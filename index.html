@@ -142,10 +142,10 @@
             let editMode = false;
             let projects = []; // Array global para manejar datos
 
-            // URL del backend Node.js (ajusta a tu IP/puerto si no es local)
-            const SCRIPT_URL = 'http://localhost:3000/projects'; // Cambia a http://192.168.101.13:3000/projects si el servidor está remoto
+            // URL del web app de Google Apps Script (reemplaza con tu URL real si cambia)
+            const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxo3dhA7cC0KnIZvRVgH4OMoRkc4RPTey4gxRckWqqtlxJM_g15gU91sMNMEV0_zG_N0w/exec';
 
-            // Carga inicial de proyectos desde el backend
+            // Carga inicial de proyectos desde Sheets
             loadProjects();
 
             // Evento para guardar/actualizar
@@ -182,25 +182,26 @@
                             addProjectLocal(project);
                         }
                         resetForm();
+                        // No necesitas refreshTable() aquí, ya que update/add local lo maneja
                     } else {
                         throw new Error(result.error || 'Error desconocido');
                     }
                 } catch (error) {
                     console.error('Error:', error);
-                    alert('Error al guardar. Verifica que el servidor esté corriendo.');
+                    alert('Error al guardar. Verifica la conexión y la URL del script.');
                 }
             });
 
-            // Función para cargar proyectos desde el backend
+            // Función para cargar proyectos desde Sheets
             async function loadProjects() {
                 try {
-                    const response = await fetch(SCRIPT_URL); // GET por defecto
+                    const response = await fetch(SCRIPT_URL); // doGet por defecto
                     const result = await response.json();
                     if (result.success) {
                         projects = result.projects || [];
                         tableBody.innerHTML = ''; // Limpia tabla antes de agregar
-                        projects.forEach(addProjectToTable); // Solo agrega a tabla
-                        saveToLocalStorage(projects); // Backup local
+                        projects.forEach(addProjectToTable); // Solo agrega a tabla, no guarda individual
+                        saveToLocalStorage(projects); // Guarda el array completo
                     } else {
                         console.error('Error cargando:', result.error);
                         // Fallback a localStorage
@@ -273,7 +274,7 @@
                     const result = await response.json();
                     if (result.success) {
                         alert('Proyecto eliminado exitosamente.');
-                        refreshTable(); // Recarga desde backend
+                        refreshTable(); // Recarga desde Sheets
                     } else {
                         throw new Error(result.error);
                     }
@@ -309,7 +310,7 @@
                 return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             }
 
-            // Guardar array completo en localStorage (backup)
+            // Guardar array completo en localStorage
             function saveToLocalStorage(projectsArray) {
                 localStorage.setItem('projects', JSON.stringify(projectsArray));
             }
@@ -323,7 +324,7 @@
                 editMode = false;
             }
 
-            // Refrescar tabla (limpia y recarga desde backend)
+            // Refrescar tabla (limpia y recarga desde Sheets)
             function refreshTable() {
                 tableBody.innerHTML = '';
                 loadProjects();
