@@ -1,1 +1,408 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Portal BIM Alcabama</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+    <!-- Librería SheetJS para exportar a Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+        }
+        .main-color {
+            background-color: #D3045C;
+        }
+        .text-main {
+            color: #D3045C;
+        }
+        .border-main {
+            border-color: #D3045C;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <header class="bg-white shadow-md">
+        <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center">
+                <img alt="Logo de Alcabama" class="h-8 mr-4" src="https://script.google.com/u/0/home/projects/1zOOOEF1Cv_a5FKVlWdxMESYjLpzzSI0VpBTMszX0_e4oYyuiXv0nJy3e/edit"/>
+            </div>
+            <div class="hidden md:flex items-center space-x-6">
+                <a class="text-gray-600 hover:text-main" href="#">Página principal</a>
+                <a class="text-gray-600 hover:text-main" href="#">Solicitud acceso a plataformas</a>
+                <a class="text-gray-600 hover:text-main flex items-center" href="#">
+                    PROYECTOS <span class="material-icons text-sm ml-1">expand_more</span>
+                </a>
+                <span class="material-icons text-gray-600 cursor-pointer">search</span>
+                <a class="text-gray-600 hover:text-main" href="#">Iniciar sesión</a>
+            </div>
+            <div class="md:hidden">
+                <button class="text-gray-600">
+                    <span class="material-icons">menu</span>
+                </button>
+            </div>
+        </nav>
+    </header>
+    <main>
+        <div class="main-color text-white">
+            <div class="container mx-auto px-6 py-20 flex items-center">
+                <div class="w-1/3 flex justify-center">
+                    <img alt="Logo BIM" class="h-20" src="https://www.photo-pick.com/online/thFP5r4H.link"/>
+                </div>
+                <div class="border-l-2 border-white h-24 mx-8"></div>
+                <div class="w-2/3">
+                    <p class="text-lg">Bienvenido al Portal BIM Alcabama</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-gray-700 text-white">
+            <div class="container mx-auto px-6 py-12">
+                <h1 class="text-3xl font-bold mb-4">Función del Portal BIM Alcabama (PBA)</h1>
+                <p class="text-lg">El portal BIM Alcabama tiene como función centralizar los procesos BIM en un solo espacio, brindando un espacio de interacción entre los procesos. Se basa en tres puntos fundamentales: Metodología y procesos, Formación y Recursos.</p>
+            </div>
+        </div>
+        <div class="container mx-auto px-6 py-12" id="form-section">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">Registro de Proyecto</h2>
+            <form class="bg-white p-8 rounded-lg shadow-md" id="project-form">
+                <input type="hidden" id="edit-id" name="edit-id" />
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2" for="proyecto">Proyecto</label>
+                        <input class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500" id="proyecto" name="proyecto" required="" type="text"/>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2" for="responsable">Responsable</label>
+                        <input class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500" id="responsable" name="responsable" required="" type="text"/>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2" for="pin">PIN</label>
+                        <input class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500" id="pin" name="pin" required="" type="text"/>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2" for="cargo">Cargo</label>
+                        <input class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500" id="cargo" name="cargo" required="" type="text"/>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2" for="fecha_inicio">Fecha de Inicio de Operación</label>
+                        <input class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500" id="fecha_inicio" name="fecha_inicio" required="" type="date"/>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2" for="fecha_fin">Fecha Final de Operación</label>
+                        <input class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500" id="fecha_fin" name="fecha_fin" required="" type="date"/>
+                    </div>
+                </div>
+                <div class="mt-8 flex justify-end space-x-4">
+                    <button class="bg-pink-600 text-white font-bold py-2 px-6 rounded-md hover:bg-pink-700 transition duration-300" type="submit">Guardar Proyecto</button>
+                    <button class="bg-gray-600 text-white font-bold py-2 px-6 rounded-md hover:bg-gray-700 transition duration-300 hidden" id="cancel-edit" type="button">Cancelar Edición</button>
+                </div>
+            </form>
+        </div>
+        <div class="container mx-auto px-6 py-12" id="table-section">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">Proyectos Registrados</h2>
+            <div class="bg-white p-8 rounded-lg shadow-md">
+                <div class="mb-4 flex justify-end">
+                    <button id="export-excel" class="bg-green-600 text-white font-bold py-2 px-6 rounded-md hover:bg-green-700 transition duration-300">Exportar a Excel</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left" id="projects-table">
+                        <thead>
+                            <tr class="bg-gray-200 text-gray-600 uppercase text-sm leading-normal">
+                                <th class="py-3 px-6">ID</th>
+                                <th class="py-3 px-6">Proyecto</th>
+                                <th class="py-3 px-6">Responsable</th>
+                                <th class="py-3 px-6">PIN</th>
+                                <th class="py-3 px-6">Cargo</th>
+                                <th class="py-3 px-6">Fecha Inicio</th>
+                                <th class="py-3 px-6">Fecha Fin</th>
+                                <th class="py-3 px-6">Nº Días</th>
+                                <th class="py-3 px-6">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-gray-600 text-sm font-light">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+    <footer class="bg-gray-800 text-white py-8 mt-12">
+        <div class="container mx-auto px-6 text-center">
+            <p>© 2025 Portal BIM Alcabama. Todos los derechos reservados.</p>
+        </div>
+    </footer>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('project-form');
+            const tableBody = document.querySelector('#projects-table tbody');
+            const exportBtn = document.getElementById('export-excel');
+            const cancelEditBtn = document.getElementById('cancel-edit');
+            let editMode = false;
+            let projects = []; // Array global para manejar datos
 
+            // URL del backend Node.js (ajusta a tu IP/puerto si no es local)
+            const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyKl9UWAdj-OJHSfFNGEqK3YriqGZG9KvYm5ZLn5YSqXyjYA1WQbYxSx1_0kBtiFzcu/exec';
+            // Carga inicial de proyectos desde el backend
+            loadProjects();
+
+            // Evento para guardar/actualizar
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const formData = new FormData(form);
+                const project = {
+                    id: formData.get('edit-id') || Date.now(),
+                    proyecto: formData.get('proyecto').trim(),
+                    responsable: formData.get('responsable').trim(),
+                    pin: formData.get('pin').trim(),
+                    cargo: formData.get('cargo').trim(),
+                    fecha_inicio: formData.get('fecha_inicio'),
+                    fecha_fin: formData.get('fecha_fin'),
+                    dias: calculateDays(formData.get('fecha_inicio'), formData.get('fecha_fin')),
+                    action: editMode ? 'update' : 'add'
+                };
+
+                // Convertir el objeto a FormData para enviarlo a Google Apps Script
+                const scriptData = new FormData();
+                for (const key in project) {
+                    scriptData.append(key, project[key]);
+                }
+
+                try {
+                    const response = await fetch(SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'no-cors', // Esencial para evitar errores de CORS con Google Scripts
+                        body: scriptData
+                    });
+
+                    // Con 'no-cors', no podemos leer la respuesta, pero podemos asumir éxito si no hay error.
+                    alert(editMode ? 'Proyecto actualizado exitosamente.' : 'Proyecto guardado exitosamente.');
+                    
+                    // Actualizar la tabla localmente
+                    if (editMode) {
+                        updateProjectLocal(project);
+                    } else {
+                        // Para 'add', el ID real lo genera el backend. Recargamos para obtenerlo.
+                        addProjectLocal(project); // Añade localmente para feedback inmediato
+                        loadProjects(); // Recarga para sincronizar con el backend
+                    }
+                    resetForm();
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error al guardar. Revisa la consola para más detalles.');
+                }
+            });
+
+            // Función para cargar proyectos desde el backend
+            async function loadProjects() {
+                if (!SCRIPT_URL) return; // No hacer nada si la URL no está definida
+                try {
+                    const response = await fetch(SCRIPT_URL); // GET por defecto
+                    const result = await response.json();
+                    if (result.success) {
+                        projects = result.projects || [];
+                        tableBody.innerHTML = ''; // Limpia tabla antes de agregar
+                        projects.forEach(addProjectToTable); // Solo agrega a tabla
+                        saveToLocalStorage(projects); // Backup local
+                    } else {
+                        console.error('Error cargando:', result.error);
+                        // Fallback a localStorage
+                        loadFromLocalStorage();
+                    }
+                } catch (error) {
+                    console.error('Error en loadProjects:', error);
+                    loadFromLocalStorage();
+                }
+            }
+
+            // Fallback: Carga desde localStorage
+            function loadFromLocalStorage() {
+                projects = JSON.parse(localStorage.getItem('projects')) || [];
+                tableBody.innerHTML = '';
+                projects.forEach(addProjectToTable);
+            }
+
+            // Agregar a tabla (solo tabla, el array se maneja en el caller)
+            function addProjectToTable(project) {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-200 hover:bg-gray-100';
+                row.dataset.id = project.id;
+                row.innerHTML = `
+                    <td class="py-3 px-6">${project.id}</td>
+                    <td class="py-3 px-6">${project.proyecto}</td>
+                    <td class="py-3 px-6">${project.responsable}</td>
+                    <td class="py-3 px-6">${project.pin}</td> <!-- Opcional: ${project.pin ? '***' : ''} para ocultar -->
+                    <td class="py-3 px-6">${project.cargo}</td>
+                    <td class="py-3 px-6">${project.fecha_inicio}</td>
+                    <td class="py-3 px-6">${project.fecha_fin}</td>
+                    <td class="py-3 px-6">${project.dias}</td>
+                    <td class="py-3 px-6">
+                        <button class="edit-btn bg-blue-600 text-white py-1 px-2 rounded-md hover:bg-blue-700 mr-2">Editar</button>
+                        <button class="delete-btn bg-red-600 text-white py-1 px-2 rounded-md hover:bg-red-700">Eliminar</button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+
+                row.querySelector('.edit-btn').addEventListener('click', () => editProject(project.id));
+                row.querySelector('.delete-btn').addEventListener('click', () => deleteProject(project.id));
+            }
+
+            // Agregar nuevo (actualizado: empuja al array y guarda)
+            function addProjectLocal(project) {
+                projects.push(project);
+                saveToLocalStorage(projects);
+                addProjectToTable(project);
+            }
+
+            // Actualizar local
+            function updateProjectLocal(updatedProject) {
+                const index = projects.findIndex(p => p.id == updatedProject.id); // == para flexibilidad
+                if (index !== -1) {
+                    projects[index] = updatedProject;
+                    saveToLocalStorage(projects);
+                    refreshTable(); // Refresca la tabla completa para consistencia
+                }
+            }
+
+            // Eliminar (llama al backend y refresca)
+            window.deleteProject = async (id) => {
+                if (!confirm('¿Estás seguro de eliminar este proyecto?')) return;
+
+                const scriptData = new FormData();
+                scriptData.append('id', id);
+                scriptData.append('action', 'delete');
+
+                try {
+                    const response = await fetch(SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        body: scriptData
+                    });
+
+                    alert('Proyecto eliminado exitosamente.');
+
+                    // Eliminar localmente y refrescar la tabla
+                    projects = projects.filter(p => p.id != id);
+                    saveToLocalStorage(projects);
+                    refreshTable();
+
+                } catch (error) {
+                    console.error('Error eliminando:', error);
+                    alert('Error al eliminar.');
+                }
+            };
+
+            // Editar
+            window.editProject = (id) => {
+                const project = projects.find(p => p.id == id);
+                if (project) {
+                    document.getElementById('edit-id').value = project.id;
+                    document.getElementById('proyecto').value = project.proyecto;
+                    document.getElementById('responsable').value = project.responsable;
+                    document.getElementById('pin').value = project.pin;
+                    document.getElementById('cargo').value = project.cargo;
+                    document.getElementById('fecha_inicio').value = project.fecha_inicio;
+                    document.getElementById('fecha_fin').value = project.fecha_fin;
+                    form.querySelector('button[type="submit"]').textContent = 'Actualizar Proyecto';
+                    cancelEditBtn.classList.remove('hidden');
+                    editMode = true;
+                }
+            };
+
+            // Calcular días
+            function calculateDays(startDate, endDate) {
+                if (!startDate || !endDate) return 0;
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+                const diffTime = Math.abs(end - start);
+                return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            }
+
+            // Guardar array completo en localStorage (backup)
+            function saveToLocalStorage(projectsArray) {
+                localStorage.setItem('projects', JSON.stringify(projectsArray));
+            }
+
+            // Reset form
+            function resetForm() {
+                form.reset();
+                document.getElementById('edit-id').value = '';
+                form.querySelector('button[type="submit"]').textContent = 'Guardar Proyecto';
+                cancelEditBtn.classList.add('hidden');
+                editMode = false;
+            }
+
+            // Refrescar tabla (limpia y recarga desde backend)
+            function refreshTable() {
+                tableBody.innerHTML = '';
+                loadProjects();
+            }
+
+            // Evento cancelar
+            cancelEditBtn.addEventListener('click', resetForm);
+
+            // Evento exportar a Excel (del código original, sin cambios)
+            exportBtn.addEventListener('click', () => {
+                const table = document.getElementById('projects-table');
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.table_to_sheet(table);
+
+                // Definir columnas para ajustar el ancho
+                ws['!cols'] = [
+                    { wch: 10 }, // ID
+                    { wch: 20 }, // Proyecto
+                    { wch: 20 }, // Responsable
+                    { wch: 10 }, // PIN
+                    { wch: 15 }, // Cargo
+                    { wch: 15 }, // Fecha Inicio
+                    { wch: 15 }, // Fecha Fin
+                    { wch: 10 }, // Nº Días
+                    { wch: 15 }  // Acciones (no se exporta)
+                ];
+
+                // Aplicar formato básico a los encabezados
+                const headers = ['A1', 'B1', 'C1', 'D1', 'E1', 'F1', 'G1', 'H1', 'I1'];
+                headers.forEach(cell => {
+                    if (ws[cell]) {
+                        ws[cell].s = {
+                            font: { bold: true },
+                            alignment: { horizontal: 'center', vertical: 'center' }
+                        };
+                    }
+                });
+
+                // Eliminar la columna de acciones en la exportación
+                const range = XLSX.utils.decode_range(ws['!ref']);
+                for (let row = range.s.r; row <= range.e.r; row++) {
+                    const actionCell = XLSX.utils.encode_cell({ r: row, c: 8 }); // Columna I
+                    delete ws[actionCell];
+                }
+                ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: range.e.r, c: 7 } });
+
+                // Aplicar formato a las celdas
+                for (let row = range.s.r + 1; row <= range.e.r; row++) {
+                    for (let col = range.s.c; col <= 7; col++) {
+                        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+                        if (!ws[cellAddress]) continue;
+                        ws[cellAddress].s = { alignment: { horizontal: 'left', vertical: 'center' } };
+                        if (col === 5 || col === 6) ws[cellAddress].z = 'yyyy-mm-dd'; // Fechas
+                        if (col === 7) { ws[cellAddress].z = '0'; ws[cellAddress].t = 'n'; } // Números
+                    }
+                }
+
+                // Definir tabla de Excel
+                ws['!autofilter'] = { ref: `A1:H${range.e.r + 1}` };
+                ws['!tables'] = [{
+                    ref: `A1:H${range.e.r + 1}`, name: 'TablaProyectos', displayName: 'TablaProyectos', headerRowCount: 1,
+                    totalsRowCount: 0, styleInfo: { name: 'TableStyleMedium2', showFirstColumn: false, showLastColumn: false, showRowStripes: true, showColumnStripes: false }
+                }];
+
+                XLSX.utils.book_append_sheet(wb, ws, 'Proyectos');
+                XLSX.writeFile(wb, 'proyectos_registrados.xlsx');
+            });
+        });
+    </script>
+</body>
+</html>
