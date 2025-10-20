@@ -79,27 +79,34 @@
 
                 const account = msalInstance.getAllAccounts()[0];
                 if (account) {
-                    // Obtener el token de acceso para Microsoft Graph
-                    const accessTokenRequest = {
-                        scopes: ["User.Read", "GroupMember.Read.All"],
-                        account: account
-                    };
-                    const response = await msalInstance.acquireTokenSilent(accessTokenRequest);
-
-                    // Obtener los nombres de los grupos del usuario desde Microsoft Graph
-                    const groupsResponse = await fetch("https://graph.microsoft.com/v1.0/me/memberOf", {
-                        headers: {
-                            "Authorization": `Bearer ${response.accessToken}`
+                    let groupNames = []; // Inicia los grupos como un array vacío
+                    
+                    // Intenta obtener los grupos del usuario. Si falla, no interrumpe el login.
+                    try {
+                        const accessTokenRequest = {
+                            scopes: ["User.Read", "GroupMember.Read.All"],
+                            account: account
+                        };
+                        const response = await msalInstance.acquireTokenSilent(accessTokenRequest);
+                        
+                        const groupsResponse = await fetch("https://graph.microsoft.com/v1.0/me/memberOf", {
+                            headers: { "Authorization": `Bearer ${response.accessToken}` }
+                        });
+                        
+                        if (groupsResponse.ok) {
+                            const groupsData = await groupsResponse.json();
+                            groupNames = groupsData.value.map(group => group.displayName);
+                        } else {
+                            console.warn("No se pudieron obtener los grupos del usuario. El inicio de sesión continuará sin esta información.");
                         }
-                    });
-                    const groupsData = await groupsResponse.json();
-                    const groupNames = groupsData.value.map(group => group.displayName);
-
-                    // Guardar la información del usuario y sus grupos en sessionStorage
+                    } catch (groupError) {
+                        console.warn("Error al obtener los grupos. Es probable que falte el consentimiento de administrador para 'GroupMember.Read.All'.", groupError);
+                    }
+                    
                     const userProfile = {
                         name: account.name,
                         username: account.username,
-                        groups: groupNames
+                        groups: groupNames // Se guardará el array de grupos (lleno o vacío)
                     };
                     sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
 
