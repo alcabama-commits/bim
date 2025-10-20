@@ -51,7 +51,7 @@
           </div>
           <nav class="hidden md:flex items-center space-x-6 text-sm">
             <a id="nav-link-home" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary transition-colors" href="#">Página principal</a>
-            <a id="nav-link-access-request" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary transition-colors" href="https://alcabama-commits.github.io/bim/index.html">Solicitud acceso a plataformas</a>
+            <a id="nav-link-access-request" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary transition-colors hidden" href="https://alcabama-commits.github.io/bim/index.html">Solicitud acceso a plataformas</a>
             <div class="relative group">
               <button type="button" class="flex items-center text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary transition-colors">
                 <span>PROYECTOS</span>
@@ -83,8 +83,8 @@
       </div>
       <!-- Menú desplegable móvil -->
       <div id="mobile-menu" class="hidden md:hidden bg-white dark:bg-gray-900">
-        <a id="mobile-link-home" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" href="#">Página principal</a>
-        <a id="mobile-link-access-request" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" href="https://alcabama-commits.github.io/bim/index.html">Solicitud acceso a plataformas</a>
+        <a id="mobile-link-home" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" href="https://alcabama-commits.github.io/bim/home">Página principal</a>
+        <a id="mobile-link-access-request" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 hidden" href="https://alcabama-commits.github.io/bim/index.html">Solicitud acceso a plataformas</a>
         <div class="px-4 py-2 text-sm text-gray-700 dark:text-gray-200">
           <span class="font-bold">PROYECTOS</span>
           <a class="block pl-4 pr-2 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" href="#">Proyecto 1</a>
@@ -170,12 +170,15 @@
         }
         
         // --- CONTROL DE ACCESO BASADO EN ROLES ---
-        if (userAccount && userAccount.groups) {
-            // Si el usuario pertenece al grupo "Residente de Obra", ocultar el enlace de solicitud de acceso
-            if (userAccount.groups.includes('Residente de Obra')) {
-                document.getElementById('nav-link-access-request')?.classList.add('hidden');
-                document.getElementById('mobile-link-access-request')?.classList.add('hidden');
-            }
+        if (userAccount) {
+            const navLink = document.getElementById('nav-link-access-request');
+            const mobileLink = document.getElementById('mobile-link-access-request');
+            
+            // Mostrar el enlace si el usuario está logueado, a menos que sea "Residente de Obra"
+            if (!userAccount.groups?.includes('Residente de Obra')) {
+                navLink?.classList.remove('hidden');
+                mobileLink?.classList.remove('hidden');
+            } 
         }
 
 
