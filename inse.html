@@ -74,7 +74,7 @@
             try {
                 await msalInstance.loginPopup({
                     // Permisos para leer perfil y grupos a los que pertenece el usuario
-                    scopes: ["User.Read", "GroupMember.Read.All"] 
+                    scopes: ["User.Read", "GroupMember.Read.All", "Sites.Read.All"] 
                 });
 
                 const account = msalInstance.getAllAccounts()[0];
@@ -84,7 +84,7 @@
                     // Intenta obtener los grupos del usuario. Si falla, no interrumpe el login.
                     try {
                         const accessTokenRequest = {
-                            scopes: ["User.Read", "GroupMember.Read.All"],
+                            scopes: ["User.Read", "GroupMember.Read.All", "Sites.Read.All"],
                             account: account
                         };
                         const response = await msalInstance.acquireTokenSilent(accessTokenRequest);
