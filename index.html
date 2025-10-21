@@ -41,7 +41,7 @@
             const isResidenteDeObra = userAccount.groups?.some(group => group.toLowerCase() === 'residente de obra');
             
             // Lista de usuarios restringidos individualmente (insensible a mayúsculas/minúsculas)
-            const restrictedUsers = ['alc.spk.1@gmail.com'];
+            const restrictedUsers = ['alc.spk.1@gmail.com', 'kanatagiraldo@gmail.com'];
             const isRestrictedUser = restrictedUsers.includes(userAccount.username.toLowerCase());
 
             console.log('DEBUG (EXP.01 Security): userAccount.groups:', userAccount.groups);
