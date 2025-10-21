@@ -180,11 +180,16 @@
             
             // Comprobamos si el usuario es "Residente de Obra" (insensible a mayúsculas/minúsculas)
             const isResidenteDeObra = userAccount.groups?.some(group => group.toLowerCase() === 'residente de obra');
-            console.log('DEBUG (Home): isResidenteDeObra (evaluado):', isResidenteDeObra);
+            
+            // Lista de usuarios restringidos individualmente (insensible a mayúsculas/minúsculas)
+            const restrictedUsers = ['alc.spk.1@gmail.com'];
+            const isRestrictedUser = restrictedUsers.includes(userAccount.username.toLowerCase());
 
-            // Lógica de acceso: Mostrar el enlace si NO es "Residente de Obra"
-            // Si userAccount.groups es null (ej. para usuarios MSA), !isResidenteDeObra será true, mostrando el enlace.
-            if (!isResidenteDeObra) { 
+            console.log('DEBUG (Home): isResidenteDeObra (evaluado):', isResidenteDeObra);
+            console.log('DEBUG (Home): isRestrictedUser (evaluado):', isRestrictedUser);
+
+            // Lógica de acceso: Mostrar el enlace solo si el usuario NO es "Residente de Obra" Y NO está en la lista de restringidos.
+            if (!isResidenteDeObra && !isRestrictedUser) { 
                 console.log('DEBUG (Home): Condition met to SHOW "Solicitud acceso a plataformas" link.');
                 navLink?.classList.remove('hidden');
                 mobileLink?.classList.remove('hidden');
