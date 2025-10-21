@@ -174,16 +174,16 @@
             const navLink = document.getElementById('nav-link-access-request');
             const mobileLink = document.getElementById('mobile-link-access-request');
             
-            // Mostrar el enlace si el usuario está logueado, a menos que sea "Residente de Obra"
-            // La condición ahora es más estricta: solo se muestra si los grupos se obtuvieron
-            // Y el usuario no es "Residente de Obra". Si los grupos no se obtuvieron, el enlace permanece oculto.
-            if (userAccount.groups && userAccount.groups.length > 0 && !userAccount.groups.includes('Residente de Obra')) {
-                navLink?.classList.remove('hidden');
-                mobileLink?.classList.remove('hidden');
-            } else {
-                // Si no se cumplen las condiciones, asegurar que el enlace esté oculto
+            // Lógica de acceso: Ocultar el enlace solo si se confirma que el usuario es "Residente de Obra".
+            // Si no se pueden obtener los grupos, el enlace se mostrará por defecto.
+            if (userAccount.groups?.includes('Residente de Obra')) {
+                // Si es Residente de Obra, nos aseguramos de que el enlace esté oculto.
                 navLink?.classList.add('hidden');
                 mobileLink?.classList.add('hidden');
+            } else {
+                // Para cualquier otro caso (otro rol, o si los grupos no se pudieron leer), mostramos el enlace.
+                navLink?.classList.remove('hidden');
+                mobileLink?.classList.remove('hidden');
             } 
         }
 
