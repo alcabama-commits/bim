@@ -9,6 +9,8 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
     <!-- Librería SheetJS para exportar a Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- MSAL.js para autenticación con Azure AD -->
+    <script src="https://alcdn.msauth.net/browser/2.14.2/js/msal-browser.min.js"></script>
     <style>
         body {
             font-family: 'Roboto', sans-serif;
@@ -51,7 +53,7 @@
         <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
             <div class="flex items-center">
                 <a href="https://alcabama-commits.github.io/bim/home">
-                    <img alt="Logo de Alcabama" class="h-8 mr-4" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDnGH0dVV0uy9_t78YwQwvz7LUraYiYvCQVEiC06OdaLpcN2wnmq2HLsK6cbfuvsac3GswgEgn48dq-hXbq-eRky7bZzwaslcrlndCVP3GcYuStRBWVqfwlVZxfxrVLzZE5rWFU9ntSKkGFzM4se49dZDbC9OuqNiCmRw0oMuDC78EX1KGfpGCe8MeUrvYy7KryjYn42OtQ3bnXVpAiPJ929-GNxVkRgJf_-IrvZhxxMpOw43qwrsXaQ4_Oc49CGLlTviQprRgwEzQ4"/>
+                    <img alt="Logo de Alcabama" class="h-8 mr-4" src="https://i.postimg.cc/HxDQsbNG/Logo-ALCABAMA-SOLO.jpg"/>
                 </a>
             </div>
             <div class="hidden md:flex items-center space-x-6">
@@ -161,6 +163,44 @@
         </div>
     </footer>
     <script>
+        // --- CONFIGURACIÓN DE SHAREPOINT Y MSAL ---
+        const msalConfig = {
+            auth: {
+                clientId: "8dc59d32-a4cd-48df-9d65-f19b53f36f28", // El mismo Client ID de tu app
+                authority: "https://login.microsoftonline.com/e746d2b1-1005-454e-bd83-bfb88c950a5d",
+            },
+            cache: {
+                cacheLocation: "sessionStorage",
+            }
+        };
+
+        const msalInstance = new msal.PublicClientApplication(msalConfig);
+
+        // IDs de SharePoint (¡DEBES REEMPLAZARLOS!)
+        const SHAREPOINT_HOST = 'inversionesalcabama.sharepoint.com';
+        const SITE_ID = 'inversionesalcabama.sharepoint.com,2bbe65a7-5c42-43a2-8c61-ae6dd6b1e86f,21d11739-3848-4e1a-a76c-4bff97c060d4'; // Ver instrucciones para obtenerlo
+        const LIST_ID = 'Proyectos'; // El nombre de tu lista de SharePoint
+        const UPLOAD_FILE_ID = '01D3Y2WJ64D3ABD5-2DCB-4CB9-9CB9-BC7B49EA213B'; // ID del archivo a reemplazar
+
+        // Función para obtener un token de acceso para Microsoft Graph
+        async function getGraphToken() {
+            const account = msalInstance.getAllAccounts()[0];
+            if (!account) {
+                throw new Error("Usuario no autenticado.");
+            }
+            const request = {
+                scopes: ["Sites.ReadWrite.All"],
+                account: account
+            };
+            try {
+                const response = await msalInstance.acquireTokenSilent(request);
+                return response.accessToken;
+            } catch (error) {
+                console.error("Se requiere interacción para obtener el token:", error);
+                return (await msalInstance.acquireTokenPopup(request)).accessToken;
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             // --- GESTIÓN DE LA INTERFAZ DE USUARIO DE AUTENTICACIÓN ---
             const authContainer = document.getElementById('auth-container');
@@ -189,16 +229,13 @@
             let editMode = false;
             let projects = [];
 
-            // URL del backend en Google Apps Script
-            const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyk8uOe3VydkwJiWYQKfAKLH2w-Z4aqMTLudrJFEe7j5b_rIIsViFtPLpWHws_1SXy8/exec';
             // Carga inicial de proyectos desde el backend
             loadProjects();
 
             // Evento para guardar/actualizar
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const formData = new FormData(form);
-                const project = {
+                const formData = new FormData(form);                const project = {
                     id: formData.get('edit-id') || Date.now(),
                     proyecto: formData.get('proyecto').trim(),
                     responsable: formData.get('responsable').trim(),
@@ -209,73 +246,110 @@
                     dias: calculateDays(formData.get('fecha_inicio'), formData.get('fecha_fin')),
                     action: editMode ? 'update' : 'add'
                 };
-
-                // Convertir el objeto a FormData para enviarlo a Google Apps Script
-                const scriptData = new FormData();
-                for (const key in project) {
-                    scriptData.append(key, project[key]);
-                }
-
-                try {
-                    const response = await fetch(SCRIPT_URL, {
-                        method: 'POST',
-                        mode: 'no-cors', 
-                        body: scriptData
-                    });
-
-                    alert(editMode ? 'Proyecto actualizado exitosamente.' : 'Proyecto guardado exitosamente.');
-                    
-                    // Actualizar la tabla localmente
-                    if (editMode) {
-                        updateProjectLocal(project);
-                    } else {
-                        addProjectLocal(project);
-                        loadProjects();
-                    }
-                    resetForm();
-
-                } catch (error) {
-                    console.error('Error:', error);
-                    alert('Error al guardar. Revisa la consola para más detalles.');
-                }
+                
+                saveProject(project);
             });
 
             // Función para cargar proyectos desde el backend
             async function loadProjects() {
-                if (!SCRIPT_URL) return;
                 try {
-                    const response = await fetch(SCRIPT_URL);
-                    const result = await response.json();
-                    if (result.success) {
-                        projects = result.projects || [];
-                        tableBody.innerHTML = '';
-                        projects.forEach(addProjectToTable);
-                        saveToLocalStorage(projects);
-                    } else {
-                        console.error('Error cargando:', result.error);
-                        loadFromLocalStorage();
-                    }
+                    const token = await getGraphToken();
+                    const url = `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/lists/${LIST_ID}/items?expand=fields`;
+                    const response = await fetch(url, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (!response.ok) throw new Error(`Error al cargar: ${response.statusText}`);
+                    
+                    const data = await response.json();
+                    projects = data.value.map(item => ({
+                        id: item.id,
+                        etag: item.etag, // Guardar etag para actualizaciones
+                        proyecto: item.fields.Title, // Asumiendo que 'Proyecto' es la columna 'Title'
+                        responsable: item.fields.Responsable,
+                        pin: item.fields.PIN,
+                        cargo: item.fields.Cargo,
+                        fecha_inicio: item.fields.Fecha_x0020_de_x0020_Inicio_x00,
+                        fecha_fin: item.fields.Fecha_x0020_Final_x0020_de_x002,
+                        dias: item.fields.N_x00ba__x0020_D_x00ed_as || 0
+                    }));
+                    tableBody.innerHTML = '';
+                    projects.forEach(addProjectToTable);
                 } catch (error) {
                     console.error('Error en loadProjects:', error);
-                    loadFromLocalStorage();
+                    alert('No se pudieron cargar los proyectos desde SharePoint.');
                 }
             }
 
-            //Carga desde localStorage
-            function loadFromLocalStorage() {
-                projects = JSON.parse(localStorage.getItem('projects')) || [];
-                tableBody.innerHTML = '';
-                projects.forEach(addProjectToTable);
+            // Guardar o actualizar un proyecto en SharePoint
+            async function saveProject(project) {
+                try {
+                    const token = await getGraphToken();
+                    const isUpdate = !!document.getElementById('edit-id').value;
+                    const url = isUpdate
+                        ? `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/lists/${LIST_ID}/items/${project.id}`
+                        : `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/lists/${LIST_ID}/items`;
+
+                    const body = {
+                        fields: {
+                            'Title': project.proyecto, // 'Title' es la columna principal obligatoria
+                            'Responsable': project.responsable,
+                            'PIN': project.pin,
+                            'Cargo': project.cargo,
+                            'Fecha_x0020_de_x0020_Inicio_x00': project.fecha_inicio,
+                            'Fecha_x0020_Final_x0020_de_x002': project.fecha_fin,
+                            'N_x00ba__x0020_D_x00ed_as': project.dias
+                        }
+                    };
+
+                    const response = await fetch(url, {
+                        method: isUpdate ? 'PATCH' : 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(body)
+                    });
+
+                    if (!response.ok) throw new Error(`Error al guardar: ${response.statusText}`);
+                    
+                    alert(`Proyecto ${isUpdate ? 'actualizado' : 'guardado'} con éxito.`);
+                    resetForm();
+                    loadProjects(); // Recargar la tabla
+
+                } catch (error) {
+                    console.error('Error en saveProject:', error);
+                    alert('Error al guardar el proyecto en SharePoint.');
+                }
             }
 
-            // Agregar a tabla (solo tabla, el array se maneja en el caller)
+            // Eliminar un proyecto de SharePoint
+            window.deleteProject = async (id) => {
+                if (!confirm('¿Estás seguro de eliminar este proyecto?')) return;
+                try {
+                    const token = await getGraphToken();
+                    const url = `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/lists/${LIST_ID}/items/${id}`;
+                    const response = await fetch(url, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+
+                    if (!response.ok) throw new Error(`Error al eliminar: ${response.statusText}`);
+                    
+                    alert('Proyecto eliminado con éxito.');
+                    loadProjects(); // Recargar la tabla
+                } catch (error) {
+                    console.error('Error en deleteProject:', error);
+                    alert('Error al eliminar el proyecto de SharePoint.');
+                }
+            };
+
             function addProjectToTable(project) {
                 const row = document.createElement('tr');
                 row.className = 'border-b border-gray-200 hover:bg-gray-100';
                 row.dataset.id = project.id;
                 row.innerHTML = `
                     <td class="py-3 px-6">${project.id}</td>
-                    <td class="py-3 px-6">${project.proyecto}</td>
+                    <td class="py-3 px-6">${project.proyecto || ''}</td>
                     <td class="py-3 px-6">${project.responsable}</td>
                     <td class="py-3 px-6">${project.pin}</td> <!-- Opcional: ${project.pin ? '***' : ''} para ocultar -->
                     <td class="py-3 px-6">${project.cargo}</td>
@@ -292,51 +366,6 @@
                 row.querySelector('.edit-btn').addEventListener('click', () => editProject(project.id));
                 row.querySelector('.delete-btn').addEventListener('click', () => deleteProject(project.id));
             }
-
-            // Agregar nuevo (actualizado: empuja al array y guarda)
-            function addProjectLocal(project) {
-                projects.push(project);
-                saveToLocalStorage(projects);
-                addProjectToTable(project);
-            }
-
-            // Actualizar local
-            function updateProjectLocal(updatedProject) {
-                const index = projects.findIndex(p => p.id == updatedProject.id);
-                if (index !== -1) {
-                    projects[index] = updatedProject;
-                    saveToLocalStorage(projects);
-                    refreshTable();
-                }
-            }
-
-            // Eliminar (llama al backend y refresca)
-            window.deleteProject = async (id) => {
-                if (!confirm('¿Estás seguro de eliminar este proyecto?')) return;
-
-                const scriptData = new FormData();
-                scriptData.append('id', id);
-                scriptData.append('action', 'delete');
-
-                try {
-                    const response = await fetch(SCRIPT_URL, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        body: scriptData
-                    });
-
-                    alert('Proyecto eliminado exitosamente.');
-
-                    // Eliminar localmente y refrescar la tabla
-                    projects = projects.filter(p => p.id != id);
-                    saveToLocalStorage(projects);
-                    refreshTable();
-
-                } catch (error) {
-                    console.error('Error eliminando:', error);
-                    alert('Error al eliminar.');
-                }
-            };
 
             // Editar
             window.editProject = (id) => {
@@ -364,11 +393,6 @@
                 return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             }
 
-            // Guardar array completo en localStorage (backup)
-            function saveToLocalStorage(projectsArray) {
-                localStorage.setItem('projects', JSON.stringify(projectsArray));
-            }
-
             // Reset form
             function resetForm() {
                 form.reset();
@@ -381,14 +405,14 @@
             // Refrescar tabla (limpia y recarga desde backend)
             function refreshTable() {
                 tableBody.innerHTML = '';
-                loadProjects();
+                loadProjects(); // Recarga desde SharePoint
             }
 
             // Evento cancelar
             cancelEditBtn.addEventListener('click', resetForm);
 
-            // Evento exportar a Excel (del código original, sin cambios)
-            exportBtn.addEventListener('click', () => {
+            // Evento exportar a Excel y subir a SharePoint
+            exportBtn.addEventListener('click', async () => {
                 const table = document.getElementById('projects-table');
                 const wb = XLSX.utils.book_new();
                 const ws = XLSX.utils.table_to_sheet(table);
@@ -444,7 +468,26 @@
                 }];
 
                 XLSX.utils.book_append_sheet(wb, ws, 'Proyectos');
-                XLSX.writeFile(wb, 'proyectos_registrados.xlsx');
+                
+                // Convertir a Blob para subir
+                const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                const excelBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+                // Subir a SharePoint
+                try {
+                    const token = await getGraphToken();
+                    const url = `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/items/${UPLOAD_FILE_ID}/content`;
+                    const response = await fetch(url, {
+                        method: 'PUT',
+                        headers: { 'Authorization': `Bearer ${token}` },
+                        body: excelBlob
+                    });
+                    if (!response.ok) throw new Error(`Error al subir: ${response.statusText}`);
+                    alert('Excel exportado y subido a SharePoint con éxito.');
+                } catch (error) {
+                    console.error('Error al subir a SharePoint:', error);
+                    alert('Error al subir el archivo a SharePoint.');
+                }
             });
         });
     </script>
