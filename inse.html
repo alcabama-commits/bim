@@ -96,16 +96,23 @@
                         
                         if (groupsResponse.ok) {
                             const groupsData = await groupsResponse.json();
-                            groupNames = groupsData.value.map(group => group.displayName);
+                            // Filtramos para asegurarnos de que solo obtenemos objetos con displayName
+                            groupNames = groupsData.value.filter(g => g.displayName).map(g => g.displayName);
                         } else if (groupsResponse.status === 403) {
                             console.error("Error 403: Permisos insuficientes. Falta el consentimiento de administrador para 'GroupMember.Read.All'.");
+                            errorMessage.textContent = "Error de permisos (403). Contacta al administrador.";
                         } else {
-                            console.warn("No se pudieron obtener los grupos del usuario (respuesta no OK). El inicio de sesión continuará sin esta información.");
-                            console.warn("Groups API response:", groupsResponse); // Debugging: Ver la respuesta de la API de grupos
+                            const errorText = await groupsResponse.text();
+                            console.error(`Error al obtener grupos: ${groupsResponse.status} - ${groupsResponse.statusText}`);
+                            console.error("Respuesta de la API de Graph:", errorText);
+                            errorMessage.textContent = `Error al obtener roles (${groupsResponse.status}).`;
                         }
                     } catch (groupError) {
-                        console.warn("Error al obtener los grupos. Es probable que falte el consentimiento de administrador para 'GroupMember.Read.All' o el token no tenga los scopes necesarios.", groupError);
-                        errorMessage.textContent = "Error al obtener roles. Contacta al administrador si el problema persiste."; // Mensaje para el usuario
+                        console.error("Excepción al obtener los grupos. Revisa la configuración de la app y los permisos de API.", groupError);
+                        // Si es un error de interacción, MSAL lo manejará en el catch principal.
+                        if (!(groupError instanceof msal.InteractionRequiredAuthError)) {
+                            errorMessage.textContent = "Error técnico al obtener roles. Revisa la consola.";
+                        }
                     }
                     
                     const userProfile = {
