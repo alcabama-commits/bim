@@ -32,13 +32,14 @@
             // 1. Si no hay usuario, redirigir al login.
             if (!userAccount) {
                 alert('Acceso denegado. Por favor, inicie sesión.');
-                window.location.href = 'https://alcabama-commits.github.io/bim/inse.html'; // URL de tu página de login
+                window.location.href = 'https://alcabama-commits.github.io/bim/login.html'; // URL de tu página de login
                 return;
             }
 
-            // 2. Si el usuario es "Residente de Obra", redirigir al home.
+            // 2. Lógica de seguridad estricta:
+            // Si los grupos no se pudieron obtener (null) O si el usuario es "Residente de Obra", denegar acceso.
             const isResidenteDeObra = userAccount.groups?.some(group => group.toLowerCase() === 'residente de obra');
-            if (isResidenteDeObra) {
+            if (userAccount.groups === null || isResidenteDeObra) {
                 alert('Acceso denegado. No tiene permisos para ver esta página.');
                 window.location.href = 'https://alcabama-commits.github.io/bim/home'; // URL de tu página principal
             }
@@ -49,16 +50,21 @@
     <header class="bg-white shadow-md">
         <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
             <div class="flex items-center">
-                <img alt="Logo de Alcabama" class="h-8 mr-4" src="https://script.google.com/u/0/home/projects/1zOOOEF1Cv_a5FKVlWdxMESYjLpzzSI0VpBTMszX0_e4oYyuiXv0nJy3e/edit"/>
+                <a href="https://alcabama-commits.github.io/bim/home">
+                    <img alt="Logo de Alcabama" class="h-8 mr-4" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDnGH0dVV0uy9_t78YwQwvz7LUraYiYvCQVEiC06OdaLpcN2wnmq2HLsK6cbfuvsac3GswgEgn48dq-hXbq-eRky7bZzwaslcrlndCVP3GcYuStRBWVqfwlVZxfxrVLzZE5rWFU9ntSKkGFzM4se49dZDbC9OuqNiCmRw0oMuDC78EX1KGfpGCe8MeUrvYy7KryjYn42OtQ3bnXVpAiPJ929-GNxVkRgJf_-IrvZhxxMpOw43qwrsXaQ4_Oc49CGLlTviQprRgwEzQ4"/>
+                </a>
             </div>
             <div class="hidden md:flex items-center space-x-6">
-                <a class="text-gray-600 hover:text-main" href="#">Página principal</a>
-                <a class="text-gray-600 hover:text-main" href="#">Solicitud acceso a plataformas</a>
+                <a class="text-gray-600 hover:text-main" href="https://alcabama-commits.github.io/bim/home">Página principal</a>
+                <a class="text-gray-600 hover:text-main" href="https://alcabama-commits.github.io/bim/index.html">Solicitud acceso a plataformas</a>
                 <a class="text-gray-600 hover:text-main flex items-center" href="#">
                     PROYECTOS <span class="material-icons text-sm ml-1">expand_more</span>
                 </a>
                 <span class="material-icons text-gray-600 cursor-pointer">search</span>
-                <a class="text-gray-600 hover:text-main" href="#">Iniciar sesión</a>
+                <!-- Contenedor para el estado de autenticación -->
+                <div id="auth-container" class="flex items-center space-x-4">
+                   <a class="text-gray-600 hover:text-main" href="https://alcabama-commits.github.io/bim/login.html">Iniciar sesión</a>
+                </div>
             </div>
             <div class="md:hidden">
                 <button class="text-gray-600">
@@ -156,6 +162,26 @@
     </footer>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // --- GESTIÓN DE LA INTERFAZ DE USUARIO DE AUTENTICACIÓN ---
+            const authContainer = document.getElementById('auth-container');
+            const userAccount = JSON.parse(sessionStorage.getItem('userAccount'));
+
+            if (userAccount) {
+                // Si el usuario está logueado, mostrar su nombre y el botón de cerrar sesión
+                authContainer.innerHTML = `
+                    <span class="text-sm font-medium text-gray-700">Hola, ${userAccount.name.split(' ')[0]}</span>
+                    <button id="logout-button" class="text-gray-600 hover:text-main text-sm font-medium">Cerrar sesión</button>
+                `;
+
+                document.getElementById('logout-button').addEventListener('click', () => {
+                    sessionStorage.removeItem('userAccount');
+                    window.location.reload(); // Recargar la página para reflejar el cambio
+                });
+            } else {
+                // Si no está logueado, el enlace de "Iniciar sesión" ya está visible por defecto.
+            }
+
+            // --- LÓGICA DEL FORMULARIO Y LA TABLA ---
             const form = document.getElementById('project-form');
             const tableBody = document.querySelector('#projects-table tbody');
             const exportBtn = document.getElementById('export-excel');
