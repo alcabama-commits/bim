@@ -174,22 +174,24 @@
         // --- CONTROL DE ACCESO BASADO EN ROLES ---
         if (userAccount) {
             console.log('Home page: User is logged in:', userAccount.name);
-            console.log('Home page: User groups from sessionStorage:', userAccount.groups);
+            console.log('DEBUG (Home): User groups from sessionStorage:', userAccount.groups);
             const navLink = document.getElementById('nav-link-access-request');
             const mobileLink = document.getElementById('mobile-link-access-request');
             
             // Comprobamos si el usuario es "Residente de Obra" (insensible a mayúsculas/minúsculas)
             const isResidenteDeObra = userAccount.groups?.some(group => group.toLowerCase() === 'residente de obra');
-            console.log('DEBUG: isResidenteDeObra (evaluado):', isResidenteDeObra);
+            console.log('DEBUG (Home): isResidenteDeObra (evaluado):', isResidenteDeObra);
 
             // Lógica de acceso flexible:
             // 1. Si los grupos NO se pudieron obtener (userAccount.groups es null), muestra el enlace por defecto.
             // 2. Si los grupos SÍ se obtuvieron, oculta el enlace solo si el usuario es "Residente de Obra".
             if (userAccount.groups === null || !isResidenteDeObra) {
+                console.log('DEBUG (Home): Condition met to SHOW "Solicitud acceso a plataformas" link.');
                 navLink?.classList.remove('hidden');
                 mobileLink?.classList.remove('hidden');
             } else {
                 // Ocultar solo si los grupos se obtuvieron y el usuario es "Residente de Obra".
+                console.log('DEBUG (Home): Condition met to HIDE "Solicitud acceso a plataformas" link.');
                 navLink?.classList.add('hidden');
                 mobileLink?.classList.add('hidden');
             }
