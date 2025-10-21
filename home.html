@@ -182,13 +182,14 @@
             const isResidenteDeObra = userAccount.groups?.some(group => group.toLowerCase() === 'residente de obra');
             console.log('DEBUG: isResidenteDeObra (evaluado):', isResidenteDeObra);
 
-            // Lógica de acceso segura: Mostrar el enlace solo si los grupos se obtuvieron correctamente
-            // Y el usuario NO es "Residente de Obra".
-            if (userAccount.groups && !isResidenteDeObra) {
+            // Lógica de acceso flexible:
+            // 1. Si los grupos NO se pudieron obtener (userAccount.groups es null), muestra el enlace por defecto.
+            // 2. Si los grupos SÍ se obtuvieron, oculta el enlace solo si el usuario es "Residente de Obra".
+            if (userAccount.groups === null || !isResidenteDeObra) {
                 navLink?.classList.remove('hidden');
                 mobileLink?.classList.remove('hidden');
             } else {
-                // En cualquier otro caso (grupos no obtenidos, o el usuario es "Residente de Obra"), asegurar que el enlace esté oculto.
+                // Ocultar solo si los grupos se obtuvieron y el usuario es "Residente de Obra".
                 navLink?.classList.add('hidden');
                 mobileLink?.classList.add('hidden');
             }
