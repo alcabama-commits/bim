@@ -85,7 +85,7 @@
                     // Intenta obtener los grupos del usuario. Si falla, no interrumpe el login.
                     try {
                         const accessTokenRequest = {
-                            scopes: ["https://graph.microsoft.com/.default"], // Solicitar un token para Graph API
+                            scopes: ["User.Read", "GroupMember.Read.All"], // Pedir explícitamente los scopes para Graph
                             account: account
                         };
                         const response = await msalInstance.acquireTokenSilent(accessTokenRequest);
