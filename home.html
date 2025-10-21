@@ -173,20 +173,25 @@
         
         // --- CONTROL DE ACCESO BASADO EN ROLES ---
         if (userAccount) {
+            console.log('Home page: User is logged in:', userAccount.name);
+            console.log('Home page: User groups from sessionStorage:', userAccount.groups);
             const navLink = document.getElementById('nav-link-access-request');
             const mobileLink = document.getElementById('mobile-link-access-request');
             
-            // Lógica de acceso: Ocultar el enlace solo si se confirma que el usuario es "Residente de Obra".
-            // Si no se pueden obtener los grupos, el enlace se mostrará por defecto.
-            if (userAccount.groups?.includes('Residente de Obra')) {
-                // Si es Residente de Obra, nos aseguramos de que el enlace esté oculto.
-                navLink?.classList.add('hidden');
-                mobileLink?.classList.add('hidden');
-            } else {
-                // Para cualquier otro caso (otro rol, o si los grupos no se pudieron leer), mostramos el enlace.
+            // Comprobamos si el usuario es "Residente de Obra" (insensible a mayúsculas/minúsculas)
+            const isResidenteDeObra = userAccount.groups?.some(group => group.toLowerCase() === 'residente de obra');
+            console.log('DEBUG: isResidenteDeObra (evaluado):', isResidenteDeObra);
+
+            // Lógica de acceso segura: Mostrar el enlace solo si los grupos se obtuvieron correctamente
+            // Y el usuario NO es "Residente de Obra".
+            if (userAccount.groups && !isResidenteDeObra) {
                 navLink?.classList.remove('hidden');
                 mobileLink?.classList.remove('hidden');
-            } 
+            } else {
+                // En cualquier otro caso (grupos no obtenidos, o el usuario es "Residente de Obra"), asegurar que el enlace esté oculto.
+                navLink?.classList.add('hidden');
+                mobileLink?.classList.add('hidden');
+            }
         }
 
 
