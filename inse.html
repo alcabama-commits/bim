@@ -113,6 +113,7 @@
                         username: account.username,
                         groups: groupNames // Se guardará el array de grupos o null si falló
                     };
+                    };
                     sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
 
                     window.location.href = 'https://alcabama-commits.github.io/bim/home'; // Redirigir
