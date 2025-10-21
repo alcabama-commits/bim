@@ -182,15 +182,14 @@
             const isResidenteDeObra = userAccount.groups?.some(group => group.toLowerCase() === 'residente de obra');
             console.log('DEBUG (Home): isResidenteDeObra (evaluado):', isResidenteDeObra);
 
-            // Lógica de acceso flexible:
-            // 1. Si los grupos NO se pudieron obtener (userAccount.groups es null), muestra el enlace por defecto.
-            // 2. Si los grupos SÍ se obtuvieron, oculta el enlace solo si el usuario es "Residente de Obra".
-            if (userAccount.groups === null || !isResidenteDeObra) {
+            // Lógica de acceso: Mostrar el enlace si NO es "Residente de Obra"
+            // Si userAccount.groups es null (ej. para usuarios MSA), !isResidenteDeObra será true, mostrando el enlace.
+            if (!isResidenteDeObra) { 
                 console.log('DEBUG (Home): Condition met to SHOW "Solicitud acceso a plataformas" link.');
                 navLink?.classList.remove('hidden');
                 mobileLink?.classList.remove('hidden');
             } else {
-                // Ocultar solo si los grupos se obtuvieron y el usuario es "Residente de Obra".
+                // Ocultar si se confirma que es "Residente de Obra".
                 console.log('DEBUG (Home): Condition met to HIDE "Solicitud acceso a plataformas" link.');
                 navLink?.classList.add('hidden');
                 mobileLink?.classList.add('hidden');
