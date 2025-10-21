@@ -73,17 +73,19 @@
         loginButton.addEventListener('click', async () => {
             try {
                 await msalInstance.loginPopup({
-                    scopes: ["User.Read"] // Solo permisos básicos para el login inicial
+                    scopes: ["User.Read", "GroupMember.Read.All", "Sites.Read.All"] // Solicitar todos los permisos necesarios
                 });
 
                 const account = msalInstance.getAllAccounts()[0];
+                console.log('MSAL Account after loginPopup:', account); // Debugging: Verificar si se obtiene la cuenta
+
                 if (account) {
                     let groupNames = []; // Inicia los grupos como un array vacío
                     
                     // Intenta obtener los grupos del usuario. Si falla, no interrumpe el login.
                     try {
                         const accessTokenRequest = {
-                            scopes: ["User.Read", "GroupMember.Read.All", "Sites.Read.All"], // Solicitar estos scopes para el token de Graph
+                            scopes: ["https://graph.microsoft.com/.default"], // Solicitar un token para Graph API
                             account: account
                         };
                         const response = await msalInstance.acquireTokenSilent(accessTokenRequest);
@@ -96,10 +98,12 @@
                             const groupsData = await groupsResponse.json();
                             groupNames = groupsData.value.map(group => group.displayName);
                         } else {
-                            console.warn("No se pudieron obtener los grupos del usuario. El inicio de sesión continuará sin esta información.");
+                            console.warn("No se pudieron obtener los grupos del usuario (respuesta no OK). El inicio de sesión continuará sin esta información.");
+                            console.warn("Groups API response:", groupsResponse); // Debugging: Ver la respuesta de la API de grupos
                         }
                     } catch (groupError) {
-                        console.warn("Error al obtener los grupos. Es probable que falte el consentimiento de administrador para 'GroupMember.Read.All'.", groupError);
+                        console.warn("Error al obtener los grupos. Es probable que falte el consentimiento de administrador para 'GroupMember.Read.All' o el token no tenga los scopes necesarios.", groupError);
+                        errorMessage.textContent = "Error al obtener roles. Contacta al administrador si el problema persiste."; // Mensaje para el usuario
                     }
                     
                     const userProfile = {
