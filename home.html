@@ -149,6 +149,8 @@
     document.addEventListener('DOMContentLoaded', () => {
         // --- GESTIÓN DEL TEMA (MODO OSCURO/CLARO) ---
         const authContainer = document.getElementById('auth-container');
+        console.log('Home page: DOM Content Loaded.');
+        console.log('Home page: Attempting to retrieve userAccount from sessionStorage...');
         const userAccount = JSON.parse(sessionStorage.getItem('userAccount'));
 
         if (userAccount) {
