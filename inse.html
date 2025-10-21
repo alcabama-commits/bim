@@ -80,7 +80,7 @@
                 console.log('MSAL Account after loginPopup:', account); // Debugging: Verificar si se obtiene la cuenta
 
                 if (account) {
-                    let groupNames = []; // Inicia los grupos como un array vacío
+                    let groupNames = null; // Inicia como null para indicar que no se han obtenido los grupos
                     
                     // Intenta obtener los grupos del usuario. Si falla, no interrumpe el login.
                     try {
@@ -97,6 +97,8 @@
                         if (groupsResponse.ok) {
                             const groupsData = await groupsResponse.json();
                             groupNames = groupsData.value.map(group => group.displayName);
+                        } else if (groupsResponse.status === 403) {
+                            console.error("Error 403: Permisos insuficientes. Falta el consentimiento de administrador para 'GroupMember.Read.All'.");
                         } else {
                             console.warn("No se pudieron obtener los grupos del usuario (respuesta no OK). El inicio de sesión continuará sin esta información.");
                             console.warn("Groups API response:", groupsResponse); // Debugging: Ver la respuesta de la API de grupos
@@ -109,7 +111,7 @@
                     const userProfile = {
                         name: account.name,
                         username: account.username,
-                        groups: groupNames // Se guardará el array de grupos (lleno o vacío)
+                        groups: groupNames // Se guardará el array de grupos o null si falló
                     };
                     sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
 
