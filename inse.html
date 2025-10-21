@@ -73,9 +73,7 @@
         loginButton.addEventListener('click', async () => {
             try {
                 await msalInstance.loginPopup({
-                    // Permisos para leer perfil y grupos a los que pertenece el usuario
-                    scopes: ["User.Read", "GroupMember.Read.All", "Sites.Read.All"],
-                    prompt: 'select_account' // Fuerza la selección de cuenta y reevaluación de consentimiento
+                    scopes: ["User.Read"] // Solo permisos básicos para el login inicial
                 });
 
                 const account = msalInstance.getAllAccounts()[0];
@@ -85,7 +83,7 @@
                     // Intenta obtener los grupos del usuario. Si falla, no interrumpe el login.
                     try {
                         const accessTokenRequest = {
-                            scopes: ["User.Read", "GroupMember.Read.All", "Sites.Read.All"],
+                            scopes: ["User.Read", "GroupMember.Read.All", "Sites.Read.All"], // Solicitar estos scopes para el token de Graph
                             account: account
                         };
                         const response = await msalInstance.acquireTokenSilent(accessTokenRequest);
