@@ -23,12 +23,33 @@
             border-color: #D3045C;
         }
     </style>
+    <script>
+        // --- SCRIPT DE SEGURIDAD ---
+        // Se ejecuta antes de cargar el resto de la página.
+        (function() {
+            const userAccount = JSON.parse(sessionStorage.getItem('userAccount'));
+
+            // 1. Si no hay usuario, redirigir al login.
+            if (!userAccount) {
+                alert('Acceso denegado. Por favor, inicie sesión.');
+                window.location.href = 'https://alcabama-commits.github.io/bim/inse.html'; // URL de tu página de login
+                return;
+            }
+
+            // 2. Si el usuario es "Residente de Obra", redirigir al home.
+            const isResidenteDeObra = userAccount.groups?.some(group => group.toLowerCase() === 'residente de obra');
+            if (isResidenteDeObra) {
+                alert('Acceso denegado. No tiene permisos para ver esta página.');
+                window.location.href = 'https://alcabama-commits.github.io/bim/home'; // URL de tu página principal
+            }
+        })();
+    </script>
 </head>
 <body class="bg-gray-100">
     <header class="bg-white shadow-md">
         <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
             <div class="flex items-center">
-                <img alt="Logo de Alcabama" class="h-8 mr-4" src="https://www.photo-pick.com/online/api/internal/albums/ed07b9ab-5007-4bd2-a0d6-b71d6992bba0/albumimages/37de5e02-6807-4e7a-ae52-9aef721cabcf"/>
+                <img alt="Logo de Alcabama" class="h-8 mr-4" src="https://script.google.com/u/0/home/projects/1zOOOEF1Cv_a5FKVlWdxMESYjLpzzSI0VpBTMszX0_e4oYyuiXv0nJy3e/edit"/>
             </div>
             <div class="hidden md:flex items-center space-x-6">
                 <a class="text-gray-600 hover:text-main" href="#">Página principal</a>
@@ -50,7 +71,7 @@
         <div class="main-color text-white">
             <div class="container mx-auto px-6 py-20 flex items-center">
                 <div class="w-1/3 flex justify-center">
-                    <img alt="Logo BIM" class="h-20" src="https://www.photo-pick.com/online/api/internal/albums/ae75d536-aa06-4513-ba99-f3b9183b1aa8/albumimages/24f49357-1cce-4f86-bbc4-790e2a0ab1cd"/>
+                    <img alt="Logo BIM" class="h-20" src="https://i.postimg.cc/yN3gwWn5/logo-bim-ajustado.png"/>
                 </div>
                 <div class="border-l-2 border-white h-24 mx-8"></div>
                 <div class="w-2/3">
