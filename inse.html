@@ -112,8 +112,9 @@
                         name: account.name,
                         username: account.username,
                         groups: groupNames // Se guardará el array de grupos o null si falló
-                    };
-                    };
+                    };                    
+                    console.log('DEBUG: Grupos obtenidos para el usuario:', groupNames); // <-- AÑADIDO PARA DEPURACIÓN
+
                     sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
 
                     window.location.href = 'https://alcabama-commits.github.io/bim/home'; // Redirigir
