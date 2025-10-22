@@ -1,25 +1,27 @@
 <!DOCTYPE html>
-<html lang="es" class=""> <!-- La clase 'dark' se gestionará con JS -->
-<head>
-  <meta charset="utf-8"/>
-  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-  <meta name="description" content="Portal BIM de Alcabama: metodología, formación y recursos para procesos BIM en proyectos."/>
-  <title>Portal BIM Alcabama</title>
-  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
-  <script>
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Portal BIM Alcabama</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<script>
     tailwind.config = {
       darkMode: "class",
       theme: {
         extend: {
           colors: {
-            primary: "#D8005A",
-            "background-light": "#F3F4F6",
-            "background-dark": "#111827",
-            "text-light": "#1F2937",
-            "text-dark": "#F9FAFB"
+            primary: "#D8005E",
+            "background-light": "#FFFFFF",
+            "background-dark": "#1F2937",
+            "text-light": "#111827",
+            "text-dark": "#F3F4F6",
+            "card-light": "#FFFFFF",
+            "card-dark": "#374151",
+            "border-light": "#E5E7EB",
+            "border-dark": "#4B5563"
           },
           fontFamily: {
-            display: ["Inter", "sans-serif"],
+            sans: ['Inter', 'sans-serif'],
           },
           borderRadius: {
             DEFAULT: "0.5rem",
@@ -28,188 +30,137 @@
       },
     };
   </script>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
-  <!-- Librería SheetJS para exportar a Excel -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <style>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
     .material-symbols-outlined {
-      font-variation-settings:
-      'FILL' 0,
-      'wght' 400,
-      'GRAD' 0,
-      'opsz' 24
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
     }
   </style>
 </head>
-<body class="bg-background-light dark:bg-background-dark font-display">
-  <div class="min-h-screen flex flex-col">
-    <header class="bg-white dark:bg-gray-900 shadow-md">
-      <div class="container mx-auto px-4 py-4">
-        <div class="flex justify-between items-center">
-          <div class="flex items-center">
-            <img alt="Alcabama logo" class="h-8 mr-4" loading="lazy" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDnGH0dVV0uy9_t78YwQwvz7LUraYiYvCQVEiC06OdaLpcN2wnmq2HLsK6cbfuvsac3GswgEgn48dq-hXbq-eRky7bZzwaslcrlndCVP3GcYuStRBWVqfwlVZxfxrVLzZE5rWFU9ntSKkGFzM4se49dZDbC9OuqNiCmRw0oMuDC78EX1KGfpGCe8MeUrvYy7KryjYn42OtQ3bnXVpAiPJ929-GNxVkRgJf_-IrvZhxxMpOw43qwrsXaQ4_Oc49CGLlTviQprRgwEzQ4"/>
-          </div>
-          <nav class="hidden md:flex items-center space-x-6 text-sm">
-            <a id="nav-link-home" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary transition-colors" href="#">Página principal</a>
-            <a id="nav-link-access-request" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary transition-colors hidden" href="https://alcabama-commits.github.io/bim/index.html">Solicitud acceso a plataformas</a>
-            <div class="relative group">
-              <button type="button" class="flex items-center text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary transition-colors">
-                <span>PROYECTOS</span>
-                <span class="material-symbols-outlined text-sm ml-1">expand_more</span>
-              </button>
-              <div class="absolute hidden group-hover:block bg-white dark:bg-gray-800 shadow-lg rounded-md mt-2 py-2 w-48">
-                <a class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" href="#">Proyecto 1</a>
-                <a class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" href="#">Proyecto 2</a>
-              </div>
-            </div>
-          </nav>
-          <div class="flex items-center space-x-4">
-            <button aria-label="Buscar" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary">
-              <span class="material-symbols-outlined">search</span>
-            </button>
-            <button id="theme-toggle" aria-label="Cambiar tema" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary">
-              <span class="material-symbols-outlined">dark_mode</span>
-            </button>
-            <!-- Contenedor para el estado de autenticación -->
-            <div id="auth-container" class="flex items-center space-x-4">
-               <a class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary text-sm font-medium" href="https://alcabama-commits.github.io/bim/inse.html">Iniciar sesión</a>
-            </div>
-            <!-- Botón de menú móvil -->
-            <button id="mobile-menu-button" class="md:hidden text-gray-600 dark:text-gray-300">
-              <span class="material-symbols-outlined">menu</span>
-            </button>
-          </div>
+<body class="bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
+<div class="relative min-h-screen bg-background-light dark:bg-background-dark">
+<header class="absolute top-0 left-0 w-full z-10 p-8">
+    <div class="container mx-auto flex items-center justify-between">
+        <div class="flex items-center">
+            <img alt="BIM logo" class="h-8 mr-4" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDkpjphWodGG5oEz5sHi-dOjhXdmFM2nR-eK0RiYYgatHKeslkC8tjAyxkcVMNl4KGud4Xe9eiz6oV7Au1TuBo4t1yNpagjy0tLin7cFwDRtqB--XI6-GCInURy93Tg4vowczxZvuNqeZCViRHLVXTbgQQ4AAA24Qm1CEP5idPwC2pKuwib3ZORoHu5ILQv7j55OWZQHbBtqKc_qmFzRHPV4wZbzoMnWt4lz_tMk1qw5zoIIv1IpkVklhmaKOjxNtl3aX0EqzrQ7ig"/>
+            <span class="text-xl font-semibold text-white">Portal BIM Alcabama</span>
         </div>
-      </div>
-      <!-- Menú desplegable móvil -->
-      <div id="mobile-menu" class="hidden md:hidden bg-white dark:bg-gray-900">
-        <a id="mobile-link-home" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700" href="https://alcabama-commits.github.io/bim/home">Página principal</a>
-        <a id="mobile-link-access-request" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 hidden" href="https://alcabama-commits.github.io/bim/index.html">Solicitud acceso a plataformas</a>
-        <div class="px-4 py-2 text-sm text-gray-700 dark:text-gray-200">
-          <span class="font-bold">PROYECTOS</span>
-          <a class="block pl-4 pr-2 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" href="#">Proyecto 1</a>
-          <a class="block pl-4 pr-2 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" href="#">Proyecto 2</a>
+        <div class="flex items-center space-x-4">
+            <button id="theme-toggle" aria-label="Cambiar tema" class="text-white hover:text-primary"><span class="material-symbols-outlined">dark_mode</span></button>
+            <div id="auth-container" class="flex items-center space-x-4"><a href="https://alcabama-commits.github.io/bim/login.html" class="text-white hover:text-primary text-sm font-medium">Iniciar sesión</a></div>
         </div>
-      </div>
-    </header>
-    <main class="flex-grow">
-      <section class="bg-primary text-white">
-        <div class="container mx-auto px-4 py-32">
-          <div class="flex items-center">
-            <div class="w-1/3">
-              <img alt="logo BIM" class="h-8 mr-4" loading="lazy" src="https://i.postimg.cc/yN3gwWn5/logo-bim-ajustado.png"/>
-            </div>
-            <div class="border-l-2 border-white h-24 mx-8"></div>
-            <div class="w-2/3">
-              <p class="text-lg">Bienvenido al Portal BIM Alcabama</p>
-            </div>
-          </div>
-        </div>
-      </section>
-      <section class="bg-gray-700 dark:bg-gray-800 text-white py-20">
-        <div class="container mx-auto px-4 text-center">
-          <h2 class="text-3xl font-bold mb-4">Función del Portal BIM Alcabama (PBA)</h2>
-          <p class="max-w-4xl mx-auto text-gray-300">
-            El portal BIM Alcabama tiene como función centralizar los procesos BIM en un solo espacio, brindando un espacio de interacción entre los procesos. Se basa en tres puntos fundamentales: Metodología y procesos, Formación y Recursos.
+    </div>
+</header>
+<main>
+<section class="relative pt-24">
+<div class="absolute inset-x-0 top-24 bottom-0">
+<img alt="Black and white cityscape" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDG6qVkM4zHk2g-9JVMM6kXnU7g8j6I_L3ILmDQGkWJ5zzHdihv9XPWJbMrNyiVW7G3EQzNMWlrXYwTWqlLOk-Gm0FHQTG0P0kyG8zBtKstQ7XgOtjwlI7jkBtf3--3ni49NX9KZrkUMbDOGVigtgM5LV25wXjj2IdsK4NgHBBSNqLCMOujsHnUVGUB1WqJjQUG4DY0RiMRNjRvLku6EuvQzIL-lddC58zggAMzzWVjcnMDO2pO_C8Ksm43SGWAKGGSjJhvNsAwXdI"/>
+</div>
+<div class="relative container mx-auto px-8 pt-12 pb-24 flex items-center min-h-[calc(70vh-6rem)]">
+<div class="w-full md:w-1/2 lg:w-2/5 p-10 bg-primary/90 text-white rounded-lg backdrop-blur-sm">
+<h1 class="text-4xl md:text-5xl font-extrabold mb-4">Portal BIM Alcabama</h1>
+<p class="text-lg mb-8">
+            El Portal BIM de Alcabama es un entorno digital destinado a la gestión colaborativa de proyectos bajo la metodología Building Information Modeling (BIM). Sirve para gestionar, distribuir y compartir información técnica, promoviendo la integración de disciplinas y la eficiencia en el desarrollo de cada proyecto.
           </p>
-        </div>
-      </section>
-      <section class="bg-black text-white py-20">
-        <div class="container mx-auto px-4">
-          <div class="grid md:grid-cols-3 gap-12">
-            <div class="text-center md:text-left">
-              <h3 class="text-xl font-semibold mb-4">Metodología y procesos</h3>
-              <p class="text-gray-400 text-sm">
-                Se comparten los principios fundamentales que estructuran la metodología BIM en Alcabama, así como los parámetros y reglas a seguir para su correcta implementación en todos los procesos a los que tenga lugar.
-              </p>
-            </div>
-            <div class="text-center md:text-left">
-              <h3 class="text-xl font-semibold mb-4">Formación</h3>
-              <p class="text-gray-400 text-sm">
-                En esta sección encontrarás guías y tutoriales que te permitirán aprender del funcionamiento BIM en Alcabama.
-              </p>
-            </div>
-            <div class="text-center md:text-left">
-              <h3 class="text-xl font-semibold mb-4">Recursos</h3>
-              <p class="text-gray-400 text-sm">
-                Esta sección agrupa los recursos desarrollados para facilitar los procesos BIM, así como generar eficiencia en el desarrollo de los proyectos en Alcabama.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
-    <footer class="bg-gray-800 dark:bg-black text-gray-400 py-8 mt-auto">
-        <div class="container mx-auto px-4 text-center text-sm">
-            <p>© 2025 Portal BIM Alcabama. Todos los derechos reservados.</p>
-        </div>
-    </footer>
-  </div>
-  <script>
+<p class="text-white font-bold">
+            CDE ALCABAMA - PBA
+          </p>
+</div>
+</div>
+</section>
+<section class="bg-background-light dark:bg-background-dark py-16 px-8">
+<div class="container mx-auto">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
+<div>
+<h2 class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">Proyectos</h2>
+<ul class="space-y-2">
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Arboré</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Blue</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Ciudadela armonía</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Gardenias</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Iris</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">La figeroa</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Madero</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Magnolias</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Orión</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Trevoly</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Ventura</a></li>
+</ul>
+</div>
+<div>
+<h2 class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">Publicaciones</h2>
+<ul class="space-y-2">
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Publicaciones por proyecto</a></li>
+</ul>
+</div>
+<div>
+<h2 class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">Solicitudes</h2>
+<ul class="space-y-2">
+<li id="link-solicitud-cde"><a class="hover:text-primary dark:hover:text-primary" href="https://alcabama-commits.github.io/bim/index.html">Solicitud de acceso a CDE</a></li>
+</ul>
+</div>
+<div>
+<h2 class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">Métricas</h2>
+<ul class="space-y-2">
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Auditorías</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Incidencias</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Seguimiento de proyectos</a></li>
+</ul>
+</div>
+</div>
+</div>
+</section>
+</main>
+<footer class="bg-background-light dark:bg-background-dark py-8 px-8 mt-auto">
+<div class="container mx-auto text-center text-gray-500 dark:text-gray-400">
+<img alt="Alcabama logo" class="h-8 mx-auto mb-4" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCiq7ALHsYH5TpIYrmig_3hjHraqcEIg-rFha-I_t4dQABStugsvaZVL1tWvG6bPklXOjkFc3RPK_rWz3V1WT5td0FuLCKQPZWNG3b_8Wi5VagBas6MTC9yvZD1jt_r2OrlejBmBBgIJGBdJcF2TL7pt3fih9Y36iX79u4PGILceoocYFekzsSrchyJvnAtXTgLaA6RPFMH6Xl6oy-DpiLkXvR5MaQ1EyiHkBc549mpuT_KAyeWcsBIcMjpWKYUp69oWsxNDp7RqEA"/>
+<p class="text-sm">© 2023 Portal BIM Alcabama - Todos los derechos reservados.</p>
+</div>
+</footer>
+</div>
+
+<script>
     document.addEventListener('DOMContentLoaded', () => {
-        // --- GESTIÓN DEL TEMA (MODO OSCURO/CLARO) ---
         const authContainer = document.getElementById('auth-container');
-        console.log('Home page: DOM Content Loaded.');
-        console.log('Home page: Attempting to retrieve userAccount from sessionStorage...');
         const userAccount = JSON.parse(sessionStorage.getItem('userAccount'));
 
+        // --- GESTIÓN DE AUTENTICACIÓN ---
         if (userAccount) {
-            // Si el usuario está logueado, mostrar su nombre y el botón de cerrar sesión
             authContainer.innerHTML = `
-                <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Hola, ${userAccount.name.split(' ')[0]}</span>
-                <button id="logout-button" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary text-sm font-medium">Cerrar sesión</button>
+                <span class="text-sm font-medium text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
+                <button id="logout-button" class="text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
             `;
-
             document.getElementById('logout-button').addEventListener('click', () => {
                 sessionStorage.removeItem('userAccount');
-                // Opcional: Redirigir a la página de logout de MSAL si es necesario
-                // msalInstance.logoutPopup(); 
-                window.location.reload(); // Recargar la página para reflejar el cambio
+                window.location.reload();
             });
-        } else {
-            // Si no está logueado, el enlace de "Iniciar sesión" ya está visible por defecto.
-            // No es necesario hacer nada aquí.
         }
-        
-        // --- CONTROL DE ACCESO BASADO EN ROLES ---
+
+        // --- CONTROL DE ACCESO POR USUARIO ---
         if (userAccount) {
-            console.log('Home page: User is logged in:', userAccount.name);
-            console.log('DEBUG (Home): User groups from sessionStorage:', userAccount.groups);
-            const navLink = document.getElementById('nav-link-access-request');
-            const mobileLink = document.getElementById('mobile-link-access-request');
+            const linkSolicitud = document.getElementById('link-solicitud-cde');
             
-            // Comprobamos si el usuario es "Residente de Obra" (insensible a mayúsculas/minúsculas)
-            const isResidenteDeObra = userAccount.groups?.some(group => group.toLowerCase() === 'residente de obra');
-            
-            // Lista de usuarios restringidos individualmente (insensible a mayúsculas/minúsculas)
+            // Lista de usuarios restringidos
             const restrictedUsers = ['alc.spk.1@gmail.com', 'kanatagiraldo@gmail.com'];
             const isRestrictedUser = restrictedUsers.includes(userAccount.username.toLowerCase());
 
-            console.log('DEBUG (Home): isResidenteDeObra (evaluado):', isResidenteDeObra);
-            console.log('DEBUG (Home): isRestrictedUser (evaluado):', isRestrictedUser);
-
-            // Lógica de acceso: Mostrar el enlace solo si el usuario NO es "Residente de Obra" Y NO está en la lista de restringidos.
-            if (!isResidenteDeObra && !isRestrictedUser) { 
-                console.log('DEBUG (Home): Condition met to SHOW "Solicitud acceso a plataformas" link.');
-                navLink?.classList.remove('hidden');
-                mobileLink?.classList.remove('hidden');
+            if (isRestrictedUser) {
+                linkSolicitud?.classList.add('hidden');
             } else {
-                // Ocultar si se confirma que es "Residente de Obra".
-                console.log('DEBUG (Home): Condition met to HIDE "Solicitud acceso a plataformas" link.');
-                navLink?.classList.add('hidden');
-                mobileLink?.classList.add('hidden');
+                linkSolicitud?.classList.remove('hidden');
             }
+        } else {
+            // Si no hay usuario, por defecto ocultamos el enlace
+            document.getElementById('link-solicitud-cde')?.classList.add('hidden');
         }
 
-
-        // --- LÓGICA DEL MENÚ MÓVIL ---
-        const mobileMenuButton = document.getElementById('mobile-menu-button');
-        const mobileMenu = document.getElementById('mobile-menu');
-
-        mobileMenuButton.addEventListener('click', () => {
-          mobileMenu.classList.toggle('hidden');
-        });
-
+        // --- GESTIÓN DEL TEMA (MODO OSCURO/CLARO) ---
         const themeToggle = document.getElementById('theme-toggle');
         const htmlEl = document.documentElement;
 
@@ -232,6 +183,5 @@
           applyTheme(newTheme);
         });
     });
-  </script>
-</body>
-</html>
+</script>
+</body></html>
