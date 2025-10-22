@@ -55,8 +55,8 @@
             auth: {
                 // Reemplaza con los datos de tu aplicación en Azure AD
                 clientId: "8dc59d32-a4cd-48df-9d65-f19b53f36f28", 
-                authority: "https://login.microsoftonline.com/common", // Volvemos a 'common' para permitir MSA
-                redirectUri: window.location.origin + window.location.pathname, // URI de redirección en Azure (la URL actual de la página)
+                authority: "https://login.microsoftonline.com/common",
+                redirectUri: "https://alcabama-commits.github.io/bim/inse.html", // URI de redirección en Azure (la URL correcta de login)
             },
             cache: {
                 cacheLocation: "sessionStorage", // Usa sessionStorage para que la sesión se cierre al cerrar la pestaña
