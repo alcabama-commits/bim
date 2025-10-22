@@ -73,58 +73,23 @@
         loginButton.addEventListener('click', async () => {
             try {
                 await msalInstance.loginPopup({
-                    scopes: ["User.Read", "GroupMember.Read.All"]
+                    scopes: ["User.Read"] // Solo necesitamos leer el perfil del usuario
                 });
 
                 const account = msalInstance.getAllAccounts()[0];
                 console.log('MSAL Account after loginPopup:', account); // Debugging: Verificar si se obtiene la cuenta
 
                 if (account) {
-                    let groupNames = null; // Inicia como null para indicar que no se han obtenido los grupos
-                    
-                    // Intenta obtener los grupos del usuario. Si falla, no interrumpe el login.
-                    try {
-                        const accessTokenRequest = {
-                            scopes: ["User.Read", "GroupMember.Read.All"], // Pedir explícitamente los scopes para Graph
-                            account: account
-                        };
-                        const response = await msalInstance.acquireTokenSilent(accessTokenRequest);
-                        
-                        const groupsResponse = await fetch("https://graph.microsoft.com/v1.0/me/memberOf", {
-                            headers: { "Authorization": `Bearer ${response.accessToken}` }
-                        });
-                        
-                        if (groupsResponse.ok) {
-                            const groupsData = await groupsResponse.json();
-                            // Filtramos para asegurarnos de que solo obtenemos objetos con displayName
-                            groupNames = groupsData.value.filter(g => g.displayName).map(g => g.displayName);
-                        } else if (groupsResponse.status === 403) {
-                            console.error("Error 403: Permisos insuficientes. Falta el consentimiento de administrador para 'GroupMember.Read.All'.");
-                            errorMessage.textContent = "Error de permisos (403). Contacta al administrador.";
-                        } else {
-                            const errorText = await groupsResponse.text();
-                            console.error(`Error al obtener grupos: ${groupsResponse.status} - ${groupsResponse.statusText}`);
-                            console.error("Respuesta de la API de Graph:", errorText);
-                            errorMessage.textContent = `Error al obtener roles (${groupsResponse.status}).`;
-                        }
-                    } catch (groupError) {
-                        console.error("Excepción al obtener los grupos. Revisa la configuración de la app y los permisos de API.", groupError);
-                        // Si es un error de interacción, MSAL lo manejará en el catch principal.
-                        if (!(groupError instanceof msal.InteractionRequiredAuthError)) {
-                            errorMessage.textContent = "Error técnico al obtener roles. Revisa la consola.";
-                        }
-                    }
-                    
                     const userProfile = {
                         name: account.name,
                         username: account.username,
-                        groups: groupNames // Se guardará el array de grupos o null si falló
+                        groups: null // Ya no obtenemos grupos, se establece en null
                     };                    
-                    console.log('DEBUG: Grupos obtenidos para el usuario:', groupNames); // <-- AÑADIDO PARA DEPURACIÓN
+                    console.log('DEBUG: User profile created:', userProfile);
 
                     sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
 
-                    window.location.href = 'https://alcabama-commits.github.io/bim/home'; // Redirigir
+                    window.location.href = 'https://alcabama-commits.github.io/bim/INDEX_DES.html'; // Redirigir a la nueva página de inicio
                 }
             } catch (error) {
                 console.error(error);
