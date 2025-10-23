@@ -89,10 +89,20 @@
                 console.log('MSAL Account after loginPopup:', account); // Debugging: Verificar si se obtiene la cuenta
 
                 if (account) {
-                    // Buscar el rol del usuario en localStorage
-                    const userRoles = JSON.parse(localStorage.getItem('portalUserRoles')) || [];
-                    const userData = userRoles.find(u => u.email.toLowerCase() === account.username.toLowerCase());
-                    const userRole = userData ? userData.role : null;
+                    // URL del script que devuelve la lista de roles en formato JSON
+                    const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw3LZBukOETESOjCrz1EdEcYVHry5_S_SzHGyPvKUm2JHr2Roppt36m2jsijYVI74s/exec';
+                    let userRole = null;
+
+                    try {
+                        const response = await fetch(ROLES_SCRIPT_URL);
+                        const rolesList = await response.json();
+                        const userData = rolesList.find(u => u.email.toLowerCase() === account.username.toLowerCase());
+                        if (userData) {
+                            userRole = userData.rol; // 'rol' en minúsculas, como lo devuelve el script
+                        }
+                    } catch (error) {
+                        console.error("Error al obtener la lista de roles:", error);
+                    }
 
                     const userProfile = {
                         name: account.name,
