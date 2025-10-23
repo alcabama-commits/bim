@@ -92,20 +92,27 @@
                     // URL del script que devuelve la lista de roles en formato JSON
                     const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw3LZBukOETESOjCrz1EdEcYVHry5_S_SzHGyPvKUm2JHr2Roppt36m2jsijYVI74s/exec';
                     let userRole = null;
+                    const normalizedAccountEmail = account.username.trim().toLowerCase();
 
-                    try {
-                        const response = await fetch(ROLES_SCRIPT_URL);
-                        const rolesList = await response.json();
-                        // Normalizar ambos correos para una comparación robusta
-                        const normalizedAccountEmail = account.username.trim().toLowerCase();
-                        const userData = rolesList.find(u => u.email && u.email.trim().toLowerCase() === normalizedAccountEmail);
-                        
-                        if (userData) {
-                            userRole = userData.rol; // 'rol' en minúsculas, como lo devuelve el script
+                    // **INICIO DE LA MODIFICACIÓN: Verificación de superusuario**
+                    // Si el usuario es alcabama.bim@outlook.com, se le asigna el rol de ADMINISTRADOR directamente.
+                    if (normalizedAccountEmail === 'alcabama.bim@outlook.com') {
+                        userRole = 'ADMINISTRADOR';
+                        console.log('DEBUG: Administrator user detected. Role assigned directly.');
+                    } else {
+                        // Para todos los demás usuarios, se consulta el Google Sheet.
+                        try {
+                            const response = await fetch(ROLES_SCRIPT_URL);
+                            const rolesList = await response.json();
+                            const userData = rolesList.find(u => u.email && u.email.trim().toLowerCase() === normalizedAccountEmail);
+                            if (userData) {
+                                userRole = userData.rol;
+                            }
+                        } catch (error) {
+                            console.error("Error al obtener la lista de roles:", error);
                         }
-                    } catch (error) {
-                        console.error("Error al obtener la lista de roles:", error);
                     }
+                    // **FIN DE LA MODIFICACIÓN**
 
                     const userProfile = {
                         name: account.name,
