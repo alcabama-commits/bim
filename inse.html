@@ -96,7 +96,12 @@
                     };                    
                     console.log('DEBUG: User profile created:', userProfile);
 
-                    sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
+                    // Guardar en localStorage si se marcó "Mantener sesión", si no, en sessionStorage
+                    if (keepSignedInCheckbox.checked) {
+                        localStorage.setItem('userAccount', JSON.stringify(userProfile));
+                    } else {
+                        sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
+                    }
 
                     window.location.href = 'https://alcabama-commits.github.io/bim/home.html'; // Redirigir a la página de inicio correcta
                 }
