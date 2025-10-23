@@ -96,7 +96,10 @@
                     try {
                         const response = await fetch(ROLES_SCRIPT_URL);
                         const rolesList = await response.json();
-                        const userData = rolesList.find(u => u.email.toLowerCase() === account.username.toLowerCase());
+                        // Normalizar ambos correos para una comparación robusta
+                        const normalizedAccountEmail = account.username.trim().toLowerCase();
+                        const userData = rolesList.find(u => u.email && u.email.trim().toLowerCase() === normalizedAccountEmail);
+                        
                         if (userData) {
                             userRole = userData.rol; // 'rol' en minúsculas, como lo devuelve el script
                         }
