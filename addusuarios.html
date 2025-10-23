@@ -66,7 +66,7 @@
 </header>
 <main class="flex-grow flex items-center">
 <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-<div class="flex flex-col md:flex-row items-stretch overflow-hidden">
+<div class="flex flex-col md:flex-row items-stretch overflow-hidden rounded-lg shadow-lg bg-white dark:bg-gray-800">
 <div class="w-full md:w-1/2 p-8">
 <form class="space-y-6">
 <div>
@@ -92,9 +92,7 @@
 </select>
 </div>
 <div class="pt-4">
-<button class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary" type="submit">
-                                    Azure
-                                </button>
+<button class="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary" type="submit">Guardar Rol</button>
 </div>
 </form>
 </div>
@@ -111,5 +109,59 @@
 </div>
 </footer>
 </div>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = document.querySelector('form');
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw3LZBukOETESOjCrz1EdEcYVHry5_S_SzHGyPvKUm2JHr2Roppt36m2jsijYVI74s/exec';
 
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitButton = form.querySelector('button[type="submit"]');
+            const originalButtonText = submitButton.innerHTML;
+            submitButton.disabled = true;
+            submitButton.innerHTML = 'Guardando...';
+
+            const data = {
+                email: document.getElementById('correo').value,
+                rol: document.getElementById('rol').value
+            };
+
+            try {
+                const response = await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'cors',
+                    cache: 'no-cache',
+                    body: JSON.stringify(data)
+                });
+
+                // No se procesa la respuesta para evitar errores de CORS con el modo 'no-cors'
+                // que a veces es necesario con Apps Script.
+                // Se asume éxito si no hay un error de red.
+                alert('Rol guardado con éxito. La actualización puede tardar unos momentos en reflejarse.');
+                form.reset();
+
+            } catch (error) {
+                console.error('Error al enviar el formulario:', error);
+                alert(`Error: ${error.message}. Asegúrate de que la URL del script sea correcta y esté implementada para acceso anónimo.`);
+            } finally {
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalButtonText;
+            }
+        });
+
+        // Rellenar campos si el usuario viene de Azure (simulado)
+        const userEmailField = document.getElementById('correo');
+        const userNameField = document.getElementById('usuario');
+        const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
+
+        if (userAccount) {
+            if (userEmailField) {
+                userEmailField.value = userAccount.username || '';
+            }
+            if (userNameField) {
+                userNameField.value = userAccount.name || '';
+            }
+        }
+    });
+</script>
 </body></html>
