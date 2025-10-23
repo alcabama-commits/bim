@@ -89,10 +89,15 @@
                 console.log('MSAL Account after loginPopup:', account); // Debugging: Verificar si se obtiene la cuenta
 
                 if (account) {
+                    // Buscar el rol del usuario en localStorage
+                    const userRoles = JSON.parse(localStorage.getItem('portalUserRoles')) || [];
+                    const userData = userRoles.find(u => u.email.toLowerCase() === account.username.toLowerCase());
+                    const userRole = userData ? userData.role : null;
+
                     const userProfile = {
                         name: account.name,
                         username: account.username,
-                        groups: null // Ya no obtenemos grupos, se establece en null
+                        role: userRole // Guardamos el rol del usuario
                     };                    
                     console.log('DEBUG: User profile created:', userProfile);
 
