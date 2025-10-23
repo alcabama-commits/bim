@@ -50,7 +50,10 @@
 <header class="absolute top-0 left-0 w-full z-10 p-8">
     <div class="container mx-auto flex items-center justify-between">
         <div class="flex items-center">
-            <img alt="Portal BIM Alcabama Logo" class="h-8" src="https://i.postimg.cc/ZYCMwq9Z/Portal-BIM-Alcabama-7.png"/>
+            <!-- Logo para modo claro -->
+            <img alt="Portal BIM Alcabama Logo" class="h-24 dark:hidden" src="https://i.postimg.cc/ZYCMwq9Z/Portal-BIM-Alcabama-7.png"/>
+            <!-- Logo para modo oscuro -->
+            <img alt="Portal BIM Alcabama Logo" class="h-24 hidden dark:block" src="https://i.postimg.cc/rFpx1dzG/Portal-BIM-Alcabama-8.png"/>
         </div>
         <div class="flex items-center space-x-4">
             <button id="theme-toggle" aria-label="Cambiar tema" class="text-text-light dark:text-white hover:text-primary"><span class="material-symbols-outlined">dark_mode</span></button>
