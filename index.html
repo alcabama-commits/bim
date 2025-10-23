@@ -33,24 +33,20 @@
             // 1. Si no hay usuario, redirigir al login.
             if (!userAccount) {
                 alert('Acceso denegado. Por favor, inicie sesión.');
-                window.location.href = 'https://alcabama-commits.github.io/bim/login.html'; // URL de tu página de login
+                window.location.href = 'https://alcabama-commits.github.io/bim/inse.html'; // URL de tu página de login
                 return;
             }
 
-            // 2. Lógica de seguridad: Denegar acceso si el usuario es "Residente de Obra" O si está en la lista de usuarios restringidos.
-            const isResidenteDeObra = userAccount.groups?.some(group => group.toLowerCase() === 'residente de obra');
-            
+            // 2. Lógica de seguridad: Denegar acceso si el usuario está en la lista de usuarios restringidos.
             // Lista de usuarios restringidos individualmente (insensible a mayúsculas/minúsculas)
             const restrictedUsers = ['alc.spk.1@gmail.com', 'kanatagiraldo@gmail.com'];
             const isRestrictedUser = restrictedUsers.includes(userAccount.username.toLowerCase());
 
-            console.log('DEBUG (EXP.01 Security): userAccount.groups:', userAccount.groups);
-            console.log('DEBUG (EXP.01 Security): isResidenteDeObra:', isResidenteDeObra);
             console.log('DEBUG (EXP.01 Security): isRestrictedUser:', isRestrictedUser);
 
-            if (isResidenteDeObra || isRestrictedUser) {
+            if (isRestrictedUser) {
                 alert('Acceso denegado. No tiene permisos para ver esta página.');
-                window.location.href = 'https://alcabama-commits.github.io/bim/home'; // URL de tu página principal
+                window.location.href = 'https://alcabama-commits.github.io/bim/INDEX_DES.html'; // URL de tu página principal
             }
         })();
     </script>
@@ -59,12 +55,12 @@
     <header class="bg-white shadow-md">
         <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
             <div class="flex items-center">
-                <a href="https://alcabama-commits.github.io/bim/home">
+                <a href="https://alcabama-commits.github.io/bim/INDEX_DES.html">
                     <img alt="Logo de Alcabama" class="h-8 mr-4" src="https://i.postimg.cc/HxDQsbNG/Logo-ALCABAMA-SOLO.jpg"/>
                 </a>
             </div>
             <div class="hidden md:flex items-center space-x-6">
-                <a class="text-gray-600 hover:text-main" href="https://alcabama-commits.github.io/bim/home">Página principal</a>
+                <a class="text-gray-600 hover:text-main" href="https://alcabama-commits.github.io/bim/INDEX_DES.html">Página principal</a>
                 <a class="text-gray-600 hover:text-main" href="https://alcabama-commits.github.io/bim/index.html">Solicitud acceso a plataformas</a>
                 <a class="text-gray-600 hover:text-main flex items-center" href="#">
                     PROYECTOS <span class="material-icons text-sm ml-1">expand_more</span>
@@ -72,7 +68,7 @@
                 <span class="material-icons text-gray-600 cursor-pointer">search</span>
                 <!-- Contenedor para el estado de autenticación -->
                 <div id="auth-container" class="flex items-center space-x-4">
-                   <a class="text-gray-600 hover:text-main" href="https://alcabama-commits.github.io/bim/login.html">Iniciar sesión</a>
+                   <a class="text-gray-600 hover:text-main" href="https://alcabama-commits.github.io/bim/inse.html">Iniciar sesión</a>
                 </div>
             </div>
             <div class="md:hidden">
