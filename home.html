@@ -50,8 +50,7 @@
 <header class="absolute top-0 left-0 w-full z-10 p-8">
     <div class="container mx-auto flex items-center justify-between">
         <div class="flex items-center">
-            <img alt="BIM logo" class="h-8 mr-4" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDkpjphWodGG5oEz5sHi-dOjhXdmFM2nR-eK0RiYYgatHKeslkC8tjAyxkcVMNl4KGud4Xe9eiz6oV7Au1TuBo4t1yNpagjy0tLin7cFwDRtqB--XI6-GCInURy93Tg4vowczxZvuNqeZCViRHLVXTbgQQ4AAA24Qm1CEP5idPwC2pKuwib3ZORoHu5ILQv7j55OWZQHbBtqKc_qmFzRHPV4wZbzoMnWt4lz_tMk1qw5zoIIv1IpkVklhmaKOjxNtl3aX0EqzrQ7ig"/>
-            <span class="text-xl font-semibold text-text-light dark:text-white">Portal BIM Alcabama</span>
+            <img alt="Portal BIM Alcabama Logo" class="h-8" src="https://i.postimg.cc/ZYCMwq9Z/Portal-BIM-Alcabama-7.png"/>
         </div>
         <div class="flex items-center space-x-4">
             <button id="theme-toggle" aria-label="Cambiar tema" class="text-text-light dark:text-white hover:text-primary"><span class="material-symbols-outlined">dark_mode</span></button>
@@ -113,7 +112,10 @@
 </main>
 <footer class="bg-background-light dark:bg-background-dark py-8 px-8 mt-auto">
 <div class="container mx-auto text-center text-gray-500 dark:text-gray-400">
-<img alt="Alcabama logo" class="h-8 mx-auto mb-4" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCiq7ALHsYH5TpIYrmig_3hjHraqcEIg-rFha-I_t4dQABStugsvaZVL1tWvG6bPklXOjkFc3RPK_rWz3V1WT5td0FuLCKQPZWNG3b_8Wi5VagBas6MTC9yvZD1jt_r2OrlejBmBBgIJGBdJcF2TL7pt3fih9Y36iX79u4PGILceoocYFekzsSrchyJvnAtXTgLaA6RPFMH6Xl6oy-DpiLkXvR5MaQ1EyiHkBc549mpuT_KAyeWcsBIcMjpWKYUp69oWsxNDp7RqEA"/>
+<!-- Logo para modo claro -->
+<img alt="Alcabama logo" class="h-8 mx-auto mb-4 dark:hidden" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png"/>
+<!-- Logo para modo oscuro -->
+<img alt="Alcabama logo" class="h-8 mx-auto mb-4 hidden dark:block" src="https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png"/>
 <p class="text-sm">© 2023 Portal BIM Alcabama - Todos los derechos reservados.</p>
 </div>
 </footer>
@@ -127,8 +129,8 @@
         // --- GESTIÓN DE AUTENTICACIÓN ---
         if (userAccount) {
             authContainer.innerHTML = `
-                <span class="text-sm font-medium text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
-                <button id="logout-button" class="text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
+                <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
+                <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
             `;
             document.getElementById('logout-button').addEventListener('click', () => {
                 sessionStorage.removeItem('userAccount');
