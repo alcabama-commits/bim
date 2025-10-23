@@ -28,7 +28,8 @@
         // --- SCRIPT DE SEGURIDAD ---
         // Se ejecuta antes de cargar el resto de la página.
         (function() {
-            const userAccount = JSON.parse(sessionStorage.getItem('userAccount'));
+            // Buscar usuario en sessionStorage y luego en localStorage
+            const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
 
             // 1. Si no hay usuario, redirigir al login.
             if (!userAccount) {
@@ -169,7 +170,8 @@
         document.addEventListener('DOMContentLoaded', () => {
             // --- GESTIÓN DE LA INTERFAZ DE USUARIO DE AUTENTICACIÓN ---
             const authContainer = document.getElementById('auth-container');
-            const userAccount = JSON.parse(sessionStorage.getItem('userAccount'));
+            // Buscar usuario en sessionStorage y luego en localStorage
+            const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
 
             console.log('DEBUG (EXP.01 DOMContentLoaded): userAccount:', userAccount);
 
@@ -181,7 +183,8 @@
                 `;
 
                 document.getElementById('logout-button').addEventListener('click', () => {
-                    sessionStorage.removeItem('userAccount');
+                    sessionStorage.removeItem('userAccount'); // Limpiar ambas ubicaciones
+                    localStorage.removeItem('userAccount');
                     window.location.reload(); // Recargar la página para reflejar el cambio
                 });
             } else {
