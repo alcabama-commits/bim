@@ -38,14 +38,14 @@
                 return;
             }
 
-            // 2. Lógica de seguridad: Denegar acceso si el usuario está en la lista de usuarios restringidos.
-            // Lista de usuarios restringidos individualmente (insensible a mayúsculas/minúsculas)
-            const restrictedUsers = ['alc.spk.1@gmail.com', 'kanatagiraldo@gmail.com'];
-            const isRestrictedUser = restrictedUsers.includes(userAccount.username.toLowerCase());
+            // 2. Lógica de seguridad: Denegar acceso si el rol del usuario no está permitido.
+            const allowedRoles = ['EDGE', 'COMBOS Y REFORMAS', 'ACÚSTICA', 'ADMINISTRADOR'];
+            const userRole = userAccount.role;
+            const isAllowed = userRole && allowedRoles.includes(userRole);
 
-            console.log('DEBUG (EXP.01 Security): isRestrictedUser:', isRestrictedUser);
+            console.log(`DEBUG (Publicaciones Security): User role is '${userRole}'. Allowed roles: ${allowedRoles}. Access granted: ${isAllowed}`);
 
-            if (isRestrictedUser) {
+            if (!isAllowed) {
                 alert('Acceso denegado. No tiene permisos para ver esta página.');
                 window.location.href = 'https://alcabama-commits.github.io/bim/home.html'; // URL de tu página principal
             }
