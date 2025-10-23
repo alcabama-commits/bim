@@ -91,14 +91,15 @@
 </div>
 <div>
 <h2 class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">Publicaciones</h2>
-<ul class="space-y-2">
-<li><a class="hover:text-primary dark:hover:text-primary" href="#">Publicaciones por proyecto</a></li>
+<ul class="space-y-2" id="link-publicaciones">
+<li><a class="hover:text-primary dark:hover:text-primary" href="https://alcabama-commits.github.io/bim/Publicaciones.html">Publicaciones por proyecto</a></li>
 </ul>
 </div>
 <div>
 <h2 class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">Solicitudes</h2>
 <ul class="space-y-2">
 <li id="link-solicitud-cde"><a class="hover:text-primary dark:hover:text-primary" href="https://alcabama-commits.github.io/bim/index.html">Solicitud de acceso a CDE</a></li>
+<li id="link-admin-usuarios"><a class="hover:text-primary dark:hover:text-primary" href="https://alcabama-commits.github.io/bim/addusuarios.html">Administrar Usuarios</a></li>
 </ul>
 </div>
 <div>
@@ -145,20 +146,37 @@
 
         // --- CONTROL DE ACCESO POR USUARIO ---
         if (userAccount) {
-            const linkSolicitud = document.getElementById('link-solicitud-cde');
-            
-            // Lista de usuarios restringidos
-            const restrictedUsers = ['alc.spk.1@gmail.com', 'kanatagiraldo@gmail.com'];
-            const isRestrictedUser = restrictedUsers.includes(userAccount.username.toLowerCase());
+            const userRole = userAccount.role;
+            console.log('User role:', userRole);
 
-            if (isRestrictedUser) {
-                linkSolicitud?.classList.add('hidden');
-            } else {
-                linkSolicitud?.classList.remove('hidden');
-            }
+            // Definir permisos por rol para cada enlace
+            const permissions = {
+                'link-solicitud-cde': ['EDGE', 'ARQUITECTURA'],
+                'link-publicaciones': ['EDGE', 'COMBOS Y REFORMAS', 'ACÚSTICA'],
+                'link-admin-usuarios': ['ADMINISTRADOR']
+            };
+
+            // Función para mostrar/ocultar enlaces
+            const checkPermissions = (elementId, allowedRoles) => {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    if (userRole && allowedRoles.includes(userRole)) {
+                        element.classList.remove('hidden');
+                    } else {
+                        element.classList.add('hidden');
+                    }
+                }
+            };
+            
+            // Aplicar permisos a todos los enlaces
+            Object.keys(permissions).forEach(elementId => {
+                checkPermissions(elementId, permissions[elementId]);
+            });
         } else {
-            // Si no hay usuario, por defecto ocultamos el enlace
+            // Si no hay usuario, ocultar todos los enlaces protegidos
             document.getElementById('link-solicitud-cde')?.classList.add('hidden');
+            document.getElementById('link-publicaciones')?.classList.add('hidden');
+            document.getElementById('link-admin-usuarios')?.classList.add('hidden');
         }
 
         // --- GESTIÓN DEL TEMA (MODO OSCURO/CLARO) ---
