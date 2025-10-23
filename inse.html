@@ -38,6 +38,12 @@
         </div>
 
         <div class="w-full max-w-sm p-8 bg-white dark:bg-gray-800 rounded-lg shadow-md">
+            <div class="mb-6">
+                <label class="flex items-center cursor-pointer">
+                    <input type="checkbox" id="keep-signed-in" class="form-checkbox h-5 w-5 text-primary rounded border-gray-300 focus:ring-primary">
+                    <span class="ml-3 text-sm text-gray-600 dark:text-gray-300">Mantener la sesión iniciada</span>
+                </label>
+            </div>
             <button id="login-button" class="w-full flex items-center justify-center bg-blue-600 text-white font-bold py-3 px-4 rounded-md hover:bg-blue-700 transition duration-300">
                 <svg class="w-6 h-6 mr-3" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M21.4,5.3h-3.1V2.2h-3.1v3.1H12V2.2H8.9v3.1H5.8v3.1H2.7v3.1H5.8v3.1H8.9v3.1H12v-3.1h3.1v-3.1h3.1V8.4h3.1V5.3H21.4z M15.3,12.5h-3.1v3.1H8.9v-3.1H5.8V8.4h3.1V5.3h3.1v3.1h3.1V12.5z"/>
@@ -51,27 +57,30 @@
 
     <script>
         // --- CONFIGURACIÓN DE AUTENTICACIÓN MSAL ---
-        const msalConfig = {
-            auth: {
-                // Reemplaza con los datos de tu aplicación en Azure AD
-                clientId: "8dc59d32-a4cd-48df-9d65-f19b53f36f28", 
-                authority: "https://login.microsoftonline.com/common", // Permite cuentas personales y de organización
-                redirectUri: window.location.href, // Usar la URL actual como URI de redirección
-            },
-            cache: {
-                cacheLocation: "sessionStorage", // Usa sessionStorage para que la sesión se cierre al cerrar la pestaña
-                storeAuthStateInCookie: false,
-            }
-        };
-
-        const msalInstance = new msal.PublicClientApplication(msalConfig);
-
         // --- LÓGICA DE INICIO DE SESIÓN ---
         const loginButton = document.getElementById('login-button');
         const errorMessage = document.getElementById('error-message');
+        const keepSignedInCheckbox = document.getElementById('keep-signed-in');
 
         loginButton.addEventListener('click', async () => {
             try {
+                const cacheLocation = keepSignedInCheckbox.checked ? "localStorage" : "sessionStorage";
+                console.log(`Using cache location: ${cacheLocation}`);
+
+                const msalConfig = {
+                    auth: {
+                        clientId: "8dc59d32-a4cd-48df-9d65-f19b53f36f28", 
+                        authority: "https://login.microsoftonline.com/common",
+                        redirectUri: window.location.href,
+                    },
+                    cache: {
+                        cacheLocation: cacheLocation,
+                        storeAuthStateInCookie: false,
+                    }
+                };
+
+                const msalInstance = new msal.PublicClientApplication(msalConfig);
+
                 await msalInstance.loginPopup({
                     scopes: ["User.Read"] // Solo necesitamos leer el perfil del usuario
                 });
