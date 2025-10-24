@@ -122,7 +122,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="py-3 px-6">${user.rol || ''}</td>
                     <td class="py-3 px-6">${user.especialidad || ''}</td>
                     <td class="py-3 px-6 text-center">
-                        <a href="formulario_usuarios.html?email=${encodeURIComponent(user.email)}" class="bg-blue-600 text-white py-1 px-3 rounded-md hover:bg-blue-700 text-xs">Editar</a>
+                        <a href="formulario_usuarios.html?email=${encodeURIComponent(user.email)}" class="bg-blue-600 text-white py-1 px-3 rounded-md hover:bg-blue-700 text-xs mr-2">Editar</a>
+                        <button onclick="deleteUser('${user.email}')" class="bg-red-600 text-white py-1 px-3 rounded-md hover:bg-red-700 text-xs">Eliminar</button>
                     </td>
                 `;
                 tableBody.appendChild(row);
@@ -133,6 +134,29 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error fetching users:', error);
         }
     }
+
+    window.deleteUser = async (email) => {
+        if (!confirm(`¿Estás seguro de que deseas eliminar al usuario ${email}? Esta acción no se puede deshacer.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(SCRIPT_URL, {
+                method: 'POST',
+                mode: 'cors',
+                cache: 'no-cache',
+                body: JSON.stringify({ action: 'delete', email: email })
+            });
+
+            // Asumimos éxito y recargamos la tabla para ver el cambio.
+            alert('Usuario eliminado correctamente.');
+            loadUsers();
+
+        } catch (error) {
+            console.error('Error al eliminar el usuario:', error);
+            alert(`Error al intentar eliminar el usuario: ${error.message}`);
+        }
+    };
 
     exportBtn.addEventListener('click', () => {
         const table = document.getElementById('users-table');
