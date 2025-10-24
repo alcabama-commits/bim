@@ -171,7 +171,7 @@
                 .then(users => {
                     const userToEdit = users.find(user => user.email.toLowerCase() === emailToEdit.toLowerCase());
                     if (userToEdit) {
-                        document.getElementById('usuario').value = userToEdit.nombre || '';
+                        document.getElementById('usuario').value = userToEdit.nombre || ''; // Mapeo correcto: userToEdit.nombre -> campo 'usuario'
                         document.getElementById('correo').value = userToEdit.email || '';
                         document.getElementById('correo').readOnly = true; // El correo no se debe poder editar
                         document.getElementById('correo').classList.add('bg-gray-200', 'dark:bg-gray-600');
