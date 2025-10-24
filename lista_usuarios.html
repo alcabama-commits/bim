@@ -109,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            users.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+            users.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '')); // 'nombre' es la clave correcta
 
             users.forEach(user => {
                 if (!user.email) return; // Omitir filas sin email
