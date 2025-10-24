@@ -100,6 +100,7 @@
 <ul class="space-y-2">
 <li id="link-solicitud-cde"><a class="hover:text-primary dark:hover:text-primary" href="https://alcabama-commits.github.io/bim/index.html">Solicitud de acceso a CDE</a></li>
 <li id="link-admin-usuarios"><a class="hover:text-primary dark:hover:text-primary" href="https://alcabama-commits.github.io/bim/addusuarios.html">Administrar Usuarios</a></li>
+<li id="link-lista-usuarios"><a class="hover:text-primary dark:hover:text-primary" href="https://alcabama-commits.github.io/bim/lista_usuarios.html">Listar Usuarios</a></li>
 </ul>
 </div>
 <div>
@@ -153,7 +154,8 @@
             const permissions = {
                 'link-solicitud-cde': ['EDGE', 'ARQUITECTURA', 'ADMINISTRADOR'],
                 'link-publicaciones': ['EDGE', 'COMBOS Y REFORMAS', 'ACÚSTICA', 'ADMINISTRADOR'],
-                'link-admin-usuarios': ['ADMINISTRADOR']
+                'link-admin-usuarios': ['ADMINISTRADOR'],
+                'link-lista-usuarios': ['ADMINISTRADOR']
             };
 
             // Función para mostrar/ocultar enlaces
@@ -177,6 +179,7 @@
             document.getElementById('link-solicitud-cde')?.classList.add('hidden');
             document.getElementById('link-publicaciones')?.classList.add('hidden');
             document.getElementById('link-admin-usuarios')?.classList.add('hidden');
+            document.getElementById('link-lista-usuarios')?.classList.add('hidden');
         }
 
         // --- GESTIÓN DEL TEMA (MODO OSCURO/CLARO) ---
