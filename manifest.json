@@ -2,7 +2,7 @@
   "name": "Portal BIM Alcabama",
   "short_name": "Portal BIM",
   "description": "Portal para la centralización de procesos BIM en Alcabama.",
-  "start_url": "/bim/home.html",
+  "start_url": "home.html",
   "display": "standalone",
   "background_color": "#FFFFFF",
   "theme_color": "#D8005E",
