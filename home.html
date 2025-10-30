@@ -36,8 +36,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@900&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
-<!-- Enlace al manifiesto de la PWA -->
-<link rel="manifest" href="/bim/manifest.json">
+<!-- Enlace al manifiesto de la PWA (ruta relativa) -->
+<link rel="manifest" href="manifest.json">
 <style>
     body {
       font-family: 'Inter', sans-serif;
@@ -79,7 +79,7 @@
 <h2 class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">Proyectos</h2>
 <ul class="space-y-2">
 <li><a class="hover:text-primary dark:hover:text-primary" href="#">Arboré</a></li>
-<li><a class="hover:text-primary dark:hover:text-primary" href="#">Blue</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="proyectos/blue_project_plans.html">Blue</a></li>
 <li><a class="hover:text-primary dark:hover:text-primary" href="#">Ciudadela armonía</a></li>
 <li><a class="hover:text-primary dark:hover:text-primary" href="#">Gardenias</a></li>
 <li><a class="hover:text-primary dark:hover:text-primary" href="#">Iris</a></li>
@@ -210,7 +210,7 @@
         // --- REGISTRO DEL SERVICE WORKER PARA PWA ---
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/bim/sw.js')
+                navigator.serviceWorker.register('sw.js')
                     .then(registration => {
                         console.log('ServiceWorker registrado con éxito:', registration.scope);
                     })
