@@ -1,8 +1,9 @@
 const CACHE_NAME = 'portal-bim-alcabama-v1';
 // Lista de archivos que queremos guardar en caché para que la app funcione offline.
 const urlsToCache = [
-  '/bim/home.html',
-  '/bim/inse.html',
+  'home.html', // Ruta relativa a la ubicación del Service Worker
+  'inse.html', 
+  'blue_project_plans.html', // Ruta corregida
   'https://cdn.tailwindcss.com?plugins=forms,typography',
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap',
   'https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@900&display=swap',
