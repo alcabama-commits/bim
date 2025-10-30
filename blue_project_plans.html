@@ -44,6 +44,12 @@
     .material-symbols-outlined {
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
     }
+    /* Estilos para el contenedor del visor */
+    #viewer-container {
+        position: relative;
+        width: 100%;
+        height: 70vh; /* 70% de la altura de la pantalla */
+    }
   </style>
 </head>
 <body class="bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
@@ -65,21 +71,13 @@
 <main class="pt-24 pb-16">
     <section class="container mx-auto px-8 py-8">
         <h1 class="text-3xl font-bold text-center mb-8">Planos y Modelos del Proyecto Blue</h1>
-        
-        <!-- Componente para lanzar el visor de Autodesk -->
-        <div class="bg-card-light dark:bg-card-dark rounded-lg shadow-lg p-8 max-w-3xl mx-auto text-center">
-            <img src="https://i.postimg.cc/yN3gwWn5/logo-bim-ajustado.png" alt="Visor de Modelos" class="h-24 mx-auto mb-6">
-            <h2 class="text-2xl font-semibold mb-4">Acceso al Visor de Modelos 3D</h2>
-            <p class="text-gray-600 dark:text-gray-400 mb-8">
-                Para explorar los planos y modelos 3D del proyecto Blue, haz clic en el siguiente botón. El visor de Autodesk se abrirá en una nueva pestaña para una mejor experiencia.
-            </p>
-            <a href="https://viewer.autodesk.com/drive/hub/de28f2539/share/SH30dd5QT870c25f12fc886fa93f09860087/version/dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLjBldV9NUGlDUWIta21HY2s0eklYTnc_dmVyc2lvbj0x?source=drive&sheetId=NzZiYjJmYmMtMjU4ZS02ODA5LWM5YjItOTM0ZmNjNzIxZjli" 
-               target="_blank" 
-               rel="noopener noreferrer" 
-               class="inline-block bg-primary text-white font-bold py-3 px-8 rounded-md hover:bg-opacity-90 transition duration-300 shadow-md">
-                Abrir Visor de Autodesk
-            </a>
+
+        <!-- Contenedor donde se renderizará el visor 3D -->
+        <div id="viewer-container" class="rounded-lg shadow-lg overflow-hidden bg-gray-200 dark:bg-gray-700">
+            <!-- El visor se cargará aquí -->
         </div>
+        <p class="text-center text-gray-600 dark:text-gray-400 mt-4">Usa el ratón para navegar en el modelo 3D. Rueda para zoom, clic derecho para rotar, clic izquierdo para seleccionar.</p>
+
     </section>
 </main>
 <footer class="bg-background-light dark:bg-background-dark py-8 px-8 mt-auto">
@@ -92,6 +90,10 @@
 </div>
 </footer>
 </div>
+
+<!-- Librerías para el visor 3D -->
+<script src="https://unpkg.com/three@0.135.0/build/three.min.js"></script>
+<script src="https://unpkg.com/web-ifc-viewer@1.0.216/dist/web-ifc-viewer.js"></script>
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -123,6 +125,40 @@
           localStorage.setItem('theme', newTheme);
           applyTheme(newTheme);
         });
+
+        // --- LÓGICA DEL VISOR IFC ---
+        const container = document.getElementById('viewer-container');
+        const viewer = new WebIFC.IfcViewerAPI({ container, backgroundColor: new THREE.Color(0xeeeeee) });
+
+        // Crea una rejilla para dar contexto espacial
+        viewer.grid.setGrid();
+        viewer.axes.setAxes();
+
+        async function loadIfc(url) {
+            // Configura la ruta al archivo .wasm necesario para procesar el IFC
+            await viewer.IFC.setWasmPath("https://unpkg.com/web-ifc@0.0.36/", true);
+            
+            // Carga el modelo
+            const model = await viewer.IFC.loadIfcUrl(url);
+
+            // Añade sombras para un mejor efecto visual
+            await viewer.shadows.setShadows(model);
+
+            // Opcional: Añade un botón para crear planos de corte
+            const clippingPlanes = viewer.clipper.createFrom(model);
+            
+            // Opcional: Permite seleccionar elementos con doble clic
+            container.ondblclick = async () => {
+                const result = await viewer.IFC.pickIfcItem(true);
+                if (!result) return;
+                const { modelID, id } = result;
+                const props = await viewer.IFC.getProperties(modelID, id, true, false);
+                console.log(props); // Muestra las propiedades del elemento en la consola
+            };
+        }
+
+        // Carga el modelo. ¡RECUERDA CAMBIAR ESTA URL POR LA DE TU PROPIO ARCHIVO IFC!
+        loadIfc('https://ifcjs.github.io/ifcjs-crash-course/sample-apps/01/rac_basic_sample_project.ifc');
     });
 </script>
 </body></html>
