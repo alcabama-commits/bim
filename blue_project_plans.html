@@ -65,19 +65,21 @@
 <main class="pt-24 pb-16">
     <section class="container mx-auto px-8 py-8">
         <h1 class="text-3xl font-bold text-center mb-8">Planos y Modelos del Proyecto Blue</h1>
-        <div class="relative" style="padding-top: 56.25%;"> <!-- 16:9 Aspect Ratio -->
-            <iframe
-                src="https://viewer.autodesk.com/drive/hub/de28f2539/share/SH30dd5QT870c25f12fc886fa93f09860087/version/dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLjBldV9NUGlDUWIta21HY2s0eklYTnc_dmVyc2lvbj0x?source=drive&sheetId=NzZiYjJmYmMtMjU4ZS02ODA5LWM5YjItOTM0ZmNjNzIxZjli"
-                width="100%"
-                height="100%"
-                allowfullscreen="true"
-                webkitallowfullscreen="true"
-                mozallowfullscreen="true"
-                frameborder="0"
-                class="absolute top-0 left-0 w-full h-full"
-            ></iframe>
+        
+        <!-- Componente para lanzar el visor de Autodesk -->
+        <div class="bg-card-light dark:bg-card-dark rounded-lg shadow-lg p-8 max-w-3xl mx-auto text-center">
+            <img src="https://i.postimg.cc/yN3gwWn5/logo-bim-ajustado.png" alt="Visor de Modelos" class="h-24 mx-auto mb-6">
+            <h2 class="text-2xl font-semibold mb-4">Acceso al Visor de Modelos 3D</h2>
+            <p class="text-gray-600 dark:text-gray-400 mb-8">
+                Para explorar los planos y modelos 3D del proyecto Blue, haz clic en el siguiente botón. El visor de Autodesk se abrirá en una nueva pestaña para una mejor experiencia.
+            </p>
+            <a href="https://viewer.autodesk.com/drive/hub/de28f2539/share/SH30dd5QT870c25f12fc886fa93f09860087/version/dXJuOmFkc2sud2lwcHJvZDpmcy5maWxlOnZmLjBldV9NUGlDUWIta21HY2s0eklYTnc_dmVyc2lvbj0x?source=drive&sheetId=NzZiYjJmYmMtMjU4ZS02ODA5LWM5YjItOTM0ZmNjNzIxZjli" 
+               target="_blank" 
+               rel="noopener noreferrer" 
+               class="inline-block bg-primary text-white font-bold py-3 px-8 rounded-md hover:bg-opacity-90 transition duration-300 shadow-md">
+                Abrir Visor de Autodesk
+            </a>
         </div>
-        <p class="text-center text-gray-600 dark:text-gray-400 mt-4">Explora los modelos y planos del proyecto Blue directamente desde el visor de Autodesk.</p>
     </section>
 </main>
 <footer class="bg-background-light dark:bg-background-dark py-8 px-8 mt-auto">
