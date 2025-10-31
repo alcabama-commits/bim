@@ -152,6 +152,9 @@
                 // Oculta el indicador de carga una vez que el modelo está listo
                 if (model) {
                     loadingIndicator.style.display = 'none';
+                    // Enfoca la cámara en el modelo para que sea visible
+                    const scene = viewer.context.getScene();
+                    viewer.context.fitToFrame(scene);
                 }
 
                 // Añade sombras para un mejor efecto visual
@@ -177,7 +180,7 @@
         // --- ¡ACCIÓN REQUERIDA! ---
         // Reemplaza la URL de abajo con la URL "Raw" de tu archivo .ifc en GitHub.
         // Ejemplo: 'https://raw.githubusercontent.com/alcabama-commits/bim/main/models/TU_ARCHIVO.ifc'
-        const ifcUrl = 'https://github.com/alcabama-commits/bim/raw/refs/heads/main/Models/02_GI_BLU_Estructura_CBombas2.ifc'; // <- CAMBIA ESTA LÍNEA
+        const ifcUrl = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc'; // <- CAMBIA ESTA LÍNEA
         loadIfc(ifcUrl);
     });
 </script>
