@@ -99,7 +99,7 @@
 
 <script type="module">
     // ===================================================================================
-    // SOLUCIÓN DEFINITIVA - 2024
+    // SOLUCIÓN DEFINITIVA
     // Se usa la versión 1.0.233 que está empaquetada correctamente y la ruta directa al archivo ES Module.
     // ===================================================================================
     import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
@@ -112,33 +112,33 @@
 
         if (userAccount) {
             authContainer.innerHTML = `
-                <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>` +
-                `<button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
+                <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
+                <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
             `;
             document.getElementById('logout-button').addEventListener('click', () => {
                 sessionStorage.removeItem('userAccount');
                 localStorage.removeItem('userAccount');
                 window.location.href = 'home.html';
             });
-        } 
-        
+        }
+
         const themeToggle = document.getElementById('theme-toggle');
         const htmlEl = document.documentElement;
         const applyTheme = (theme) => {
             if (theme === 'dark') { htmlEl.classList.add('dark'); themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode'; }
             else { htmlEl.classList.remove('dark'); themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode'; }
         };
-
+        
         const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         applyTheme(savedTheme);
-
+        
         themeToggle.addEventListener('click', () => {
             const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
             localStorage.setItem('theme', newTheme);
             applyTheme(newTheme);
         });
 
-        // --- LÓGICA DEL VISOR IFC ---
+        // --- LÓGICA DEL VISOR IFC (VERSIÓN FINAL) ---
         const container = document.getElementById('viewer-container');
         const viewer = new IfcViewerAPI({ container, backgroundColor: new THREE.Color(0xeeeeee) });
 
@@ -146,30 +146,30 @@
         viewer.axes.setAxes();
 
         const loadingIndicator = document.getElementById('loading-indicator');
-        
+
         async function loadIfc(url) {
             try {
                 console.log("Cargando modelo desde:", url);
-                await viewer.IFC.setWasmPath("https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.233/wasm/");
+                await viewer.IFC.setWasmPath("https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.233/wasm/"); // WASM de la versión correcta
                 const model = await viewer.IFC.loadIfcUrl(url, true);
 
                 if (model) {
                     loadingIndicator.style.display = 'none';
                     viewer.context.fitToFrame();
                     await viewer.shadows.setShadows(model);
+                    console.log("¡Modelo cargado con éxito!");
                 }
-
             } catch (error) {
                 console.error("Error al cargar IFC:", error);
                 loadingIndicator.innerHTML = `
                     <div class="text-red-500 text-center p-4">
                         <p class="font-bold">Error al cargar</p>
-                        <p class="text-xs mt-2">No se pudo cargar el modelo. Revisa la consola (F12) para más detalles.</p>
+                        <p class="text-xs mt-2">${error.message}</p>
                     </div>`;
             }
         }
 
-        const ifcUrl = 'https://raw.githack.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc'; // Tu modelo
+        const ifcUrl = 'https://raw.githack.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc';
         loadIfc(ifcUrl);
     });
 </script>
