@@ -97,12 +97,14 @@
 </footer>
 </div>
 
-<!-- Librerías para el visor 3D -->
-<script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
-<script src="https://unpkg.com/web-ifc-viewer@1.0.190/dist/web-ifc-viewer.js"></script>
+<!-- Librerías para el visor 3D (cargadas como Módulos ES) -->
+<script type="module">
+    // 1. Importar las librerías necesarias
+    import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
+    import { IfcViewerAPI } from 'https://unpkg.com/web-ifc-viewer@1.0.225/dist/web-ifc-viewer.js';
 
-<script>
     document.addEventListener('DOMContentLoaded', () => {
+        // --- GESTIÓN DE AUTENTICACIÓN Y TEMA (código existente) ---
         const authContainer = document.getElementById('auth-container');
         const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
 
@@ -114,30 +116,29 @@
             document.getElementById('logout-button').addEventListener('click', () => {
                 sessionStorage.removeItem('userAccount');
                 localStorage.removeItem('userAccount');
-                window.location.href = 'home.html'; // Redirigir al home después de cerrar sesión
+                window.location.href = 'home.html';
             });
         }
 
         const themeToggle = document.getElementById('theme-toggle');
         const htmlEl = document.documentElement;
         const applyTheme = (theme) => {
-          if (theme === 'dark') { htmlEl.classList.add('dark'); themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode'; }
-          else { htmlEl.classList.remove('dark'); themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode'; }
+            if (theme === 'dark') { htmlEl.classList.add('dark'); themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode'; }
+            else { htmlEl.classList.remove('dark'); themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode'; }
         };
         const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         applyTheme(savedTheme);
         themeToggle.addEventListener('click', () => {
-          const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
-          localStorage.setItem('theme', newTheme);
-          applyTheme(newTheme);
+            const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
+            localStorage.setItem('theme', newTheme);
+            applyTheme(newTheme);
         });
 
-        // --- LÓGICA DEL VISOR IFC ---
+        // --- LÓGICA DEL VISOR IFC (Refactorizada) ---
         const container = document.getElementById('viewer-container');
-        // Con la versión 1.0.190, podemos volver a usar la sintaxis original que sí funciona.
-        const viewer = new WebIFC.IfcViewerAPI({ container, backgroundColor: new THREE.Color(0xeeeeee) });
-        
-        // Crea una rejilla para dar contexto espacial
+        // 2. Instanciar el visor usando IfcViewerAPI directamente (ya no existe WebIFC)
+        const viewer = new IfcViewerAPI({ container, backgroundColor: new THREE.Color(0xeeeeee) });
+
         viewer.grid.setGrid();
         viewer.axes.setAxes();
 
@@ -145,46 +146,28 @@
 
         async function loadIfc(url) {
             try {
-                // 1. CORRECCIÓN: Usar la ruta WASM que corresponde a la versión 1.0.190.
-                await viewer.IFC.setWasmPath("https://unpkg.com/web-ifc-viewer@1.0.190/wasm/", true);
-                
-                // Carga el modelo
-                const model = await viewer.IFC.loadIfcUrl(url);
+                console.log("Cargando modelo desde:", url);
+                await viewer.IFC.setWasmPath("https://unpkg.com/web-ifc-viewer@1.0.225/wasm/");
+                const model = await viewer.IFC.loadIfcUrl(url, true); // Usar worker para mejor rendimiento
 
-                // Oculta el indicador de carga una vez que el modelo está listo
                 if (model) {
                     loadingIndicator.style.display = 'none';
-                    // Enfoca la cámara en el modelo para que sea visible
-                    viewer.context.fitToFrame(); // fitToFrame no necesita argumentos para ajustar todo
+                    viewer.context.fitToFrame();
+                    await viewer.shadows.setShadows(model);
                 }
-
-                // Añade sombras para un mejor efecto visual
-                await viewer.shadows.setShadows(model);
-
-                // Opcional: Añade un botón para crear planos de corte
-                const clippingPlanes = viewer.clipper.createFrom(model);
-                
-                // Opcional: Permite seleccionar elementos con doble clic
-                container.ondblclick = async () => {
-                    const result = await viewer.IFC.pickIfcItem(true);
-                    if (!result) return;
-                    const { modelID, id } = result;
-                    const props = await viewer.IFC.getProperties(modelID, id, true, false);
-                    console.log(props); // Muestra las propiedades del elemento en la consola
-                };
             } catch (error) {
-                console.error("Error al cargar el modelo IFC:", error);
+                console.error("Error al cargar IFC:", error);
                 loadingIndicator.innerHTML = `
                     <div class="text-red-500 text-center p-4">
-                        <p class="font-bold">Error al cargar el modelo</p>
+                        <p class="font-bold">Error al cargar</p>
                         <p class="text-xs mt-2">${error.message}</p>
-                        <p class="text-xs mt-1">Revisa la consola (F12) para más detalles.</p>
                     </div>`;
             }
         }
 
-        // 2. CORRECCIÓN: Usar raw.githack.com para evitar problemas de CORS con GitHub.
-        const ifcUrl = 'https://raw.githack.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc';
+        // 3. Usar la URL con raw.githack.com y, una vez que funcione, cambiar a tu modelo.
+        // const ifcUrl = 'https://raw.githack.com/IFCjs/test-files/main/01.ifc'; // Modelo de prueba
+        const ifcUrl = 'https://raw.githack.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc'; // Tu modelo
         loadIfc(ifcUrl);
     });
 </script>
