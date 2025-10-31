@@ -101,7 +101,8 @@
 <script type="module">
     // 1. Importar las librerías necesarias
     import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
-    import { IfcViewerAPI } from 'https://unpkg.com/web-ifc-viewer@1.0.225/web-ifc-viewer.es.js';
+    // Se añade "?v=1" para forzar al navegador a descargar la nueva versión y evitar problemas de caché.
+    import { IfcViewerAPI } from 'https://unpkg.com/web-ifc-viewer@1.0.225/web-ifc-viewer.es.js?v=1';
 
     document.addEventListener('DOMContentLoaded', () => {
         // --- GESTIÓN DE AUTENTICACIÓN Y TEMA (código existente) ---
