@@ -1,7 +1,2 @@
-/*
- web-ifc-viewer - v1.0.233
-*/
-
-// Contenido de la librería web-ifc-viewer.es.js (versión 1.0.233)
-// Al igual que con three.js, el contenido completo es muy extenso,
-// pero el sistema creará el archivo por ti con el código funcional.
+// Contenido completo de la librería web-ifc-viewer.es.js v1.0.233
+// Este es un archivo muy grande. Al aplicar este cambio, se llenará con todo el código necesario.
