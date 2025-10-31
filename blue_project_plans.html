@@ -99,7 +99,7 @@
 
 <!-- Librerías para el visor 3D -->
 <script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
-<script src="https://unpkg.com/web-ifc-viewer@1.0.225/dist/web-ifc-viewer.js"></script>
+<script src="https://unpkg.com/web-ifc-viewer@1.0.190/dist/web-ifc-viewer.js"></script>
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -134,13 +134,9 @@
 
         // --- LÓGICA DEL VISOR IFC ---
         const container = document.getElementById('viewer-container');
-        // CORRECCIÓN: Inyectar la dependencia de THREE.js en el constructor del visor.
-        // Esto soluciona el error "WebIFC is not defined" porque asegura que el visor se inicialice correctamente.
-        const viewer = new IfcViewerAPI({ 
-            container, 
-            backgroundColor: new THREE.Color(0xeeeeee) 
-        }, THREE);
-
+        // Con la versión 1.0.190, podemos volver a usar la sintaxis original que sí funciona.
+        const viewer = new WebIFC.IfcViewerAPI({ container, backgroundColor: new THREE.Color(0xeeeeee) });
+        
         // Crea una rejilla para dar contexto espacial
         viewer.grid.setGrid();
         viewer.axes.setAxes();
@@ -149,8 +145,8 @@
 
         async function loadIfc(url) {
             try {
-                // 1. CORRECCIÓN: Usar la ruta WASM del mismo paquete del visor para garantizar compatibilidad.
-                await viewer.IFC.setWasmPath("https://unpkg.com/web-ifc-viewer@1.0.225/wasm/", true);
+                // 1. CORRECCIÓN: Usar la ruta WASM que corresponde a la versión 1.0.190.
+                await viewer.IFC.setWasmPath("https://unpkg.com/web-ifc-viewer@1.0.190/wasm/", true);
                 
                 // Carga el modelo
                 const model = await viewer.IFC.loadIfcUrl(url);
@@ -159,7 +155,6 @@
                 if (model) {
                     loadingIndicator.style.display = 'none';
                     // Enfoca la cámara en el modelo para que sea visible
-                    const scene = viewer.context.getScene();
                     viewer.context.fitToFrame(); // fitToFrame no necesita argumentos para ajustar todo
                 }
 
