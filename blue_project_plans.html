@@ -74,7 +74,10 @@
 
         <!-- Contenedor donde se renderizará el visor 3D -->
         <div id="viewer-container" class="rounded-lg shadow-lg overflow-hidden bg-gray-200 dark:bg-gray-700">
-            <!-- El visor se cargará aquí -->
+            <!-- Indicador de carga -->
+            <div id="loading-indicator" class="text-center text-gray-500">
+                <p>Cargando modelo 3D...</p>
+            </div>
         </div>
         <p class="text-center text-gray-600 dark:text-gray-400 mt-4">Usa el ratón para navegar en el modelo 3D. Rueda para zoom, clic derecho para rotar, clic izquierdo para seleccionar.</p>
 
@@ -134,12 +137,19 @@
         viewer.grid.setGrid();
         viewer.axes.setAxes();
 
+        const loadingIndicator = document.getElementById('loading-indicator');
+
         async function loadIfc(url) {
             // Configura la ruta al archivo .wasm necesario para procesar el IFC
             await viewer.IFC.setWasmPath("https://unpkg.com/web-ifc@0.0.36/", true);
             
             // Carga el modelo
             const model = await viewer.IFC.loadIfcUrl(url);
+
+            // Oculta el indicador de carga una vez que el modelo está listo
+            if (model) {
+                loadingIndicator.style.display = 'none';
+            }
 
             // Añade sombras para un mejor efecto visual
             await viewer.shadows.setShadows(model);
@@ -157,8 +167,11 @@
             };
         }
 
-        // Carga el modelo. ¡RECUERDA CAMBIAR ESTA URL POR LA DE TU PROPIO ARCHIVO IFC!
-        loadIfc('https://ifcjs.github.io/ifcjs-crash-course/sample-apps/01/rac_basic_sample_project.ifc');
+        // --- ¡ACCIÓN REQUERIDA! ---
+        // Reemplaza la URL de abajo con la URL "Raw" de tu archivo .ifc en GitHub.
+        // Ejemplo: 'https://raw.githubusercontent.com/alcabama-commits/bim/main/models/TU_ARCHIVO.ifc'
+        const ifcUrl = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/models/02_GI_BLU_Estructura_CBombas2.ifc'; // <- CAMBIA ESTA LÍNEA
+        loadIfc(ifcUrl);
     });
 </script>
 </body></html>
