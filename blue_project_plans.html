@@ -74,12 +74,12 @@
     <section class="container mx-auto px-8 py-8">
         <h1 class="text-3xl font-bold text-center mb-8">Planos y Modelos del Proyecto Blue</h1>
 
-        <!-- Contenedor donde se renderizará el visor 3D -->
-        <div id="viewer-container" class="rounded-lg shadow-lg overflow-hidden bg-gray-200 dark:bg-gray-700">
-            <!-- Indicador de carga -->
-            <div id="loading-indicator" class="text-center text-gray-500">
-                <p>Cargando modelo 3D...</p>
-            </div>
+        <!-- Contenedor para el visor y el indicador de carga -->
+        <div class="relative rounded-lg shadow-lg overflow-hidden bg-gray-200 dark:bg-gray-700">
+            <!-- Indicador de carga (ahora superpuesto) -->
+            <div id="loading-indicator" class="absolute inset-0 flex items-center justify-center text-gray-500 z-10"><p>Cargando modelo 3D...</p></div>
+            <!-- Contenedor donde se renderizará el visor 3D (ahora vacío) -->
+            <div id="viewer-container"></div>
         </div>
         <p class="text-center text-gray-600 dark:text-gray-400 mt-4">Usa el ratón para navegar en el modelo 3D. Rueda para zoom, clic derecho para rotar, clic izquierdo para seleccionar.</p>
 
