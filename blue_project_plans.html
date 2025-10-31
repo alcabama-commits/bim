@@ -101,8 +101,8 @@
 <script type="module">
     // 1. Importar las librerías necesarias
     import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
-    // CAMBIO DE CDN: Se usa jsdelivr en lugar de unpkg para evitar problemas de red/caché.
-    import { IfcViewerAPI } from 'https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.225/web-ifc-viewer.es.js';
+    // CORRECCIÓN FINAL: Se actualiza a la versión 1.0.226, que sí incluye el archivo .es.js correcto.
+    import { IfcViewerAPI } from 'https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.226/web-ifc-viewer.es.js';
 
     document.addEventListener('DOMContentLoaded', () => {
         // --- GESTIÓN DE AUTENTICACIÓN Y TEMA (código existente) ---
@@ -148,7 +148,8 @@
         async function loadIfc(url) {
             try {
                 console.log("Cargando modelo desde:", url);
-                await viewer.IFC.setWasmPath("https://unpkg.com/web-ifc-viewer@1.0.225/wasm/");
+                // Se actualiza también la ruta del WASM para que coincida con la nueva versión.
+                await viewer.IFC.setWasmPath("https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.226/wasm/");
                 const model = await viewer.IFC.loadIfcUrl(url, true); // Usar worker para mejor rendimiento
 
                 if (model) {
