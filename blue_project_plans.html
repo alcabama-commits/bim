@@ -97,78 +97,78 @@
 </footer>
 </div>
 
-<!-- Librerías para el visor 3D (cargadas como Módulos ES) -->
 <script type="module">
-    // 1. Importar las librerías necesarias
+    // ===================================================================================
+    // SOLUCIÓN DEFINITIVA - 2024
+    // Se usa la versión 1.0.233 que está empaquetada correctamente y la ruta directa al archivo ES Module.
+    // ===================================================================================
     import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
-    // CORRECCIÓN FINAL: Se actualiza a la versión 1.0.230, que está empaquetada correctamente en el CDN.
-    import { IfcViewerAPI } from 'https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.230/dist/web-ifc-viewer.es.js';
+    import { IfcViewerAPI } from 'https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.233/web-ifc-viewer.es.js';
 
     document.addEventListener('DOMContentLoaded', () => {
-        // --- GESTIÓN DE AUTENTICACIÓN Y TEMA (código existente) ---
+        // --- GESTIÓN DE AUTENTICACIÓN Y TEMA ---
         const authContainer = document.getElementById('auth-container');
         const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
 
         if (userAccount) {
             authContainer.innerHTML = `
-                <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
-                <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
+                <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>` +
+                `<button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
             `;
             document.getElementById('logout-button').addEventListener('click', () => {
                 sessionStorage.removeItem('userAccount');
                 localStorage.removeItem('userAccount');
                 window.location.href = 'home.html';
             });
-        }
-
+        } 
+        
         const themeToggle = document.getElementById('theme-toggle');
         const htmlEl = document.documentElement;
         const applyTheme = (theme) => {
             if (theme === 'dark') { htmlEl.classList.add('dark'); themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode'; }
             else { htmlEl.classList.remove('dark'); themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode'; }
         };
+
         const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         applyTheme(savedTheme);
+
         themeToggle.addEventListener('click', () => {
             const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
             localStorage.setItem('theme', newTheme);
             applyTheme(newTheme);
         });
 
-        // --- LÓGICA DEL VISOR IFC (Refactorizada) ---
+        // --- LÓGICA DEL VISOR IFC ---
         const container = document.getElementById('viewer-container');
-        // 2. Instanciar el visor usando IfcViewerAPI directamente (ya no existe WebIFC)
         const viewer = new IfcViewerAPI({ container, backgroundColor: new THREE.Color(0xeeeeee) });
 
         viewer.grid.setGrid();
         viewer.axes.setAxes();
 
         const loadingIndicator = document.getElementById('loading-indicator');
-
+        
         async function loadIfc(url) {
             try {
                 console.log("Cargando modelo desde:", url);
-                // Se actualiza también la ruta del WASM para que coincida con la nueva versión.
-                await viewer.IFC.setWasmPath("https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.230/wasm/");
-                const model = await viewer.IFC.loadIfcUrl(url, true); // Usar worker para mejor rendimiento
+                await viewer.IFC.setWasmPath("https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.233/wasm/");
+                const model = await viewer.IFC.loadIfcUrl(url, true);
 
                 if (model) {
                     loadingIndicator.style.display = 'none';
                     viewer.context.fitToFrame();
                     await viewer.shadows.setShadows(model);
                 }
+
             } catch (error) {
                 console.error("Error al cargar IFC:", error);
                 loadingIndicator.innerHTML = `
                     <div class="text-red-500 text-center p-4">
                         <p class="font-bold">Error al cargar</p>
-                        <p class="text-xs mt-2">${error.message}</p>
+                        <p class="text-xs mt-2">No se pudo cargar el modelo. Revisa la consola (F12) para más detalles.</p>
                     </div>`;
             }
         }
 
-        // 3. Usar la URL con raw.githack.com y, una vez que funcione, cambiar a tu modelo.
-        // const ifcUrl = 'https://raw.githack.com/IFCjs/test-files/main/01.ifc'; // Modelo de prueba
         const ifcUrl = 'https://raw.githack.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc'; // Tu modelo
         loadIfc(ifcUrl);
     });
