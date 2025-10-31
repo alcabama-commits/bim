@@ -134,7 +134,12 @@
 
         // --- LÓGICA DEL VISOR IFC ---
         const container = document.getElementById('viewer-container');
-        const viewer = new WebIFC.IfcViewerAPI({ container, backgroundColor: new THREE.Color(0xeeeeee) });
+        // CORRECCIÓN: Inyectar la dependencia de THREE.js en el constructor del visor.
+        // Esto soluciona el error "WebIFC is not defined" porque asegura que el visor se inicialice correctamente.
+        const viewer = new IfcViewerAPI({ 
+            container, 
+            backgroundColor: new THREE.Color(0xeeeeee) 
+        }, THREE);
 
         // Crea una rejilla para dar contexto espacial
         viewer.grid.setGrid();
