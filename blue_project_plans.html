@@ -142,31 +142,36 @@
         const loadingIndicator = document.getElementById('loading-indicator');
 
         async function loadIfc(url) {
-            // Configura la ruta al archivo .wasm necesario para procesar el IFC
-            await viewer.IFC.setWasmPath("https://unpkg.com/web-ifc@0.0.36/", true);
-            
-            // Carga el modelo
-            const model = await viewer.IFC.loadIfcUrl(url);
+            try {
+                // Configura la ruta al archivo .wasm necesario para procesar el IFC
+                await viewer.IFC.setWasmPath("https://unpkg.com/web-ifc@0.0.36/", true);
+                
+                // Carga el modelo
+                const model = await viewer.IFC.loadIfcUrl(url);
 
-            // Oculta el indicador de carga una vez que el modelo está listo
-            if (model) {
-                loadingIndicator.style.display = 'none';
+                // Oculta el indicador de carga una vez que el modelo está listo
+                if (model) {
+                    loadingIndicator.style.display = 'none';
+                }
+
+                // Añade sombras para un mejor efecto visual
+                await viewer.shadows.setShadows(model);
+
+                // Opcional: Añade un botón para crear planos de corte
+                const clippingPlanes = viewer.clipper.createFrom(model);
+                
+                // Opcional: Permite seleccionar elementos con doble clic
+                container.ondblclick = async () => {
+                    const result = await viewer.IFC.pickIfcItem(true);
+                    if (!result) return;
+                    const { modelID, id } = result;
+                    const props = await viewer.IFC.getProperties(modelID, id, true, false);
+                    console.log(props); // Muestra las propiedades del elemento en la consola
+                };
+            } catch (error) {
+                console.error("Error al cargar el modelo IFC:", error);
+                loadingIndicator.innerHTML = `<p class="text-red-500">Error al cargar el modelo. Verifica la URL y el archivo.</p>`;
             }
-
-            // Añade sombras para un mejor efecto visual
-            await viewer.shadows.setShadows(model);
-
-            // Opcional: Añade un botón para crear planos de corte
-            const clippingPlanes = viewer.clipper.createFrom(model);
-            
-            // Opcional: Permite seleccionar elementos con doble clic
-            container.ondblclick = async () => {
-                const result = await viewer.IFC.pickIfcItem(true);
-                if (!result) return;
-                const { modelID, id } = result;
-                const props = await viewer.IFC.getProperties(modelID, id, true, false);
-                console.log(props); // Muestra las propiedades del elemento en la consola
-            };
         }
 
         // --- ¡ACCIÓN REQUERIDA! ---
