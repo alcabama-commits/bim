@@ -97,8 +97,8 @@
 </div>
 
 <!-- Librerías para el visor 3D -->
-<script src="https://unpkg.com/three@0.135.0/build/three.min.js"></script>
-<script src="https://unpkg.com/web-ifc-viewer@1.0.216/dist/web-ifc-viewer.js"></script>
+<script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
+<script src="https://unpkg.com/web-ifc-viewer@1.0.225/dist/web-ifc-viewer.js"></script>
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -143,8 +143,8 @@
 
         async function loadIfc(url) {
             try {
-                // Configura la ruta al archivo .wasm necesario para procesar el IFC
-                await viewer.IFC.setWasmPath("https://unpkg.com/web-ifc@0.0.36/", true);
+                // Configura la ruta al archivo .wasm (debe coincidir con la versión del visor)
+                await viewer.IFC.setWasmPath("https://unpkg.com/web-ifc@0.0.44/", true);
                 
                 // Carga el modelo
                 const model = await viewer.IFC.loadIfcUrl(url);
