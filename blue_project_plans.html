@@ -102,7 +102,8 @@
     // SOLUCIÓN FINAL: Cargar librerías localmente para eliminar dependencias de CDN.
     // ===================================================================================
     import * as THREE from './libs/three.module.js';
-    import { IfcViewerAPI } from './libs/web-ifc-viewer.es.js';
+    // CORRECCIÓN: Se usan importaciones por defecto (sin llaves) que es como la librería está construida.
+    import IfcViewerAPI from './libs/web-ifc-viewer.es.js';
 
     document.addEventListener('DOMContentLoaded', () => {
         // --- GESTIÓN DE AUTENTICACIÓN Y TEMA ---
