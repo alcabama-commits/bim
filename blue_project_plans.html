@@ -66,7 +66,7 @@
         </div>
         <div class="flex items-center space-x-4">
             <button id="theme-toggle" aria-label="Cambiar tema" class="text-text-light dark:text-white hover:text-primary"><span class="material-symbols-outlined">dark_mode</span></button>
-            <div id="auth-container" class="flex items-center space-x-4"><a href="../inse.html" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Iniciar sesión</a></div>
+            <div id="auth-container" class="flex items-center space-x-4"><a href="inse.html" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Iniciar sesión</a></div>
         </div>
     </div>
 </header>
@@ -113,7 +113,7 @@
             document.getElementById('logout-button').addEventListener('click', () => {
                 sessionStorage.removeItem('userAccount');
                 localStorage.removeItem('userAccount');
-                window.location.href = '../home.html'; // Redirigir al home después de cerrar sesión
+                window.location.href = 'home.html'; // Redirigir al home después de cerrar sesión
             });
         }
 
