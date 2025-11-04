@@ -101,10 +101,11 @@
     // SOLUCIÓN DEFINITIVA - Usando la nueva arquitectura de @thatopen/components
     // ===================================================================================
 
-    // Importar las nuevas librerías desde un CDN (Skypack) que las prepara para el navegador.
+    // Importar las librerías desde un CDN (Skypack) que las prepara para el navegador.
+    import * as THREE from "https://cdn.skypack.dev/three@0.152.2";
     import * as OBC from "https://cdn.skypack.dev/@thatopen/components@1.0.1";
     import * as BUI from "https://cdn.skypack.dev/@thatopen/ui@1.0.1";
-    import Stats from "https://cdn.skypack.dev/stats.js@0.17.0";
+    import Stats from "https://cdn.skypack.dev/stats-js@1.0.1";
 
     // --- GESTIÓN DE AUTENTICACIÓN Y TEMA (Sin cambios) ---
     const authContainer = document.getElementById('auth-container');
@@ -141,7 +142,7 @@
     const worlds = components.get(OBC.Worlds);
     const world = worlds.create();
     world.scene = new OBC.SimpleScene(components);
-    world.scene.setup();
+    world.scene.setup(new THREE.Color(0xeeeeee)); // Se pasa el color aquí
     world.scene.three.background = null;
 
     const container = document.getElementById("viewer-container");
