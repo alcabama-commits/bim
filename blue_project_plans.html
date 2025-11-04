@@ -98,112 +98,81 @@
 </div>
 <script type="module">
     // ===================================================================================
-    // SOLUCIÓN DEFINITIVA - Usando la nueva arquitectura de @thatopen/components
+    // SOLUCIÓN FINAL (LOCAL): Cargar las librerías desde los archivos locales.
     // ===================================================================================
+    import * as THREE from './libs/three.module.js';
+    import { IfcViewerAPI } from './libs/web-ifc-viewer.es.js';
 
-    // Importar las librerías desde un CDN (Skypack) que las prepara para el navegador.
-    import * as THREE from "https://cdn.skypack.dev/three@0.152.2";
-    import * as OBC from "https://cdn.skypack.dev/@thatopen/components@1.0.1";
-    import * as BUI from "https://cdn.skypack.dev/@thatopen/ui@1.0.1";
-    import Stats from "https://cdn.skypack.dev/stats-js@1.0.1";
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- GESTIÓN DE AUTENTICACIÓN Y TEMA ---
+        const authContainer = document.getElementById('auth-container');
+        const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
 
-    // --- GESTIÓN DE AUTENTICACIÓN Y TEMA (Sin cambios) ---
-    const authContainer = document.getElementById('auth-container');
-    const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
-    if (userAccount) {
-        authContainer.innerHTML = `
-            <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
-            <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
-        `;
-        document.getElementById('logout-button').addEventListener('click', () => {
-            sessionStorage.removeItem('userAccount');
-            localStorage.removeItem('userAccount');
-            window.location.href = 'home.html';
+        if (userAccount) {
+            authContainer.innerHTML = `
+                <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
+                <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
+            `;
+            document.getElementById('logout-button').addEventListener('click', () => {
+                sessionStorage.removeItem('userAccount');
+                localStorage.removeItem('userAccount');
+                window.location.href = 'home.html';
+            });
+        }
+
+        const themeToggle = document.getElementById('theme-toggle');
+        const htmlEl = document.documentElement;
+        const applyTheme = (theme) => {
+            if (theme === 'dark') {
+                htmlEl.classList.add('dark');
+                themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode';
+            } else {
+                htmlEl.classList.remove('dark');
+                themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode';
+            }
+        };
+        const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        applyTheme(savedTheme);
+        themeToggle.addEventListener('click', () => {
+            const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
+            localStorage.setItem('theme', newTheme);
+            applyTheme(newTheme);
         });
-    }
-    const themeToggle = document.getElementById('theme-toggle');
-    const htmlEl = document.documentElement;
-    const applyTheme = (theme) => {
-        if (theme === 'dark') { htmlEl.classList.add('dark'); themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode'; }
-        else { htmlEl.classList.remove('dark'); themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode'; }
-    };
-    const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    applyTheme(savedTheme);
-    themeToggle.addEventListener('click', () => {
-        const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
-        localStorage.setItem('theme', newTheme);
-        applyTheme(newTheme);
-    });
 
-    // --- CONFIGURACIÓN DEL VISOR CON @thatopen/components ---
+        // --- LÓGICA DEL VISOR IFC ---
+        const container = document.getElementById('viewer-container');
+        const viewer = new IfcViewerAPI({ container, backgroundColor: new THREE.Color(0xeeeeee) });
 
-    const components = new OBC.Components();
+        viewer.grid.setGrid();
+        viewer.axes.setAxes();
 
-    const worlds = components.get(OBC.Worlds);
-    const world = worlds.create();
-    world.scene = new OBC.SimpleScene(components);
-    world.scene.setup(new THREE.Color(0xeeeeee)); // Se pasa el color aquí
-    world.scene.three.background = null;
-
-    const container = document.getElementById("viewer-container");
-    world.renderer = new OBC.SimpleRenderer(components, container);
-    world.camera = new OBC.OrthoPerspectiveCamera(components);
-    await world.camera.controls.setLookAt(78, 20, -2.2, 26, -4, 25);
-
-    components.init();
-
-    components.get(OBC.Grids).create(world);
-
-    // --- LÓGICA PARA CARGAR EL MODELO IFC ---
-
-    const ifcLoader = components.get(OBC.IfcLoader);
-    await ifcLoader.setup({
-        wasm: {
-            path: "https://unpkg.com/web-ifc@0.0.55/",
-            absolute: true,
-        },
-    });
-
-    const fragments = components.get(OBC.FragmentsManager);
-    fragments.onFragmentsLoaded.add((model) => {
-        world.scene.three.add(model);
         const loadingIndicator = document.getElementById('loading-indicator');
-        if(loadingIndicator) loadingIndicator.style.display = 'none';
-        console.log("¡Modelo cargado con éxito!");
+
+        async function loadIfc(url) {
+            try {
+                console.log("Cargando modelo desde:", url);
+                // El motor WASM se carga desde el CDN, usando una versión estable.
+                await viewer.IFC.setWasmPath("https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.215/wasm/");
+                const model = await viewer.IFC.loadIfcUrl(url, true);
+
+                if (model) {
+                    loadingIndicator.style.display = 'none';
+                    viewer.context.fitToFrame();
+                    await viewer.shadows.setShadows(model);
+                    console.log("¡Modelo cargado con éxito!");
+                }
+            } catch (error) {
+                console.error("Error al cargar IFC:", error);
+                loadingIndicator.innerHTML = `
+                    <div class="text-red-500 text-center p-4">
+                        <p class="font-bold">Error al cargar el visor</p>
+                        <p class="text-xs mt-2">${error.message}</p>
+                    </div>`;
+            }
+        }
+
+        const ifcUrl = 'https://raw.githack.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc';
+        loadIfc(ifcUrl);
     });
-
-    const loadIfc = async (url) => {
-        const file = await fetch(url);
-        const data = await file.arrayBuffer();
-        const buffer = new Uint8Array(data);
-        await ifcLoader.load(buffer, "ifc-model");
-    };
-
-    // Cargar tu modelo
-    const ifcUrl = 'https://raw.githack.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc';
-    loadIfc(ifcUrl);
-
-    // --- UI Y ESTADÍSTICAS (Opcional pero útil) ---
-
-    BUI.Manager.init();
-    const panel = BUI.Component.create(() => {
-        return BUI.html`
-            <bim-panel active label="Visor Blue" class="options-menu">
-                <bim-panel-section label="Controles">
-                    <p class="text-sm text-gray-500">Navega con el ratón.</p>
-                </bim-panel-section>
-            </bim-panel>
-        `;
-    });
-    document.body.append(panel);
-
-    const stats = new Stats();
-    stats.showPanel(2);
-    document.body.append(stats.dom);
-    stats.dom.style.left = "0px";
-    stats.dom.style.zIndex = "unset";
-    world.renderer.onBeforeUpdate.add(() => stats.begin());
-    world.renderer.onAfterUpdate.add(() => stats.end());
-
 </script>
 </body></html>
