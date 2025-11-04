@@ -99,11 +99,10 @@
 
 <script type="module">
     // ===================================================================================
-    // SOLUCIÓN FINAL: Volver a CDN con una URL verificada y un parámetro anti-caché.
+    // SOLUCIÓN FINAL (LOCAL): Cargar las librerías desde los archivos locales.
     // ===================================================================================
-    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js';
-    // Se usa la versión 1.0.233 que está empaquetada correctamente. Se añade "?v=final" para forzar la recarga.
-    import { IfcViewerAPI } from 'https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.233/web-ifc-viewer.es.js?v=final';
+    import * as THREE from './libs/three.module.js';
+    import { IfcViewerAPI } from './libs/web-ifc-viewer.es.js';
 
     document.addEventListener('DOMContentLoaded', () => {
         // --- GESTIÓN DE AUTENTICACIÓN Y TEMA ---
@@ -150,8 +149,8 @@
         async function loadIfc(url) {
             try {
                 console.log("Cargando modelo desde:", url);
-                // La ruta del motor WASM también debe usar el CDN.
-                await viewer.IFC.setWasmPath("https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.233/wasm/?v=final");
+                // El motor WASM se sigue cargando desde el CDN, lo cual es seguro.
+                await viewer.IFC.setWasmPath("./"); // La librería buscará los archivos WASM en la misma carpeta que el modelo.
                 const model = await viewer.IFC.loadIfcUrl(url, true);
 
                 if (model) {
