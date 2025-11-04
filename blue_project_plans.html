@@ -148,16 +148,15 @@
 
         const loadingIndicator = document.getElementById('loading-indicator');
 
-        // Reemplazada por la versión robusta que maneja CORS y ArrayBuffer
         async function loadIfc(url) {
             try {
                 console.log("Iniciando carga del modelo IFC desde:", url);
                 loadingIndicator.style.display = 'flex';
 
-                // 1. Configurar WASM con una versión más estable
-                await viewer.IFC.setWasmPath("https://unpkg.com/web-ifc@0.0.58/wasm/");
+                // El motor WASM se carga desde el CDN, usando una versión estable que coincide con la librería local.
+                await viewer.IFC.setWasmPath("https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.215/wasm/");
 
-                // 2. Carga manual para controlar CORS y ArrayBuffer
+                // Carga manual para controlar CORS y asegurar que se obtiene un ArrayBuffer
                 const response = await fetch(url);
                 if (!response.ok) {
                     throw new Error(`Error de red: ${response.status} - ${response.statusText}`);
@@ -168,16 +167,8 @@
 
                 if (model) {
                     loadingIndicator.style.display = 'none';
-
-                    // 3. Sombras (usando la API correcta)
-                    // La API de shadowDropper está dentro de viewer.shadows
-                    await viewer.shadows.dropper.renderShadow(model.modelID);
-
-                    // 4. Ajuste de cámara robusto
-                    setTimeout(() => {
-                        viewer.context.fitToFrame();
-                    }, 500);
-
+                    await viewer.shadows.setShadows(model);
+                    viewer.context.fitToFrame();
                     console.log("Modelo IFC cargado exitosamente:", model);
                 }
             } catch (error) {
