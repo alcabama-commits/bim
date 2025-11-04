@@ -148,30 +148,53 @@
 
         const loadingIndicator = document.getElementById('loading-indicator');
 
+        // Reemplazada por la versión robusta que maneja CORS y ArrayBuffer
         async function loadIfc(url) {
             try {
-                console.log("Cargando modelo desde:", url);
-                // El motor WASM se carga desde el CDN, usando una versión estable.
-                await viewer.IFC.setWasmPath("https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.215/wasm/");
-                const model = await viewer.IFC.loadIfcUrl(url, true);
+                console.log("Iniciando carga del modelo IFC desde:", url);
+                loadingIndicator.style.display = 'flex';
+
+                // 1. Configurar WASM con una versión más estable
+                await viewer.IFC.setWasmPath("https://unpkg.com/web-ifc@0.0.58/wasm/");
+
+                // 2. Carga manual para controlar CORS y ArrayBuffer
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Error de red: ${response.status} - ${response.statusText}`);
+                }
+
+                const arrayBuffer = await response.arrayBuffer();
+                const model = await viewer.IFC.loadIfc(arrayBuffer, true);
 
                 if (model) {
                     loadingIndicator.style.display = 'none';
-                    viewer.context.fitToFrame();
-                    await viewer.shadows.setShadows(model);
-                    console.log("¡Modelo cargado con éxito!");
+
+                    // 3. Sombras (usando la API correcta)
+                    // La API de shadowDropper está dentro de viewer.shadows
+                    await viewer.shadows.dropper.renderShadow(model.modelID);
+
+                    // 4. Ajuste de cámara robusto
+                    setTimeout(() => {
+                        viewer.context.fitToFrame();
+                    }, 500);
+
+                    console.log("Modelo IFC cargado exitosamente:", model);
                 }
             } catch (error) {
                 console.error("Error al cargar IFC:", error);
                 loadingIndicator.innerHTML = `
-                    <div class="text-red-500 text-center p-4">
-                        <p class="font-bold">Error al cargar el visor</p>
-                        <p class="text-xs mt-2">${error.message}</p>
+                    <div class="text-red-500 text-center p-6 max-w-md mx-auto">
+                        <p class="font-bold text-lg">Error al cargar el modelo</p>
+                        <p class="text-sm mt-2">${error.message}</p>
+                        <p class="text-xs mt-3 text-gray-600 dark:text-gray-400">
+                            Asegúrate de que el archivo IFC esté en un servidor con CORS habilitado (como GitHub Pages).
+                        </p>
                     </div>`;
             }
         }
 
-        const ifcUrl = 'https://raw.githack.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc';
+        // URL que SÍ permite CORS, usando tu propio repositorio de GitHub Pages
+        const ifcUrl = 'https://alcabama-commits.github.io/bim/Models/02_GI_BLU_Estructura_CBombas2.ifc';
         loadIfc(ifcUrl);
     });
 </script>
