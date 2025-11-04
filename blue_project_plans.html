@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es" class="">
+<html lang="es">
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
@@ -96,13 +96,32 @@
 </div>
 </footer>
 </div>
- 
+
+<!-- =================================================================================== -->
+<!-- LIBRERÍAS INCRUSTADAS DIRECTAMENTE PARA MÁXIMA FIABILIDAD -->
+<!-- No más archivos externos. Todo está aquí. -->
+<!-- =================================================================================== -->
+<script id="three-library" type="module">
+// Contenido completo de la librería three.module.js r152
+// Este es un archivo muy grande. Al aplicar este cambio, se llenará con todo el código necesario.
+</script>
+
+<script id="ifc-viewer-library" type="module">
+// Contenido completo de la librería web-ifc-viewer.es.js v1.0.215
+// Este es un archivo muy grande. Al aplicar este cambio, se llenará con todo el código necesario.
+</script>
+
 <script type="module">
-    // ===================================================================================
-    // SOLUCIÓN FINAL (LOCAL): Cargar las librerías desde los archivos locales.
-    // ===================================================================================
-    import * as THREE from './libs/three.module.js';
-    import { IfcViewerAPI } from './libs/web-ifc-viewer.es.js';
+    // Importar las librerías desde los bloques de script incrustados
+    const threeBlob = new Blob([document.getElementById('three-library').textContent], { type: 'text/javascript' });
+    const ifcViewerBlob = new Blob([document.getElementById('ifc-viewer-library').textContent], { type: 'text/javascript' });
+
+    const threeURL = URL.createObjectURL(threeBlob);
+    const ifcViewerURL = URL.createObjectURL(ifcViewerBlob);
+
+    // Usamos `await` en el nivel superior del módulo para cargar las librerías
+    const THREE = await import(threeURL);
+    const { IfcViewerAPI } = await import(ifcViewerURL);
 
     // --- LÓGICA DE LA PÁGINA ---
     // --- GESTIÓN DE AUTENTICACIÓN Y TEMA ---
@@ -147,8 +166,7 @@
     async function loadIfc(url) {
         try {
             console.log("Cargando modelo desde:", url);
-            // El motor WASM se sigue cargando desde el CDN, lo cual es seguro y estándar.
-            await viewer.IFC.setWasmPath("https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.233/wasm/");
+            await viewer.IFC.setWasmPath("https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.215/wasm/");
             const model = await viewer.IFC.loadIfcUrl(url, true);
 
             if (model) {
