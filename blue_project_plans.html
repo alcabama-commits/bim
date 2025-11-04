@@ -96,38 +96,19 @@
 </div>
 </footer>
 </div>
-
-<!-- =================================================================================== -->
-<!-- LIBRERÍAS INCRUSTADAS DIRECTAMENTE PARA MÁXIMA FIABILIDAD -->
-<!-- No más archivos externos. Todo está aquí. -->
-<!-- =================================================================================== -->
-<script id="three-library" type="module">
-// Contenido completo de la librería three.module.js r152
-// Este es un archivo muy grande. Al aplicar este cambio, se llenará con todo el código necesario.
-</script>
-
-<script id="ifc-viewer-library" type="module">
-// Contenido completo de la librería web-ifc-viewer.es.js v1.0.215
-// Este es un archivo muy grande. Al aplicar este cambio, se llenará con todo el código necesario.
-</script>
-
 <script type="module">
-    // Importar las librerías desde los bloques de script incrustados
-    const threeBlob = new Blob([document.getElementById('three-library').textContent], { type: 'text/javascript' });
-    const ifcViewerBlob = new Blob([document.getElementById('ifc-viewer-library').textContent], { type: 'text/javascript' });
+    // ===================================================================================
+    // SOLUCIÓN DEFINITIVA - Usando la nueva arquitectura de @thatopen/components
+    // ===================================================================================
 
-    const threeURL = URL.createObjectURL(threeBlob);
-    const ifcViewerURL = URL.createObjectURL(ifcViewerBlob);
+    // Importar las nuevas librerías desde un CDN (Skypack) que las prepara para el navegador.
+    import * as OBC from "https://cdn.skypack.dev/@thatopen/components@1.0.1";
+    import * as BUI from "https://cdn.skypack.dev/@thatopen/ui@1.0.1";
+    import Stats from "https://cdn.skypack.dev/stats.js@0.17.0";
 
-    // Usamos `await` en el nivel superior del módulo para cargar las librerías
-    const THREE = await import(threeURL);
-    const { IfcViewerAPI } = await import(ifcViewerURL);
-
-    // --- LÓGICA DE LA PÁGINA ---
-    // --- GESTIÓN DE AUTENTICACIÓN Y TEMA ---
+    // --- GESTIÓN DE AUTENTICACIÓN Y TEMA (Sin cambios) ---
     const authContainer = document.getElementById('auth-container');
     const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
-
     if (userAccount) {
         authContainer.innerHTML = `
             <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
@@ -139,7 +120,6 @@
             window.location.href = 'home.html';
         });
     }
-
     const themeToggle = document.getElementById('theme-toggle');
     const htmlEl = document.documentElement;
     const applyTheme = (theme) => {
@@ -154,38 +134,75 @@
         applyTheme(newTheme);
     });
 
-    // --- LÓGICA DEL VISOR IFC ---
-    const container = document.getElementById('viewer-container');
-    const viewer = new IfcViewerAPI({ container, backgroundColor: new THREE.Color(0xeeeeee) });
+    // --- CONFIGURACIÓN DEL VISOR CON @thatopen/components ---
 
-    viewer.grid.setGrid();
-    viewer.axes.setAxes();
+    const components = new OBC.Components();
 
-    const loadingIndicator = document.getElementById('loading-indicator');
+    const worlds = components.get(OBC.Worlds);
+    const world = worlds.create();
+    world.scene = new OBC.SimpleScene(components);
+    world.scene.setup();
+    world.scene.three.background = null;
 
-    async function loadIfc(url) {
-        try {
-            console.log("Cargando modelo desde:", url);
-            await viewer.IFC.setWasmPath("https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.215/wasm/");
-            const model = await viewer.IFC.loadIfcUrl(url, true);
+    const container = document.getElementById("viewer-container");
+    world.renderer = new OBC.SimpleRenderer(components, container);
+    world.camera = new OBC.OrthoPerspectiveCamera(components);
+    await world.camera.controls.setLookAt(78, 20, -2.2, 26, -4, 25);
 
-            if (model) {
-                loadingIndicator.style.display = 'none';
-                viewer.context.fitToFrame();
-                await viewer.shadows.setShadows(model);
-                console.log("¡Modelo cargado con éxito!");
-            }
-        } catch (error) {
-            console.error("Error al cargar IFC:", error);
-            loadingIndicator.innerHTML = `
-                <div class="text-red-500 text-center p-4">
-                    <p class="font-bold">Error al cargar el visor</p>
-                    <p class="text-xs mt-2">${error.message}</p>
-                </div>`;
-        }
-    }
+    components.init();
 
+    components.get(OBC.Grids).create(world);
+
+    // --- LÓGICA PARA CARGAR EL MODELO IFC ---
+
+    const ifcLoader = components.get(OBC.IfcLoader);
+    await ifcLoader.setup({
+        wasm: {
+            path: "https://unpkg.com/web-ifc@0.0.55/",
+            absolute: true,
+        },
+    });
+
+    const fragments = components.get(OBC.FragmentsManager);
+    fragments.onFragmentsLoaded.add((model) => {
+        world.scene.three.add(model);
+        const loadingIndicator = document.getElementById('loading-indicator');
+        if(loadingIndicator) loadingIndicator.style.display = 'none';
+        console.log("¡Modelo cargado con éxito!");
+    });
+
+    const loadIfc = async (url) => {
+        const file = await fetch(url);
+        const data = await file.arrayBuffer();
+        const buffer = new Uint8Array(data);
+        await ifcLoader.load(buffer, "ifc-model");
+    };
+
+    // Cargar tu modelo
     const ifcUrl = 'https://raw.githack.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc';
     loadIfc(ifcUrl);
+
+    // --- UI Y ESTADÍSTICAS (Opcional pero útil) ---
+
+    BUI.Manager.init();
+    const panel = BUI.Component.create(() => {
+        return BUI.html`
+            <bim-panel active label="Visor Blue" class="options-menu">
+                <bim-panel-section label="Controles">
+                    <p class="text-sm text-gray-500">Navega con el ratón.</p>
+                </bim-panel-section>
+            </bim-panel>
+        `;
+    });
+    document.body.append(panel);
+
+    const stats = new Stats();
+    stats.showPanel(2);
+    document.body.append(stats.dom);
+    stats.dom.style.left = "0px";
+    stats.dom.style.zIndex = "unset";
+    world.renderer.onBeforeUpdate.add(() => stats.begin());
+    world.renderer.onAfterUpdate.add(() => stats.end());
+
 </script>
 </body></html>
