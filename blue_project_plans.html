@@ -74,15 +74,27 @@
 <main class="pt-24 pb-16">
     <section class="container mx-auto px-8 py-8">
         <h1 class="text-3xl font-bold text-center mb-8">Planos y Modelos del Proyecto Blue</h1>
+        <p class="text-center text-gray-600 dark:text-gray-400 max-w-3xl mx-auto mb-6">Modelo cargado desde el repositorio. Usa los botones para interactuar o sube tu propio archivo. Navega en el modelo 3D con el ratón: rueda para zoom, clic derecho para rotar.</p>
 
-        <!-- Contenedor para el visor y el indicador de carga -->
-        <div class="relative rounded-lg shadow-lg overflow-hidden bg-gray-200 dark:bg-gray-700">
-            <!-- Indicador de carga (ahora superpuesto) -->
-            <div id="loading-indicator" class="absolute inset-0 flex items-center justify-center text-gray-500 z-10"><p>Cargando modelo 3D...</p></div>
-            <!-- Contenedor donde se renderizará el visor 3D (ahora vacío) -->
-            <div id="viewer-container"></div>
+        <!-- Controles -->
+        <div class="flex justify-center items-center space-x-4 mb-6">
+            <button id="fit-button" disabled class="px-4 py-2 bg-primary text-white rounded-md shadow-md hover:bg-opacity-90 transition disabled:bg-gray-400 disabled:cursor-not-allowed">Enfocar Modelo</button>
+            <button id="load-repo" class="px-4 py-2 bg-gray-600 text-white rounded-md shadow-md hover:bg-gray-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed">Recargar Modelo</button>
         </div>
-        <p class="text-center text-gray-600 dark:text-gray-400 mt-4">Usa el ratón para navegar en el modelo 3D. Rueda para zoom, clic derecho para rotar, clic izquierdo para seleccionar.</p>
+
+        <!-- Carga de archivo local -->
+        <div class="text-center mb-8">
+            <label for="file-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">O sube tu propio archivo .ifc</label>
+            <input type="file" id="file-input" accept=".ifc" class="mx-auto block w-full max-w-sm text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"/>
+        </div>
+
+        <!-- Contenedor del Visor -->
+        <div id="viewer-container" class="relative rounded-lg shadow-lg overflow-hidden bg-white dark:bg-gray-800">
+            <div class="loading absolute inset-0 flex items-center justify-center z-10 bg-white/80 dark:bg-gray-800/80">
+                <p class="text-lg font-semibold text-primary">Cargando modelo desde el repositorio...</p>
+            </div>
+        </div>
+        <div class="info text-center mt-4 font-semibold" id="info"></div>
 
     </section>
 </main>
@@ -96,12 +108,20 @@
 </div>
 </footer>
 </div>
+<!-- Importmap para gestionar las dependencias de Three.js -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
 <script type="module">
-    // ===================================================================================
-    // SOLUCIÓN FINAL (LOCAL): Cargar las librerías desde los archivos locales.
-    // ===================================================================================
-    import * as THREE from './libs/three.module.js';
-    import { IfcViewerAPI } from './libs/web-ifc-viewer.es.js';
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    const { IfcAPI } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
 
     document.addEventListener('DOMContentLoaded', () => {
         // --- GESTIÓN DE AUTENTICACIÓN Y TEMA ---
