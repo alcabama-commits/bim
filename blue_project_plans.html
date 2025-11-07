@@ -5,7 +5,7 @@
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Planos Proyecto Blue - Portal BIM Alcabama</title>
 
-<!-- Tailwind solo para estilos -->
+<!-- Tailwind -->
 <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
 <script>
   tailwind.config = {
@@ -27,9 +27,7 @@
           sans: ['Inter', 'sans-serif'],
           'source-sans-pro': ['"Source Sans Pro"', 'sans-serif']
         },
-        borderRadius: {
-          DEFAULT: "0.5rem",
-        },
+        borderRadius: { DEFAULT: "0.5rem" },
       },
     },
   };
@@ -37,23 +35,14 @@
 
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@900&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
 
 <style>
-  body {
-    font-family: 'Inter', sans-serif;
-  }
-  .material-symbols-outlined {
-    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-  }
-  #viewer-container {
-    position: relative;
-    width: 100%;
-    height: 70vh;
-    min-height: 500px; /* Aumentado para mejor visualización */
-  }
+  body { font-family: 'Inter', sans-serif; }
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  #viewer-container { position: relative; width: 100%; height: 70vh; min-height: 500px; }
 </style>
 </head>
 
@@ -82,28 +71,34 @@
 <main class="pt-24 pb-16">
     <section class="container mx-auto px-8 py-8">
         <h1 class="text-3xl font-bold text-center mb-8">Planos y Modelos del Proyecto Blue</h1>
-        <p class="text-center text-gray-600 dark:text-gray-400 max-w-3xl mx-auto mb-6">Modelo cargado desde el repositorio. Usa los botones para interactuar o sube tu propio archivo. Navega en el modelo 3D con el ratón: rueda para zoom, clic derecho para rotar.</p>
+        <p class="text-center text-gray-600 dark:text-gray-400 max-w-3xl mx-auto mb-6">
+          Modelo cargado desde el repositorio. Usa los botones para interactuar o sube tu propio archivo. 
+          Navega en el modelo 3D con el ratón: rueda para zoom, clic derecho para rotar.
+        </p>
 
         <!-- Controles -->
         <div class="flex justify-center items-center space-x-4 mb-6">
-            <button id="fit-button" disabled class="px-4 py-2 bg-primary text-white rounded-md shadow-md hover:bg-opacity-90 transition disabled:bg-gray-400 disabled:cursor-not-allowed">Enfocar Modelo</button>
-            <button id="load-repo" class="px-4 py-2 bg-gray-600 text-white rounded-md shadow-md hover:bg-gray-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed">Recargar Modelo</button>
+            <button id="fit-button" disabled class="px-4 py-2 bg-primary text-white rounded-md shadow-md hover:bg-opacity-90 transition disabled:bg-gray-400 disabled:cursor-not-allowed">
+              Enfocar Modelo
+            </button>
+            <button id="load-repo" class="px-4 py-2 bg-gray-600 text-white rounded-md shadow-md hover:bg-gray-700 transition">
+              Recargar Modelo
+            </button>
         </div>
 
-        <!-- Carga de archivo local -->
+        <!-- Carga local -->
         <div class="text-center mb-8">
             <label for="file-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">O sube tu propio archivo .ifc</label>
             <input type="file" id="file-input" accept=".ifc" class="mx-auto block w-full max-w-sm text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"/>
         </div>
 
-        <!-- Contenedor del Visor -->
+        <!-- Visor -->
         <div id="viewer-container" class="relative rounded-lg shadow-lg overflow-hidden bg-white dark:bg-gray-800">
             <div class="loading absolute inset-0 flex items-center justify-center z-10 bg-white/80 dark:bg-gray-800/80">
-                <p class="text-lg font-semibold text-primary">Cargando modelo desde el repositorio...</p>
+                <p class="text-lg font-semibold text-primary">Cargando modelo desde GitHub...</p>
             </div>
         </div>
         <div class="info text-center mt-4 font-semibold" id="info"></div>
-
     </section>
 </main>
 
@@ -111,12 +106,12 @@
   <div class="container mx-auto text-center text-gray-500 dark:text-gray-400">
     <img alt="Alcabama logo" class="h-8 mx-auto mb-4 dark:hidden" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png"/>
     <img alt="Alcabama logo" class="h-8 mx-auto mb-4 hidden dark:block" src="https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png"/>
-    <p class="text-sm">© 2023 Portal BIM Alcabama - Todos los derechos reservados.</p>
+    <p class="text-sm">© 2025 Portal BIM Alcabama - Todos los derechos reservados.</p>
   </div>
 </footer>
 </div>
 
-<!-- Importmap para gestionar las dependencias de Three.js -->
+<!-- Importmap -->
 <script type="importmap">
 {
   "imports": {
@@ -132,7 +127,7 @@
     const { IfcAPI } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
 
     document.addEventListener('DOMContentLoaded', () => {
-        // --- GESTIÓN DE AUTENTICACIÓN Y TEMA ---
+        // --- TEMA Y AUTH ---
         const authContainer = document.getElementById("auth-container");
         const userAccount = JSON.parse(sessionStorage.getItem("userAccount") || localStorage.getItem("userAccount"));
 
@@ -161,21 +156,17 @@
                 themeToggle.querySelector(".material-symbols-outlined").textContent = "dark_mode";
             }
             currentTheme = theme;
-            // Actualizar visor si ya existe
-            if (window.viewer) {
-                window.viewer.updateTheme(currentTheme);
-            }
+            if (window.viewer) window.viewer.updateTheme(currentTheme);
         };
 
         applyTheme(currentTheme);
-
         themeToggle.addEventListener("click", () => {
             const newTheme = htmlEl.classList.contains("dark") ? "light" : "dark";
             localStorage.setItem("theme", newTheme);
             applyTheme(newTheme);
         });
 
-        // --- LÓGICA DEL VISOR IFC ---
+        // --- VISOR IFC ---
         const container = document.getElementById('viewer-container');
         const input = document.getElementById('file-input');
         const loadingContainer = container.querySelector('.loading');
@@ -183,7 +174,8 @@
         const fitButton = document.getElementById('fit-button');
         const repoButton = document.getElementById('load-repo');
 
-        const REPO_MODEL_URL = 'https://alcabama-commits.github.io/bim/Models/02_GI_BLU_Estructura_CBombas2.ifc';
+        // URL CORRECTA: raw.githubusercontent.com
+        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc';
 
         const viewer = new class {
             constructor() {
@@ -195,7 +187,7 @@
                 this.renderer.setPixelRatio(window.devicePixelRatio);
                 container.appendChild(this.renderer.domElement);
 
-                this.updateTheme(currentTheme); // Aplicar tema inicial
+                this.updateTheme(currentTheme);
 
                 const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
                 this.scene.add(ambientLight);
@@ -226,13 +218,11 @@
 
                 window.addEventListener('resize', () => this.onResize());
             }
-            
+
             updateTheme(theme) {
                 const isDark = theme === 'dark';
                 this.scene.background = new THREE.Color(isDark ? 0x343434 : 0xf0f4ff);
-                if (this.grid) {
-                    this.grid.material.color.set(isDark ? 0x4B5563 : 0xcccccc);
-                }
+                if (this.grid) this.grid.material.color.set(isDark ? 0x4B5563 : 0xcccccc);
             }
 
             onResize() {
@@ -256,7 +246,7 @@
                 try {
                     await this.ifc.Init();
                     const response = await fetch(url);
-                    if (!response.ok) throw new Error(`Error HTTP ${response.status}: No se pudo cargar el archivo`);
+                    if (!response.ok) throw new Error(`Error HTTP ${response.status}`);
                     const buffer = await response.arrayBuffer();
                     const modelID = this.ifc.OpenModel(new Uint8Array(buffer), {
                         COORDINATE_TO_ORIGIN: true,
@@ -288,7 +278,7 @@
                         }
                     }
 
-                    if (totalVerts === 0) throw new Error('No se encontró geometría 3D en el archivo IFC');
+                    if (totalVerts === 0) throw new Error('No se encontró geometría 3D');
 
                     const geometry = new THREE.BufferGeometry();
                     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -313,7 +303,7 @@
                     this.fitCamera();
                 } catch (err) {
                     loadingContainer.querySelector('p').textContent = `Error: ${err.message}`;
-                    info.textContent = `Error al cargar. Revisa la consola para más detalles.`;
+                    info.textContent = `Error al cargar. Revisa la consola.`;
                     info.style.color = '#e74c3c';
                     console.error(err);
                 } finally {
@@ -338,8 +328,8 @@
                 this.controls.update();
             }
         };
-        
-        window.viewer = viewer; // Exponer para el cambio de tema
+
+        window.viewer = viewer;
 
         fitButton.addEventListener('click', () => viewer.fitCamera());
         repoButton.addEventListener('click', () => viewer.load(REPO_MODEL_URL));
@@ -353,6 +343,7 @@
             await viewer.load(currentUrl);
         });
 
+        // CARGAR AUTOMÁTICAMENTE
         viewer.load(REPO_MODEL_URL);
     });
 </script>
