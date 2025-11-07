@@ -1,198 +1,200 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Planos Proyecto Blue - Portal BIM Alcabama</title>
-
-<!-- Tailwind -->
-<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
-<script>
-  tailwind.config = {
-    darkMode: "class",
-    theme: {
-      extend: {
-        colors: {
-          primary: "#D8005E",
-          "background-light": "#FFFFFF",
-          "background-dark": "#343434",
-          "text-light": "#111827",
-          "text-dark": "#F3F4F6",
-          "card-light": "#FFFFFF",
-          "card-dark": "#374151",
-          "border-light": "#E5E7EB",
-          "border-dark": "#4B5563"
-        },
-        fontFamily: {
-          sans: ['Inter', 'sans-serif'],
-          'source-sans-pro': ['"Source Sans Pro"', 'sans-serif']
-        },
-        borderRadius: { DEFAULT: "0.5rem" },
-      },
-    },
-  };
-</script>
-
-<link href="https://fonts.googleapis.com" rel="preconnect"/>
-<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@900&display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
-
-<style>
-  body { font-family: 'Inter', sans-serif; }
-  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
-  #viewer-container { position: relative; width: 100%; height: 70vh; min-height: 500px; }
-</style>
-</head>
-
-<body class="bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
-
-<div class="relative min-h-screen bg-background-light dark:bg-background-dark">
-<header class="absolute top-0 left-0 w-full z-10 px-8 py-4">
-  <div class="container mx-auto flex items-center justify-between">
-    <div class="flex items-center">
-      <a href="home.html" aria-label="Volver a la página de inicio">
-        <img alt="Portal BIM Alcabama Logo" class="h-12 dark:hidden" src="https://i.postimg.cc/wMDNvJB5/Portal-BIM-Alcabama-7-1.png"/>
-        <img alt="Portal BIM Alcabama Logo" class="h-12 hidden dark:block" src="https://i.postimg.cc/mgpPTVwf/Portal-BIM-Alcabama-7-2.png"/>
-      </a>
-    </div>
-    <div class="flex items-center space-x-4">
-      <button id="theme-toggle" aria-label="Cambiar tema" class="text-text-light dark:text-white hover:text-primary">
-        <span class="material-symbols-outlined">dark_mode</span>
-      </button>
-      <div id="auth-container" class="flex items-center space-x-4">
-        <a href="inse.html" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Iniciar sesión</a>
-      </div>
-    </div>
-  </div>
-</header>
-
-<main class="pt-24 pb-16">
-    <section class="container mx-auto px-8 py-8">
-        <h1 class="text-3xl font-bold text-center mb-8">Planos y Modelos del Proyecto Blue</h1>
-        <p class="text-center text-gray-600 dark:text-gray-400 max-w-3xl mx-auto mb-6">
-          Modelo cargado desde el repositorio. Usa los botones para interactuar o sube tu propio archivo. 
-          Navega en el modelo 3D con el ratón: rueda para zoom, clic derecho para rotar.
-        </p>
-
-        <!-- Controles -->
-        <div class="flex justify-center items-center space-x-4 mb-6">
-            <button id="fit-button" disabled class="px-4 py-2 bg-primary text-white rounded-md shadow-md hover:bg-opacity-90 transition disabled:bg-gray-400 disabled:cursor-not-allowed">
-              Enfocar Modelo
-            </button>
-            <button id="load-repo" class="px-4 py-2 bg-gray-600 text-white rounded-md shadow-md hover:bg-gray-700 transition">
-              Recargar Modelo
-            </button>
-        </div>
-
-        <!-- Carga local -->
-        <div class="text-center mb-8">
-            <label for="file-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">O sube tu propio archivo .ifc</label>
-            <input type="file" id="file-input" accept=".ifc" class="mx-auto block w-full max-w-sm text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"/>
-        </div>
-
-        <!-- Visor -->
-        <div id="viewer-container" class="relative rounded-lg shadow-lg overflow-hidden bg-white dark:bg-gray-800">
-            <div class="loading absolute inset-0 flex items-center justify-center z-10 bg-white/80 dark:bg-gray-800/80">
-                <p class="text-lg font-semibold text-primary">Cargando modelo desde GitHub...</p>
-            </div>
-        </div>
-        <div class="info text-center mt-4 font-semibold" id="info"></div>
-    </section>
-</main>
-
-<footer class="bg-background-light dark:bg-background-dark py-8 px-8 mt-auto">
-  <div class="container mx-auto text-center text-gray-500 dark:text-gray-400">
-    <img alt="Alcabama logo" class="h-8 mx-auto mb-4 dark:hidden" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png"/>
-    <img alt="Alcabama logo" class="h-8 mx-auto mb-4 hidden dark:block" src="https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png"/>
-    <p class="text-sm">© 2025 Portal BIM Alcabama - Todos los derechos reservados.</p>
-  </div>
-</footer>
-</div>
-
-<!-- Importmap -->
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-  }
-}
-</script>
-
-<script type="module">
-    import * as THREE from 'three';
-    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-    const { IfcAPI } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
-
-    document.addEventListener('DOMContentLoaded', () => {
-        // --- TEMA Y AUTH ---
-        const authContainer = document.getElementById("auth-container");
-        const userAccount = JSON.parse(sessionStorage.getItem("userAccount") || localStorage.getItem("userAccount"));
-
-        if (userAccount) {
-            authContainer.innerHTML = `
-                <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(" ")[0]}</span>
-                <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
-            `;
-            document.getElementById("logout-button").addEventListener("click", () => {
-                sessionStorage.removeItem("userAccount");
-                localStorage.removeItem("userAccount");
-                window.location.href = "home.html";
-            });
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor IFC 3D</title>
+    <link rel="icon" href="data:,">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
+            color: #2c3e50;
+            line-height: 1.6;
+            min-height: 100vh;
         }
-
-        const themeToggle = document.getElementById("theme-toggle");
-        const htmlEl = document.documentElement;
-        let currentTheme = localStorage.getItem("theme") || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-
-        const applyTheme = (theme) => {
-            if (theme === "dark") {
-                htmlEl.classList.add("dark");
-                themeToggle.querySelector(".material-symbols-outlined").textContent = "light_mode";
-            } else {
-                htmlEl.classList.remove("dark");
-                themeToggle.querySelector(".material-symbols-outlined").textContent = "dark_mode";
+        h1 {
+            text-align: center;
+            color: #1a3d7c;
+            margin-bottom: 10px;
+            font-size: 2.2em;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        p {
+            text-align: center;
+            max-width: 800px;
+            margin: 0 auto 20px;
+            color: #555;
+            font-size: 1.1em;
+        }
+        .controls {
+            text-align: center;
+            margin: 15px 0;
+        }
+        button {
+            padding: 10px 20px;
+            background: #1a3d7c;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        button:hover {
+            background: #0d2a5e;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+        .file-upload {
+            text-align: center;
+            margin: 25px 0;
+        }
+        .file-upload label {
+            font-weight: 600;
+            color: #1a3d7c;
+            display: block;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+        input[type="file"] {
+            padding: 12px 16px;
+            border: 2px dashed #1a3d7c;
+            border-radius: 10px;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1em;
+            width: 100%;
+            max-width: 400px;
+            display: inline-block;
+        }
+        input[type="file"]:hover {
+            background: #f0f4ff;
+            border-color: #0d2a5e;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(13, 42, 94, 0.15);
+        }
+        #viewer-container {
+            position: relative;
+            width: 90vw;
+            max-width: 1200px;
+            height: 70vh;
+            min-height: 500px;
+            margin: 30px auto;
+            border: 1px solid #ddd;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.18);
+            background: #fff;
+            transition: all 0.3s ease;
+        }
+        #viewer-container:hover {
+            box-shadow: 0 20px 45px rgba(0, 0, 0, 0.22);
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.2em;
+            color: #1a3d7c;
+            font-weight: 600;
+            z-index: 10;
+            background: rgba(255,255,255,0.9);
+            padding: 15px 25px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .info {
+            text-align: center;
+            margin-top: 15px;
+            font-weight: 600;
+        }
+        @media (max-width: 768px) {
+            #viewer-container {
+                width: 95vw;
+                height: 60vh;
+                min-height: 400px;
             }
-            currentTheme = theme;
-            if (window.viewer) window.viewer.updateTheme(currentTheme);
-        };
+            h1 { font-size: 1.8em; }
+            button { font-size: 0.9em; padding: 8px 16px; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Visor IFC 3D Interactivo</h1>
+    <p>Modelo cargado desde el repositorio. Usa los botones para interactuar o sube tu propio archivo.</p>
 
-        applyTheme(currentTheme);
-        themeToggle.addEventListener("click", () => {
-            const newTheme = htmlEl.classList.contains("dark") ? "light" : "dark";
-            localStorage.setItem("theme", newTheme);
-            applyTheme(newTheme);
-        });
+    <div class="controls">
+        <button id="fit-button" disabled>Enfocar Modelo</button>
+        <button id="load-repo">Recargar Modelo</button>
+    </div>
 
-        // --- VISOR IFC ---
+    <div class="file-upload">
+        <label for="file-input">O sube tu propio archivo .ifc</label>
+        <input type="file" id="file-input" accept=".ifc">
+    </div>
+
+    <div id="viewer-container">
+        <div class="loading">Cargando modelo desde el repositorio...</div>
+    </div>
+    <div class="info" id="info"></div>
+
+    <!-- Importmap -->
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+    </script>
+
+    <!-- Código principal -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        const { IfcAPI } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
+
         const container = document.getElementById('viewer-container');
         const input = document.getElementById('file-input');
-        const loadingContainer = container.querySelector('.loading');
+        const loadingText = container.querySelector('.loading');
         const info = document.getElementById('info');
         const fitButton = document.getElementById('fit-button');
         const repoButton = document.getElementById('load-repo');
 
-        // URL CORRECTA: raw.githubusercontent.com
-        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc';
+        // URL RAW directa del modelo en GitHub
+        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/pruebas/main/model/19_ZI_ALL_Estructura_Torre_ModuloA_T1-T2.ifc';
 
         const viewer = new class {
             constructor() {
                 this.scene = new THREE.Scene();
-                this.camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 2000);
+                this.scene.background = new THREE.Color(0xf5f7fa);
+                this.camera = new THREE.PerspectiveCamera(75, container.clientWidth/container.clientHeight, 0.1, 1000);
                 this.camera.position.set(50, 50, 50);
                 this.renderer = new THREE.WebGLRenderer({ antialias: true });
                 this.renderer.setSize(container.clientWidth, container.clientHeight);
-                this.renderer.setPixelRatio(window.devicePixelRatio);
+                this.renderer.shadowMap.enabled = true;
                 container.appendChild(this.renderer.domElement);
 
-                this.updateTheme(currentTheme);
-
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+                // Iluminación
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
                 this.scene.add(ambientLight);
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
-                directionalLight.position.set(100, 100, 50);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(100, 100, 100);
                 this.scene.add(directionalLight);
 
                 this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -208,37 +210,26 @@
                 this.ifc = new IfcAPI();
                 this.ifc.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/');
 
-                this.grid = new THREE.GridHelper(200, 50);
-                this.scene.add(this.grid);
-                this.axes = new THREE.AxesHelper(10);
-                this.scene.add(this.axes);
+                // Grilla y ejes
+                const grid = new THREE.GridHelper(200, 100, 0x888888, 0x444444);
+                this.scene.add(grid);
+                const axes = new THREE.AxesHelper(50);
+                this.scene.add(axes);
 
                 this.models = [];
                 this.currentMesh = null;
-
-                window.addEventListener('resize', () => this.onResize());
-            }
-
-            updateTheme(theme) {
-                const isDark = theme === 'dark';
-                this.scene.background = new THREE.Color(isDark ? 0x343434 : 0xf0f4ff);
-                if (this.grid) this.grid.material.color.set(isDark ? 0x4B5563 : 0xcccccc);
-            }
-
-            onResize() {
-                this.camera.aspect = container.clientWidth / container.clientHeight;
-                this.camera.updateProjectionMatrix();
-                this.renderer.setSize(container.clientWidth, container.clientHeight);
             }
 
             async load(url) {
                 info.textContent = '';
-                loadingContainer.style.display = 'flex';
-                loadingContainer.querySelector('p').textContent = 'Cargando modelo...';
+                loadingText.style.display = 'block';
+                loadingText.textContent = 'Cargando modelo...';
+                loadingText.style.color = '#1a3d7c';
                 fitButton.disabled = true;
                 repoButton.disabled = true;
                 input.disabled = true;
 
+                // Limpiar
                 this.models.forEach(m => this.scene.remove(m));
                 this.models = [];
                 this.currentMesh = null;
@@ -246,13 +237,14 @@
                 try {
                     await this.ifc.Init();
                     const response = await fetch(url);
-                    if (!response.ok) throw new Error(`Error HTTP ${response.status}`);
+                    if (!response.ok) throw new Error(`Error HTTP ${response.status}: No se pudo cargar el archivo`);
                     const buffer = await response.arrayBuffer();
                     const modelID = this.ifc.OpenModel(new Uint8Array(buffer), {
                         COORDINATE_TO_ORIGIN: true,
                         USE_FAST_BOOLS: true
                     });
 
+                    // Extraer geometría
                     const allIfcItems = Object.values(this.ifc).filter(v => typeof v === 'number' && v > 1000);
                     let totalVerts = 0;
                     const positions = [], indices = [];
@@ -261,6 +253,7 @@
                         const ids = this.ifc.GetLineIDsWithType(modelID, type);
                         for (let i = 0; i < ids.size(); i++) {
                             const id = ids.get(i);
+                            // Omitir geometrías 2D o inválidas
                             const geom = this.ifc.GetGeometry(modelID, id);
                             if (!geom) continue;
 
@@ -278,7 +271,7 @@
                         }
                     }
 
-                    if (totalVerts === 0) throw new Error('No se encontró geometría 3D');
+                    if (totalVerts === 0) throw new Error('No se encontró geometría 3D en el archivo IFC');
 
                     const geometry = new THREE.BufferGeometry();
                     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -286,10 +279,10 @@
                     geometry.computeVertexNormals();
 
                     const material = new THREE.MeshLambertMaterial({
-                        color: 0x99aaff,
+                        color: 0x6699ff,
                         side: THREE.DoubleSide,
                         transparent: true,
-                        opacity: 0.95
+                        opacity: 0.9
                     });
 
                     const mesh = new THREE.Mesh(geometry, material);
@@ -297,19 +290,23 @@
                     this.models.push(mesh);
                     this.currentMesh = mesh;
 
-                    loadingContainer.style.display = 'none';
+                    loadingText.style.display = 'none';
                     info.textContent = `Modelo cargado: ${totalVerts.toLocaleString()} vértices`;
                     info.style.color = '#27ae60';
-                    this.fitCamera();
-                } catch (err) {
-                    loadingContainer.querySelector('p').textContent = `Error: ${err.message}`;
-                    info.textContent = `Error al cargar. Revisa la consola.`;
-                    info.style.color = '#e74c3c';
-                    console.error(err);
-                } finally {
-                    fitButton.disabled = !this.currentMesh;
+                    fitButton.disabled = false;
                     repoButton.disabled = false;
                     input.disabled = false;
+
+                    // Enfocar automáticamente al cargar
+                    this.fitCamera();
+                } catch (err) {
+                    loadingText.style.display = 'none';
+                    info.textContent = `Error al cargar: ${err.message}`;
+                    info.style.color = '#e74c3c';
+                    fitButton.disabled = false;
+                    repoButton.disabled = false;
+                    input.disabled = false;
+                    console.error(err);
                 }
             }
 
@@ -319,21 +316,26 @@
                 const center = box.getCenter(new THREE.Vector3());
                 const size = box.getSize(new THREE.Vector3());
                 const maxDim = Math.max(size.x, size.y, size.z);
-                const fov = this.camera.fov * (Math.PI / 180);
-                let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.5;
-                cameraZ = Math.max(cameraZ, 10);
+                const fov = this.camera.fov * Math.PI / 180;
+                let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.8;
+                cameraZ = Math.max(cameraZ, 10); // Asegurar una distancia mínima
 
                 this.camera.position.set(center.x + cameraZ, center.y + cameraZ, center.z + cameraZ);
+                this.camera.lookAt(center);
                 this.controls.target.copy(center);
-                this.controls.update();
             }
         };
 
-        window.viewer = viewer;
+        // Botón de enfocar
+        fitButton.addEventListener('click', () => {
+            viewer.fitCamera();
+        });
 
-        fitButton.addEventListener('click', () => viewer.fitCamera());
+        // Botón de recargar modelo del repo
         repoButton.addEventListener('click', () => viewer.load(REPO_MODEL_URL));
 
+
+        // Carga local
         let currentUrl = null;
         input.addEventListener('change', async (e) => {
             const file = e.target.files[0];
@@ -343,10 +345,9 @@
             await viewer.load(currentUrl);
         });
 
-        // CARGAR AUTOMÁTICAMENTE
+        // CARGAR AUTOMÁTICAMENTE AL INICIAR
         viewer.load(REPO_MODEL_URL);
-    });
-</script>
+    </script>
 
 </body>
 </html>
