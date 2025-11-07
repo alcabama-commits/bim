@@ -137,17 +137,14 @@
 <body>
     <h1>Visor IFC 3D Interactivo</h1>
     <p>Modelo cargado desde el repositorio. Usa los botones para interactuar o sube tu propio archivo.</p>
-
     <div class="controls">
         <button id="fit-button" disabled>Enfocar Modelo</button>
         <button id="load-repo">Recargar Modelo</button>
     </div>
-
     <div class="file-upload">
         <label for="file-input">O sube tu propio archivo .ifc</label>
         <input type="file" id="file-input" accept=".ifc">
     </div>
-
     <div id="viewer-container">
         <div class="loading">Cargando modelo desde el repositorio...</div>
     </div>
@@ -176,8 +173,8 @@
         const fitButton = document.getElementById('fit-button');
         const repoButton = document.getElementById('load-repo');
 
-        // URL RAW directa del modelo en GitHub
-        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/pruebas/main/model/19_ZI_ALL_Estructura_Torre_ModuloA_T1-T2.ifc';
+        // URL RAW CORRECTA DEL NUEVO MODELO
+        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc';
 
         const viewer = new class {
             constructor() {
@@ -190,7 +187,6 @@
                 this.renderer.shadowMap.enabled = true;
                 container.appendChild(this.renderer.domElement);
 
-                // Iluminación
                 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
                 this.scene.add(ambientLight);
                 const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -210,7 +206,6 @@
                 this.ifc = new IfcAPI();
                 this.ifc.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/');
 
-                // Grilla y ejes
                 const grid = new THREE.GridHelper(200, 100, 0x888888, 0x444444);
                 this.scene.add(grid);
                 const axes = new THREE.AxesHelper(50);
@@ -229,7 +224,6 @@
                 repoButton.disabled = true;
                 input.disabled = true;
 
-                // Limpiar
                 this.models.forEach(m => this.scene.remove(m));
                 this.models = [];
                 this.currentMesh = null;
@@ -244,7 +238,6 @@
                         USE_FAST_BOOLS: true
                     });
 
-                    // Extraer geometría
                     const allIfcItems = Object.values(this.ifc).filter(v => typeof v === 'number' && v > 1000);
                     let totalVerts = 0;
                     const positions = [], indices = [];
@@ -253,14 +246,11 @@
                         const ids = this.ifc.GetLineIDsWithType(modelID, type);
                         for (let i = 0; i < ids.size(); i++) {
                             const id = ids.get(i);
-                            // Omitir geometrías 2D o inválidas
                             const geom = this.ifc.GetGeometry(modelID, id);
                             if (!geom) continue;
-
                             const verts = geom.GetVertexData();
                             const inds = geom.GetIndexData();
                             const base = positions.length / 3;
-
                             for (let j = 0; j < verts.length; j += 3) {
                                 positions.push(verts[j], verts[j + 1], verts[j + 2]);
                             }
@@ -296,8 +286,6 @@
                     fitButton.disabled = false;
                     repoButton.disabled = false;
                     input.disabled = false;
-
-                    // Enfocar automáticamente al cargar
                     this.fitCamera();
                 } catch (err) {
                     loadingText.style.display = 'none';
@@ -318,24 +306,16 @@
                 const maxDim = Math.max(size.x, size.y, size.z);
                 const fov = this.camera.fov * Math.PI / 180;
                 let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.8;
-                cameraZ = Math.max(cameraZ, 10); // Asegurar una distancia mínima
-
+                cameraZ = Math.max(cameraZ, 10);
                 this.camera.position.set(center.x + cameraZ, center.y + cameraZ, center.z + cameraZ);
                 this.camera.lookAt(center);
                 this.controls.target.copy(center);
             }
         };
 
-        // Botón de enfocar
-        fitButton.addEventListener('click', () => {
-            viewer.fitCamera();
-        });
-
-        // Botón de recargar modelo del repo
+        fitButton.addEventListener('click', () => viewer.fitCamera());
         repoButton.addEventListener('click', () => viewer.load(REPO_MODEL_URL));
 
-
-        // Carga local
         let currentUrl = null;
         input.addEventListener('change', async (e) => {
             const file = e.target.files[0];
@@ -345,9 +325,8 @@
             await viewer.load(currentUrl);
         });
 
-        // CARGAR AUTOMÁTICAMENTE AL INICIAR
+        // CARGAR AUTOMÁTICAMENTE
         viewer.load(REPO_MODEL_URL);
     </script>
-
 </body>
 </html>
