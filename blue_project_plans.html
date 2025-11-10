@@ -13,7 +13,7 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
             color: #2c3e50;
-            line-height: 1.6;
+            line-height: 1.1;
             min-height: 100vh;
         }
         h1 {
@@ -142,7 +142,7 @@
         <button id="load-repo">Recargar Modelo</button>
     </div>
     <div class="file-upload">
-        <label for="file-input">O sube tu propio archivo .ifc 1</label> <!-- CAMBIO AQUÍ -->
+        <label for="file-input">O sube tu propio archivo .ifc 2</label>
         <input type="file" id="file-input" accept=".ifc">
     </div>
     <div id="viewer-container">
@@ -173,8 +173,8 @@
         const fitButton = document.getElementById('fit-button');
         const repoButton = document.getElementById('load-repo');
 
-        // URL RAW DEL MODELO EN REPO BIM
-        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc';
+        // MODELO DE PRUEBA QUE SÍ TIENE GEOMETRÍA 3D
+        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/pruebas/main/model/19_ZI_ALL_Estructura_Torre_ModuloA_T1-T2.ifc';
 
         const viewer = new class {
             constructor() {
