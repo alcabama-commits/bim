@@ -6,14 +6,13 @@
     <title>Visor IFC 3D - Proyecto Blue</title>
     <link rel="icon" href="data:,">
     <style>
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; margin:0; padding:0; }
         body {
-            margin: 0; padding: 20px;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
-            color: #2c3e50; line-height: 1.6; min-height: 100vh;
+            color: #2c3e50; line-height: 1.6; min-height: 100vh; padding: 20px;
         }
-        h1 { text-align: center; color: #1a3d7c; margin-bottom: 10px; font-size: 2.2em; text-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #1a3d7c; font-size: 2.2em; margin-bottom: 10px; text-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         p { text-align: center; max-width: 800px; margin: 0 auto 20px; color: #555; font-size: 1.1em; }
         .controls { text-align: center; margin: 15px 0; }
         button {
@@ -22,7 +21,7 @@
             box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 0 5px;
         }
         button:disabled { background: #bdc3c7; cursor: not-allowed; box-shadow: none; }
-        button:hover:not(:disabled) { background: #0d2a5e; transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.15); }
+        button:hover:not(:disabled) { background: #0d2a5e; transform: translateY(-2px); }
         .file-upload { text-align: center; margin: 25px 0; }
         .file-upload label { font-weight: 600; color: #1a3d7c; margin-bottom: 8px; font-size: 1.1em; display: block; }
         input[type="file"] {
@@ -59,11 +58,10 @@
         <input type="file" id="file-input" accept=".ifc">
     </div>
     <div id="viewer-container">
-        <div class="loading">Cargando modelo desde el repositorio...</div>
+        <div class="loading">Cargando modelo de prueba (con geometría 3D)...</div>
     </div>
     <div class="info" id="info"></div>
 
-    <!-- Importmap -->
     <script type="importmap">
     {
       "imports": {
@@ -73,7 +71,6 @@
     }
     </script>
 
-    <!-- Código principal -->
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -86,11 +83,11 @@
         const fitButton = document.getElementById('fit-button');
         const repoButton = document.getElementById('load-repo');
 
-        // URL CON ?raw=true → DESCARGA BINARIA PURA
-        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc?raw=true';
+        // MODELO DE PRUEBA QUE SÍ TIENE GEOMETRÍA 3D
+        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/pruebas/main/model/19_ZI_ALL_Estructura_Torre_ModuloA_T1-T2.ifc?raw=true';
 
-        // MODELO DE PRUEBA (comenta esta línea cuando uses tu IFC)
-        // const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/pruebas/main/model/19_ZI_ALL_Estructura_Torre_ModuloA_T1-T2.ifc?raw=true';
+        // CUANDO TENGAS TU IFC CON 3D, USA ESTA:
+        // const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc?raw=true';
 
         const viewer = new class {
             constructor() {
@@ -100,7 +97,6 @@
                 this.camera.position.set(50, 50, 50);
                 this.renderer = new THREE.WebGLRenderer({ antialias: true });
                 this.renderer.setSize(container.clientWidth, container.clientHeight);
-                this.renderer.shadowMap.enabled = true;
                 container.appendChild(this.renderer.domElement);
 
                 this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -145,16 +141,13 @@
                 try {
                     await this.ifc.Init();
 
-                    // DESCARGA BINARIA SEGURA
                     const response = await fetch(url, {
                         method: 'GET',
                         mode: 'cors',
-                        headers: {
-                            'Accept': 'application/octet-stream'
-                        }
+                        headers: { 'Accept': 'application/octet-stream' }
                     });
 
-                    if (!response.ok) throw new Error(`HTTP ${response.status}: No se pudo cargar el archivo`);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
                     const blob = await response.blob();
                     const buffer = await blob.arrayBuffer();
@@ -206,7 +199,7 @@
                     loadingText.style.display = 'none';
                     info.textContent = `Error: ${err.message}`;
                     info.style.color = '#e74c3c';
-                    console.error('Error detallado:', err);
+                    console.error(err);
                 } finally {
                     fitButton.disabled = repoButton.disabled = input.disabled = false;
                 }
@@ -237,7 +230,6 @@
             URL.revokeObjectURL(url);
         };
 
-        // CARGAR AUTOMÁTICAMENTE
         viewer.load(REPO_MODEL_URL);
     </script>
 </body>
