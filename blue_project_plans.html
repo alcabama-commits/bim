@@ -142,7 +142,7 @@
         <button id="load-repo">Recargar Modelo</button>
     </div>
     <div class="file-upload">
-        <label for="file-input">O sube tu propio archivo .ifc</label>
+        <label for="file-input">O sube tu propio archivo .ifc 1</label> <!-- CAMBIO AQUÍ -->
         <input type="file" id="file-input" accept=".ifc">
     </div>
     <div id="viewer-container">
@@ -173,7 +173,7 @@
         const fitButton = document.getElementById('fit-button');
         const repoButton = document.getElementById('load-repo');
 
-        // URL RAW CORRECTA DEL NUEVO MODELO
+        // URL RAW DEL MODELO EN REPO BIM
         const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc';
 
         const viewer = new class {
