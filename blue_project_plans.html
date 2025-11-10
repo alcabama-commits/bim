@@ -13,7 +13,7 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
             color: #2c3e50;
-            line-height: 1.1;
+            line-height: 1.6;
             min-height: 100vh;
         }
         h1 {
@@ -173,7 +173,7 @@
         const fitButton = document.getElementById('fit-button');
         const repoButton = document.getElementById('load-repo');
 
-        // MODELO DE PRUEBA QUE SÍ TIENE GEOMETRÍA 3D
+        // MODELO QUE SÍ TIENE GEOMETRÍA 3D (PRUEBA FUNCIONAL)
         const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/pruebas/main/model/19_ZI_ALL_Estructura_Torre_ModuloA_T1-T2.ifc';
 
         const viewer = new class {
@@ -213,13 +213,18 @@
 
                 this.models = [];
                 this.currentMesh = null;
+
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = container.clientWidth / container.clientHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(container.clientWidth, container.clientHeight);
+                });
             }
 
             async load(url) {
                 info.textContent = '';
                 loadingText.style.display = 'block';
                 loadingText.textContent = 'Cargando modelo...';
-                loadingText.style.color = '#1a3d7c';
                 fitButton.disabled = true;
                 repoButton.disabled = true;
                 input.disabled = true;
@@ -310,6 +315,7 @@
                 this.camera.position.set(center.x + cameraZ, center.y + cameraZ, center.z + cameraZ);
                 this.camera.lookAt(center);
                 this.controls.target.copy(center);
+                this.controls.update();
             }
         };
 
