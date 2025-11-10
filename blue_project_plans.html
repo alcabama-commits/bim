@@ -3,134 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visor IFC 3D</title>
+    <title>Visor IFC 3D - Proyecto Blue</title>
     <link rel="icon" href="data:,">
     <style>
         * { box-sizing: border-box; }
         body {
-            margin: 0;
-            padding: 20px;
+            margin: 0; padding: 20px;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
-            color: #2c3e50;
-            line-height: 1.6;
-            min-height: 100vh;
+            color: #2c3e50; line-height: 1.6; min-height: 100vh;
         }
-        h1 {
-            text-align: center;
-            color: #1a3d7c;
-            margin-bottom: 10px;
-            font-size: 2.2em;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        p {
-            text-align: center;
-            max-width: 800px;
-            margin: 0 auto 20px;
-            color: #555;
-            font-size: 1.1em;
-        }
-        .controls {
-            text-align: center;
-            margin: 15px 0;
-        }
+        h1 { text-align: center; color: #1a3d7c; margin-bottom: 10px; font-size: 2.2em; text-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        p { text-align: center; max-width: 800px; margin: 0 auto 20px; color: #555; font-size: 1.1em; }
+        .controls { text-align: center; margin: 15px 0; }
         button {
-            padding: 10px 20px;
-            background: #1a3d7c;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            padding: 10px 20px; background: #1a3d7c; color: white; border: none; border-radius: 8px;
+            font-size: 1em; font-weight: 600; cursor: pointer; transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 0 5px;
         }
-        button:disabled {
-            background: #bdc3c7;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-        button:hover {
-            background: #0d2a5e;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-        }
-        .file-upload {
-            text-align: center;
-            margin: 25px 0;
-        }
-        .file-upload label {
-            font-weight: 600;
-            color: #1a3d7c;
-            display: block;
-            margin-bottom: 8px;
-            font-size: 1.1em;
-        }
+        button:disabled { background: #bdc3c7; cursor: not-allowed; box-shadow: none; }
+        button:hover:not(:disabled) { background: #0d2a5e; transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.15); }
+        .file-upload { text-align: center; margin: 25px 0; }
+        .file-upload label { font-weight: 600; color: #1a3d7c; margin-bottom: 8px; font-size: 1.1em; display: block; }
         input[type="file"] {
-            padding: 12px 16px;
-            border: 2px dashed #1a3d7c;
-            border-radius: 10px;
-            background: #fff;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 1em;
-            width: 100%;
-            max-width: 400px;
-            display: inline-block;
+            padding: 12px 16px; border: 2px dashed #1a3d7c; border-radius: 10px; background: #fff;
+            cursor: pointer; font-size: 1em; max-width: 400px; width: 100%;
         }
-        input[type="file"]:hover {
-            background: #f0f4ff;
-            border-color: #0d2a5e;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(13, 42, 94, 0.15);
-        }
+        input[type="file"]:hover { background: #f0f4ff; border-color: #0d2a5e; }
         #viewer-container {
-            position: relative;
-            width: 90vw;
-            max-width: 1200px;
-            height: 70vh;
-            min-height: 500px;
-            margin: 30px auto;
-            border: 1px solid #ddd;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.18);
-            background: #fff;
-            transition: all 0.3s ease;
-        }
-        #viewer-container:hover {
-            box-shadow: 0 20px 45px rgba(0, 0, 0, 0.22);
+            position: relative; width: 90vw; max-width: 1200px; height: 70vh; min-height: 500px;
+            margin: 30px auto; border: 1px solid #ddd; border-radius: 16px; overflow: hidden;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.18); background: #fff;
         }
         .loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 1.2em;
-            color: #1a3d7c;
-            font-weight: 600;
-            z-index: 10;
-            background: rgba(255,255,255,0.9);
-            padding: 15px 25px;
-            border-radius: 8px;
-            text-align: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 1.2em; color: #1a3d7c; font-weight: 600; background: rgba(255,255,255,0.9);
+            padding: 15px 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center;
         }
-        .info {
-            text-align: center;
-            margin-top: 15px;
-            font-weight: 600;
-        }
+        .info { text-align: center; margin-top: 15px; font-weight: 600; }
         @media (max-width: 768px) {
-            #viewer-container {
-                width: 95vw;
-                height: 60vh;
-                min-height: 400px;
-            }
-            h1 { font-size: 1.8em; }
-            button { font-size: 0.9em; padding: 8px 16px; }
+            #viewer-container { width: 95vw; height: 60vh; min-height: 400px; }
+            h1 { font-size: 1.8em; } button { font-size: 0.9em; padding: 8px 16px; }
         }
     </style>
 </head>
@@ -173,8 +86,11 @@
         const fitButton = document.getElementById('fit-button');
         const repoButton = document.getElementById('load-repo');
 
-        // MODELO QUE SÍ TIENE GEOMETRÍA 3D (PRUEBA FUNCIONAL)
-        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/pruebas/main/model/19_ZI_ALL_Estructura_Torre_ModuloA_T1-T2.ifc';
+        // URL CON ?raw=true → DESCARGA BINARIA PURA
+        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc?raw=true';
+
+        // MODELO DE PRUEBA (comenta esta línea cuando uses tu IFC)
+        // const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/pruebas/main/model/19_ZI_ALL_Estructura_Torre_ModuloA_T1-T2.ifc?raw=true';
 
         const viewer = new class {
             constructor() {
@@ -187,14 +103,21 @@
                 this.renderer.shadowMap.enabled = true;
                 container.appendChild(this.renderer.domElement);
 
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-                this.scene.add(ambientLight);
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                directionalLight.position.set(100, 100, 100);
-                this.scene.add(directionalLight);
+                this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                dirLight.position.set(100, 100, 100);
+                this.scene.add(dirLight);
 
                 this.controls = new OrbitControls(this.camera, this.renderer.domElement);
                 this.controls.enableDamping = true;
+
+                this.scene.add(new THREE.GridHelper(200, 100, 0x888888, 0x444444));
+                this.scene.add(new THREE.AxesHelper(50));
+
+                this.ifc = new IfcAPI();
+                this.ifc.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/');
+
+                this.models = []; this.currentMesh = null;
 
                 const animate = () => {
                     requestAnimationFrame(animate);
@@ -202,17 +125,6 @@
                     this.renderer.render(this.scene, this.camera);
                 };
                 animate();
-
-                this.ifc = new IfcAPI();
-                this.ifc.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/');
-
-                const grid = new THREE.GridHelper(200, 100, 0x888888, 0x444444);
-                this.scene.add(grid);
-                const axes = new THREE.AxesHelper(50);
-                this.scene.add(axes);
-
-                this.models = [];
-                this.currentMesh = null;
 
                 window.addEventListener('resize', () => {
                     this.camera.aspect = container.clientWidth / container.clientHeight;
@@ -225,81 +137,78 @@
                 info.textContent = '';
                 loadingText.style.display = 'block';
                 loadingText.textContent = 'Cargando modelo...';
-                fitButton.disabled = true;
-                repoButton.disabled = true;
-                input.disabled = true;
+                fitButton.disabled = repoButton.disabled = input.disabled = true;
 
                 this.models.forEach(m => this.scene.remove(m));
-                this.models = [];
-                this.currentMesh = null;
+                this.models = []; this.currentMesh = null;
 
                 try {
                     await this.ifc.Init();
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error(`Error HTTP ${response.status}: No se pudo cargar el archivo`);
-                    const buffer = await response.arrayBuffer();
+
+                    // DESCARGA BINARIA SEGURA
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        mode: 'cors',
+                        headers: {
+                            'Accept': 'application/octet-stream'
+                        }
+                    });
+
+                    if (!response.ok) throw new Error(`HTTP ${response.status}: No se pudo cargar el archivo`);
+
+                    const blob = await response.blob();
+                    const buffer = await blob.arrayBuffer();
                     const modelID = this.ifc.OpenModel(new Uint8Array(buffer), {
                         COORDINATE_TO_ORIGIN: true,
                         USE_FAST_BOOLS: true
                     });
 
-                    const allIfcItems = Object.values(this.ifc).filter(v => typeof v === 'number' && v > 1000);
-                    let totalVerts = 0;
-                    const positions = [], indices = [];
+                    const types = Object.values(this.ifc).filter(v => typeof v === 'number' && v > 1000);
+                    let verts = 0;
+                    const pos = [], idx = [];
 
-                    for (const type of allIfcItems) {
+                    for (const type of types) {
                         const ids = this.ifc.GetLineIDsWithType(modelID, type);
                         for (let i = 0; i < ids.size(); i++) {
                             const id = ids.get(i);
                             const geom = this.ifc.GetGeometry(modelID, id);
                             if (!geom) continue;
-                            const verts = geom.GetVertexData();
-                            const inds = geom.GetIndexData();
-                            const base = positions.length / 3;
-                            for (let j = 0; j < verts.length; j += 3) {
-                                positions.push(verts[j], verts[j + 1], verts[j + 2]);
-                            }
-                            for (let j = 0; j < inds.length; j++) {
-                                indices.push(inds[j] + base);
-                            }
-                            totalVerts += verts.length / 3;
+                            const v = geom.GetVertexData();
+                            const ind = geom.GetIndexData();
+                            const base = pos.length / 3;
+                            for (let j = 0; j < v.length; j += 3) pos.push(v[j], v[j+1], v[j+2]);
+                            for (let j = 0; j < ind.length; j++) idx.push(ind[j] + base);
+                            verts += v.length / 3;
                         }
                     }
 
-                    if (totalVerts === 0) throw new Error('No se encontró geometría 3D en el archivo IFC');
+                    if (verts === 0) throw new Error('No se encontró geometría 3D en el archivo IFC');
 
-                    const geometry = new THREE.BufferGeometry();
-                    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-                    geometry.setIndex(indices);
-                    geometry.computeVertexNormals();
+                    const geo = new THREE.BufferGeometry();
+                    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+                    geo.setIndex(idx);
+                    geo.computeVertexNormals();
 
-                    const material = new THREE.MeshLambertMaterial({
-                        color: 0x6699ff,
-                        side: THREE.DoubleSide,
-                        transparent: true,
-                        opacity: 0.9
+                    const mat = new THREE.MeshLambertMaterial({
+                        color: 0x6699ff, side: THREE.DoubleSide, transparent: true, opacity: 0.9
                     });
 
-                    const mesh = new THREE.Mesh(geometry, material);
+                    const mesh = new THREE.Mesh(geo, mat);
                     this.scene.add(mesh);
                     this.models.push(mesh);
                     this.currentMesh = mesh;
 
                     loadingText.style.display = 'none';
-                    info.textContent = `Modelo cargado: ${totalVerts.toLocaleString()} vértices`;
+                    info.textContent = `Modelo cargado: ${verts.toLocaleString()} vértices`;
                     info.style.color = '#27ae60';
-                    fitButton.disabled = false;
-                    repoButton.disabled = false;
-                    input.disabled = false;
                     this.fitCamera();
                 } catch (err) {
                     loadingText.style.display = 'none';
-                    info.textContent = `Error al cargar: ${err.message}`;
+                    info.textContent = `Error: ${err.message}`;
                     info.style.color = '#e74c3c';
-                    fitButton.disabled = false;
-                    repoButton.disabled = false;
-                    input.disabled = false;
-                    console.error(err);
+                    console.error('Error detallado:', err);
+                } finally {
+                    fitButton.disabled = repoButton.disabled = input.disabled = false;
                 }
             }
 
@@ -308,28 +217,25 @@
                 const box = new THREE.Box3().setFromObject(this.currentMesh);
                 const center = box.getCenter(new THREE.Vector3());
                 const size = box.getSize(new THREE.Vector3());
-                const maxDim = Math.max(size.x, size.y, size.z);
+                const max = Math.max(size.x, size.y, size.z);
                 const fov = this.camera.fov * Math.PI / 180;
-                let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.8;
-                cameraZ = Math.max(cameraZ, 10);
-                this.camera.position.set(center.x + cameraZ, center.y + cameraZ, center.z + cameraZ);
-                this.camera.lookAt(center);
+                let dist = Math.abs(max / 2 / Math.tan(fov / 2)) * 1.8;
+                dist = Math.max(dist, 10);
+                this.camera.position.set(center.x + dist, center.y + dist, center.z + dist);
                 this.controls.target.copy(center);
                 this.controls.update();
             }
         };
 
-        fitButton.addEventListener('click', () => viewer.fitCamera());
-        repoButton.addEventListener('click', () => viewer.load(REPO_MODEL_URL));
-
-        let currentUrl = null;
-        input.addEventListener('change', async (e) => {
+        fitButton.onclick = () => viewer.fitCamera();
+        repoButton.onclick = () => viewer.load(REPO_MODEL_URL);
+        input.onchange = async e => {
             const file = e.target.files[0];
             if (!file) return;
-            if (currentUrl) URL.revokeObjectURL(currentUrl);
-            currentUrl = URL.createObjectURL(file);
-            await viewer.load(currentUrl);
-        });
+            const url = URL.createObjectURL(file);
+            await viewer.load(url);
+            URL.revokeObjectURL(url);
+        };
 
         // CARGAR AUTOMÁTICAMENTE
         viewer.load(REPO_MODEL_URL);
