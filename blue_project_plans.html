@@ -475,10 +475,12 @@
               for (const type of allTypes) {
                   const ids = this.ifc.GetLineIDsWithType(currentModelID, type);
                   for (let i = 0; i < ids.size(); i++) {
-                      const geom = this.ifc.GetGeometry(currentModelID, ids.get(i));
+                      const expressID = ids.get(i);
+                      const geom = this.ifc.GetGeometry(currentModelID, expressID);
                       if (!geom) continue;
-                      const v = geom.GetVertexData();
-                      const ind = geom.GetIndexData();
+                      // CORRECCIÓN: Usar los métodos modernos para obtener los datos de la geometría.
+                      const v = this.ifc.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
+                      const ind = this.ifc.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
                       const base = pos.length / 3;
                       for (let j = 0; j < v.length; j += 3) pos.push(v[j], v[j+1], v[j+2]);
                       for (let j = 0; j < ind.length; j++) idx.push(ind[j] + base);
