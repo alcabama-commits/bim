@@ -49,10 +49,191 @@
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   }
   #viewer-container {
-    position: relative;
-    width: 100%;
-    height: 70vh;
-    min-height: 400px;
+    position: absolute;
+    top: 56px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+    background: var(--bg-darker);
+    transition: background 0.3s ease;
+  }
+  
+  /* Estilos del nuevo visor */
+  :root {
+    --bg-dark: #0f1720;
+    --bg-darker: #0a0f15;
+    --bg-light: #f8f9fa;
+    --bg-lighter: #ffffff;
+    --text-dark: #e6eef8;
+    --text-light: #2c3e50;
+    --accent: #d8005e; /* Color primario del portal */
+    --accent-hover: #e81c70;
+    --accent-light: #ff4d8c;
+    --border-dark: rgba(255,255,255,0.08);
+    --border-light: rgba(0,0,0,0.1);
+    --shadow-dark: rgba(0,0,0,0.4);
+    --shadow-light: rgba(0,0,0,0.12);
+    --grid-dark: #444444;
+    --grid-light: #cccccc;
+    --highlight: #ff6b9d;
+  }
+
+  body {
+    overflow: hidden; /* Para que el visor ocupe toda la pantalla */
+  }
+
+  body.light {
+    background: var(--bg-light);
+    color: var(--text-light);
+  }
+
+  .viewer-header {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    padding: 10px 16px;
+    background: linear-gradient(90deg, rgba(15,23,32,0.95), rgba(25,35,50,0.95));
+    border-bottom: 1px solid var(--border-dark);
+    z-index: 30;
+    backdrop-filter: blur(8px);
+    transition: all 0.3s ease;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+  }
+  body.light .viewer-header {
+    background: linear-gradient(90deg, rgba(255,255,255,0.95), rgba(241,243,245,0.95));
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .viewer-header h1 { 
+    font-size: 1.15rem; 
+    margin: 0; 
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .controls { 
+    display: flex; 
+    gap: 8px; 
+    align-items: center; 
+  }
+
+  .viewer-header button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px var(--shadow-dark);
+  }
+  .viewer-header button:hover:not(:disabled) { 
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px var(--shadow-dark);
+  }
+  .viewer-header button:disabled { 
+    opacity: 0.45; 
+    cursor: not-allowed; 
+  }
+  body.light .viewer-header button {
+    box-shadow: 0 2px 4px var(--shadow-light);
+  }
+  body.light .viewer-header button:hover:not(:disabled) {
+    box-shadow: 0 4px 8px var(--shadow-light);
+  }
+
+  .viewer-header input[type="file"] {
+    background: transparent;
+    color: var(--text-dark);
+    border: 1px dashed var(--border-dark);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    max-width: 150px;
+  }
+  body.light .viewer-header input[type="file"] {
+    color: var(--text-light);
+    border: 1px dashed var(--border-light);
+  }
+  .viewer-header input[type="file"]::file-selector-button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin-right: 8px;
+    cursor: pointer;
+  }
+
+  .loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.85);
+    color: var(--accent-light);
+    padding: 16px 28px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 1.1rem;
+    z-index: 100;
+    box-shadow: 0 8px 20px var(--shadow-dark);
+    border: 1px solid var(--accent);
+  }
+  body.light .loading {
+    background: rgba(255,255,255,0.95);
+    color: var(--accent);
+    box-shadow: 0 8px 20px var(--shadow-light);
+  }
+
+  #info {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 40;
+    background: rgba(0,0,0,0.7);
+    padding: 12px 16px;
+    border-radius: 10px;
+    max-width: 340px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--border-dark);
+    transition: all 0.3s ease;
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  body.light #info {
+    background: rgba(255,255,255,0.9);
+    color: var(--text-light);
+    border: 1px solid var(--border-light);
+  }
+
+  #log {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: rgba(0,0,0,0.8);
+    color: #8ef0a3;
+    font-family: 'Courier New', monospace;
+    font-size: 0.82rem;
+    padding: 10px 14px;
+    max-height: 24vh;
+    overflow-y: auto;
+    border-top: 1px solid var(--border-dark);
+    backdrop-filter: blur(6px);
+    transition: all 0.3s ease;
   }
 </style>
 </head>
@@ -60,138 +241,294 @@
 <body class="bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
 
 <div class="relative min-h-screen bg-background-light dark:bg-background-dark">
-<header class="absolute top-0 left-0 w-full z-10 px-8 py-4">
-  <div class="container mx-auto flex items-center justify-between">
-    <div class="flex items-center">
-      <a href="home.html" aria-label="Volver a la página de inicio">
-        <img alt="Portal BIM Alcabama Logo" class="h-12 dark:hidden" src="https://i.postimg.cc/wMDNvJB5/Portal-BIM-Alcabama-7-1.png"/>
-        <img alt="Portal BIM Alcabama Logo" class="h-12 hidden dark:block" src="https://i.postimg.cc/mgpPTVwf/Portal-BIM-Alcabama-7-2.png"/>
-      </a>
-    </div>
-    <div class="flex items-center space-x-4">
-      <button id="theme-toggle" aria-label="Cambiar tema" class="text-text-light dark:text-white hover:text-primary">
-        <span class="material-symbols-outlined">dark_mode</span>
+  <header class="viewer-header">
+    <a href="home.html" aria-label="Volver a la página de inicio" class="mr-4">
+      <img alt="Portal BIM Alcabama Logo" class="h-8 dark:hidden" src="https://i.postimg.cc/wMDNvJB5/Portal-BIM-Alcabama-7-1.png"/>
+      <img alt="Portal BIM Alcabama Logo" class="h-8 hidden dark:block" src="https://i.postimg.cc/mgpPTVwf/Portal-BIM-Alcabama-7-2.png"/>
+    </a>
+    <h1>Visor IFC — Proyecto Blue</h1>
+    <div class="controls ml-auto">
+      <button id="fit-button" disabled>Enfocar</button>
+      <button id="load-repo">Recargar</button>
+      <label>
+        <input type="file" id="file-input" accept=".ifc">
+      </label>
+      <button id="theme-toggle" title="Cambiar tema" class="!bg-transparent !border !border-border-light dark:!border-border-dark !w-9 !h-9 !rounded-full flex items-center justify-center text-lg">
+        <span class="material-symbols-outlined !text-xl"></span>
       </button>
-      <div id="auth-container" class="flex items-center space-x-4">
-        <a href="inse.html" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Iniciar sesión</a>
-      </div>
     </div>
+  </header>
+
+  <div id="viewer-container">
+    <div class="loading" id="loading">Cargando modelo...</div>
   </div>
-</header>
 
-<main class="pt-24 pb-16">
-  <section class="container mx-auto px-8 py-8">
-    <h1 class="text-3xl font-bold text-center mb-8">Planos y Modelos del Proyecto Blue</h1>
+  <div id="info">Estado: <span id="status">Iniciando...</span></div>
 
-    <div class="relative rounded-lg shadow-lg overflow-hidden bg-gray-200 dark:bg-gray-700">
-      <div id="loading-indicator" class="absolute inset-0 flex items-center justify-center text-gray-500 z-10">
-        <p>Cargando modelo 3D...</p>
-      </div>
-      <div id="viewer-container"></div>
-    </div>
-
-    <p class="text-center text-gray-600 dark:text-gray-400 mt-4">
-      Usa el ratón para navegar en el modelo 3D. Rueda para zoom, clic derecho para rotar, clic izquierdo para seleccionar.
-    </p>
-  </section>
-</main>
-
-<footer class="bg-background-light dark:bg-background-dark py-8 px-8 mt-auto">
-  <div class="container mx-auto text-center text-gray-500 dark:text-gray-400">
-    <img alt="Alcabama logo" class="h-8 mx-auto mb-4 dark:hidden" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png"/>
-    <img alt="Alcabama logo" class="h-8 mx-auto mb-4 hidden dark:block" src="https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png"/>
-    <p class="text-sm">© 2023 Portal BIM Alcabama - Todos los derechos reservados.</p>
+  <div id="log">
+    <strong>DIAGNÓSTICO EN VIVO</strong><br>
+    Iniciando visor...
   </div>
-</footer>
+
 </div>
 
+<!-- Importmap para gestionar las dependencias de Three.js -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
 <script type="module">
-  import * as THREE from "./libs/three/three.module.js";
-  import { IfcViewerAPI } from "./libs/web-ifc-viewer/dist/ifc-viewer-api.js";
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- GESTIÓN DE AUTENTICACIÓN Y TEMA ---
+        // NOTA: La autenticación se elimina de esta página para simplificar, 
+        // ya que el visor es el foco principal.
+        const authContainer = document.getElementById("auth-container");
+        const userAccount = JSON.parse(sessionStorage.getItem("userAccount") || localStorage.getItem("userAccount"));
 
-  document.addEventListener("DOMContentLoaded", () => {
-    // --- GESTIÓN DE AUTENTICACIÓN Y TEMA ---
-    const authContainer = document.getElementById("auth-container");
-    const userAccount = JSON.parse(sessionStorage.getItem("userAccount") || localStorage.getItem("userAccount"));
+        if (userAccount) {
+            authContainer.innerHTML = `
+                <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(" ")[0]}</span>
+                <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
+            `;
+            document.getElementById("logout-button").addEventListener("click", () => {
+                sessionStorage.removeItem("userAccount");
+                localStorage.removeItem("userAccount");
+                window.location.href = "home.html";
+            });
+        }
 
-    if (userAccount) {
-      authContainer.innerHTML = `
-        <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(" ")[0]}</span>
-        <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
-      `;
-      document.getElementById("logout-button").addEventListener("click", () => {
-        sessionStorage.removeItem("userAccount");
-        localStorage.removeItem("userAccount");
-        window.location.href = "home.html";
-      });
-    }
+        const themeToggle = document.getElementById("theme-toggle");
+        const htmlEl = document.documentElement;
+        let currentTheme = localStorage.getItem("theme") || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        
+        const applyTheme = (theme) => {
+            if (theme === "dark") {
+                htmlEl.classList.add("dark");
+                document.body.classList.remove('light');
+                themeToggle.querySelector(".material-symbols-outlined").textContent = "light_mode";
+            } else {
+                htmlEl.classList.remove("dark");
+                themeToggle.querySelector(".material-symbols-outlined").textContent = "dark_mode";
+            }
+            currentTheme = theme;
+            // Actualizar visor si ya existe
+            if (window.viewerInstance) {
+                window.viewerInstance.updateSceneColors();
+            }
+        };
+        
+        applyTheme(currentTheme);
 
-    const themeToggle = document.getElementById("theme-toggle");
-    const htmlEl = document.documentElement;
+        themeToggle.addEventListener("click", () => {
+            const newTheme = htmlEl.classList.contains("dark") ? "light" : "dark";
+            localStorage.setItem("theme", newTheme);
+            applyTheme(newTheme);
+        });
 
-    const applyTheme = (theme) => {
-      if (theme === "dark") {
-        htmlEl.classList.add("dark");
-        themeToggle.querySelector(".material-symbols-outlined").textContent = "light_mode";
-      } else {
-        htmlEl.classList.remove("dark");
-        themeToggle.querySelector(".material-symbols-outlined").textContent = "dark_mode";
-      }
+    });
+
+    // --- LÓGICA DEL VISOR IFC (NUEVA VERSIÓN) ---
+    const container = document.getElementById('viewer-container');
+    const input = document.getElementById('file-input');
+    const loadingText = document.getElementById('loading');
+    const info = document.getElementById('info');
+    const status = document.getElementById('status');
+    const logBox = document.getElementById('log');
+    const fitButton = document.getElementById('fit-button');
+    const repoButton = document.getElementById('load-repo');
+
+    const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_CBombas2.ifc?raw=true';
+    const REPO_MODEL_NAME = '02_GI_BLU_Estructura_CBombas2.ifc';
+
+    const log = (msg) => {
+      logBox.textContent += '\n' + msg;
+      logBox.scrollTop = logBox.scrollHeight;
+      console.log('[IFC]', msg);
     };
 
-    const savedTheme =
-      localStorage.getItem("theme") ||
-      (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    applyTheme(savedTheme);
+    let viewer = null;
+    let currentModelID = null;
 
-    themeToggle.addEventListener("click", () => {
-      const newTheme = htmlEl.classList.contains("dark") ? "light" : "dark";
-      localStorage.setItem("theme", newTheme);
-      applyTheme(newTheme);
-    });
-
-    // --- VISOR IFC LOCAL ---
-    const container = document.getElementById("viewer-container");
-    const viewer = new IfcViewerAPI({
-      container,
-      backgroundColor: new THREE.Color(0xeeeeee),
-    });
-
-    viewer.grid.setGrid();
-    viewer.axes.setAxes();
-
-    const loadingIndicator = document.getElementById("loading-indicator");
-
-    async function loadIfc(url) {
+    (async () => {
       try {
-        console.log("Iniciando carga del modelo IFC desde:", url);
-        loadingIndicator.style.display = "flex";
+        log('Importando librerías...');
+        const THREE = await import('three');
+        const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
+        const { IfcAPI } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
+        log('Three.js y web-ifc cargados');
 
-        // Ruta local al motor WASM
-        await viewer.IFC.setWasmPath("./libs/web-ifc/");
+        class Viewer {
+          constructor() {
+            log('Inicializando escena 3D...');
+            this.scene = new THREE.Scene();
+            this.camera = new THREE.PerspectiveCamera(75, container.clientWidth/container.clientHeight, 0.1, 2000);
+            this.camera.position.set(50, 50, 50);
+            this.renderer = new THREE.WebGLRenderer({ antialias: true });
+            this.renderer.setSize(container.clientWidth, container.clientHeight);
+            this.renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(this.renderer.domElement);
 
-        const model = await viewer.IFC.loadIfcUrl(url);
+            this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(100, 100, 100);
+            this.scene.add(dirLight);
 
-        loadingIndicator.style.display = "none";
-        await viewer.shadowDropper.renderShadow(model.modelID);
-        viewer.context.fitToFrame();
-        console.log("✅ Modelo IFC cargado exitosamente");
-      } catch (error) {
-        console.error("❌ Error al cargar IFC:", error);
-        loadingIndicator.innerHTML = `
-          <div class="text-red-500 text-center p-6 max-w-md mx-auto">
-            <p class="font-bold text-lg">Error al cargar el modelo</p>
-            <p class="text-sm mt-2">${error.message}</p>
-            <p class="text-xs mt-3 text-gray-600 dark:text-gray-400">
-              Verifica que el archivo IFC esté en la carpeta raíz del proyecto.
-            </p>
-          </div>`;
+            this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+            this.controls.enableDamping = true;
+
+            this.scene.add(new THREE.AxesHelper(50));
+
+            this.ifc = new IfcAPI();
+            this.ifc.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/');
+
+            this.models = [];
+            this.currentMesh = null;
+
+            const animate = () => {
+              requestAnimationFrame(animate);
+              this.controls.update();
+              this.renderer.render(this.scene, this.camera);
+            };
+            animate();
+
+            window.addEventListener('resize', () => this.onResize());
+            this.updateSceneColors();
+          }
+
+          onResize() {
+            this.camera.aspect = container.clientWidth / container.clientHeight;
+            this.camera.updateProjectionMatrix();
+            this.renderer.setSize(container.clientWidth, container.clientHeight);
+          }
+
+          updateSceneColors() {
+            const isLight = document.body.classList.contains('light');
+            this.scene.background = new THREE.Color(isLight ? 0xf8f9fa : 0x0a0f15);
+            this.updateGrid();
+          }
+
+          updateGrid() {
+            if (this.grid) this.scene.remove(this.grid);
+            const isLight = document.body.classList.contains('light');
+            const color1 = isLight ? 'var(--grid-light)' : 'var(--grid-dark)';
+            this.grid = new THREE.GridHelper(200, 50, new THREE.Color(color1), new THREE.Color(color1));
+            this.grid.material.transparent = true;
+            this.grid.material.opacity = 0.5;
+            this.scene.add(this.grid);
+          }
+
+          async load(url, name) {
+            log(`Descargando: ${name}`);
+            status.textContent = `Cargando: ${name}...`;
+            loadingText.style.display = 'block';
+            fitButton.disabled = true;
+
+            this.models.forEach(m => this.scene.remove(m));
+            this.models = [];
+
+            try {
+              await this.ifc.Init();
+              log('web-ifc inicializado');
+
+              const res = await fetch(url);
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              const buffer = await res.arrayBuffer();
+              log(`Descargado: ${(buffer.byteLength/1024/1024).toFixed(2)} MB`);
+
+              currentModelID = this.ifc.OpenModel(new Uint8Array(buffer), { COORDINATE_TO_ORIGIN: true });
+              log(`Modelo abierto (ID: ${currentModelID})`);
+
+              const allTypes = this.ifc.GetAllTypes(currentModelID);
+              log(`Tipos IFC encontrados: ${allTypes.length}`);
+
+              let verts = 0;
+              const pos = [], idx = [];
+
+              for (const type of allTypes) {
+                  const ids = this.ifc.GetLineIDsWithType(currentModelID, type);
+                  for (let i = 0; i < ids.size(); i++) {
+                      const geom = this.ifc.GetGeometry(currentModelID, ids.get(i));
+                      if (!geom) continue;
+                      const v = geom.GetVertexData();
+                      const ind = geom.GetIndexData();
+                      const base = pos.length / 3;
+                      for (let j = 0; j < v.length; j += 3) pos.push(v[j], v[j+1], v[j+2]);
+                      for (let j = 0; j < ind.length; j++) idx.push(ind[j] + base);
+                      verts += v.length / 3;
+                  }
+              }
+
+              if (verts === 0) throw new Error('No hay geometría 3D en el archivo');
+              log(`ÉXITO: ${verts.toLocaleString()} vértices`);
+
+              const geo = new THREE.BufferGeometry();
+              geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+              geo.setIndex(idx);
+              geo.computeVertexNormals();
+
+              const mat = new THREE.MeshLambertMaterial({ 
+                color: 0xd8005e, 
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.9
+              });
+              const mesh = new THREE.Mesh(geo, mat);
+              this.scene.add(mesh);
+              this.models.push(mesh);
+              this.currentMesh = mesh;
+
+              loadingText.style.display = 'none';
+              status.textContent = `Listo: ${name}`;
+              info.innerHTML = `
+                <strong style="color: var(--accent);">Modelo cargado</strong><br>
+                ${verts.toLocaleString()} vértices<br>
+                <small>Archivo: ${name}</small>
+              `;
+              this.fitCamera();
+            } catch (err) {
+              loadingText.style.display = 'none';
+              status.textContent = `Error: ${err.message}`;
+              log(`ERROR: ${err.message}`);
+            } finally {
+              fitButton.disabled = false;
+            }
+          }
+
+          fitCamera() {
+            if (!this.currentMesh) return;
+            const box = new THREE.Box3().setFromObject(this.currentMesh);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const max = Math.max(size.x, size.y, size.z);
+            const dist = Math.max(max * 1.5, 50);
+            this.camera.position.copy(center).add(new THREE.Vector3(dist, dist, dist));
+            this.controls.target.copy(center);
+            this.controls.update();
+            log('Cámara enfocada');
+          }
+        }
+
+        viewer = new Viewer();
+        window.viewerInstance = viewer; // Exponer para el cambio de tema
+
+        fitButton.onclick = () => viewer.fitCamera();
+        repoButton.onclick = () => viewer.load(REPO_MODEL_URL, REPO_MODEL_NAME);
+        input.onchange = e => {
+          const file = e.target.files[0];
+          if (file) viewer.load(URL.createObjectURL(file), file.name);
+        };
+
+        viewer.load(REPO_MODEL_URL, REPO_MODEL_NAME);
+
+      } catch (err) {
+        log(`FALLO CRÍTICO: ${err.message}`);
       }
-    }
-
-    // Cargar modelo local
-    loadIfc("./02_GI_BLU_Estructura_CBombas2.ifc");
-  });
+    })();
 </script>
 
 </body>
