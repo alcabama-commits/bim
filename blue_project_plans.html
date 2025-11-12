@@ -446,7 +446,11 @@
               const buffer = await res.arrayBuffer();
               log(`Descargado: ${(buffer.byteLength/1024/1024).toFixed(2)} MB`);
 
-              currentModelID = this.ifc.OpenModel(new Uint8Array(buffer), { COORDINATE_TO_ORIGIN: true });
+              // CORRECCIÓN FINAL: Forzar al motor a procesar todos los tipos de geometría.
+              // Esto es crucial para modelos que no usan exclusivamente "Faceted B-Rep".
+              const settings = { COORDINATE_TO_ORIGIN: true, GEOMETRY_TYPE: "IFCGEOMETRY" };
+              currentModelID = this.ifc.OpenModel(new Uint8Array(buffer), settings);
+
               log(`Modelo abierto (ID: ${currentModelID})`);
 
               // CORRECCIÓN FINAL: Usamos la lista de tipos importada directamente.
