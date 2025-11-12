@@ -8,125 +8,45 @@
     <style>
         * { box-sizing: border-box; margin:0; padding:0; }
         body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%); 
+            font-family: 'Segoe UI', sans-serif; 
+            background: #f4f6f9; 
             color: #2c3e50; 
             padding: 20px; 
             min-height: 100vh; 
         }
-        h1 { 
-            text-align: center; 
-            color: #1a3d7c; 
-            font-size: 2.2em; 
-            margin-bottom: 10px; 
-            text-shadow: 0 2px 4px rgba(0,0,0,0.1); 
-        }
-        .controls, .file-upload { text-align: center; margin: 15px 0; }
+        h1 { text-align: center; color: #1a3d7c; font-size: 2em; margin-bottom: 15px; }
+        .controls { text-align: center; margin: 15px 0; }
         button { 
-            padding: 10px 20px; 
-            background: #1a3d7c; 
-            color: white; 
-            border: none; 
-            border-radius: 8px; 
-            font-weight: 600; 
-            cursor: pointer; 
-            margin: 0 5px; 
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            padding: 10px 20px; background: #1a3d7c; color: white; border: none; border-radius: 8px; 
+            font-weight: 600; cursor: pointer; margin: 5px; 
         }
-        button:disabled { background: #bdc3c7; cursor: not-allowed; box-shadow: none; }
-        button:hover:not(:disabled) { background: #0d2a5e; transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.15); }
-        .file-upload label { 
-            font-weight: 600; 
-            color: #1a3d7c; 
-            display: block; 
-            margin-bottom: 8px; 
-            font-size: 1.1em; 
-        }
+        button:disabled { background: #bdc3c7; cursor: not-allowed; }
+        button:hover:not(:disabled) { background: #0d2a5e; }
+        .file-upload { text-align: center; margin: 15px 0; }
+        .file-upload label { color: #1a3d7c; font-weight: 600; }
         input[type="file"] { 
-            padding: 12px 16px; 
-            border: 2px dashed #1a3d7c; 
-            border-radius: 10px; 
-            background: #fff; 
-            cursor: pointer; 
-            font-size: 1em; 
-            max-width: 400px; 
-            width: 100%; 
+            padding: 10px; border: 2px dashed #1a3d7c; border-radius: 8px; background: #fff; 
+            max-width: 400px; width: 100%; 
         }
-        input[type="file"]:hover { background: #f0f4ff; border-color: #0d2a5e; }
         #viewer-container { 
-            position: relative; 
-            width: 90vw; 
-            max-width: 1200px; 
-            height: 70vh; 
-            min-height: 500px; 
-            margin: 30px auto; 
-            border: 1px solid #ddd; 
-            border-radius: 16px; 
-            overflow: hidden; 
-            box-shadow: 0 15px 35px rgba(0,0,0,0.18); 
-            background: #fff; 
+            position: relative; width: 90vw; max-width: 1200px; height: 70vh; min-height: 500px; 
+            margin: 30px auto; border: 1px solid #ddd; border-radius: 16px; overflow: hidden; 
+            background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.15); 
         }
         .loading { 
-            position: absolute; 
-            top: 50%; 
-            left: 50%; 
-            transform: translate(-50%, -50%); 
-            font-size: 1.2em; 
-            color: #1a3d7c; 
-            font-weight: 600; 
-            background: rgba(255,255,255,0.9); 
-            padding: 15px 25px; 
-            border-radius: 8px; 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            background: white; padding: 15px 25px; border-radius: 8px; font-weight: 600; color: #1a3d7c; 
             box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
-            text-align: center; 
         }
-        .info { 
-            text-align: center; 
-            margin-top: 15px; 
-            font-weight: 600; 
-        }
-        .current-file { 
-            text-align: center; 
-            margin: 10px auto; 
-            padding: 10px; 
-            background: #eef5ff; 
-            border-radius: 8px; 
-            max-width: 600px; 
-            color: #1a3d7c; 
-            font-weight: 500; 
-            font-size: 1em; 
-        }
+        .status { text-align: center; margin: 10px; padding: 10px; background: #eef5ff; border-radius: 8px; max-width: 600px; margin: 10px auto; }
+        /* PANEL DEBUG - SIEMPRE VISIBLE */
         .debug { 
-            background: #f0f0f0; 
-            color: #2c3e50; 
-            padding: 12px; 
-            border-radius: 8px; 
-            margin: 10px auto; 
-            max-width: 700px; 
-            font-family: 'Courier New', monospace; 
-            font-size: 0.9em; 
-            text-align: left;
-            white-space: pre-wrap;
-            border: 1px solid #ddd;
+            background: #1a3d7c; color: white; padding: 15px; border-radius: 10px; 
+            margin: 20px auto; max-width: 900px; font-family: 'Courier New', monospace; 
+            font-size: 1em; text-align: left; white-space: pre-wrap; 
+            border: 2px solid #0d2a5e; 
         }
-        .error-details { 
-            background: #ffebee; 
-            color: #c62828; 
-            padding: 15px; 
-            border-radius: 8px; 
-            margin: 15px auto; 
-            max-width: 700px; 
-            font-size: 1em; 
-            text-align: center; 
-            line-height: 1.5; 
-        }
-        .error-details strong { color: #b71c1c; }
-        @media (max-width: 768px) {
-            #viewer-container { width: 95vw; height: 60vh; min-height: 400px; }
-            h1 { font-size: 1.8em; }
-            button { font-size: 0.9em; padding: 8px 16px; }
-        }
+        .debug strong { color: #a8d8ff; }
     </style>
 </head>
 <body>
@@ -138,20 +58,23 @@
     </div>
 
     <div class="file-upload">
-        <label for="file-input">O sube tu propio archivo .ifc 2</label>
+        <label for="file-input">Sube tu archivo .ifc</label>
         <input type="file" id="file-input" accept=".ifc">
     </div>
 
-    <!-- INDICADOR DEL ARCHIVO CARGADO -->
-    <div class="current-file" id="current-file">Cargando modelo desde el repositorio...</div>
+    <div class="status" id="current-file">Cargando modelo...</div>
 
     <div id="viewer-container">
-        <div class="loading">Cargando modelo...</div>
+        <div class="loading" id="loading">Cargando modelo...</div>
     </div>
 
-    <div class="info" id="info"></div>
-    <div class="debug" id="debug"></div>
-    <div class="error-details" id="error-details" style="display:none;"></div>
+    <div id="info" class="status"></div>
+
+    <!-- PANEL DEBUG - SIEMPRE APARECERÁ -->
+    <div class="debug" id="debug">
+        <strong>DIAGNÓSTICO EN VIVO</strong><br>
+        Iniciando visor...
+    </div>
 
     <!-- Importmap -->
     <script type="importmap">
@@ -163,218 +86,183 @@
     }
     </script>
 
-    <!-- CÓDIGO COMPLETO 100% FUNCIONAL -->
+    <!-- CÓDIGO COMPLETO Y ESTABLE -->
     <script type="module">
-        import * as THREE from 'three';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-        const { IfcAPI } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
-
+        // ELEMENTOS
         const container = document.getElementById('viewer-container');
         const input = document.getElementById('file-input');
-        const loadingText = container.querySelector('.loading');
+        const loadingText = document.getElementById('loading');
         const info = document.getElementById('info');
         const currentFileDiv = document.getElementById('current-file');
         const debug = document.getElementById('debug');
-        const errorDetails = document.getElementById('error-details');
         const fitButton = document.getElementById('fit-button');
-        const repoButton = document.getElement. getElementById('load-repo');
+        const repoButton = document.getElementById('load-repo');
 
-        // TU ARCHIVO ACTUAL EN GITHUB
+        // URL DEL MODELO
         const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_TorreD.ifc?raw=true';
         const REPO_MODEL_NAME = '02_GI_BLU_Estructura_TorreD.ifc';
 
-        const viewer = new class {
-            constructor() {
-                this.scene = new THREE.Scene();
-                this.scene.background = new THREE.Color(0xf5f7fa);
-                this.camera = new THREE.PerspectiveCamera(75, container.clientWidth/container.clientHeight, 0.1, 1000);
-                this.camera.position.set(50, 50, 50);
-                this.renderer = new THREE.WebGLRenderer({ antialias: true });
-                this.renderer.setSize(container.clientWidth, container.clientHeight);
-                this.renderer.shadowMap.enabled = true;
-                container.appendChild(this.renderer.domElement);
+        // ACTUALIZAR DEBUG
+        const log = (msg) => {
+            debug.innerHTML += msg + '<br>';
+            console.log('[IFC]', msg);
+        };
 
-                this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-                const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                dirLight.position.set(100, 100, 100);
-                this.scene.add(dirLight);
+        log('Importando librerías...');
 
-                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-                this.controls.enableDamping = true;
+        try {
+            // IMPORTAR THREE Y CONTROLES
+            const THREE = await import('three');
+            const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
+            const { IfcAPI } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
 
-                this.scene.add(new THREE.GridHelper(200, 100, 0x888888, 0x444444));
-                this.scene.add(new THREE.AxesHelper(50));
+            log('Three.js y web-ifc cargados');
 
-                this.ifc = new IfcAPI();
-                this.ifc.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/');
-
-                this.models = [];
-                this.currentMesh = null;
-
-                const animate = () => {
-                    requestAnimationFrame(animate);
-                    this.controls.update();
-                    this.renderer.render(this.scene, this.camera);
-                };
-                animate();
-
-                window.addEventListener('resize', () => {
-                    this.camera.aspect = container.clientWidth / container.clientHeight;
-                    this.camera.updateProjectionMatrix();
+            // VISOR
+            const viewer = new class {
+                constructor() {
+                    log('Inicializando escena 3D...');
+                    this.scene = new THREE.Scene();
+                    this.scene.background = new THREE.Color(0xf5f7fa);
+                    this.camera = new THREE.PerspectiveCamera(75, container.clientWidth/container.clientHeight, 0.1, 1000);
+                    this.camera.position.set(50, 50, 50);
+                    this.renderer = new THREE.WebGLRenderer({ antialias: true });
                     this.renderer.setSize(container.clientWidth, container.clientHeight);
-                });
-            }
+                    this.renderer.setPixelRatio(window.devicePixelRatio);
+                    container.appendChild(this.renderer.domElement);
 
-            async load(url, fileName = null) {
-                info.textContent = '';
-                errorDetails.style.display = 'none';
-                debug.textContent = 'Iniciando carga...\n';
-                currentFileDiv.textContent = fileName ? `Cargando: ${fileName}...` : `Cargando: ${REPO_MODEL_NAME}...`;
-                currentFileDiv.style.color = '#1a3d7c';
-                loadingText.style.display = 'block';
-                loadingText.textContent = 'Descargando y procesando IFC...';
-                fitButton.disabled = repoButton.disabled = input.disabled = true;
+                    this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+                    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                    dirLight.position.set(100, 100, 100);
+                    this.scene.add(dirLight);
 
-                this.models.forEach(m => this.scene.remove(m));
-                this.models = [];
-                this.currentMesh = null;
+                    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                    this.controls.enableDamping = true;
 
-                try {
-                    await this.ifc.Init();
-                    debug.textContent += 'web-ifc inicializado\n';
+                    this.scene.add(new THREE.GridHelper(200, 50));
+                    this.scene.add(new THREE.AxesHelper(50));
 
-                    const response = await fetch(url, {
-                        method: 'GET',
-                        mode: 'cors',
-                        headers: { 'Accept': 'application/octet-stream' }
+                    this.ifc = new IfcAPI();
+                    this.ifc.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/');
+
+                    this.models = [];
+                    this.currentMesh = null;
+
+                    const animate = () => {
+                        requestAnimationFrame(animate);
+                        this.controls.update();
+                        this.renderer.render(this.scene, this.camera);
+                    };
+                    animate();
+
+                    window.addEventListener('resize', () => {
+                        this.camera.aspect = container.clientWidth / container.clientHeight;
+                        this.camera.updateProjectionMatrix();
+                        this.renderer.setSize(container.clientWidth, container.clientHeight);
                     });
-
-                    if (!response.ok) throw new Error(`HTTP ${response.status}: No se pudo descargar el archivo`);
-
-                    const blob = await response.blob();
-                    const buffer = await blob.arrayBuffer();
-                    debug.textContent += `Archivo descargado: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB\n`;
-
-                    // FORZAR LECTURA DE FACETED BREP
-                    const modelID = this.ifc.OpenModel(new Uint8Array(buffer), {
-                        COORDINATE_TO_ORIGIN: true,
-                        USE_FAST_BOOLS: true,
-                        IFC_LOADER_SETTINGS: {
-                            INCLUDE_GEOMETRY: true,
-                            COORDINATE_TO_ORIGIN: true
-                        }
-                    });
-
-                    debug.textContent += `Modelo IFC abierto (ID: ${modelID})\n`;
-
-                    // BUSCAR TODOS LOS TIPOS POSIBLES
-                    const allTypes = this.ifc.GetAllTypes(modelID);
-                    debug.textContent += `Tipos IFC encontrados: ${allTypes.length}\n`;
-
-                    let totalVerts = 0;
-                    const positions = [], indices = [];
-
-                    for (const type of allTypes) {
-                        const ids = this.ifc.GetLineIDsWithType(modelID, type);
-                        for (let i = 0; i < ids.size(); i++) {
-                            const expressID = ids.get(i);
-                            const geom = this.ifc.GetGeometry(modelID, expressID);
-                            if (!geom) continue;
-                            const verts = geom.GetVertexData();
-                            const inds = geom.GetIndexData();
-                            const base = positions.length / 3;
-                            for (let j = 0; j < verts.length; j += 3) {
-                                positions.push(verts[j], verts[j+1], verts[j+2]);
-                            }
-                            for (let j = 0; j < inds.length; j++) {
-                                indices.push(inds[j] + base);
-                            }
-                            totalVerts += verts.length / 3;
-                        }
-                    }
-
-                    debug.textContent += `Geometría extraída: ${totalVerts.toLocaleString()} vértices\n`;
-
-                    if (totalVerts === 0) {
-                        errorDetails.innerHTML = `
-                            <strong>Error: No se encontró geometría 3D</strong><br><br>
-                            <strong>Posibles causas:</strong><br>
-                            1. El IFC fue exportado sin geometría (solo metadatos)<br>
-                            2. Formato no compatible con web-ifc<br>
-                            3. Geometría en formato SweptSolid (no soportado)<br><br>
-                            <strong>Prueba esto:</strong><br>
-                            • Exporta desde una vista 3D en Revit<br>
-                            • Usa "Faceted BRep" si aparece la opción<br>
-                            • O sube un IFC diferente para probar
-                        `;
-                        errorDetails.style.display = 'block';
-                        throw new Error('No se encontró geometría 3D en el archivo IFC');
-                    }
-
-                    const geometry = new THREE.BufferGeometry();
-                    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-                    geometry.setIndex(indices);
-                    geometry.computeVertexNormals();
-
-                    const material = new THREE.MeshLambertMaterial({
-                        color: 0x6699ff,
-                        side: THREE.DoubleSide,
-                        transparent: true,
-                        opacity: 0.9
-                    });
-
-                    const mesh = new THREE.Mesh(geometry, material);
-                    this.scene.add(mesh);
-                    this.models.push(mesh);
-                    this.currentMesh = mesh;
-
-                    loadingText.style.display = 'none';
-                    info.textContent = `Modelo cargado: ${totalVerts.toLocaleString()} vértices`;
-                    info.style.color = '#27ae60';
-                    currentFileDiv.textContent = fileName ? `Archivo cargado: ${fileName}` : `Archivo cargado: ${REPO_MODEL_NAME}`;
-                    currentFileDiv.style.color = '#27ae60';
-                    this.fitCamera();
-                } catch (err) {
-                    loadingText.style.display = 'none';
-                    info.textContent = `Error: ${err.message}`;
-                    info.style.color = '#e74c3c';
-                    currentFileDiv.textContent = fileName ? `Error al cargar: ${fileName}` : `Error al cargar: ${REPO_MODEL_NAME}`;
-                    currentFileDiv.style.color = '#e74c3c';
-                    debug.textContent += `ERROR: ${err.message}\n`;
-                    console.error('Error completo:', err);
-                } finally {
-                    fitButton.disabled = repoButton.disabled = input.disabled = false;
                 }
-            }
 
-            fitCamera() {
-                if (!this.currentMesh) return;
-                const box = new THREE.Box3().setFromObject(this.currentMesh);
-                const center = box.getCenter(new THREE.Vector3());
-                const size = box.getSize(new THREE.Vector3());
-                const maxDim = Math.max(size.x, size.y, size.z);
-                const fov = this.camera.fov * Math.PI / 180;
-                let distance = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.8;
-                distance = Math.max(distance, 10);
-                this.camera.position.set(center.x + distance, center.y + distance, center.z + distance);
-                this.controls.target.copy(center);
-                this.controls.update();
-            }
-        };
+                async load(url, name) {
+                    log(`Descargando: ${name}`);
+                    currentFileDiv.textContent = `Cargando: ${name}...`;
+                    loadingText.style.display = 'block';
+                    fitButton.disabled = true;
 
-        fitButton.onclick = () => viewer.fitCamera();
-        repoButton.onclick = () => viewer.load(REPO_MODEL_URL, REPO_MODEL_NAME);
+                    this.models.forEach(m => this.scene.remove(m));
+                    this.models = [];
 
-        input.onchange = async e => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const url = URL.createObjectURL(file);
-            await viewer.load(url, file.name);
-            URL.revokeObjectURL(url);
-        };
+                    try {
+                        await this.ifc.Init();
+                        log('web-ifc inicializado');
 
-        // CARGAR AUTOMÁTICAMENTE
-        viewer.load(REPO_MODEL_URL, REPO_MODEL_NAME);
+                        const res = await fetch(url);
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        const buffer = await res.arrayBuffer();
+                        log(`Descargado: ${(buffer.byteLength/1024/1024).toFixed(2)} MB`);
+
+                        const modelID = this.ifc.OpenModel(new Uint8Array(buffer), { COORDINATE_TO_ORIGIN: true });
+                        log(`Modelo abierto (ID: ${modelID})`);
+
+                        const types = this.ifc.GetAllTypes(modelID);
+                        log(`Tipos IFC: ${types.length}`);
+
+                        let verts = 0;
+                        const pos = [], idx = [];
+
+                        for (const type of types) {
+                            const ids = this.ifc.GetLineIDsWithType(modelID, type);
+                            for (let i = 0; i < ids.size(); i++) {
+                                const geom = this.ifc.GetGeometry(modelID, ids.get(i));
+                                if (!geom) continue;
+                                const v = geom.GetVertexData();
+                                const ind = geom.GetIndexData();
+                                const base = pos.length / 3;
+                                for (let j = 0; j < v.length; j += 3) pos.push(v[j], v[j+1], v[j+2]);
+                                for (let j = 0; j < ind.length; j++) idx.push(ind[j] + base);
+                                verts += v.length / 3;
+                            }
+                        }
+
+                        if (verts === 0) throw new Error('No hay geometría 3D');
+
+                        log(`ÉXITO: ${verts.toLocaleString()} vértices`);
+
+                        const geo = new THREE.BufferGeometry();
+                        geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+                        geo.setIndex(idx);
+                        geo.computeVertexNormals();
+
+                        const mat = new THREE.MeshLambertMaterial({ color: 0x6699ff, side: THREE.DoubleSide });
+                        const mesh = new THREE.Mesh(geo, mat);
+                        this.scene.add(mesh);
+                        this.models.push(mesh);
+                        this.currentMesh = mesh;
+
+                        loadingText.style.display = 'none';
+                        info.textContent = `Cargado: ${verts.toLocaleString()} vértices`;
+                        info.style.color = '#27ae60';
+                        currentFileDiv.textContent = `Listo: ${name}`;
+                        currentFileDiv.style.color = '#27ae60';
+                        this.fitCamera();
+                    } catch (err) {
+                        loadingText.style.display = 'none';
+                        info.textContent = `Error: ${err.message}`;
+                        info.style.color = '#e74c3c';
+                        log(`ERROR: ${err.message}`);
+                    } finally {
+                        fitButton.disabled = false;
+                    }
+                }
+
+                fitCamera() {
+                    if (!this.currentMesh) return;
+                    const box = new THREE.Box3().setFromObject(this.currentMesh);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+                    const max = Math.max(size.x, size.y, size.z);
+                    const dist = Math.max(max * 1.5, 50);
+                    this.camera.position.copy(center).add(new THREE.Vector3(dist, dist, dist));
+                    this.controls.target.copy(center);
+                    this.controls.update();
+                }
+            };
+
+            // INICIAR
+            const v = new viewer();
+            fitButton.onclick = () => v.fitCamera();
+            repoButton.onclick = () => v.load(REPO_MODEL_URL, REPO_MODEL_NAME);
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (file) v.load(URL.createObjectURL(file), file.name);
+            };
+
+            // CARGAR AL INICIO
+            v.load(REPO_MODEL_URL, REPO_MODEL_NAME);
+
+        } catch (err) {
+            log(`FALLO CRÍTICO: ${err.message}`);
+            console.error(err);
+        }
     </script>
 </body>
 </html>
