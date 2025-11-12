@@ -348,7 +348,24 @@
         log('Importando librerías...');
         const THREE = await import('three');
         const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
-        const { IfcAPI } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
+        // CORRECCIÓN: Importamos la API y también todas las constantes de tipo IFC directamente.
+        const { 
+            IfcAPI,
+            IFCWALL,
+            IFCWALLSTANDARDCASE,
+            IFCSLAB,
+            IFCWINDOW,
+            IFCPLATE,
+            IFCMEMBER,
+            IFCROOF,
+            IFCBUILDINGSTOREY,
+            IFCSTAIR,
+            IFCSTAIRFLIGHT,
+            IFCRAILING,
+            IFCFURNISHINGELEMENT,
+            IFCCURTAINWALL,
+            IFCDOOR
+        } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
         log('Three.js y web-ifc cargados');
 
         class Viewer {
@@ -432,11 +449,25 @@
               currentModelID = this.ifc.OpenModel(new Uint8Array(buffer), { COORDINATE_TO_ORIGIN: true });
               log(`Modelo abierto (ID: ${currentModelID})`);
 
-              // CORRECCIÓN: GetAllTypes no existe. Se usa el método anterior para obtener
-              // todas las constantes de tipo IFC (ej. IFCWALL, IFCSLAB) desde el objeto API.
-              // Estos son valores numéricos que representan cada tipo de elemento.
-              const allTypes = Object.values(this.ifc).filter(v => typeof v === 'number' && v > 1000);
-              log(`Tipos de geometría IFC a procesar: ${allTypes.length}`);
+              // CORRECCIÓN FINAL: Usamos la lista de tipos importada directamente.
+              // Este es el método más robusto y evita errores si la estructura interna de la API cambia.
+              const allTypes = [
+                  IFCWALL,
+                  IFCWALLSTANDARDCASE,
+                  IFCSLAB,
+                  IFCWINDOW,
+                  IFCPLATE,
+                  IFCMEMBER,
+                  IFCROOF,
+                  IFCBUILDINGSTOREY,
+                  IFCSTAIR,
+                  IFCSTAIRFLIGHT,
+                  IFCRAILING,
+                  IFCFURNISHINGELEMENT,
+                  IFCCURTAINWALL,
+                  IFCDOOR
+              ];
+              log(`Tipos de geometría IFC a procesar: ${allTypes.length} (lista explícita)`);
 
               let verts = 0;
               const pos = [], idx = [];
