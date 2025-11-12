@@ -3,127 +3,109 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visor IFC 3D - Proyecto Blue</title>
+    <title>Visor IFC 3D - Torre D</title>
     <link rel="icon" href="data:,">
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
-            color: #2c3e50;
-            padding: 20px;
-            min-height: 100vh;
+        * { box-sizing: border-box; margin:0; padding:0; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%); 
+            color: #2c3e50; 
+            padding: 20px; 
+            min-height: 100vh; 
         }
-        h1 {
-            text-align: center;
-            color: #1a3d7c;
-            font-size: 2.2em;
-            margin-bottom: 10px;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        h1 { 
+            text-align: center; 
+            color: #1a3d7c; 
+            font-size: 2.2em; 
+            margin-bottom: 10px; 
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1); 
         }
-        p {
-            text-align: center;
-            max-width: 800px;
-            margin: 0 auto 20px;
-            color: #555;
-            font-size: 1.1em;
-        }
-        .controls {
-            text-align: center;
-            margin: 15px 0;
-        }
-        button {
-            padding: 10px 20px;
-            background: #1a3d7c;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1em;
-            font-weight: 600;
-            cursor: pointer;
+        .controls, .file-upload { text-align: center; margin: 15px 0; }
+        button { 
+            padding: 10px 20px; 
+            background: #1a3d7c; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            margin: 0 5px; 
             transition: all 0.3s ease;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            margin: 0 5px;
         }
-        button:disabled {
-            background: #bdc3c7;
-            cursor: not-allowed;
-            box-shadow: none;
+        button:disabled { background: #bdc3c7; cursor: not-allowed; box-shadow: none; }
+        button:hover:not(:disabled) { background: #0d2a5e; transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.15); }
+        .file-upload label { 
+            font-weight: 600; 
+            color: #1a3d7c; 
+            display: block; 
+            margin-bottom: 8px; 
+            font-size: 1.1em; 
         }
-        button:hover:not(:disabled) {
-            background: #0d2a5e;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        input[type="file"] { 
+            padding: 12px 16px; 
+            border: 2px dashed #1a3d7c; 
+            border-radius: 10px; 
+            background: #fff; 
+            cursor: pointer; 
+            font-size: 1em; 
+            max-width: 400px; 
+            width: 100%; 
         }
-        .file-upload {
+        input[type="file"]:hover { background: #f0f4ff; border-color: #0d2a5e; }
+        #viewer-container { 
+            position: relative; 
+            width: 90vw; 
+            max-width: 1200px; 
+            height: 70vh; 
+            min-height: 500px; 
+            margin: 30px auto; 
+            border: 1px solid #ddd; 
+            border-radius: 16px; 
+            overflow: hidden; 
+            box-shadow: 0 15px 35px rgba(0,0,0,0.18); 
+            background: #fff; 
+        }
+        .loading { 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            font-size: 1.2em; 
+            color: #1a3d7c; 
+            font-weight: 600; 
+            background: rgba(255,255,255,0.9); 
+            padding: 15px 25px; 
+            border-radius: 8px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+            text-align: center; 
+        }
+        .info { 
+            text-align: center; 
+            margin-top: 15px; 
+            font-weight: 600; 
+        }
+        .current-file { 
+            text-align: center; 
+            margin: 10px auto; 
+            padding: 10px; 
+            background: #eef5ff; 
+            border-radius: 8px; 
+            max-width: 600px; 
+            color: #1a3d7c; 
+            font-weight: 500; 
+            font-size: 1em; 
+        }
+        .error-details { 
+            background: #ffebee; 
+            color: #c62828; 
+            padding: 10px; 
+            border-radius: 8px; 
+            margin: 10px auto; 
+            max-width: 600px; 
+            font-size: 0.9em; 
             text-align: center;
-            margin: 25px 0;
-        }
-        .file-upload label {
-            font-weight: 600;
-            color: #1a3d7c;
-            display: block;
-            margin-bottom: 8px;
-            font-size: 1.1em;
-        }
-        input[type="file"] {
-            padding: 12px 16px;
-            border: 2px dashed #1a3d7c;
-            border-radius: 10px;
-            background: #fff;
-            cursor: pointer;
-            font-size: 1em;
-            max-width: 400px;
-            width: 100%;
-        }
-        input[type="file"]:hover {
-            background: #f0f4ff;
-            border-color: #0d2a5e;
-        }
-        #viewer-container {
-            position: relative;
-            width: 90vw;
-            max-width: 1200px;
-            height: 70vh;
-            min-height: 500px;
-            margin: 30px auto;
-            border: 1px solid #ddd;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.18);
-            background: #fff;
-        }
-        .loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 1.2em;
-            color: #1a3d7c;
-            font-weight: 600;
-            background: rgba(255,255,255,0.9);
-            padding: 15px 25px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        .info {
-            text-align: center;
-            margin-top: 15px;
-            font-weight: 600;
-        }
-        .current-file {
-            text-align: center;
-            margin-top: 10px;
-            font-size: 1em;
-            color: #1a3d7c;
-            font-weight: 500;
-            padding: 8px;
-            background: #eef5ff;
-            border-radius: 8px;
-            max-width: 600px;
-            margin-left: auto;
-            margin-right: auto;
         }
         @media (max-width: 768px) {
             #viewer-container { width: 95vw; height: 60vh; min-height: 400px; }
@@ -133,8 +115,7 @@
     </style>
 </head>
 <body>
-    <h1>Visor IFC 3D Interactivo</h1>
-    <p>Modelo cargado desde el repositorio. Usa los botones para interactuar o sube tu propio archivo.</p>
+    <h1>Visor IFC 3D - Torre D</h1>
 
     <div class="controls">
         <button id="fit-button" disabled>Enfocar Modelo</button>
@@ -154,6 +135,7 @@
     </div>
 
     <div class="info" id="info"></div>
+    <div class="error-details" id="error-details" style="display:none;"></div>
 
     <!-- Importmap -->
     <script type="importmap">
@@ -165,7 +147,7 @@
     }
     </script>
 
-    <!-- Código principal -->
+    <!-- CÓDIGO COMPLETO Y FUNCIONAL -->
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -176,12 +158,13 @@
         const loadingText = container.querySelector('.loading');
         const info = document.getElementById('info');
         const currentFileDiv = document.getElementById('current-file');
+        const errorDetails = document.getElementById('error-details');
         const fitButton = document.getElementById('fit-button');
         const repoButton = document.getElementById('load-repo');
 
-        // TU ARCHIVO EN GITHUB (verifica que exista)
-        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_TorreD.ifc?raw=true';
-        const REPO_MODEL_NAME = '02_GI_BLU_Estructura_TorreD.ifc';
+        // TU ARCHIVO EN GITHUB (CAMBIAR CUANDO SUBAS EL NUEVO CON 3D)
+        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_TorreD_3D.ifc?raw=true';
+        const REPO_MODEL_NAME = '02_GI_BLU_Estructura_TorreD_3D.ifc';
 
         const viewer = new class {
             constructor() {
@@ -227,10 +210,11 @@
 
             async load(url, fileName = null) {
                 info.textContent = '';
-                currentFileDiv.textContent = fileName ? `Archivo cargado: ${fileName}` : `Cargando: ${REPO_MODEL_NAME}...`;
+                errorDetails.style.display = 'none';
+                currentFileDiv.textContent = fileName ? `Cargando: ${fileName}...` : `Cargando: ${REPO_MODEL_NAME}...`;
                 currentFileDiv.style.color = '#1a3d7c';
                 loadingText.style.display = 'block';
-                loadingText.textContent = 'Cargando modelo...';
+                loadingText.textContent = 'Procesando IFC...';
                 fitButton.disabled = repoButton.disabled = input.disabled = true;
 
                 this.models.forEach(m => this.scene.remove(m));
@@ -246,7 +230,7 @@
                         headers: { 'Accept': 'application/octet-stream' }
                     });
 
-                    if (!response.ok) throw new Error(`HTTP ${response.status}: No se pudo cargar el archivo`);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}: No se pudo descargar el archivo`);
 
                     const blob = await response.blob();
                     const buffer = await blob.arrayBuffer();
@@ -256,40 +240,52 @@
                     });
 
                     const types = Object.values(this.ifc).filter(v => typeof v === 'number' && v > 1000);
-                    let verts = 0;
-                    const pos = [], idx = [];
+                    let totalVerts = 0;
+                    const positions = [], indices = [];
 
                     for (const type of types) {
                         const ids = this.ifc.GetLineIDsWithType(modelID, type);
                         for (let i = 0; i < ids.size(); i++) {
                             const geom = this.ifc.GetGeometry(modelID, ids.get(i));
                             if (!geom) continue;
-                            const v = geom.GetVertexData(), ind = geom.GetIndexData();
-                            const base = pos.length / 3;
-                            for (let j = 0; j < v.length; j += 3) pos.push(v[j], v[j+1], v[j+2]);
-                            for (let j = 0; j < ind.length; j++) idx.push(ind[j] + base);
-                            verts += v.length / 3;
+                            const verts = geom.GetVertexData();
+                            const inds = geom.GetIndexData();
+                            const base = positions.length / 3;
+                            for (let j = 0; j < verts.length; j += 3) {
+                                positions.push(verts[j], verts[j+1], verts[j+2]);
+                            }
+                            for (let j = 0; j < inds.length; j++) {
+                                indices.push(inds[j] + base);
+                            }
+                            totalVerts += verts.length / 3;
                         }
                     }
 
-                    if (verts === 0) throw new Error('No se encontró geometría 3D en el archivo IFC');
+                    if (totalVerts === 0) {
+                        errorDetails.textContent = `El archivo IFC no contiene geometría 3D. Exporta desde una vista 3D en Revit o usa Faceted BRep.`;
+                        errorDetails.style.display = 'block';
+                        throw new Error('No se encontró geometría 3D en el archivo IFC');
+                    }
 
-                    const geo = new THREE.BufferGeometry();
-                    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-                    geo.setIndex(idx);
-                    geo.computeVertexNormals();
+                    const geometry = new THREE.BufferGeometry();
+                    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                    geometry.setIndex(indices);
+                    geometry.computeVertexNormals();
 
-                    const mat = new THREE.MeshLambertMaterial({
-                        color: 0x6699ff, side: THREE.DoubleSide, transparent: true, opacity: 0.9
+                    const material = new THREE.MeshLambertMaterial({
+                        color: 0x6699ff,
+                        side: THREE.DoubleSide,
+                        transparent: true,
+                        opacity: 0.9
                     });
 
-                    const mesh = new THREE.Mesh(geo, mat);
+                    const mesh = new THREE.Mesh(geometry, material);
                     this.scene.add(mesh);
                     this.models.push(mesh);
                     this.currentMesh = mesh;
 
                     loadingText.style.display = 'none';
-                    info.textContent = `Modelo cargado: ${verts.toLocaleString()} vértices`;
+                    info.textContent = `Modelo cargado: ${totalVerts.toLocaleString()} vértices`;
                     info.style.color = '#27ae60';
                     currentFileDiv.textContent = fileName ? `Archivo cargado: ${fileName}` : `Archivo cargado: ${REPO_MODEL_NAME}`;
                     currentFileDiv.style.color = '#27ae60';
@@ -300,7 +296,7 @@
                     info.style.color = '#e74c3c';
                     currentFileDiv.textContent = fileName ? `Error al cargar: ${fileName}` : `Error al cargar: ${REPO_MODEL_NAME}`;
                     currentFileDiv.style.color = '#e74c3c';
-                    console.error(err);
+                    console.error('Error detallado:', err);
                 } finally {
                     fitButton.disabled = repoButton.disabled = input.disabled = false;
                 }
@@ -311,11 +307,11 @@
                 const box = new THREE.Box3().setFromObject(this.currentMesh);
                 const center = box.getCenter(new THREE.Vector3());
                 const size = box.getSize(new THREE.Vector3());
-                const max = Math.max(size.x, size.y, size.z);
+                const maxDim = Math.max(size.x, size.y, size.z);
                 const fov = this.camera.fov * Math.PI / 180;
-                let dist = Math.abs(max / 2 / Math.tan(fov / 2)) * 1.8;
-                dist = Math.max(dist, 10);
-                this.camera.position.set(center.x + dist, center.y + dist, center.z + dist);
+                let distance = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.8;
+                distance = Math.max(distance, 10);
+                this.camera.position.set(center.x + distance, center.y + distance, center.z + distance);
                 this.controls.target.copy(center);
                 this.controls.update();
             }
