@@ -196,7 +196,7 @@
 
   #info {
     position: absolute;
-    top: 12px;
+    top: 68px; /* Ajustado para estar debajo del header (56px + 12px padding) */
     right: 12px;
     z-index: 40;
     background: rgba(0,0,0,0.7);
@@ -243,8 +243,8 @@
 <div class="relative min-h-screen bg-background-light dark:bg-background-dark">
   <header class="viewer-header">
     <a href="home.html" aria-label="Volver a la página de inicio" class="mr-4">
-      <img alt="Portal BIM Alcabama Logo" class="h-8 dark:hidden" src="https://i.postimg.cc/wMDNvJB5/Portal-BIM-Alcabama-7-1.png"/>
-      <img alt="Portal BIM Alcabama Logo" class="h-8 hidden dark:block" src="https://i.postimg.cc/mgpPTVwf/Portal-BIM-Alcabama-7-2.png"/>
+      <img alt="Portal BIM Alcabama Logo" id="viewer-logo-light" class="h-8" src="https://i.postimg.cc/wMDNvJB5/Portal-BIM-Alcabama-7-1.png"/>
+      <img alt="Portal BIM Alcabama Logo" id="viewer-logo-dark" class="h-8 hidden" src="https://i.postimg.cc/mgpPTVwf/Portal-BIM-Alcabama-7-2.png"/>
     </a>
     <h1>Visor IFC — Proyecto Blue</h1>
     <div class="controls ml-auto">
@@ -254,7 +254,7 @@
         <input type="file" id="file-input" accept=".ifc">
       </label>
       <button id="theme-toggle" title="Cambiar tema" class="!bg-transparent !border !border-border-light dark:!border-border-dark !w-9 !h-9 !rounded-full flex items-center justify-center text-lg">
-        <span class="material-symbols-outlined !text-xl"></span>
+        <span class="material-symbols-outlined !text-xl">dark_mode</span>
       </button>
     </div>
   </header>
@@ -284,26 +284,11 @@
 
 <script type="module">
     document.addEventListener('DOMContentLoaded', () => {
-        // --- GESTIÓN DE AUTENTICACIÓN Y TEMA ---
-        // NOTA: La autenticación se elimina de esta página para simplificar, 
-        // ya que el visor es el foco principal.
-        const authContainer = document.getElementById("auth-container");
-        const userAccount = JSON.parse(sessionStorage.getItem("userAccount") || localStorage.getItem("userAccount"));
-
-        if (userAccount) {
-            authContainer.innerHTML = `
-                <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(" ")[0]}</span>
-                <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
-            `;
-            document.getElementById("logout-button").addEventListener("click", () => {
-                sessionStorage.removeItem("userAccount");
-                localStorage.removeItem("userAccount");
-                window.location.href = "home.html";
-            });
-        }
-
+        // --- GESTIÓN DEL TEMA ---
         const themeToggle = document.getElementById("theme-toggle");
         const htmlEl = document.documentElement;
+        const logoLight = document.getElementById('viewer-logo-light');
+        const logoDark = document.getElementById('viewer-logo-dark');
         let currentTheme = localStorage.getItem("theme") || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
         
         const applyTheme = (theme) => {
@@ -311,9 +296,14 @@
                 htmlEl.classList.add("dark");
                 document.body.classList.remove('light');
                 themeToggle.querySelector(".material-symbols-outlined").textContent = "light_mode";
+                logoLight.classList.add('hidden');
+                logoDark.classList.remove('hidden');
             } else {
                 htmlEl.classList.remove("dark");
+                document.body.classList.add('light');
                 themeToggle.querySelector(".material-symbols-outlined").textContent = "dark_mode";
+                logoLight.classList.remove('hidden');
+                logoDark.classList.add('hidden');
             }
             currentTheme = theme;
             // Actualizar visor si ya existe
@@ -329,7 +319,6 @@
             localStorage.setItem("theme", newTheme);
             applyTheme(newTheme);
         });
-
     });
 
     // --- LÓGICA DEL VISOR IFC (NUEVA VERSIÓN) ---
@@ -408,7 +397,7 @@
 
           updateSceneColors() {
             const isLight = document.body.classList.contains('light');
-            this.scene.background = new THREE.Color(isLight ? 0xf8f9fa : 0x0a0f15);
+            this.scene.background = new THREE.Color(isLight ? getComputedStyle(document.documentElement).getPropertyValue('--bg-lighter').trim() : getComputedStyle(document.documentElement).getPropertyValue('--bg-darker').trim());
             this.updateGrid();
           }
 
@@ -416,7 +405,7 @@
             if (this.grid) this.scene.remove(this.grid);
             const isLight = document.body.classList.contains('light');
             const color1 = isLight ? 'var(--grid-light)' : 'var(--grid-dark)';
-            this.grid = new THREE.GridHelper(200, 50, new THREE.Color(color1), new THREE.Color(color1));
+            this.grid = new THREE.GridHelper(200, 50, new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue(isLight ? '--grid-light' : '--grid-dark').trim()));
             this.grid.material.transparent = true;
             this.grid.material.opacity = 0.5;
             this.scene.add(this.grid);
