@@ -432,8 +432,11 @@
               currentModelID = this.ifc.OpenModel(new Uint8Array(buffer), { COORDINATE_TO_ORIGIN: true });
               log(`Modelo abierto (ID: ${currentModelID})`);
 
-              const allTypes = this.ifc.GetAllTypes(currentModelID);
-              log(`Tipos IFC encontrados: ${allTypes.length}`);
+              // CORRECCIÓN: GetAllTypes no existe. Se usa el método anterior para obtener
+              // todas las constantes de tipo IFC (ej. IFCWALL, IFCSLAB) desde el objeto API.
+              // Estos son valores numéricos que representan cada tipo de elemento.
+              const allTypes = Object.values(this.ifc).filter(v => typeof v === 'number' && v > 1000);
+              log(`Tipos de geometría IFC a procesar: ${allTypes.length}`);
 
               let verts = 0;
               const pos = [], idx = [];
