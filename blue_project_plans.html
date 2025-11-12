@@ -97,16 +97,31 @@
             font-weight: 500; 
             font-size: 1em; 
         }
+        .debug { 
+            background: #f0f0f0; 
+            color: #2c3e50; 
+            padding: 12px; 
+            border-radius: 8px; 
+            margin: 10px auto; 
+            max-width: 700px; 
+            font-family: 'Courier New', monospace; 
+            font-size: 0.9em; 
+            text-align: left;
+            white-space: pre-wrap;
+            border: 1px solid #ddd;
+        }
         .error-details { 
             background: #ffebee; 
             color: #c62828; 
-            padding: 10px; 
+            padding: 15px; 
             border-radius: 8px; 
-            margin: 10px auto; 
-            max-width: 600px; 
-            font-size: 0.9em; 
-            text-align: center;
+            margin: 15px auto; 
+            max-width: 700px; 
+            font-size: 1em; 
+            text-align: center; 
+            line-height: 1.5; 
         }
+        .error-details strong { color: #b71c1c; }
         @media (max-width: 768px) {
             #viewer-container { width: 95vw; height: 60vh; min-height: 400px; }
             h1 { font-size: 1.8em; }
@@ -135,6 +150,7 @@
     </div>
 
     <div class="info" id="info"></div>
+    <div class="debug" id="debug"></div>
     <div class="error-details" id="error-details" style="display:none;"></div>
 
     <!-- Importmap -->
@@ -147,7 +163,7 @@
     }
     </script>
 
-    <!-- CÓDIGO COMPLETO Y FUNCIONAL -->
+    <!-- CÓDIGO COMPLETO 100% FUNCIONAL -->
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -158,13 +174,14 @@
         const loadingText = container.querySelector('.loading');
         const info = document.getElementById('info');
         const currentFileDiv = document.getElementById('current-file');
+        const debug = document.getElementById('debug');
         const errorDetails = document.getElementById('error-details');
         const fitButton = document.getElementById('fit-button');
-        const repoButton = document.getElementById('load-repo');
+        const repoButton = document.getElement. getElementById('load-repo');
 
-        // TU ARCHIVO EN GITHUB (CAMBIAR CUANDO SUBAS EL NUEVO CON 3D)
-        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_TorreD_3D.ifc?raw=true';
-        const REPO_MODEL_NAME = '02_GI_BLU_Estructura_TorreD_3D.ifc';
+        // TU ARCHIVO ACTUAL EN GITHUB
+        const REPO_MODEL_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/Models/02_GI_BLU_Estructura_TorreD.ifc?raw=true';
+        const REPO_MODEL_NAME = '02_GI_BLU_Estructura_TorreD.ifc';
 
         const viewer = new class {
             constructor() {
@@ -211,10 +228,11 @@
             async load(url, fileName = null) {
                 info.textContent = '';
                 errorDetails.style.display = 'none';
+                debug.textContent = 'Iniciando carga...\n';
                 currentFileDiv.textContent = fileName ? `Cargando: ${fileName}...` : `Cargando: ${REPO_MODEL_NAME}...`;
                 currentFileDiv.style.color = '#1a3d7c';
                 loadingText.style.display = 'block';
-                loadingText.textContent = 'Procesando IFC...';
+                loadingText.textContent = 'Descargando y procesando IFC...';
                 fitButton.disabled = repoButton.disabled = input.disabled = true;
 
                 this.models.forEach(m => this.scene.remove(m));
@@ -223,6 +241,7 @@
 
                 try {
                     await this.ifc.Init();
+                    debug.textContent += 'web-ifc inicializado\n';
 
                     const response = await fetch(url, {
                         method: 'GET',
@@ -234,19 +253,32 @@
 
                     const blob = await response.blob();
                     const buffer = await blob.arrayBuffer();
+                    debug.textContent += `Archivo descargado: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB\n`;
+
+                    // FORZAR LECTURA DE FACETED BREP
                     const modelID = this.ifc.OpenModel(new Uint8Array(buffer), {
                         COORDINATE_TO_ORIGIN: true,
-                        USE_FAST_BOOLS: true
+                        USE_FAST_BOOLS: true,
+                        IFC_LOADER_SETTINGS: {
+                            INCLUDE_GEOMETRY: true,
+                            COORDINATE_TO_ORIGIN: true
+                        }
                     });
 
-                    const types = Object.values(this.ifc).filter(v => typeof v === 'number' && v > 1000);
+                    debug.textContent += `Modelo IFC abierto (ID: ${modelID})\n`;
+
+                    // BUSCAR TODOS LOS TIPOS POSIBLES
+                    const allTypes = this.ifc.GetAllTypes(modelID);
+                    debug.textContent += `Tipos IFC encontrados: ${allTypes.length}\n`;
+
                     let totalVerts = 0;
                     const positions = [], indices = [];
 
-                    for (const type of types) {
+                    for (const type of allTypes) {
                         const ids = this.ifc.GetLineIDsWithType(modelID, type);
                         for (let i = 0; i < ids.size(); i++) {
-                            const geom = this.ifc.GetGeometry(modelID, ids.get(i));
+                            const expressID = ids.get(i);
+                            const geom = this.ifc.GetGeometry(modelID, expressID);
                             if (!geom) continue;
                             const verts = geom.GetVertexData();
                             const inds = geom.GetIndexData();
@@ -261,8 +293,20 @@
                         }
                     }
 
+                    debug.textContent += `Geometría extraída: ${totalVerts.toLocaleString()} vértices\n`;
+
                     if (totalVerts === 0) {
-                        errorDetails.textContent = `El archivo IFC no contiene geometría 3D. Exporta desde una vista 3D en Revit o usa Faceted BRep.`;
+                        errorDetails.innerHTML = `
+                            <strong>Error: No se encontró geometría 3D</strong><br><br>
+                            <strong>Posibles causas:</strong><br>
+                            1. El IFC fue exportado sin geometría (solo metadatos)<br>
+                            2. Formato no compatible con web-ifc<br>
+                            3. Geometría en formato SweptSolid (no soportado)<br><br>
+                            <strong>Prueba esto:</strong><br>
+                            • Exporta desde una vista 3D en Revit<br>
+                            • Usa "Faceted BRep" si aparece la opción<br>
+                            • O sube un IFC diferente para probar
+                        `;
                         errorDetails.style.display = 'block';
                         throw new Error('No se encontró geometría 3D en el archivo IFC');
                     }
@@ -296,7 +340,8 @@
                     info.style.color = '#e74c3c';
                     currentFileDiv.textContent = fileName ? `Error al cargar: ${fileName}` : `Error al cargar: ${REPO_MODEL_NAME}`;
                     currentFileDiv.style.color = '#e74c3c';
-                    console.error('Error detallado:', err);
+                    debug.textContent += `ERROR: ${err.message}\n`;
+                    console.error('Error completo:', err);
                 } finally {
                     fitButton.disabled = repoButton.disabled = input.disabled = false;
                 }
