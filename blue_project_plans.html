@@ -348,8 +348,24 @@
         log('Importando librerías...');
         const THREE = await import('three');
         const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
-        // SOLUCIÓN DEFINITIVA: Usar el IFCLoader de web-ifc-three, que es la librería de alto nivel para esto.
-        const { IFCLoader } = await import('https://unpkg.com/web-ifc-three@0.0.125/dist/IFCLoader.js');
+        // Se revierte al uso de la API base, que es más estable.
+        const { 
+            IfcAPI,
+            IFCWALL,
+            IFCWALLSTANDARDCASE,
+            IFCSLAB,
+            IFCWINDOW,
+            IFCPLATE,
+            IFCMEMBER,
+            IFCROOF,
+            IFCBUILDINGSTOREY,
+            IFCSTAIR,
+            IFCSTAIRFLIGHT,
+            IFCRAILING,
+            IFCFURNISHINGELEMENT,
+            IFCCURTAINWALL,
+            IFCDOOR
+        } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
         log('Three.js y web-ifc cargados');
 
         class Viewer {
@@ -373,9 +389,8 @@
 
             this.scene.add(new THREE.AxesHelper(50));
 
-            // Se inicializa el IFCLoader con la ruta al motor WASM de una versión estable.
-            this.ifcLoader = new IFCLoader();
-            this.ifcLoader.ifcManager.setWasmPath('https://unpkg.com/web-ifc@0.0.39/');
+            this.ifc = new IfcAPI();
+            this.ifc.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/');
             this.models = [];
             this.currentMesh = null;
 
@@ -421,34 +436,74 @@
             this.models.forEach(m => this.scene.remove(m));
             this.models = [];
 
-            // Usamos el IFCLoader para cargar el modelo.
-            // Este se encarga de toda la lógica de extracción de geometría.
             try {
-                const model = await this.ifcLoader.loadAsync(url, (event) => {
-                    const percent = Math.round((event.loaded / event.total) * 100);
-                    log(`Descargando: ${percent}%`);
-                });
+              await this.ifc.Init();
+              log('web-ifc inicializado');
 
-                // Cambiar el material por defecto si se desea
-                model.material.color.set(0xd8005e);
-                model.material.transparent = true;
-                model.material.opacity = 0.9;
+              const res = await fetch(url);
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              const buffer = await res.arrayBuffer();
+              log(`Descargado: ${(buffer.byteLength/1024/1024).toFixed(2)} MB`);
 
-                this.scene.add(model);
-                this.models.push(model);
-                this.currentMesh = model;
+              // SOLUCIÓN FINAL: Combinar la configuración que fuerza el procesamiento de TODA la geometría
+              // con el método de extracción de datos correcto.
+              const settings = { COORDINATE_TO_ORIGIN: true, USE_FAST_BOOLS: true, GEOMETRY_TYPE: "IFCGEOMETRY" };
+              currentModelID = this.ifc.OpenModel(new Uint8Array(buffer), settings);
+              log(`Modelo abierto (ID: ${currentModelID})`);
 
-                const totalVerts = model.geometry.attributes.position.count;
-                log(`ÉXITO: ${totalVerts.toLocaleString()} vértices`);
+              const allTypes = [
+                  IFCWALL, IFCWALLSTANDARDCASE, IFCSLAB, IFCWINDOW, IFCPLATE,
+                  IFCMEMBER, IFCROOF, IFCBUILDINGSTOREY, IFCSTAIR, IFCSTAIRFLIGHT,
+                  IFCRAILING, IFCFURNISHINGELEMENT, IFCCURTAINWALL, IFCDOOR
+              ];
+              log(`Tipos de geometría IFC a procesar: ${allTypes.length} (lista explícita)`);
 
-                loadingText.style.display = 'none';
-                status.textContent = `Listo: ${name}`;
-                info.innerHTML = `
-                    <strong style="color: var(--accent);">Modelo cargado</strong><br>
-                    ${totalVerts.toLocaleString()} vértices<br>
-                    <small>Archivo: ${name}</small>
-                `;
-                this.fitCamera();
+              let verts = 0;
+              const pos = [], idx = [];
+
+              for (const type of allTypes) {
+                  const ids = this.ifc.GetLineIDsWithType(currentModelID, type);
+                  for (let i = 0; i < ids.size(); i++) {
+                      const expressID = ids.get(i);
+                      const geom = this.ifc.GetGeometry(currentModelID, expressID);
+                      if (!geom) continue;
+                      // Se usa el método de dos pasos que es el correcto para leer la geometría generada.
+                      const v = this.ifc.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
+                      const ind = this.ifc.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
+                      const base = pos.length / 3;
+                      for (let j = 0; j < v.length; j += 3) pos.push(v[j], v[j+1], v[j+2]);
+                      for (let j = 0; j < ind.length; j++) idx.push(ind[j] + base);
+                      verts += v.length / 3;
+                  }
+              }
+
+              if (verts === 0) throw new Error('No hay geometría 3D en el archivo');
+              log(`ÉXITO: ${verts.toLocaleString()} vértices`);
+
+              const geo = new THREE.BufferGeometry();
+              geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+              geo.setIndex(idx);
+              geo.computeVertexNormals();
+
+              const mat = new THREE.MeshLambertMaterial({ 
+                color: 0xd8005e, 
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.9
+              });
+              const mesh = new THREE.Mesh(geo, mat);
+              this.scene.add(mesh);
+              this.models.push(mesh);
+              this.currentMesh = mesh;
+
+              loadingText.style.display = 'none';
+              status.textContent = `Listo: ${name}`;
+              info.innerHTML = `
+                <strong style="color: var(--accent);">Modelo cargado</strong><br>
+                ${verts.toLocaleString()} vértices<br>
+                <small>Archivo: ${name}</small>
+              `;
+              this.fitCamera();
             } catch (err) {
               loadingText.style.display = 'none';
               status.textContent = `Error: ${err.message}`;
