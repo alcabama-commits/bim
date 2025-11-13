@@ -445,8 +445,9 @@
               const buffer = await res.arrayBuffer();
               log(`Descargado: ${(buffer.byteLength/1024/1024).toFixed(2)} MB`);
 
-              // CORRECCIÓN DEFINITIVA: Volver a la configuración de apertura simple y al método de extracción directo.
-              const settings = { COORDINATE_TO_ORIGIN: true, USE_FAST_BOOLS: true };
+              // SOLUCIÓN FINAL: Combinar la configuración que fuerza el procesamiento de TODA la geometría
+              // con el método de extracción de datos correcto.
+              const settings = { COORDINATE_TO_ORIGIN: true, USE_FAST_BOOLS: true, GEOMETRY_TYPE: "IFCGEOMETRY" };
               currentModelID = this.ifc.OpenModel(new Uint8Array(buffer), settings);
               log(`Modelo abierto (ID: ${currentModelID})`);
 
