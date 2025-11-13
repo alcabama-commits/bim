@@ -365,7 +365,7 @@
             IFCFURNISHINGELEMENT,
             IFCCURTAINWALL,
             IFCDOOR
-        } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
+        } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.39/web-ifc-api.js');
         log('Three.js y web-ifc cargados');
 
         class Viewer {
@@ -390,7 +390,7 @@
             this.scene.add(new THREE.AxesHelper(50));
 
             this.ifc = new IfcAPI();
-            this.ifc.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/');
+            this.ifc.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.39/');
             this.models = [];
             this.currentMesh = null;
 
@@ -445,9 +445,8 @@
               const buffer = await res.arrayBuffer();
               log(`Descargado: ${(buffer.byteLength/1024/1024).toFixed(2)} MB`);
 
-              // SOLUCIÓN FINAL: Combinar la configuración que fuerza el procesamiento de TODA la geometría
-              // con el método de extracción de datos correcto.
-              const settings = { COORDINATE_TO_ORIGIN: true, USE_FAST_BOOLS: true, GEOMETRY_TYPE: "IFCGEOMETRY" };
+              // Se usa la configuración simple, ya que el problema principal era la versión de la librería.
+              const settings = { COORDINATE_TO_ORIGIN: true, USE_FAST_BOOLS: true };
               currentModelID = this.ifc.OpenModel(new Uint8Array(buffer), settings);
               log(`Modelo abierto (ID: ${currentModelID})`);
 
@@ -467,9 +466,9 @@
                       const expressID = ids.get(i);
                       const geom = this.ifc.GetGeometry(currentModelID, expressID);
                       if (!geom) continue;
-                      // Se usa el método de dos pasos que es el correcto para leer la geometría generada.
-                      const v = this.ifc.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
-                      const ind = this.ifc.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
+                      // Se usa el método de extracción directo que es compatible con la v0.0.39
+                      const v = geom.GetVertexData();
+                      const ind = geom.GetIndexData();
                       const base = pos.length / 3;
                       for (let j = 0; j < v.length; j += 3) pos.push(v[j], v[j+1], v[j+2]);
                       for (let j = 0; j < ind.length; j++) idx.push(ind[j] + base);
