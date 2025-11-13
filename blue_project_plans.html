@@ -348,24 +348,8 @@
         log('Importando librerías...');
         const THREE = await import('three');
         const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
-        // Se revierte al uso de la API base, que es más estable y no tiene problemas de CORS.
-        const { 
-            IfcAPI,
-            IFCWALL,
-            IFCWALLSTANDARDCASE,
-            IFCSLAB,
-            IFCWINDOW,
-            IFCPLATE,
-            IFCMEMBER,
-            IFCROOF,
-            IFCBUILDINGSTOREY,
-            IFCSTAIR,
-            IFCSTAIRFLIGHT,
-            IFCRAILING,
-            IFCFURNISHINGELEMENT,
-            IFCCURTAINWALL,
-            IFCDOOR
-        } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
+        // SOLUCIÓN FINAL: Se importa únicamente la API, sin las constantes, para permitir el descubrimiento dinámico.
+        const { IfcAPI } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
         log('Three.js y web-ifc cargados');
 
         class Viewer {
@@ -445,12 +429,12 @@
               const buffer = await res.arrayBuffer();
               log(`Descargado: ${(buffer.byteLength/1024/1024).toFixed(2)} MB`);
 
-              // SOLUCIÓN DEFINITIVA: Volver a la configuración y lógica exactas del código de prueba original.
+              // Se usa la configuración y lógica exactas del código de prueba original.
               const settings = { COORDINATE_TO_ORIGIN: true, USE_FAST_BOOLS: true };
               currentModelID = this.ifc.OpenModel(new Uint8Array(buffer), settings);
               log(`Modelo abierto (ID: ${currentModelID})`);
 
-              // Se usa el método del código original para obtener todos los tipos de geometría.
+              // Se usa el método del código original para descubrir dinámicamente todos los tipos de geometría.
               const allTypes = Object.values(this.ifc).filter(v => typeof v === 'number' && v > 1000);
               log(`Tipos de geometría IFC a procesar: ${allTypes.length} (descubiertos dinámicamente)`);
 
@@ -463,7 +447,7 @@
                       const expressID = ids.get(i);
                       const geom = this.ifc.GetGeometry(currentModelID, expressID);
                       if (!geom) continue;
-                      // Se usa el método de extracción directo del código original.
+                      // Se usa el método de extracción directo que es compatible con esta lógica.
                       const v = geom.GetVertexData();
                       const ind = geom.GetIndexData();
                       const base = pos.length / 3;
