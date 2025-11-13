@@ -348,8 +348,24 @@
         log('Importando librerías...');
         const THREE = await import('three');
         const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
-        // SOLUCIÓN FINAL: Se importa únicamente la API, sin las constantes, para permitir el descubrimiento dinámico.
-        const { IfcAPI } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
+        // SOLUCIÓN DEFINITIVA: Se importa la API y la lista explícita de constantes.
+        const { 
+            IfcAPI,
+            IFCWALL,
+            IFCWALLSTANDARDCASE,
+            IFCSLAB,
+            IFCWINDOW,
+            IFCPLATE,
+            IFCMEMBER,
+            IFCROOF,
+            IFCBUILDINGSTOREY,
+            IFCSTAIR,
+            IFCSTAIRFLIGHT,
+            IFCRAILING,
+            IFCFURNISHINGELEMENT,
+            IFCCURTAINWALL,
+            IFCDOOR
+        } = await import('https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js');
         log('Three.js y web-ifc cargados');
 
         class Viewer {
@@ -429,14 +445,18 @@
               const buffer = await res.arrayBuffer();
               log(`Descargado: ${(buffer.byteLength/1024/1024).toFixed(2)} MB`);
 
-              // Se usa la configuración y lógica exactas del código de prueba original.
-              const settings = { COORDINATE_TO_ORIGIN: true, USE_FAST_BOOLS: true };
+              // Se combina la configuración que fuerza el procesamiento de TODA la geometría...
+              const settings = { COORDINATE_TO_ORIGIN: true, USE_FAST_BOOLS: true, GEOMETRY_TYPE: "IFCGEOMETRY" };
               currentModelID = this.ifc.OpenModel(new Uint8Array(buffer), settings);
               log(`Modelo abierto (ID: ${currentModelID})`);
 
-              // Se usa el método del código original para descubrir dinámicamente todos los tipos de geometría.
-              const allTypes = Object.values(this.ifc).filter(v => typeof v === 'number' && v > 1000);
-              log(`Tipos de geometría IFC a procesar: ${allTypes.length} (descubiertos dinámicamente)`);
+              // ...con la lista explícita de tipos a buscar.
+              const allTypes = [
+                  IFCWALL, IFCWALLSTANDARDCASE, IFCSLAB, IFCWINDOW, IFCPLATE,
+                  IFCMEMBER, IFCROOF, IFCBUILDINGSTOREY, IFCSTAIR, IFCSTAIRFLIGHT,
+                  IFCRAILING, IFCFURNISHINGELEMENT, IFCCURTAINWALL, IFCDOOR
+              ];
+              log(`Tipos de geometría IFC a procesar: ${allTypes.length} (lista explícita)`);
 
               let verts = 0;
               const pos = [], idx = [];
@@ -447,9 +467,9 @@
                       const expressID = ids.get(i);
                       const geom = this.ifc.GetGeometry(currentModelID, expressID);
                       if (!geom) continue;
-                      // Se usa el método de extracción directo que es compatible con esta lógica.
-                      const v = geom.GetVertexData();
-                      const ind = geom.GetIndexData();
+                      // ...y con el método de extracción de dos pasos correcto para esta versión.
+                      const v = this.ifc.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
+                      const ind = this.ifc.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
                       const base = pos.length / 3;
                       for (let j = 0; j < v.length; j += 3) pos.push(v[j], v[j+1], v[j+2]);
                       for (let j = 0; j < ind.length; j++) idx.push(ind[j] + base);
