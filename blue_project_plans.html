@@ -466,9 +466,11 @@
                       const expressID = ids.get(i);
                       const geom = this.ifc.GetGeometry(currentModelID, expressID);
                       if (!geom) continue;
-                      // Este es el método de extracción directo que funciona con la v0.0.51
-                      const v = geom.GetVertexData();
-                      const ind = geom.GetIndexData();
+                      // CORRECCIÓN DEFINITIVA: Se restaura el método correcto de dos pasos.
+                      // 1. Obtener los punteros a los datos con GetVertexData() y GetIndexData().
+                      // 2. Usar la API principal para leer esos punteros y obtener los arrays numéricos.
+                      const v = this.ifc.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
+                      const ind = this.ifc.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
                       const base = pos.length / 3;
                       for (let j = 0; j < v.length; j += 3) pos.push(v[j], v[j+1], v[j+2]);
                       for (let j = 0; j < ind.length; j++) idx.push(ind[j] + base);
