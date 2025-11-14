@@ -467,9 +467,6 @@
                       const expressID = ids.get(i);
                       const geom = this.ifc.GetGeometry(currentModelID, expressID);
                       if (!geom) continue;
-                      // ...y con el método de extracción de dos pasos correcto para esta versión.
-                      const v = this.ifc.GetVertexArray(geom.GetVertexData(), geom.GetVertexDataSize());
-                      const ind = this.ifc.GetIndexArray(geom.GetIndexData(), geom.GetIndexDataSize());
                       const v = geom.GetVertexData();
                       const ind = geom.GetIndexData();
                       const base = pos.length / 3;
