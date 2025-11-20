@@ -1,115 +1,28 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Visor IFC Completo</title>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      font-family: Arial, sans-serif;
-    }
-    #viewer-container {
-      width: 100vw;
-      height: 100vh;
-      position: relative;
-    }
-    #toolbar {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      background: rgba(255, 255, 255, 0.8);
-      padding: 12px;
-      border-radius: 12px;
-      display: flex;
-      gap: 10px;
-      z-index: 10;
-    }
-    #properties {
-      position: absolute;
-      right: 0;
-      top: 0;
-      width: 300px;
-      height: 100vh;
-      overflow-y: auto;
-      background: #f8f8f8;
-      border-left: 1px solid #ccc;
-      padding: 15px;
-      z-index: 9;
-    }
-    h3 { margin-top: 0; }
-  </style>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Visor BIM - Proyecto Blue</title>
+    <link rel="stylesheet" href="./engine_templates/templates/vanilla/style.css" />
+  </head>
+  <body>
+    <!-- 
+      Este es el componente raíz de la aplicación de visor.
+      El script 'main.ts' tomará control de este elemento
+      y construirá la interfaz de usuario dentro de él.
+    -->
+    <bim-grid id="app"></bim-grid>
 
-  <!-- THREE.js -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.164.0/build/three.min.js"></script>
-  <!-- IFC.js Viewer -->
-  <script src="https://cdn.jsdelivr.net/npm/web-ifc-viewer@1.0.154/dist/ifc-viewer-api.js"></script>
-</head>
-<body>
-  <div id="viewer-container"></div>
-
-  <div id="toolbar">
-    <button id="load-ifc">Cargar IFC</button>
-    <button id="clip">Corte</button>
-    <button id="explode">Explosión</button>
-    <button id="fit">Enfocar</button>
-  </div>
-
-  <div id="properties">
-    <h3>Propiedades IFC</h3>
-    <pre id="props-content">Selecciona un elemento...</pre>
-  </div>
-
-  <script>
-    const container = document.getElementById("viewer-container");
-    const viewer = new IfcViewerAPI({ container, backgroundColor: new THREE.Color(0xffffff) });
-    viewer.axes.setAxes();
-    viewer.grid.setGrid();
-
-    async function setupWasm() {
-      await viewer.IFC.setWasmPath("./wasm/");
-    }
-
-    setupWasm();
-
-    // Cargar IFC desde botón
-    document.getElementById("load-ifc").onclick = async () => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.ifc';
-      input.onchange = async (e) => {
-        const file = e.target.files[0];
-        const url = URL.createObjectURL(file);
-        await viewer.IFC.loadIfcUrl(url, true);
-      };
-      input.click();
-    };
-
-    // Propiedades al seleccionar
-    window.onmousemove = async (event) => {
-      const result = await viewer.IFC.selector.pickIfcItem();
-      if (!result) return;
-      const props = await viewer.IFC.getProperties(result.modelID, result.id, true, true);
-      document.getElementById("props-content").textContent = JSON.stringify(props, null, 2);
-    };
-
-    // Corte
-    document.getElementById("clip").onclick = () => {
-      viewer.clipper.toggle();
-    };
-
-    // Explosión
-    let exploding = false;
-    document.getElementById("explode").onclick = () => {
-      exploding = !exploding;
-      viewer.explode.toggleExplode(exploding);
-    };
-
-    // Enfocar
-    document.getElementById("fit").onclick = () => {
-      viewer.context.ifcCamera.fitModelToFrame();
-    };
-  </script>
-</body>
+    <!-- 
+      Este script es el punto de entrada de la aplicación del visor.
+      Asegúrate de que la ruta sea correcta en tu entorno de compilación.
+      Vite se encargará de compilar todo el código TypeScript en este archivo.
+    -->
+    <script
+      type="module"
+      src="./engine_templates/templates/vanilla/src/main.ts"
+    ></script>
+  </body>
 </html>
