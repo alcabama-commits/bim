@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ejemplo de Integración - Visor IFC</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .example-section {
+      margin: 30px 0;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    .example-section h2 {
+      margin-top: 0;
+    }
+    .example-link {
+      display: inline-block;
+      margin: 10px 10px 10px 0;
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      text-decoration: none;
+      border-radius: 4px;
+    }
+    .example-link:hover {
+      background-color: #0056b3;
+    }
+    code {
+      background-color: #f4f4f4;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+    }
+    pre {
+      background-color: #f4f4f4;
+      padding: 15px;
+      border-radius: 5px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Ejemplos de Integración del Visor IFC</h1>
+  
+  <div class="example-section">
+    <h2>1. Cargar un modelo desde URL</h2>
+    <p>Puedes cargar un modelo pasando su URL como parámetro:</p>
+    <a href="index.html?model=/models/mi-edificio.ifc" class="example-link">
+      Ver Modelo Local
+    </a>
+    <a href="index.html?model=https://ejemplo.com/modelos/proyecto.ifc" class="example-link">
+      Ver Modelo Remoto
+    </a>
+    <pre><code>index.html?model=/ruta/al/modelo.ifc</code></pre>
+  </div>
+
+  <div class="example-section">
+    <h2>2. Cargar múltiples modelos</h2>
+    <p>Carga varios modelos separados por comas:</p>
+    <a href="index.html?model=/models/estructura.ifc,/models/instalaciones.ifc" class="example-link">
+      Ver Múltiples Modelos
+    </a>
+    <pre><code>index.html?model=modelo1.ifc,modelo2.ifc,modelo3.frag</code></pre>
+  </div>
+
+  <div class="example-section">
+    <h2>3. Especificar tipos de modelos por separado</h2>
+    <p>Usa parámetros separados para IFC y Fragments:</p>
+    <a href="index.html?ifc=/models/edificio.ifc&frag=/models/detalles.frag" class="example-link">
+      Ver IFC y Fragments
+    </a>
+    <pre><code>index.html?ifc=modelo1.ifc,modelo2.ifc&frag=estructura.frag</code></pre>
+  </div>
+
+  <div class="example-section">
+    <h2>4. Integración en tu sitio web</h2>
+    <p>Ejemplo de cómo generar enlaces dinámicamente desde tu backend:</p>
+    <pre><code>&lt;!-- PHP Ejemplo --&gt;
+&lt;?php
+$proyectoId = $_GET['id'];
+$modeloUrl = "/modelos/proyecto-{$proyectoId}.ifc";
+?&gt;
+&lt;a href="viewer.html?model=&lt;?php echo urlencode($modeloUrl); ?&gt;"&gt;
+  Ver Proyecto &lt;?php echo $proyectoId; ?&gt;
+&lt;/a&gt;
+
+&lt;!-- JavaScript Ejemplo --&gt;
+&lt;script&gt;
+function verModelo(modeloId) {
+  const url = `viewer.html?model=/modelos/${modeloId}.ifc`;
+  window.location.href = url;
+}
+&lt;/script&gt;
+
+&lt;button onclick="verModelo('proyecto-123')"&gt;Ver Proyecto 123&lt;/button&gt;
+</code></pre>
+  </div>
+
+  <div class="example-section">
+    <h2>5. Configuración en config.ts</h2>
+    <p>Para modelos que siempre deben cargarse, edita <code>src/config.ts</code>:</p>
+    <pre><code>export const initialModels: ModelConfig[] = [
+  {
+    url: "/models/mi-edificio.ifc",
+    type: "ifc",
+    name: "Mi Edificio"
+  }
+];
+
+export const autoLoadInitialModels = true;
+</code></pre>
+  </div>
+
+  <div class="example-section">
+    <h2>6. Iframe Embed</h2>
+    <p>También puedes integrar el visor en una página usando iframe:</p>
+    <pre><code>&lt;iframe 
+  src="viewer.html?model=/modelos/proyecto.ifc" 
+  width="100%" 
+  height="600px"
+  frameborder="0"
+&gt;&lt;/iframe&gt;
+</code></pre>
+  </div>
+
+  <div class="example-section">
+    <h2>Notas Importantes</h2>
+    <ul>
+      <li><strong>CORS:</strong> Si cargas modelos desde otro dominio, asegúrate de que el servidor tenga CORS habilitado.</li>
+      <li><strong>Rutas:</strong> Las rutas pueden ser relativas (desde la raíz del sitio) o absolutas (URLs completas).</li>
+      <li><strong>Formatos:</strong> Se soportan archivos <code>.ifc</code> y <code>.frag</code>.</li>
+      <li><strong>Nombres:</strong> Si no especificas un nombre, se extraerá automáticamente de la URL.</li>
+    </ul>
+  </div>
+</body>
+</html>
+
+
