@@ -1,17 +1,44 @@
 <!doctype html>
 <html lang="en" class="bim-ui-dark">
-
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BIM App</title>
-  <link rel="stylesheet" href="./src/style.css">
+
+  <title>Visor IFC - Alcabama</title>
+
+  <!-- Ícono -->
+  <link rel="icon" type="image/svg+xml" href="/bim/visorIFC/vite.svg" />
+
+  <!-- ESTILOS CRÍTICOS: ¡IMPRESCINDIBLES! -->
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* El contenedor principal del visor */
+    bim-grid, 
+    #app {
+      display: block;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      inset: 0;
+    }
+  </style>
+
+  <!-- Tu CSS -->
+  <link rel="stylesheet" href="/bim/visorIFC/src/style.css">
 </head>
 
 <body>
+  <!-- ROOT de la app de ThatOpenEngine -->
   <bim-grid id="app"></bim-grid>
-  <script type="module" src="/src/main.ts"></script>
-</body>
 
+  <!-- Entrada Vite (IMPORTANTE: ruta absoluta con base /bim/visorIFC/) -->
+  <script type="module" src="/bim/visorIFC/src/main.ts"></script>
+</body>
 </html>
