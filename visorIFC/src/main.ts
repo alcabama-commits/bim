@@ -204,7 +204,7 @@ async function loadModels() {
   const basePath =
     "https://alcabama-commits.github.io/bim/visorIFC/Models/";
 
-  const models = ["01.ifc", "02.ifc", "03.ifc"];
+  const models = ["02_GI_BLU_Estructura_CBombas2.ifc.ifc", "19_ZI_ALL_Estructura_Torre_ModuloA_T1-T2.ifc", "19_ZI_ALL_Estructura_Torre_ModuloA_T3-T4.ifc"];
 
   for (const file of models) {
     const url = basePath + file;
