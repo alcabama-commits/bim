@@ -9,7 +9,6 @@ import { viewportSettingsTemplate } from "./ui-templates/buttons/viewport-settin
 BUI.Manager.init();
 
 // Components Setup
-
 const components = new OBC.Components();
 const worlds = components.get(OBC.Worlds);
 
@@ -43,7 +42,6 @@ const resizeWorld = () => {
   world.renderer?.resize();
   world.camera.updateAspect();
 };
-
 viewport.addEventListener("resize", resizeWorld);
 
 world.dynamicAnchor = false;
@@ -57,7 +55,6 @@ postproduction.enabled = true;
 postproduction.style = OBF.PostproductionAspect.COLOR_SHADOWS;
 
 const { aoPass, edgesPass } = world.renderer.postproduction;
-
 edgesPass.color = new THREE.Color(0x494b50);
 
 const aoParameters = {
@@ -87,7 +84,8 @@ const fragments = components.get(OBC.FragmentsManager);
 fragments.init("/node_modules/@thatopen/fragments/dist/Worker/worker.mjs");
 
 fragments.core.models.materials.list.onItemSet.add(({ value: material }) => {
-  const isLod = "isLodMaterial" in material && material.isLodMaterial;
+  const isLod =
+    "isLodMaterial" in material && (material as any).isLodMaterial;
   if (isLod) {
     world.renderer!.postproduction.basePass.isolatedMaterials.push(material);
   }
@@ -109,6 +107,7 @@ await ifcLoader.setup({
   wasm: { absolute: true, path: "https://unpkg.com/web-ifc@0.0.71/" },
 });
 
+// Highlighter Setup
 const highlighter = components.get(OBF.Highlighter);
 highlighter.setup({
   world,
@@ -181,9 +180,35 @@ fragments.list.onItemSet.add(async ({ value: model }) => {
   model.getClippingPlanesEvent = () => {
     return Array.from(world.renderer!.three.clippingPlanes) || [];
   };
+
+  // ★ MODELOS ARRANCAN APAGADOS ★
+  model.object.visible = false;
+
   world.scene.three.add(model.object);
   await fragments.core.update(true);
 });
+
+// ----------------------
+//  ★ CARGA MULTIMODELO ★
+// ----------------------
+async function loadModels() {
+  const basePath =
+    "https://alcabama-commits.github.io/bim/visorIFC/Models/";
+
+  const models = [
+    "01.ifc",
+    "02.ifc",
+    "03.ifc"
+  ];
+
+  for (const file of models) {
+    const url = basePath + file;
+    console.log("Cargando IFC:", url);
+    await fragments.load(url);
+  }
+}
+
+loadModels();
 
 // Viewport Layouts
 const [viewportSettings] = BUI.Component.create(viewportSettingsTemplate, {
@@ -193,10 +218,10 @@ const [viewportSettings] = BUI.Component.create(viewportSettingsTemplate, {
 
 viewport.append(viewportSettings);
 
-const [viewportGrid] = BUI.Component.create(TEMPLATES.viewportGridTemplate, {
-  components,
-  world,
-});
+const [viewportGrid] = BUI.Component.create(
+  TEMPLATES.viewportGridTemplate,
+  { components, world },
+);
 
 viewport.append(viewportGrid);
 
@@ -207,20 +232,18 @@ const viewportCardTemplate = () => BUI.html`
   </div>
 `;
 
-const [contentGrid] = BUI.Component.create<
-  BUI.Grid<TEMPLATES.ContentGridLayouts, TEMPLATES.ContentGridElements>,
-  TEMPLATES.ContentGridState
->(TEMPLATES.contentGridTemplate, {
-  components,
-  id: CONTENT_GRID_ID,
-  viewportTemplate: viewportCardTemplate,
-});
+const [contentGrid] = BUI.Component.create(
+  TEMPLATES.contentGridTemplate,
+  {
+    components,
+    id: CONTENT_GRID_ID,
+    viewportTemplate: viewportCardTemplate,
+  }
+);
 
 const setInitialLayout = () => {
   if (window.location.hash) {
-    const hash = window.location.hash.slice(
-      1,
-    ) as TEMPLATES.ContentGridLayouts[number];
+    const hash = window.location.hash.slice(1);
     if (Object.keys(contentGrid.layouts).includes(hash)) {
       contentGrid.layout = hash;
     } else {
@@ -232,33 +255,18 @@ const setInitialLayout = () => {
     contentGrid.layout = "Viewer";
   }
 };
-
 setInitialLayout();
 
 contentGrid.addEventListener("layoutchange", () => {
-  window.location.hash = contentGrid.layout as string;
+  window.location.hash = contentGrid.layout;
 });
 
-const contentGridIcons: Record<TEMPLATES.ContentGridLayouts[number], string> = {
+const contentGridIcons = {
   Viewer: appIcons.MODEL,
 };
 
 // App Grid Setup
-type AppLayouts = ["App"];
-
-type Sidebar = {
-  name: "sidebar";
-  state: TEMPLATES.GridSidebarState;
-};
-
-type ContentGrid = { name: "contentGrid"; state: TEMPLATES.ContentGridState };
-
-type AppGridElements = [Sidebar, ContentGrid];
-
-const app = document.getElementById("app") as BUI.Grid<
-  AppLayouts,
-  AppGridElements
->;
+const app = document.getElementById("app");
 
 app.elements = {
   sidebar: {
@@ -273,7 +281,7 @@ app.elements = {
 };
 
 contentGrid.addEventListener("layoutchange", () =>
-  app.updateComponent.sidebar(),
+  app.updateComponent.sidebar()
 );
 
 app.layouts = {
