@@ -1,0 +1,40 @@
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: Arial, sans-serif;
+  background: #111;
+  color: white;
+}
+
+#sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 220px;
+  height: 100%;
+  background: #1b1b1b;
+  padding: 20px;
+  box-sizing: border-box;
+  border-right: 1px solid #333;
+}
+
+#sidebar h2 {
+  margin-top: 0;
+  font-size: 20px;
+}
+
+#model-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+#model-list li {
+  margin-bottom: 10px;
+}
+
+canvas {
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
