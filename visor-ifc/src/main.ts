@@ -84,11 +84,43 @@ aoPass.updateGtaoMaterial(aoParameters);
 aoPass.updatePdMaterial(pdParameters);
 
 const fragments = components.get(OBC.FragmentsManager);
-// En producción con GH Pages no use node_modules path. Mantén esto y asegúrate de copiar worker a /Worker/ o CDN en deploy.
-fragments.init("/node_modules/@thatopen/fragments/dist/Worker/worker.mjs");
+
+// Try sensible default for worker path; we'll attempt several fallbacks when initializing.
+// IMPORTANT: in production on GitHub Pages you should copy worker.mjs to /Worker/worker.mjs or use a CDN.
+const FRAGMENTS_WORKER_FALLBACKS = [
+  "/Worker/worker.mjs",
+  "/worker.mjs",
+  "/node_modules/@thatopen/fragments/dist/Worker/worker.mjs",
+];
+
+// We'll try to init fragments with first available path (best-effort).
+async function initFragmentsWorker() {
+  for (const candidate of FRAGMENTS_WORKER_FALLBACKS) {
+    try {
+      // Attempt setup by calling fragments.init and then a lightweight check: fragments.list size (no throw)
+      fragments.init(candidate);
+      console.log("fragments.init called with:", candidate);
+      // give a microtick for worker to initialize; this function won't throw synchronously most times
+      return candidate;
+    } catch (err) {
+      console.warn("fragments.init failed for", candidate, err);
+      // try next
+    }
+  }
+  // last resort: call with original node_modules path (may work in dev)
+  try {
+    fragments.init("/node_modules/@thatopen/fragments/dist/Worker/worker.mjs");
+    return "/node_modules/@thatopen/fragments/dist/Worker/worker.mjs";
+  } catch (err) {
+    console.error("All fragments.init attempts failed. Please ensure worker.mjs is available in public/Worker or use CDN.", err);
+    return null;
+  }
+}
+
+await initFragmentsWorker();
 
 fragments.core.models.materials.list.onItemSet.add(({ value: material }) => {
-  const isLod = "isLodMaterial" in material && material.isLodMaterial;
+  const isLod = "isLodMaterial" in material && (material as any).isLodMaterial;
   if (isLod) {
     world.renderer!.postproduction.basePass.isolatedMaterials.push(material);
   }
@@ -107,16 +139,27 @@ world.camera.controls.addEventListener("rest", () => {
 const ifcLoader = components.get(OBC.IfcLoader);
 await ifcLoader.setup({
   autoSetWasm: false,
+  // CDN fallback that works on GitHub Pages — leave as-is
   wasm: { absolute: true, path: "https://unpkg.com/web-ifc@0.0.71/" },
 });
 
 // ---------------------------
 //  AQUI: Lista de modelos a cargar (apagados)
 // ---------------------------
+// We use relative path under your project: /models/<filename>.ifc
 const modelsToLoad = [
   "/models/19_ZI_ALL_Estructura_Torre_ModuloA_T1-T2.ifc",
   "/models/19_ZI_ALL_Estructura_Torre_ModuloA_T3-T4.ifc",
 ];
+
+// Map filename -> loaded fragments model object
+const loadedModels: Record<string, any> = {};
+
+// Helper: filename from path
+const filenameFromPath = (p: string) => {
+  const parts = p.split("/");
+  return parts[parts.length - 1];
+};
 
 const highlighter = components.get(OBF.Highlighter);
 highlighter.setup({
@@ -204,6 +247,15 @@ fragments.list.onItemSet.add(async ({ value: model }) => {
 
   world.scene.three.add(model.object);
   await fragments.core.update(true);
+
+  // Keep track by filename when available
+  try {
+    const meta = model.sourceUrl || model.url || (model as any).fileName || null;
+    const fname = meta ? filenameFromPath(meta.toString()) : `model_${model.modelID}`;
+    loadedModels[fname] = model;
+  } catch (e) {
+    // ignore
+  }
 });
 
 // ----------------------
@@ -212,7 +264,8 @@ fragments.list.onItemSet.add(async ({ value: model }) => {
 async function loadModels() {
   const basePath = "/models/";
   for (const filePath of modelsToLoad) {
-    const filename = filePath.split("/").pop();
+    const filename = filenameFromPath(filePath);
+    // if user passed absolute-like path, use it; otherwise use basePath
     const url = filePath.startsWith("/") ? filePath : basePath + filename;
     console.log("Intentando cargar IFC:", url);
 
@@ -296,11 +349,103 @@ const contentGridIcons: Record<TEMPLATES.ContentGridLayouts[number], string> = {
 };
 
 // ------------------------------
-//  ⭐ ADD MODELS PANEL TO SIDEBAR (as extra item)
+//  ⭐ ADD MODELS PANEL TO SIDEBAR (custom simple panel)
 // ------------------------------
-const modelsPanel = BUI.Component.create(OBF.ModelsList, {
-  fragments,
-  title: "Models",
+// We'll create a lightweight BUI component that lists the models and provides toggles.
+// This avoids relying solely on OBF.ModelsList which may require other wiring.
+const createModelsToggleComponent = () => {
+  return BUI.html`
+    <div style="padding:10px;max-width:220px;color:#fff">
+      <div style="font-weight:600;margin-bottom:8px">Modelos</div>
+      <div id="models-toggles">
+        ${modelsToLoad.map(
+          (p) => BUI.html`<label style="display:block;margin-bottom:6px">
+            <input type="checkbox" data-file="${filenameFromPath(p)}" />
+            <span style="margin-left:8px">${filenameFromPath(p)}</span>
+          </label>`,
+        )}
+      </div>
+      <div style="margin-top:8px">
+        <button id="models-focus" style="padding:6px 8px;border-radius:6px;border:none;cursor:pointer">Focus seleccionado</button>
+      </div>
+    </div>
+  `;
+};
+
+const [modelsToggleComponent] = BUI.Component.create(createModelsToggleComponent);
+
+// Wire events after DOM created
+modelsToggleComponent.onAttach?.add(() => {
+  const root = (modelsToggleComponent as any).element as HTMLElement;
+  if (!root) return;
+  const toggles = Array.from(root.querySelectorAll<HTMLInputElement>("#models-toggles input[type=checkbox]"));
+  toggles.forEach((ch) => {
+    ch.addEventListener("change", async (ev) => {
+      const input = ev.currentTarget as HTMLInputElement;
+      const fname = input.dataset.file!;
+      const model = loadedModels[fname];
+      if (!model) {
+        // If model not yet loaded, attempt to load now (and keep checked)
+        if (input.checked) {
+          const url = `/models/${fname}`;
+          try {
+            console.log("Cargando al vuelo:", url);
+            await fragments.load(url);
+            // after load, ensure model tracked, set visible
+            const m = loadedModels[fname];
+            if (m && m.object) {
+              m.object.visible = true;
+              // fit camera to model
+              try {
+                const sphere = new THREE.Sphere();
+                if (m.object && m.object.geometry) {
+                  // best-effort: use bounding sphere of mesh
+                  (m.object as any).geometry.computeBoundingSphere?.();
+                }
+                m.getBoundingSphere?.(sphere);
+                world.camera.controls.fitToSphere(sphere, true);
+              } catch (e) {}
+            }
+          } catch (err) {
+            console.error("Error cargando modelo a vuelo:", err);
+            input.checked = false;
+          }
+        }
+        return;
+      }
+      // Toggle already-loaded model
+      try {
+        model.object.visible = input.checked;
+        if (input.checked) {
+          // fit camera
+          try {
+            const sphere = new THREE.Sphere();
+            model.getBoundingSphere?.(sphere);
+            world.camera.controls.fitToSphere(sphere, true);
+          } catch (e) {}
+        }
+      } catch (e) {
+        console.warn("No se pudo alternar visibilidad para", fname, e);
+      }
+    });
+  });
+
+  // Focus button: fit to first selected
+  const focusBtn = root.querySelector<HTMLButtonElement>("#models-focus");
+  focusBtn?.addEventListener("click", () => {
+    const selected = Array.from(root.querySelectorAll<HTMLInputElement>("#models-toggles input:checked"));
+    if (selected.length === 0) return;
+    const first = selected[0].dataset.file!;
+    const m = loadedModels[first];
+    if (!m) return;
+    try {
+      const sphere = new THREE.Sphere();
+      m.getBoundingSphere?.(sphere);
+      world.camera.controls.fitToSphere(sphere, true);
+    } catch (e) {
+      console.warn("No se pudo hacer focus", e);
+    }
+  });
 });
 
 // App Grid Setup
@@ -328,11 +473,12 @@ app.elements = {
       compact: true,
       layoutIcons: contentGridIcons,
       extraItems: [
+        // Insert the simple toggles component as the "Models" item in the sidebar
         {
           id: "models",
           icon: appIcons.MODEL,
           label: "Models",
-          component: modelsPanel,
+          component: modelsToggleComponent,
         },
       ],
     },
@@ -358,4 +504,21 @@ app.layout = "App";
 // ----------------------
 //  Llamar carga de modelos apagados UNA VEZ que la app está lista
 // ----------------------
-loadModels();
+// Defer a microtick to ensure UI mounted
+setTimeout(() => {
+  loadModels().then(() => {
+    console.log("LoadModels finished");
+    // After models loaded we ensure toggles are present and reflect state
+    try {
+      const root = (modelsToggleComponent as any).element as HTMLElement;
+      if (root) {
+        const toggles = Array.from(root.querySelectorAll<HTMLInputElement>("#models-toggles input[type=checkbox]"));
+        toggles.forEach((ch) => {
+          const fname = ch.dataset.file!;
+          ch.checked = !!loadedModels[fname] && !!loadedModels[fname].object && loadedModels[fname].object.visible === true;
+        });
+      }
+    } catch (e) { /* ignore */ }
+  });
+}, 200);
+
