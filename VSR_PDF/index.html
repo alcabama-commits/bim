@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor de PDF</title>
+    <style>
+        /* Estilos para que el visor ocupe toda la pantalla */
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden; /* Evita barras de scroll dobles */
+        }
+        #visor-pdf {
+            width: 100%;
+            height: 100%;
+            border: none; /* Sin bordes en el iframe */
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Mi Visor de PDF Online</h1>
+    <p>Mostrando el archivo desde la carpeta 'pdfs'.</p>
+
+    <iframe id="visor-pdf" src=""></iframe>
+
+    <script>
+        // --- CONFIGURACIÓN ---
+        // El nombre de tu repositorio en GitHub (ej: 'mi-sitio-web')
+        const nombreRepositorio = 'mi-proyecto-github-pages'; 
+        
+        // La ruta al archivo PDF, AHORA INCLUYENDO LA CARPETA
+        const rutaAlPdf = 'pdfs/mi-documento.pdf'; // <-- ¡LÍNEA MODIFICADA!
+        // -------------------
+
+        // El resto del script funciona exactamente igual
+        const urlBase = `/${nombreRepositorio}/`;
+        const urlPdfCompleta = `${urlBase}${rutaAlPdf}`;
+        const urlPdfCodificada = encodeURIComponent(urlPdfCompleta);
+        const urlVisor = `${urlBase}pdfjs/web/viewer.html?file=${urlPdfCodificada}`;
+
+        document.getElementById('visor-pdf').src = urlVisor;
+    </script>
+
+</body>
+</html>
