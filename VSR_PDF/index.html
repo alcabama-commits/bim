@@ -1,29 +1,38 @@
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SmartPDF AI Viewer</title>
+  <title>ArchView BIM - Visor de Planos Profesional</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;800&display=swap');
     body {
       font-family: 'Inter', sans-serif;
-      background-color: #f8fafc;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
     }
-    .pdf-canvas-container {
-      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
     }
-    /* Hide scrollbar for clean UI */
-    .no-scrollbar::-webkit-scrollbar {
-      display: none;
+    /* Scrollbar minimalista para BIM */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
     }
-    .no-scrollbar {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #facc15;
     }
   </style>
 <script type="importmap">
@@ -37,7 +46,7 @@
 }
 </script>
 </head>
-<body>
+<body class="bg-slate-950">
   <div id="root"></div>
 </body>
 </html>

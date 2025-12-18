@@ -1,5 +1,6 @@
 
 {
-  "name": "ArchView AI Pro",
-  "description": "Visor especializado de planimetría arquitectónica con herramientas de medición, análisis de planos y asistencia mediante IA de Gemini."
+  "name": "ArchView AI Pro - BIM Edition",
+  "description": "Visor de alta precisión para planimetría arquitectónica y modelos BIM (PDF), con herramientas de calibración, medición y análisis asistido por IA.",
+  "repository": "https://github.com/alcabama-commits/bim/tree/main/VSR_PDF"
 }

@@ -6,14 +6,10 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-export interface PdfMetadata {
-  name: string;
-  size: number;
-  totalPages: number;
-  text: string;
+export interface Calibration {
+  pixels: number;
+  realValue: number;
+  unit: string;
 }
 
-export enum ViewMode {
-  SinglePage = 'single',
-  Continuous = 'continuous'
-}
+export type Tool = 'select' | 'hand' | 'measure' | 'calibrate';
