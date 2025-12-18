@@ -3,7 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 
 export const getDocumentSummary = async (text: string): Promise<string> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Eres un asistente experto en arquitectura y construcción. Resume técnicamente este contenido extraído de un plano o memoria descriptiva: \n\n${text.substring(0, 30000)}`,
