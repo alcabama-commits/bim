@@ -6,12 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ArchView BIM - Visor de Planos Profesional</title>
   
-  <!-- Definición segura de process y global antes de cargar módulos -->
-  <script>
-    window.process = { env: { NODE_ENV: 'production', API_KEY: "" } };
-    window.global = window;
-  </script>
-
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -31,7 +25,6 @@
     ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
     ::-webkit-scrollbar-thumb:hover { background: #facc15; }
     
-    /* Fondo oscuro sólido para evitar parpadeos blancos */
     #root { background-color: #020617; min-height: 100vh; }
   </style>
 
@@ -50,18 +43,15 @@
 </head>
 <body class="bg-slate-950">
   <div id="root">
-    <!-- Loader mejorado con texto de estado -->
     <div class="flex h-screen w-full items-center justify-center bg-slate-950">
       <div class="flex flex-col items-center gap-6">
         <div class="w-12 h-12 border-4 border-slate-800 border-t-yellow-500 rounded-full animate-spin"></div>
         <div class="text-center">
           <p class="text-yellow-500 font-mono text-[10px] tracking-[0.2em] uppercase animate-pulse">Iniciando Motor BIM</p>
-          <p class="text-slate-600 text-[9px] mt-2 uppercase font-bold">Cargando dependencias de renderizado...</p>
+          <p class="text-slate-600 text-[9px] mt-2 uppercase font-bold">Cargando dependencias...</p>
         </div>
       </div>
     </div>
   </div>
-  <!-- Importante: El script type="module" debe apuntar al archivo de entrada index.tsx -->
-  <script type="module" src="index.tsx"></script>
 </body>
 </html>
