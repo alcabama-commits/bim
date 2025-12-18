@@ -16,7 +16,6 @@ interface PdfRendererProps {
   onCalibrationComplete: (c: Calibration) => void;
   onDocumentLoad: (totalPages: number, fullText: string) => void;
   onFileSelect: (file: File) => void;
-  // Added onToolChange to the props interface to fix the error where setActiveTool was not found
   onToolChange?: (tool: Tool) => void;
 }
 
@@ -32,13 +31,13 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   onCalibrationComplete,
   onDocumentLoad,
   onFileSelect,
-  // Destructure onToolChange from props
   onToolChange
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [libReady, setLibReady] = useState(false);
   
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
@@ -48,46 +47,60 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
 
   const [points, setPoints] = useState<{x: number, y: number}[]>([]);
 
+  // Verificar que la librería esté lista
   useEffect(() => {
-    const lib = window.pdfjsLib;
-    if (lib) {
-      lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
+    const checkLib = () => {
+      if (window.pdfjsLib) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        setLibReady(true);
+      } else {
+        setTimeout(checkLib, 100);
+      }
+    };
+    checkLib();
   }, []);
 
   useEffect(() => {
-    if (!file) {
+    if (!file || !libReady) {
       setPdfDoc(null);
       return;
     }
+    
+    let isMounted = true;
     const loadPdf = async () => {
-      const lib = window.pdfjsLib;
-      if (!lib) return;
-
       setLoading(true);
       try {
         const reader = new FileReader();
         reader.onload = async (e) => {
+          if (!isMounted) return;
           const typedarray = new Uint8Array(e.target?.result as ArrayBuffer);
-          const pdf = await lib.getDocument(typedarray).promise;
-          setPdfDoc(pdf);
-          let fullText = "";
-          for (let i = 1; i <= Math.min(pdf.numPages, 3); i++) {
-            const page = await pdf.getPage(i);
-            const content = await page.getTextContent();
-            fullText += content.items.map((item: any) => item.str).join(" ") + " ";
+          try {
+            const pdf = await window.pdfjsLib.getDocument(typedarray).promise;
+            if (isMounted) {
+              setPdfDoc(pdf);
+              let fullText = "";
+              const maxPagesToScan = Math.min(pdf.numPages, 3);
+              for (let i = 1; i <= maxPagesToScan; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                fullText += content.items.map((item: any) => item.str).join(" ") + " ";
+              }
+              onDocumentLoad(pdf.numPages, fullText);
+            }
+          } catch (err) {
+            console.error("Error parsing PDF document:", err);
           }
-          onDocumentLoad(pdf.numPages, fullText);
         };
         reader.readAsArrayBuffer(file);
       } catch (error) {
-        console.error("Error loading PDF:", error);
+        console.error("Error loading PDF file:", error);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
     loadPdf();
-  }, [file, onDocumentLoad]);
+    return () => { isMounted = false; };
+  }, [file, libReady, onDocumentLoad]);
 
   const renderPage = useCallback(async (pageNum: number) => {
     if (!pdfDoc || !canvasRef.current) return;
@@ -141,7 +154,6 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
               realValue: parseFloat(val),
               unit: 'm'
             });
-            // Fixed: use the onToolChange prop instead of the undefined setActiveTool
             onToolChange?.('measure');
           }
         }
@@ -160,14 +172,14 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   if (!file) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-slate-900 border-2 border-dashed border-slate-800 m-8 rounded-3xl">
-        <div className="text-center space-y-4 max-w-sm">
+        <div className="text-center space-y-4 max-w-sm p-8">
           <div className="w-20 h-20 bg-yellow-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-yellow-500/20">
             <i className="fa-solid fa-cloud-arrow-up text-3xl text-yellow-500 animate-pulse"></i>
           </div>
-          <h3 className="text-xl font-bold text-white">Visor BIM Preparado</h3>
-          <p className="text-slate-400 text-sm">Carga un plano PDF para comenzar el análisis técnico y mediciones de obra.</p>
-          <label className="inline-block cursor-pointer bg-yellow-500 hover:bg-yellow-400 text-slate-950 px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 active:scale-95">
-            Seleccionar Archivo
+          <h3 className="text-xl font-bold text-white uppercase tracking-tight">Cargar Plano BIM</h3>
+          <p className="text-slate-400 text-sm">Arrastra tu archivo o selecciónalo para iniciar el visor métrico.</p>
+          <label className="inline-block cursor-pointer bg-yellow-500 hover:bg-yellow-400 text-slate-950 px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 active:scale-95 shadow-lg shadow-yellow-500/10">
+            Seleccionar Archivo PDF
             <input 
               type="file" 
               className="hidden" 
@@ -239,7 +251,7 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
             <div className="w-16 h-16 border-4 border-yellow-500/20 border-t-yellow-500 animate-spin rounded-full"></div>
             <div className="text-center">
               <span className="block text-yellow-500 font-mono text-xs tracking-widest uppercase mb-1">Cargando Render BIM</span>
-              <span className="text-slate-500 text-[10px] uppercase font-bold">Por favor espere...</span>
+              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Calculando vectores...</span>
             </div>
           </div>
         </div>
