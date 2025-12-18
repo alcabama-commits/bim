@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js'
 import { DXFLoader } from 'three-dxf-loader'
+import { LibreDwg, Dwg_File_Type } from '@mlightcad/libredwg-web'
 
 interface Props {
   file: File | null
@@ -28,6 +29,8 @@ const DwgRenderer: React.FC<Props> = ({
   const [entityRoot, setEntityRoot] = useState<THREE.Object3D | null>(null)
   const [points, setPoints] = useState<THREE.Vector3[]>([])
   const [loading, setLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const loadTimeoutRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (!canvasRef.current || renderer) return
@@ -99,17 +102,77 @@ const DwgRenderer: React.FC<Props> = ({
   useEffect(() => {
     if (!file || !renderer) return
     setLoading(true)
+    setErrorMsg(null)
     setPoints([])
     if (entityRoot) {
       scene.remove(entityRoot)
       setEntityRoot(null)
     }
 
-    if (file.name.toLowerCase().endsWith('.dwg')) {
-      onDocInfo('Formato DWG detectado. Para visualizar en navegador se recomienda convertir a DXF.')
-      setLoading(false)
-      return
-    }
+    const run = async () => {
+      if (file.name.toLowerCase().endsWith('.dwg')) {
+        try {
+          const lib = await LibreDwg.create('/libredwg/')
+          const buf = await file.arrayBuffer()
+          const dwg = lib.dwg_read_data(new Uint8Array(buf), Dwg_File_Type.DWG)
+          const db = lib.convert(dwg)
+          const root = new THREE.Group()
+          const material = new THREE.LineBasicMaterial({ color: 0xffffff })
+          ;(db.lines || []).forEach((ln: any) => {
+            const geo = new THREE.BufferGeometry().setFromPoints([
+              new THREE.Vector3(ln.start.x, ln.start.y, 0),
+              new THREE.Vector3(ln.end.x, ln.end.y, 0),
+            ])
+            root.add(new THREE.Line(geo, material))
+          })
+          ;(db.arcs || []).forEach((arc: any) => {
+            const segs = 64
+            const curve = new THREE.EllipseCurve(
+              arc.center.x, arc.center.y,
+              arc.radius, arc.radius,
+              arc.startAngle, arc.endAngle, false, 0
+            )
+            const pts = curve.getPoints(segs).map(p => new THREE.Vector3(p.x, p.y, 0))
+            const geo = new THREE.BufferGeometry().setFromPoints(pts)
+            root.add(new THREE.Line(geo, material))
+          })
+          ;(db.circles || []).forEach((c: any) => {
+            const segs = 64
+            const curve = new THREE.EllipseCurve(
+              c.center.x, c.center.y,
+              c.radius, c.radius, 0, Math.PI * 2, false, 0
+            )
+            const pts = curve.getPoints(segs).map(p => new THREE.Vector3(p.x, p.y, 0))
+            const geo = new THREE.BufferGeometry().setFromPoints(pts)
+            root.add(new THREE.Line(geo, material))
+          })
+          scene.add(root)
+          setEntityRoot(root)
+          const box = new THREE.Box3().setFromObject(root)
+          const center = box.getCenter(new THREE.Vector3())
+          const size = box.getSize(new THREE.Vector3())
+          const maxSize = Math.max(size.x, size.y)
+          const viewSize = maxSize * 0.6
+          const w = renderer.domElement.clientWidth
+          const h = renderer.domElement.clientHeight
+          const aspect = w / h
+          camera.left = -viewSize * aspect
+          camera.right = viewSize * aspect
+          camera.top = viewSize
+          camera.bottom = -viewSize
+          camera.position.set(center.x, center.y, 10)
+          camera.zoom = 1
+          camera.updateProjectionMatrix()
+          controls?.target.set(center.x, center.y, 0)
+          controls?.update()
+          onDocInfo(`DWG cargado. Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
+        } catch (e) {
+          setErrorMsg('Error al procesar DWG en navegador. Prueba otro archivo.')
+        } finally {
+          setLoading(false)
+        }
+        return
+      }
 
     const url = URL.createObjectURL(file)
     const fontLoader = new FontLoader()
@@ -119,6 +182,14 @@ const DwgRenderer: React.FC<Props> = ({
       loader.setEnableLayer(true)
       loader.setConsumeUnits(true)
       loader.setDefaultColor(0x000000)
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current)
+      }
+      loadTimeoutRef.current = window.setTimeout(() => {
+        setLoading(false)
+        setErrorMsg('Tiempo de carga excedido. Verifica que el DXF sea válido.')
+        URL.revokeObjectURL(url)
+      }, 15000)
       loader.load(url, (data) => {
         const root = data?.entity
         if (root) {
@@ -149,17 +220,54 @@ const DwgRenderer: React.FC<Props> = ({
           onDocInfo(`DXF cargado. Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
         }
         setLoading(false)
+        if (loadTimeoutRef.current) {
+          clearTimeout(loadTimeoutRef.current)
+          loadTimeoutRef.current = null
+        }
         URL.revokeObjectURL(url)
-      }, undefined, (err) => {
-        console.error(err)
+      }, undefined, async (err) => {
         setLoading(false)
-        URL.revokeObjectURL(url)
+        setErrorMsg('No se pudo procesar el DXF con el cargador principal.')
+        try {
+          const mod = await import('three-dxf-viewer')
+          const viewer = new (mod as any).DXFViewer()
+          const dxfObj = await viewer.getFromFile(file, 'https://threejs.org/examples/fonts/helvetiker_regular.typeface.json')
+          if (dxfObj) {
+            scene.add(dxfObj)
+            setEntityRoot(dxfObj)
+            const box = new THREE.Box3().setFromObject(dxfObj)
+            const center = box.getCenter(new THREE.Vector3())
+            const size = box.getSize(new THREE.Vector3())
+            const maxSize = Math.max(size.x, size.y)
+            const viewSize = maxSize * 0.6
+            const w = renderer.domElement.clientWidth
+            const h = renderer.domElement.clientHeight
+            const aspect = w / h
+            camera.left = -viewSize * aspect
+            camera.right = viewSize * aspect
+            camera.top = viewSize
+            camera.bottom = -viewSize
+            camera.position.set(center.x, center.y, 10)
+            camera.zoom = 1
+            camera.updateProjectionMatrix()
+            controls?.target.set(center.x, center.y, 0)
+            controls?.update()
+            setErrorMsg(null)
+            onDocInfo(`DXF cargado (fallback). Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
+          }
+        } catch (e) {
+          setErrorMsg('Error al procesar DXF. Prueba con otro archivo o convertir desde CAD.')
+        } finally {
+          URL.revokeObjectURL(url)
+        }
       })
-    }, undefined, (err) => {
-      console.error('Error cargando fuente', err)
+    }, undefined, () => {
       setLoading(false)
+      setErrorMsg('Error cargando fuente de texto.')
       URL.revokeObjectURL(url)
     })
+    }
+    run()
   }, [file, renderer, scene, camera, controls, entityRoot, onDocInfo])
 
   const ndcToWorldOnPlaneZ0 = (event: React.MouseEvent) => {
@@ -256,6 +364,11 @@ const DwgRenderer: React.FC<Props> = ({
               <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Preparando geometría...</span>
             </div>
           </div>
+        </div>
+      )}
+      {errorMsg && (
+        <div className="absolute bottom-6 left-6 bg-red-600/20 border border-red-600 px-4 py-2 rounded-xl z-50">
+          <span className="text-[11px] text-red-200">{errorMsg}</span>
         </div>
       )}
     </div>
