@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Calibration, Tool } from '../types';
 
-declare const pdfjsLib: any;
+declare const window: any;
 
 interface PdfRendererProps {
   file: File | null;
@@ -15,6 +15,9 @@ interface PdfRendererProps {
   calibration: Calibration | null;
   onCalibrationComplete: (c: Calibration) => void;
   onDocumentLoad: (totalPages: number, fullText: string) => void;
+  onFileSelect: (file: File) => void;
+  // Added onToolChange to the props interface to fix the error where setActiveTool was not found
+  onToolChange?: (tool: Tool) => void;
 }
 
 const PdfRenderer: React.FC<PdfRendererProps> = ({ 
@@ -27,7 +30,10 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   isBlueprint,
   calibration,
   onCalibrationComplete,
-  onDocumentLoad 
+  onDocumentLoad,
+  onFileSelect,
+  // Destructure onToolChange from props
+  onToolChange
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -43,21 +49,30 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   const [points, setPoints] = useState<{x: number, y: number}[]>([]);
 
   useEffect(() => {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const lib = window.pdfjsLib;
+    if (lib) {
+      lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
   }, []);
 
   useEffect(() => {
-    if (!file) return;
+    if (!file) {
+      setPdfDoc(null);
+      return;
+    }
     const loadPdf = async () => {
+      const lib = window.pdfjsLib;
+      if (!lib) return;
+
       setLoading(true);
       try {
         const reader = new FileReader();
         reader.onload = async (e) => {
           const typedarray = new Uint8Array(e.target?.result as ArrayBuffer);
-          const pdf = await pdfjsLib.getDocument(typedarray).promise;
+          const pdf = await lib.getDocument(typedarray).promise;
           setPdfDoc(pdf);
           let fullText = "";
-          for (let i = 1; i <= Math.min(pdf.numPages, 5); i++) {
+          for (let i = 1; i <= Math.min(pdf.numPages, 3); i++) {
             const page = await pdf.getPage(i);
             const content = await page.getTextContent();
             fullText += content.items.map((item: any) => item.str).join(" ") + " ";
@@ -81,9 +96,11 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       const viewport = page.getViewport({ scale, rotation });
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d');
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-      await page.render({ canvasContext: context, viewport: viewport }).promise;
+      if (context) {
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        await page.render({ canvasContext: context, viewport: viewport }).promise;
+      }
     } catch (error) {
       console.error("Error rendering page:", error);
     }
@@ -95,6 +112,7 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   }, [pdfDoc, currentPage, scale, rotation, renderPage]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (!file) return;
     if (tool === 'hand') {
       setIsDragging(true);
       setStartX(e.pageX - (containerRef.current?.offsetLeft || 0));
@@ -116,13 +134,15 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
           const dx = newPoints[1].x - newPoints[0].x;
           const dy = newPoints[1].y - newPoints[0].y;
           const pixelDist = Math.sqrt(dx * dx + dy * dy);
-          const val = prompt("Ingresa la distancia real para esta medida (en metros):", "1.0");
+          const val = prompt("Establecer escala: ¿Cuántos metros mide esta línea en la realidad?", "1.0");
           if (val) {
             onCalibrationComplete({
               pixels: pixelDist,
               realValue: parseFloat(val),
               unit: 'm'
             });
+            // Fixed: use the onToolChange prop instead of the undefined setActiveTool
+            onToolChange?.('measure');
           }
         }
       }
@@ -136,6 +156,29 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
     containerRef.current.scrollLeft = scrollLeft - (x - startX) * 1.5;
     containerRef.current.scrollTop = scrollTop - (y - startY) * 1.5;
   };
+
+  if (!file) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-slate-900 border-2 border-dashed border-slate-800 m-8 rounded-3xl">
+        <div className="text-center space-y-4 max-w-sm">
+          <div className="w-20 h-20 bg-yellow-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-yellow-500/20">
+            <i className="fa-solid fa-cloud-arrow-up text-3xl text-yellow-500 animate-pulse"></i>
+          </div>
+          <h3 className="text-xl font-bold text-white">Visor BIM Preparado</h3>
+          <p className="text-slate-400 text-sm">Carga un plano PDF para comenzar el análisis técnico y mediciones de obra.</p>
+          <label className="inline-block cursor-pointer bg-yellow-500 hover:bg-yellow-400 text-slate-950 px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 active:scale-95">
+            Seleccionar Archivo
+            <input 
+              type="file" 
+              className="hidden" 
+              accept=".pdf" 
+              onChange={(e) => e.target.files?.[0] && onFileSelect(e.target.files[0])} 
+            />
+          </label>
+        </div>
+      </div>
+    );
+  }
 
   const calculateFormattedDistance = () => {
     if (points.length !== 2) return null;
@@ -163,24 +206,24 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
     >
       <div className="relative inline-block m-auto min-w-full min-h-full flex items-center justify-center p-20">
         <div className={`relative transition-all duration-300 ${isBlueprint ? 'invert hue-rotate-180 brightness-110 contrast-125' : ''}`}>
-          <canvas ref={canvasRef} className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-slate-700" />
+          <canvas ref={canvasRef} className="bg-white shadow-[0_0_60px_rgba(0,0,0,0.6)] border border-slate-700" />
           
           {showGrid && (
-            <div className="absolute inset-0 pointer-events-none opacity-10" 
-                 style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: `${50 * scale}px ${50 * scale}px` }}>
+            <div className="absolute inset-0 pointer-events-none opacity-20" 
+                 style={{ backgroundImage: 'linear-gradient(#444 1px, transparent 1px), linear-gradient(90deg, #444 1px, transparent 1px)', backgroundSize: `${50 * scale}px ${50 * scale}px` }}>
             </div>
           )}
 
           <svg className="absolute inset-0 pointer-events-none w-full h-full">
             {points.map((p, i) => (
-              <circle key={i} cx={p.x} cy={p.y} r="5" fill="#facc15" stroke="#1e293b" strokeWidth="2" />
+              <circle key={i} cx={p.x} cy={p.y} r="6" fill="#facc15" stroke="#000" strokeWidth="2" />
             ))}
             {points.length === 2 && (
               <>
-                <line x1={points[0].x} y1={points[0].y} x2={points[1].x} y2={points[1].y} stroke="#facc15" strokeWidth="2" strokeDasharray="5,5" />
-                <g transform={`translate(${(points[0].x + points[1].x) / 2}, ${(points[0].y + points[1].y) / 2 - 15})`}>
-                  <rect x="-45" y="-12" width="90" height="24" rx="12" fill="#1e293b" stroke="#facc15" strokeWidth="1" />
-                  <text fontSize="11" fontWeight="bold" textAnchor="middle" fill="#facc15" dy="4">
+                <line x1={points[0].x} y1={points[0].y} x2={points[1].x} y2={points[1].y} stroke="#facc15" strokeWidth="3" strokeDasharray="6,4" />
+                <g transform={`translate(${(points[0].x + points[1].x) / 2}, ${(points[0].y + points[1].y) / 2 - 20})`}>
+                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#facc15" strokeWidth="2" />
+                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#facc15" dy="5" className="font-mono">
                     {displayDist}
                   </text>
                 </g>
@@ -191,10 +234,13 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       </div>
 
       {loading && (
-        <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-16 h-16 border-4 border-yellow-400/20 border-t-yellow-400 animate-spin rounded-full"></div>
-            <span className="text-yellow-400 font-mono text-xs tracking-widest uppercase">Procesando BIM Data...</span>
+        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50">
+          <div className="flex flex-col items-center gap-6">
+            <div className="w-16 h-16 border-4 border-yellow-500/20 border-t-yellow-500 animate-spin rounded-full"></div>
+            <div className="text-center">
+              <span className="block text-yellow-500 font-mono text-xs tracking-widest uppercase mb-1">Cargando Render BIM</span>
+              <span className="text-slate-500 text-[10px] uppercase font-bold">Por favor espere...</span>
+            </div>
           </div>
         </div>
       )}

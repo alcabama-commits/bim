@@ -17,13 +17,16 @@ const App: React.FC = () => {
   const [isBlueprint, setIsBlueprint] = useState(false);
   const [calibration, setCalibration] = useState<Calibration | null>(null);
 
+  const handleFileSelect = (selectedFile: File) => {
+    setFile(selectedFile);
+    setCurrentPage(1);
+    setCalibration(null);
+    setDocumentText("");
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
-    if (selectedFile && selectedFile.type === 'application/pdf') {
-      setFile(selectedFile);
-      setCurrentPage(1);
-      setCalibration(null);
-    }
+    if (selectedFile) handleFileSelect(selectedFile);
   };
 
   const onDocumentLoad = useCallback((pages: number, text: string) => {
@@ -37,7 +40,6 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen w-full bg-slate-950 text-slate-100 overflow-hidden select-none">
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
-        {/* Superior Toolbar - High Density */}
         <header className="h-12 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between z-30 shadow-md">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -49,71 +51,72 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1">
-            {/* Toolset */}
             <div className="flex bg-slate-800 rounded p-0.5 border border-slate-700 mr-4">
               <button 
                 onClick={() => setActiveTool('hand')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'hand' ? 'bg-indigo-600' : 'hover:bg-slate-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'hand' ? 'bg-indigo-600 shadow-inner' : 'hover:bg-slate-700'}`}
                 title="Mano (Pan)"
               >
                 <i className="fa-solid fa-hand-pointer text-xs"></i>
               </button>
               <button 
                 onClick={() => setActiveTool('measure')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'measure' ? 'bg-indigo-600' : 'hover:bg-slate-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'measure' ? 'bg-indigo-600 shadow-inner' : 'hover:bg-slate-700'}`}
                 title="Medir"
               >
                 <i className="fa-solid fa-ruler text-xs"></i>
               </button>
               <button 
                 onClick={() => setActiveTool('calibrate')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'calibrate' ? 'bg-yellow-600' : 'hover:bg-slate-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'calibrate' ? 'bg-yellow-600 shadow-inner text-slate-950' : 'hover:bg-slate-700'}`}
                 title="Calibrar Escala"
               >
                 <i className="fa-solid fa-arrows-left-right-to-line text-xs"></i>
               </button>
             </div>
 
-            {/* View Controls */}
             <div className="flex items-center gap-2 mr-4">
-              <button onClick={() => handleZoom(-0.2)} className="hover:text-yellow-500 transition"><i className="fa-solid fa-minus text-[10px]"></i></button>
+              <button onClick={() => handleZoom(-0.2)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-800 rounded transition"><i className="fa-solid fa-minus text-[10px]"></i></button>
               <span className="text-[10px] font-mono w-12 text-center text-slate-400">{Math.round(scale * 100)}%</span>
-              <button onClick={() => handleZoom(0.2)} className="hover:text-yellow-500 transition"><i className="fa-solid fa-plus text-[10px]"></i></button>
+              <button onClick={() => handleZoom(0.2)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-800 rounded transition"><i className="fa-solid fa-plus text-[10px]"></i></button>
             </div>
 
-            <button onClick={handleRotate} className="w-8 h-8 hover:text-yellow-500 transition" title="Rotar Plano"><i className="fa-solid fa-rotate-right text-xs"></i></button>
-            <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 transition ${showGrid ? 'text-yellow-500' : 'text-slate-500'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
-            <button onClick={() => setIsBlueprint(!isBlueprint)} className={`w-8 h-8 transition ${isBlueprint ? 'text-yellow-500' : 'text-slate-500'}`} title="Modo Blueprint"><i className="fa-solid fa-eye-slash text-xs"></i></button>
+            <button onClick={handleRotate} className="w-8 h-8 hover:bg-slate-800 rounded transition" title="Rotar"><i className="fa-solid fa-rotate-right text-xs"></i></button>
+            <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded transition ${showGrid ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
+            <button onClick={() => setIsBlueprint(!isBlueprint)} className={`w-8 h-8 rounded transition ${isBlueprint ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Modo Blueprint"><i className="fa-solid fa-eye-slash text-xs"></i></button>
           </div>
 
           <div className="flex items-center gap-3">
-            <label className="cursor-pointer bg-yellow-600 hover:bg-yellow-500 text-slate-950 px-3 py-1.5 rounded text-[10px] font-black uppercase transition active:scale-95 flex items-center gap-2">
+            <label className="cursor-pointer bg-yellow-600 hover:bg-yellow-500 text-slate-950 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition active:scale-95 flex items-center gap-2">
               <i className="fa-solid fa-upload"></i>
-              <span>Cargar Plano</span>
+              <span className="hidden sm:inline">Nuevo Archivo</span>
               <input type="file" className="hidden" accept=".pdf" onChange={handleFileChange} />
             </label>
           </div>
         </header>
 
-        {/* Page Nav floating */}
         {file && (
-          <div className="absolute bottom-4 left-4 bg-slate-900/80 backdrop-blur border border-slate-700 px-3 py-1.5 rounded flex items-center gap-4 z-40 shadow-xl">
-            <button onClick={() => currentPage > 1 && setCurrentPage(p => p - 1)} disabled={currentPage <= 1} className="disabled:opacity-20 hover:text-yellow-500">
-              <i className="fa-solid fa-chevron-left text-xs"></i>
-            </button>
-            <span className="text-[10px] font-bold text-slate-300">PLANO {currentPage} / {totalPages}</span>
-            <button onClick={() => currentPage < totalPages && setCurrentPage(p => p + 1)} disabled={currentPage >= totalPages} className="disabled:opacity-20 hover:text-yellow-500">
-              <i className="fa-solid fa-chevron-right text-xs"></i>
-            </button>
-            {calibration && (
-              <div className="flex items-center gap-2 px-2 py-0.5 bg-yellow-500/10 border border-yellow-500/20 rounded text-yellow-500 text-[9px] font-bold">
-                <i className="fa-solid fa-check-double"></i> CALIBRADO
+          <div className="absolute bottom-6 left-6 bg-slate-900/90 backdrop-blur border border-slate-700 px-4 py-2 rounded-xl flex items-center gap-6 z-40 shadow-2xl">
+            <div className="flex items-center gap-3 border-r border-slate-700 pr-4">
+              <button onClick={() => currentPage > 1 && setCurrentPage(p => p - 1)} disabled={currentPage <= 1} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 disabled:opacity-20 transition">
+                <i className="fa-solid fa-chevron-left text-xs"></i>
+              </button>
+              <span className="text-[10px] font-bold text-slate-300 min-w-[80px] text-center uppercase tracking-widest">PLANO {currentPage} / {totalPages}</span>
+              <button onClick={() => currentPage < totalPages && setCurrentPage(p => p + 1)} disabled={currentPage >= totalPages} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 disabled:opacity-20 transition">
+                <i className="fa-solid fa-chevron-right text-xs"></i>
+              </button>
+            </div>
+            {calibration ? (
+              <div className="flex items-center gap-2 text-yellow-500 text-[10px] font-black animate-pulse">
+                <i className="fa-solid fa-check-circle"></i> ESCALA CALIBRADA
               </div>
+            ) : (
+              <div className="text-slate-500 text-[9px] font-bold uppercase">Escala no definida</div>
             )}
           </div>
         )}
 
-        <main className="flex-1 relative overflow-hidden">
+        <main className="flex-1 relative overflow-hidden flex flex-col">
           <PdfRenderer 
             file={file} 
             currentPage={currentPage} 
@@ -125,6 +128,9 @@ const App: React.FC = () => {
             calibration={calibration}
             onCalibrationComplete={setCalibration}
             onDocumentLoad={onDocumentLoad}
+            onFileSelect={handleFileSelect}
+            // Pass the tool setter as onToolChange prop
+            onToolChange={setActiveTool}
           />
         </main>
       </div>
