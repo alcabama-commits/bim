@@ -6,9 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ArchView BIM - Visor de Planos Profesional</title>
   
-  <!-- Definición segura de process antes de cargar módulos -->
+  <!-- Definición segura de process y global antes de cargar módulos -->
   <script>
-    window.process = { env: { API_KEY: "" } };
+    window.process = { env: { NODE_ENV: 'production', API_KEY: "" } };
+    window.global = window;
   </script>
 
   <script src="https://cdn.tailwindcss.com"></script>
@@ -22,7 +23,7 @@
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background-color: #020617; /* Slate-950 */
+      background-color: #020617;
     }
     .font-mono { font-family: 'JetBrains Mono', monospace; }
     ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -30,7 +31,7 @@
     ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
     ::-webkit-scrollbar-thumb:hover { background: #facc15; }
     
-    /* Evitar el flash blanco inicial */
+    /* Fondo oscuro sólido para evitar parpadeos blancos */
     #root { background-color: #020617; min-height: 100vh; }
   </style>
 
@@ -38,21 +39,29 @@
 {
   "imports": {
     "react": "https://esm.sh/react@19.0.0",
-    "react/": "https://esm.sh/react@19.0.0/",
     "react-dom": "https://esm.sh/react-dom@19.0.0",
     "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
     "@google/genai": "https://esm.sh/@google/genai@1.34.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/"
   }
 }
 </script>
 </head>
 <body class="bg-slate-950">
   <div id="root">
-    <!-- Loader inicial por si el JS tarda -->
+    <!-- Loader mejorado con texto de estado -->
     <div class="flex h-screen w-full items-center justify-center bg-slate-950">
-      <div class="w-10 h-10 border-4 border-slate-800 border-t-yellow-500 rounded-full animate-spin"></div>
+      <div class="flex flex-col items-center gap-6">
+        <div class="w-12 h-12 border-4 border-slate-800 border-t-yellow-500 rounded-full animate-spin"></div>
+        <div class="text-center">
+          <p class="text-yellow-500 font-mono text-[10px] tracking-[0.2em] uppercase animate-pulse">Iniciando Motor BIM</p>
+          <p class="text-slate-600 text-[9px] mt-2 uppercase font-bold">Cargando dependencias de renderizado...</p>
+        </div>
+      </div>
     </div>
   </div>
+  <!-- Importante: El script type="module" debe apuntar al archivo de entrada index.tsx -->
+  <script type="module" src="index.tsx"></script>
 </body>
 </html>
