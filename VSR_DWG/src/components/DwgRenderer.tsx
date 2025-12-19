@@ -294,7 +294,7 @@ const DwgRenderer: React.FC<Props> = ({
     })
     }
     run()
-  }, [file, renderer, scene, camera, controls, entityRoot, onDocInfo])
+  }, [file, renderer])
 
   const ndcToWorldOnPlaneZ0 = (event: React.MouseEvent) => {
     if (!renderer) return null
