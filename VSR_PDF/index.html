@@ -28,18 +28,12 @@
 
     <script>
         // --- CONFIGURACIÓN ---
-        // El nombre de tu repositorio en GitHub (ej: 'mi-sitio-web')
-        const nombreRepositorio = 'mi-proyecto-github-pages'; 
-        
-        // La ruta al archivo PDF, AHORA INCLUYENDO LA CARPETA
-        const rutaAlPdf = 'pdfs/mi-documento.pdf'; // <-- ¡LÍNEA MODIFICADA!
-        // -------------------
+        // Use rutas relativas para que funcione localmente y en servidor
+        // Ajuste el nombre del PDF según el archivo en la carpeta `pdfs`
+        const rutaAlPdf = 'pdfs/13 - VIG-1.1.pdf';
 
-        // El resto del script funciona exactamente igual
-        const urlBase = `/${nombreRepositorio}/`;
-        const urlPdfCompleta = `${urlBase}${rutaAlPdf}`;
-        const urlPdfCodificada = encodeURIComponent(urlPdfCompleta);
-        const urlVisor = `${urlBase}pdfjs/web/viewer.html?file=${urlPdfCodificada}`;
+        // Construir URL del visor usando ruta relativa
+        const urlVisor = `pdfjs/web/viewer.html?file=${encodeURIComponent(rutaAlPdf)}`;
 
         document.getElementById('visor-pdf').src = urlVisor;
     </script>
