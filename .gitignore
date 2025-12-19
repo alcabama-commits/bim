@@ -1,0 +1,14 @@
+# Global ignores
+**/node_modules/
+**/.env*
+# Ignore dist outputs except those under docs for Pages
+**/dist/
+!docs/**/dist/
+!docs/**/assets/
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.vscode/
+*.log
+
