@@ -30,6 +30,7 @@ const DwgRenderer: React.FC<Props> = ({
   const [points, setPoints] = useState<THREE.Vector3[]>([])
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [loadingText, setLoadingText] = useState<string>('')
   const loadTimeoutRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -110,71 +111,96 @@ const DwgRenderer: React.FC<Props> = ({
     }
 
     const run = async () => {
+      const maxSizeBytes = 20 * 1024 * 1024
+      if (file.size > maxSizeBytes) {
+        setLoading(false)
+        setErrorMsg('Archivo demasiado grande (>20MB). Usa un DXF más liviano o divide el plano.')
+        return
+      }
       if (file.name.toLowerCase().endsWith('.dwg')) {
+        setLoadingText('Cargando DWG')
         try {
-          const lib = await LibreDwg.create('/libredwg/')
-          const buf = await file.arrayBuffer()
-          const dwg = lib.dwg_read_data(new Uint8Array(buf), Dwg_File_Type.DWG)
-          const db = lib.convert(dwg)
-          const root = new THREE.Group()
-          const material = new THREE.LineBasicMaterial({ color: 0xffffff })
-          ;(db.lines || []).forEach((ln: any) => {
-            const geo = new THREE.BufferGeometry().setFromPoints([
-              new THREE.Vector3(ln.start.x, ln.start.y, 0),
-              new THREE.Vector3(ln.end.x, ln.end.y, 0),
-            ])
-            root.add(new THREE.Line(geo, material))
-          })
-          ;(db.arcs || []).forEach((arc: any) => {
-            const segs = 64
-            const curve = new THREE.EllipseCurve(
-              arc.center.x, arc.center.y,
-              arc.radius, arc.radius,
-              arc.startAngle, arc.endAngle, false, 0
-            )
-            const pts = curve.getPoints(segs).map(p => new THREE.Vector3(p.x, p.y, 0))
-            const geo = new THREE.BufferGeometry().setFromPoints(pts)
-            root.add(new THREE.Line(geo, material))
-          })
-          ;(db.circles || []).forEach((c: any) => {
-            const segs = 64
-            const curve = new THREE.EllipseCurve(
-              c.center.x, c.center.y,
-              c.radius, c.radius, 0, Math.PI * 2, false, 0
-            )
-            const pts = curve.getPoints(segs).map(p => new THREE.Vector3(p.x, p.y, 0))
-            const geo = new THREE.BufferGeometry().setFromPoints(pts)
-            root.add(new THREE.Line(geo, material))
-          })
-          scene.add(root)
-          setEntityRoot(root)
-          const box = new THREE.Box3().setFromObject(root)
-          const center = box.getCenter(new THREE.Vector3())
-          const size = box.getSize(new THREE.Vector3())
-          const maxSize = Math.max(size.x, size.y)
-          const viewSize = maxSize * 0.6
-          const w = renderer.domElement.clientWidth
-          const h = renderer.domElement.clientHeight
-          const aspect = w / h
-          camera.left = -viewSize * aspect
-          camera.right = viewSize * aspect
-          camera.top = viewSize
-          camera.bottom = -viewSize
-          camera.position.set(center.x, center.y, 10)
-          camera.zoom = 1
-          camera.updateProjectionMatrix()
-          controls?.target.set(center.x, center.y, 0)
-          controls?.update()
-          onDocInfo(`DWG cargado. Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
+          const libPath = (import.meta as any).env?.BASE_URL
+            ? (import.meta as any).env.BASE_URL + 'libredwg/'
+            : './libredwg/'
+          await Promise.race([
+            (async () => {
+              const lib = await LibreDwg.create(libPath)
+              const buf = await file.arrayBuffer()
+              const dwg = lib.dwg_read_data(buf as ArrayBuffer, Dwg_File_Type.DWG) as any
+              const db: any = lib.convert(dwg as number)
+              const root = new THREE.Group()
+              const material = new THREE.LineBasicMaterial({ color: 0xffffff })
+              ;((db?.lines || []) as any[]).forEach((ln: any) => {
+                const geo = new THREE.BufferGeometry().setFromPoints([
+                  new THREE.Vector3(ln.start.x, ln.start.y, 0),
+                  new THREE.Vector3(ln.end.x, ln.end.y, 0),
+                ])
+                root.add(new THREE.Line(geo, material))
+              })
+              ;((db?.arcs || []) as any[]).forEach((arc: any) => {
+                const segs = 64
+                const curve = new THREE.EllipseCurve(
+                  arc.center.x, arc.center.y,
+                  arc.radius, arc.radius,
+                  arc.startAngle, arc.endAngle, false, 0
+                )
+                const pts = curve.getPoints(segs).map(p => new THREE.Vector3(p.x, p.y, 0))
+                const geo = new THREE.BufferGeometry().setFromPoints(pts)
+                root.add(new THREE.Line(geo, material))
+              })
+              ;((db?.circles || []) as any[]).forEach((c: any) => {
+                const segs = 64
+                const curve = new THREE.EllipseCurve(
+                  c.center.x, c.center.y,
+                  c.radius, c.radius, 0, Math.PI * 2, false, 0
+                )
+                const pts = curve.getPoints(segs).map(p => new THREE.Vector3(p.x, p.y, 0))
+                const geo = new THREE.BufferGeometry().setFromPoints(pts)
+                root.add(new THREE.Line(geo, material))
+              })
+              scene.add(root)
+              setEntityRoot(root)
+              const box = new THREE.Box3().setFromObject(root)
+              const center = box.getCenter(new THREE.Vector3())
+              const size = box.getSize(new THREE.Vector3())
+              const maxSize = Math.max(size.x, size.y)
+              const viewSize = maxSize * 0.6
+              const w = renderer.domElement.clientWidth
+              const h = renderer.domElement.clientHeight
+              const aspect = w / h
+              camera.left = -viewSize * aspect
+              camera.right = viewSize * aspect
+              camera.top = viewSize
+              camera.bottom = -viewSize
+              camera.position.set(center.x, center.y, 10)
+              camera.zoom = 1
+              camera.updateProjectionMatrix()
+              controls?.target.set(center.x, center.y, 0)
+              controls?.update()
+              onDocInfo(`DWG cargado. Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
+            })(),
+            new Promise((_, reject) => {
+              loadTimeoutRef.current = window.setTimeout(() => reject(new Error('DWG_TIMEOUT')), 20000)
+            })
+          ])
         } catch (e) {
-          setErrorMsg('Error al procesar DWG en navegador. Prueba otro archivo.')
+          const msg = (e as Error)?.message === 'DWG_TIMEOUT'
+            ? 'Tiempo de carga excedido. Verifica que el DWG sea válido.'
+            : 'Error al procesar DWG en navegador. Prueba otro archivo.'
+          setErrorMsg(msg)
         } finally {
+          if (loadTimeoutRef.current) {
+            clearTimeout(loadTimeoutRef.current)
+            loadTimeoutRef.current = null
+          }
           setLoading(false)
         }
         return
       }
 
     const url = URL.createObjectURL(file)
+    setLoadingText('Cargando DXF')
     const fontLoader = new FontLoader()
     fontLoader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', (font) => {
       const loader = new DXFLoader()
@@ -190,10 +216,10 @@ const DwgRenderer: React.FC<Props> = ({
         setErrorMsg('Tiempo de carga excedido. Verifica que el DXF sea válido.')
         URL.revokeObjectURL(url)
       }, 15000)
-      loader.load(url, (data) => {
+      loader.load(url, (data: any) => {
         const root = data?.entity
         if (root) {
-          root.traverse(obj => {
+          root.traverse((obj: any) => {
             if ((obj as any).isLine) {
               (obj as THREE.Line).material = new THREE.LineBasicMaterial({ color: 0xffffff })
             }
@@ -225,7 +251,7 @@ const DwgRenderer: React.FC<Props> = ({
           loadTimeoutRef.current = null
         }
         URL.revokeObjectURL(url)
-      }, undefined, async (err) => {
+      }, undefined, async () => {
         setLoading(false)
         setErrorMsg('No se pudo procesar el DXF con el cargador principal.')
         try {
@@ -360,7 +386,7 @@ const DwgRenderer: React.FC<Props> = ({
           <div className="flex flex-col items-center gap-6">
             <div className="w-16 h-16 border-4 border-yellow-500/20 border-t-yellow-500 animate-spin rounded-full"></div>
             <div className="text-center">
-              <span className="block text-yellow-500 font-mono text-xs tracking-widest uppercase mb-1">Cargando DXF</span>
+              <span className="block text-yellow-500 font-mono text-xs tracking-widest uppercase mb-1">{loadingText}</span>
               <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Preparando geometría...</span>
             </div>
           </div>

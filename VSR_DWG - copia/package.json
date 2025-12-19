@@ -1,0 +1,24 @@
+{
+  "name": "dxf-viewer",
+  "version": "1.0.0",
+  "description": "Visor de archivos DXF para planos CAD en GitHub Pages",
+  "main": "viewer.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "serve": "npx http-server . -p 8080"
+  },
+  "keywords": [
+    "dxf",
+    "cad",
+    "viewer",
+    "github-pages"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "@types/node": "^20.10.0"
+  }
+}
+
