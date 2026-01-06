@@ -1149,7 +1149,7 @@ const DwgRenderer: React.FC<Props> = ({
       >
         {dimensions.length > 0 && (
           <button
-            onPointerDown={(e) => {
+            onPointerDown={() => {
                // Use onPointerDown for immediate response
                setDimensions([])
             }}
@@ -1164,7 +1164,7 @@ const DwgRenderer: React.FC<Props> = ({
         )}
         {areas.length > 0 && (
           <button
-            onPointerDown={(e) => {
+            onPointerDown={() => {
                // Use onPointerDown for immediate response
                setAreas([])
             }}
