@@ -24,19 +24,6 @@ const App: React.FC = () => {
     }
   }
 
-  const loadSampleDXF = async () => {
-    try {
-      const res = await fetch('https://threejs.org/examples/models/dxf/M04-100.dxf', { cache: 'no-store' })
-      const blob = await res.blob()
-      const sample = new File([blob], 'Ejemplo-M04-100.dxf', { type: 'application/dxf' })
-      setFile(sample)
-      setCalibration(null)
-      setDocInfo('')
-    } catch {
-      // noop
-    }
-  }
-
   const onCalibrationComplete = useCallback((c: Calibration) => {
     setCalibration(c)
     setActiveTool('measure')
@@ -129,13 +116,6 @@ const App: React.FC = () => {
               <span className="hidden sm:inline">Nuevo Archivo</span>
               <input type="file" className="hidden" accept=".dxf,.dwg" onChange={handleFileChange} />
             </label>
-            <button
-              onClick={loadSampleDXF}
-              className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-100 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition active:scale-95 border border-slate-700"
-              title="Probar DXF de ejemplo"
-            >
-              Probar ejemplo DXF
-            </button>
           </div>
         </header>
 
