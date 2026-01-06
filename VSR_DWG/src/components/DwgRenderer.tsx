@@ -24,7 +24,7 @@ const DwgRenderer: React.FC<Props> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [renderer, setRenderer] = useState<THREE.WebGLRenderer | null>(null)
   const [scene] = useState(() => new THREE.Scene())
-  const [camera] = useState(() => new THREE.OrthographicCamera(-50, 50, 50, -50, -100000, 100000))
+  const [camera] = useState(() => new THREE.OrthographicCamera(-50, 50, 50, -50, -1000000, 1000000))
   const [controls, setControls] = useState<OrbitControls | null>(null)
   const [gridHelper, setGridHelper] = useState<THREE.GridHelper | null>(null)
   const [entityRoot, setEntityRoot] = useState<THREE.Object3D | null>(null)
@@ -147,10 +147,58 @@ const DwgRenderer: React.FC<Props> = ({
     setSnapCandidates(candidates)
   }
 
+  const fitToView = () => {
+    if (!entityRoot || !camera || !controls || !containerRef.current) return
+
+    const box = new THREE.Box3().setFromObject(entityRoot)
+    if (box.isEmpty()) return
+
+    const center = box.getCenter(new THREE.Vector3())
+    const size = box.getSize(new THREE.Vector3())
+    const maxSize = Math.max(size.x, size.y)
+    
+    // Expand view slightly (1.2x)
+    const viewSize = maxSize * 1.2
+    
+    const w = containerRef.current.clientWidth
+    const h = containerRef.current.clientHeight
+    const aspect = w / h
+    
+    // Update camera frustum centered on 0,0 relative to camera position
+    // We want the total width/height to cover viewSize
+    const halfH = viewSize / 2
+    const halfW = halfH * aspect
+    
+    camera.left = -halfW
+    camera.right = halfW
+    camera.top = halfH
+    camera.bottom = -halfH
+    
+    // Reset Zoom to 1 so base frustum matches drawing size
+    camera.zoom = 1
+    if (controls.object instanceof THREE.OrthographicCamera) {
+      controls.object.zoom = 1
+    }
+    setZoomLevel(1)
+    
+    // Move camera and controls to center of object
+    camera.position.set(center.x, center.y, 100)
+    camera.updateProjectionMatrix()
+    
+    controls.target.set(center.x, center.y, 0)
+    controls.update()
+  }
+
   useEffect(() => {
     if (entityRoot) {
       console.log('EntityRoot changed, extracting snap points...')
       extractSnapPoints(entityRoot)
+      
+      // Auto-Fit on load
+      // Use setTimeout to ensure renderer/controls are ready and layout is computed
+      setTimeout(() => {
+         fitToView()
+      }, 100)
     }
   }, [entityRoot])
 
@@ -821,41 +869,6 @@ const DwgRenderer: React.FC<Props> = ({
     return `${d.toFixed(3)} u`
   }
 
-  const fitToView = () => {
-    if (!entityRoot || !camera || !controls || !containerRef.current) return
-
-    const box = new THREE.Box3().setFromObject(entityRoot)
-    if (box.isEmpty()) return
-
-    const center = box.getCenter(new THREE.Vector3())
-    const size = box.getSize(new THREE.Vector3())
-    const maxSize = Math.max(size.x, size.y)
-    
-    // Expand view slightly (1.2x)
-    const viewSize = maxSize * 1.2
-    
-    const w = containerRef.current.clientWidth
-    const h = containerRef.current.clientHeight
-    const aspect = w / h
-    
-    // Update camera frustum centered on 0,0 relative to camera position
-    // We want the total width/height to cover viewSize
-    const halfH = viewSize / 2
-    const halfW = halfH * aspect
-    
-    camera.left = -halfW
-    camera.right = halfW
-    camera.top = halfH
-    camera.bottom = -halfH
-    
-    // Move camera and controls to center of object
-    camera.position.set(center.x, center.y, 100)
-    camera.updateProjectionMatrix()
-    
-    controls.target.set(center.x, center.y, 0)
-    controls.update()
-  }
-
   const handleManualZoom = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!camera || !controls) return
     const newZoom = parseFloat(e.target.value)
@@ -894,7 +907,7 @@ const DwgRenderer: React.FC<Props> = ({
          <input 
             type="range" 
             min="0.1" 
-            max="100" 
+            max="10" 
             step="0.1"
             value={zoomLevel} 
             onChange={handleManualZoom}
