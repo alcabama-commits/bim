@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react'
-import { Calibration, Tool } from './types'
+import { Calibration, Tool, SnapSettings } from './types'
 import DwgRenderer from './components/DwgRenderer'
 
 const App: React.FC = () => {
@@ -9,6 +9,11 @@ const App: React.FC = () => {
   const [isBlueprint, setIsBlueprint] = useState(false)
   const [calibration, setCalibration] = useState<Calibration | null>(null)
   const [docInfo, setDocInfo] = useState<string>('')
+  const [snapSettings, setSnapSettings] = useState<SnapSettings>({
+    enableEndpoint: true,
+    enableMidpoint: true,
+    thresholdPx: 18
+  })
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
@@ -69,6 +74,20 @@ const App: React.FC = () => {
                 <i className="fa-solid fa-ruler text-xs"></i>
               </button>
               <button 
+                onClick={() => setActiveTool('area')}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'area' ? 'bg-indigo-600 shadow-inner' : 'hover:bg-slate-700'}`}
+                title="Área"
+              >
+                <i className="fa-solid fa-draw-polygon text-xs"></i>
+              </button>
+              <button 
+                onClick={() => setActiveTool('dimension')}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'dimension' ? 'bg-indigo-600 shadow-inner' : 'hover:bg-slate-700'}`}
+                title="Cotas"
+              >
+                <i className="fa-solid fa-ruler-combined text-xs"></i>
+              </button>
+              <button 
                 onClick={() => setActiveTool('calibrate')}
                 className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'calibrate' ? 'bg-yellow-600 shadow-inner text-slate-950' : 'hover:bg-slate-700'}`}
                 title="Calibrar Escala"
@@ -79,6 +98,29 @@ const App: React.FC = () => {
 
             <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded transition ${showGrid ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
             <button onClick={() => setIsBlueprint(!isBlueprint)} className={`w-8 h-8 rounded transition ${isBlueprint ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Modo Blueprint"><i className="fa-solid fa-eye-slash text-xs"></i></button>
+            
+            <div className="hidden md:flex items-center gap-2 ml-4 px-2 py-1 rounded bg-slate-800 border border-slate-700">
+              <span className="text-[10px] text-slate-400">Snap:</span>
+              <label className="flex items-center gap-1 text-[10px]">
+                <input type="checkbox" checked={snapSettings.enableEndpoint} onChange={(e) => setSnapSettings(s => ({ ...s, enableEndpoint: e.target.checked }))} />
+                <span>Endpoint</span>
+              </label>
+              <label className="flex items-center gap-1 text-[10px]">
+                <input type="checkbox" checked={snapSettings.enableMidpoint} onChange={(e) => setSnapSettings(s => ({ ...s, enableMidpoint: e.target.checked }))} />
+                <span>Midpoint</span>
+              </label>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-slate-400">Umbral</span>
+                <input
+                  type="range"
+                  min={6}
+                  max={32}
+                  value={snapSettings.thresholdPx}
+                  onChange={(e) => setSnapSettings(s => ({ ...s, thresholdPx: parseInt(e.target.value) }))}
+                />
+                <span className="text-[10px] text-slate-300 w-6 text-center">{snapSettings.thresholdPx}</span>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
@@ -125,6 +167,7 @@ const App: React.FC = () => {
             calibration={calibration}
             onCalibrationComplete={onCalibrationComplete}
             onDocInfo={(info) => setDocInfo(info)}
+            snapSettings={snapSettings}
           />
         )}
 
