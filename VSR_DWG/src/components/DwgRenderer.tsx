@@ -24,7 +24,7 @@ const DwgRenderer: React.FC<Props> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [renderer, setRenderer] = useState<THREE.WebGLRenderer | null>(null)
   const [scene] = useState(() => new THREE.Scene())
-  const [camera] = useState(() => new THREE.OrthographicCamera(-10, 10, 10, -10, -1000, 1000))
+  const [camera] = useState(() => new THREE.OrthographicCamera(-50, 50, 50, -50, -100000, 100000))
   const [controls, setControls] = useState<OrbitControls | null>(null)
   const [gridHelper, setGridHelper] = useState<THREE.GridHelper | null>(null)
   const [entityRoot, setEntityRoot] = useState<THREE.Object3D | null>(null)
@@ -204,8 +204,12 @@ const DwgRenderer: React.FC<Props> = ({
     controls.enabled = true
     controls.enableRotate = false
     controls.screenSpacePanning = true
-    controls.zoomSpeed = 2.0 // Faster zoom
+    controls.zoomSpeed = 1.5
     controls.panSpeed = 1.0
+    controls.minZoom = 0.001
+    controls.maxZoom = 10000
+    controls.enableDamping = true
+    controls.dampingFactor = 0.2
     
     // Update mouse buttons based on tool
     if (tool === 'hand') {
