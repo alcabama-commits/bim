@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "node scripts/generate-gallery.js && vite",
+    "build": "node scripts/generate-gallery.js && tsc && vite build",
+    "gallery": "node scripts/generate-gallery.js",
     "preview": "vite preview --outDir ../docs/VSR_DWG"
   },
   "dependencies": {

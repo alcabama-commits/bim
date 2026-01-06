@@ -1,7 +1,22 @@
 [
   {
-    "name": "Ejemplo Base",
-    "filename": "ejemplo.dxf",
-    "description": "Plano de ejemplo inicial"
+    "name": "13   VIG 1.1   Copia",
+    "filename": "13 - VIG-1.1 - copia.dxf",
+    "description": "Archivo DXF detectado automáticamente"
+  },
+  {
+    "name": "13   VIG 1.1",
+    "filename": "13 - VIG-1.1.dxf",
+    "description": "Archivo DXF detectado automáticamente"
+  },
+  {
+    "name": "22   LOS 1.4   Copia",
+    "filename": "22 - LOS-1.4 - copia.dxf",
+    "description": "Archivo DXF detectado automáticamente"
+  },
+  {
+    "name": "22   LOS 1.4",
+    "filename": "22 - LOS-1.4.dxf",
+    "description": "Archivo DXF detectado automáticamente"
   }
 ]
