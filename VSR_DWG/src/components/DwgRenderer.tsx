@@ -189,6 +189,24 @@ const DwgRenderer: React.FC<Props> = ({
     controls.update()
   }
 
+  const buttonsRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const div = buttonsRef.current
+    if (!div) return
+    
+    // Stop native events from bubbling to OrbitControls/Canvas
+    const stop = (e: Event) => e.stopPropagation()
+    
+    // We need to stop pointer/mouse events to prevent OrbitControls from grabbing interaction
+    const events = ['mousedown', 'pointerdown', 'touchstart', 'wheel', 'dblclick', 'click']
+    events.forEach(ev => div.addEventListener(ev, stop))
+    
+    return () => {
+      events.forEach(ev => div.removeEventListener(ev, stop))
+    }
+  }, [])
+
   useEffect(() => {
     if (entityRoot) {
       console.log('EntityRoot changed, extracting snap points...')
@@ -1124,19 +1142,18 @@ const DwgRenderer: React.FC<Props> = ({
       )}
 
       <div 
+        ref={buttonsRef}
         className="absolute top-14 right-2 z-[100] flex flex-col gap-2 pointer-events-auto"
-        onMouseDown={(e) => e.stopPropagation()}
-        onDoubleClick={(e) => e.stopPropagation()}
-        onWheel={(e) => e.stopPropagation()}
+        // React event handlers are still useful for internal logic if needed, 
+        // but native listeners in useEffect handle the stopping for OrbitControls
       >
         {dimensions.length > 0 && (
           <button
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              console.log('Clearing dimensions');
-              setDimensions([]); 
+            onPointerDown={(e) => {
+               // Use onPointerDown for immediate response
+               setDimensions([])
             }}
-            className="text-xs text-white px-3 py-1.5 rounded bg-red-900/80 border border-red-700 hover:bg-red-800 shadow-lg transition-colors flex items-center gap-2 backdrop-blur-sm"
+            className="text-xs text-white px-3 py-1.5 rounded bg-red-900/80 border border-red-700 hover:bg-red-800 shadow-lg transition-colors flex items-center gap-2 backdrop-blur-sm cursor-pointer"
             title="Borrar todas las cotas"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1147,12 +1164,11 @@ const DwgRenderer: React.FC<Props> = ({
         )}
         {areas.length > 0 && (
           <button
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              console.log('Clearing areas');
-              setAreas([]); 
+            onPointerDown={(e) => {
+               // Use onPointerDown for immediate response
+               setAreas([])
             }}
-            className="text-xs text-white px-3 py-1.5 rounded bg-red-900/80 border border-red-700 hover:bg-red-800 shadow-lg transition-colors flex items-center gap-2 backdrop-blur-sm"
+            className="text-xs text-white px-3 py-1.5 rounded bg-red-900/80 border border-red-700 hover:bg-red-800 shadow-lg transition-colors flex items-center gap-2 backdrop-blur-sm cursor-pointer"
             title="Borrar todas las áreas"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
