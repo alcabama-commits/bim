@@ -39,6 +39,7 @@ const DwgRenderer: React.FC<Props> = ({
   const [polyPoints, setPolyPoints] = useState<THREE.Vector3[]>([])
   const [areas, setAreas] = useState<AreaItem[]>([])
   const [debugStats, setDebugStats] = useState<string>('')
+  const [zoomLevel, setZoomLevel] = useState<number>(1)
 
   const extractSnapPoints = (root: THREE.Object3D) => {
     root.updateMatrixWorld(true)
@@ -212,7 +213,7 @@ const DwgRenderer: React.FC<Props> = ({
     controls.enabled = true
     controls.enableRotate = false
     controls.screenSpacePanning = true
-    controls.zoomSpeed = 0.5
+    controls.zoomSpeed = 0.2
     controls.panSpeed = 1.0
     controls.minZoom = 0.001
     controls.maxZoom = 10000
@@ -224,6 +225,14 @@ const DwgRenderer: React.FC<Props> = ({
     controls.minAzimuthAngle = 0
     controls.maxAzimuthAngle = 0
     
+    // Listen to zoom changes
+    const onChange = () => {
+      if (controls.object instanceof THREE.OrthographicCamera) {
+        setZoomLevel(controls.object.zoom)
+      }
+    }
+    controls.addEventListener('change', onChange)
+
     // Update mouse buttons based on tool
     if (tool === 'hand') {
       controls.mouseButtons = {
@@ -240,6 +249,10 @@ const DwgRenderer: React.FC<Props> = ({
     }
     
     controls.update()
+    
+    return () => {
+      controls.removeEventListener('change', onChange)
+    }
   }, [controls, tool])
 
   useEffect(() => {
@@ -843,6 +856,17 @@ const DwgRenderer: React.FC<Props> = ({
     controls.update()
   }
 
+  const handleManualZoom = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!camera || !controls) return
+    const newZoom = parseFloat(e.target.value)
+    
+    // Smoothly interpolate if needed, but direct setting is fine for slider
+    camera.zoom = newZoom
+    camera.updateProjectionMatrix()
+    controls.update()
+    setZoomLevel(newZoom)
+  }
+
   return (
     <div
       ref={containerRef}
@@ -863,6 +887,22 @@ const DwgRenderer: React.FC<Props> = ({
         </svg>
         Centrar
       </button>
+
+      {/* Zoom Slider */}
+      <div className="absolute top-1/2 right-4 transform -translate-y-1/2 flex flex-col items-center bg-slate-800/80 p-2 rounded-full z-50 gap-2">
+         <span className="text-xs text-white font-mono">{Math.round(zoomLevel * 100)}%</span>
+         <input 
+            type="range" 
+            min="0.1" 
+            max="100" 
+            step="0.1"
+            value={zoomLevel} 
+            onChange={handleManualZoom}
+            className="h-32 w-2 appearance-none bg-slate-600 rounded-lg outline-none slider-vertical"
+            style={{ writingMode: 'bt-lr', WebkitAppearance: 'slider-vertical' } as any}
+            {...{ orient: "vertical" } as any}
+         />
+      </div>
 
       {/* Debug Info Overlay */}
       <div className="absolute top-2 left-2 bg-black/70 text-white p-2 text-xs rounded pointer-events-none z-50">
