@@ -261,12 +261,12 @@ const DwgRenderer: React.FC<Props> = ({
     controls.enabled = true
     controls.enableRotate = false
     controls.screenSpacePanning = true
-    controls.zoomSpeed = 0.1
+    controls.zoomSpeed = 0.025
     controls.panSpeed = 1.0
     controls.minZoom = 0.1
     controls.maxZoom = 10
     controls.enableDamping = true
-    controls.dampingFactor = 0.2
+    controls.dampingFactor = 0.1
     // Strictly lock camera to 2D view (top-down)
     controls.minPolarAngle = Math.PI / 2
     controls.maxPolarAngle = Math.PI / 2
