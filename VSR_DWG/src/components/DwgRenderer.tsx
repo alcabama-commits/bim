@@ -260,6 +260,7 @@ const DwgRenderer: React.FC<Props> = ({
     if (!controls) return
     controls.enabled = true
     controls.enableRotate = false
+    controls.enableZoom = false // Disable built-in zoom to handle manually
     controls.screenSpacePanning = true
     controls.zoomSpeed = 0.025
     controls.panSpeed = 1.0
@@ -900,6 +901,27 @@ const DwgRenderer: React.FC<Props> = ({
     }
   }
 
+  const handleWheel = (e: React.WheelEvent) => {
+    if (!camera || !controls) return
+    
+    // Manual zoom handling to prevent massive jumps
+    // Use exponential decay based on deltaY magnitude to handle both
+    // notched mice (delta ~100) and trackpads (delta ~1-10) gracefully
+    const sensitivity = 0.0005 
+    const delta = e.deltaY
+    const zoomFactor = Math.exp(-delta * sensitivity)
+    
+    let newZoom = camera.zoom * zoomFactor
+    
+    if (newZoom < 0.1) newZoom = 0.1
+    if (newZoom > 10) newZoom = 10
+    
+    camera.zoom = newZoom
+    camera.updateProjectionMatrix()
+    controls.update()
+    setZoomLevel(newZoom)
+  }
+
   return (
     <div
       ref={containerRef}
@@ -908,6 +930,7 @@ const DwgRenderer: React.FC<Props> = ({
       onMouseDown={onMouseDown}
       onDoubleClick={onDoubleClick}
       onMouseMove={onMouseMove}
+      onWheel={handleWheel}
     >
       {/* Fit to View Button */}
       <button 
