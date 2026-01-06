@@ -21,6 +21,7 @@ const DwgRenderer: React.FC<Props> = ({
   file, tool, showGrid, isBlueprint, calibration, onCalibrationComplete, onDocInfo, snapSettings
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
+  const controlsTargetRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [renderer, setRenderer] = useState<THREE.WebGLRenderer | null>(null)
   const [scene] = useState(() => new THREE.Scene())
@@ -189,23 +190,7 @@ const DwgRenderer: React.FC<Props> = ({
     controls.update()
   }
 
-  const buttonsRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const div = buttonsRef.current
-    if (!div) return
-    
-    // Stop native events from bubbling to OrbitControls/Canvas
-    const stop = (e: Event) => e.stopPropagation()
-    
-    // We need to stop pointer/mouse events to prevent OrbitControls from grabbing interaction
-    const events = ['mousedown', 'pointerdown', 'touchstart', 'wheel', 'dblclick', 'click']
-    events.forEach(ev => div.addEventListener(ev, stop))
-    
-    return () => {
-      events.forEach(ev => div.removeEventListener(ev, stop))
-    }
-  }, [])
 
   useEffect(() => {
     if (entityRoot) {
@@ -235,7 +220,7 @@ const DwgRenderer: React.FC<Props> = ({
     const ambient = new THREE.AmbientLight(0xffffff, 1.0)
     scene.add(ambient)
 
-    const ctrls = new OrbitControls(camera, containerRef.current!)
+    const ctrls = new OrbitControls(camera, controlsTargetRef.current!)
     setControls(ctrls)
 
     const animate = () => {
@@ -944,11 +929,6 @@ const DwgRenderer: React.FC<Props> = ({
     <div
       ref={containerRef}
       className={`relative flex-1 overflow-hidden bg-slate-900 h-full ${tool === 'hand' ? 'cursor-grab' : 'cursor-crosshair'}`}
-      onContextMenu={(e) => e.preventDefault()}
-      onMouseDown={onMouseDown}
-      onDoubleClick={onDoubleClick}
-      onMouseMove={onMouseMove}
-      onWheel={handleWheel}
     >
       {/* Fit to View Button */}
       <button 
@@ -997,7 +977,16 @@ const DwgRenderer: React.FC<Props> = ({
         <div>Status: {snap ? `SNAP: ${snap.type}` : 'No Snap'}</div>
       </div>
 
-      <canvas ref={canvasRef} className="w-full h-full block" />
+      <div
+        ref={controlsTargetRef}
+        className="absolute inset-0 w-full h-full"
+        onContextMenu={(e) => e.preventDefault()}
+        onMouseDown={onMouseDown}
+        onDoubleClick={onDoubleClick}
+        onMouseMove={onMouseMove}
+        onWheel={handleWheel}
+      >
+        <canvas ref={canvasRef} className="w-full h-full block" />
 
       {/* Snap Marker */}
       {snap && renderer && (() => {
@@ -1141,18 +1130,14 @@ const DwgRenderer: React.FC<Props> = ({
         </svg>
       )}
 
+      </div>
+
       <div 
-        ref={buttonsRef}
         className="absolute top-14 right-2 z-[100] flex flex-col gap-2 pointer-events-auto"
-        // React event handlers are still useful for internal logic if needed, 
-        // but native listeners in useEffect handle the stopping for OrbitControls
       >
         {dimensions.length > 0 && (
           <button
-            onPointerDown={() => {
-               // Use onPointerDown for immediate response
-               setDimensions([])
-            }}
+            onClick={() => setDimensions([])}
             className="text-xs text-white px-3 py-1.5 rounded bg-red-900/80 border border-red-700 hover:bg-red-800 shadow-lg transition-colors flex items-center gap-2 backdrop-blur-sm cursor-pointer"
             title="Borrar todas las cotas"
           >
@@ -1164,10 +1149,7 @@ const DwgRenderer: React.FC<Props> = ({
         )}
         {areas.length > 0 && (
           <button
-            onPointerDown={() => {
-               // Use onPointerDown for immediate response
-               setAreas([])
-            }}
+            onClick={() => setAreas([])}
             className="text-xs text-white px-3 py-1.5 rounded bg-red-900/80 border border-red-700 hover:bg-red-800 shadow-lg transition-colors flex items-center gap-2 backdrop-blur-sm cursor-pointer"
             title="Borrar todas las áreas"
           >
