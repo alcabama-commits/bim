@@ -261,10 +261,10 @@ const DwgRenderer: React.FC<Props> = ({
     controls.enabled = true
     controls.enableRotate = false
     controls.screenSpacePanning = true
-    controls.zoomSpeed = 0.2
+    controls.zoomSpeed = 0.1
     controls.panSpeed = 1.0
-    controls.minZoom = 0.001
-    controls.maxZoom = 10000
+    controls.minZoom = 0.01
+    controls.maxZoom = 50
     controls.enableDamping = true
     controls.dampingFactor = 0.2
     // Strictly lock camera to 2D view (top-down)
@@ -871,13 +871,30 @@ const DwgRenderer: React.FC<Props> = ({
 
   const handleManualZoom = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!camera || !controls) return
-    const newZoom = parseFloat(e.target.value)
+    let newZoom = parseFloat(e.target.value)
     
-    // Smoothly interpolate if needed, but direct setting is fine for slider
+    // Clamp zoom if coming from input
+    if (isNaN(newZoom)) return
+    if (newZoom < 0.1) newZoom = 0.1
+    if (newZoom > 50) newZoom = 50
+
     camera.zoom = newZoom
     camera.updateProjectionMatrix()
     controls.update()
     setZoomLevel(newZoom)
+  }
+
+  const handleZoomInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!camera || !controls) return
+    const val = parseFloat(e.target.value)
+    if (!isNaN(val)) {
+        // Convert percentage to zoom level
+        const zoom = val / 100
+        camera.zoom = zoom
+        camera.updateProjectionMatrix()
+        controls.update()
+        setZoomLevel(zoom)
+    }
   }
 
   return (
@@ -902,8 +919,17 @@ const DwgRenderer: React.FC<Props> = ({
       </button>
 
       {/* Zoom Slider */}
-      <div className="absolute top-1/2 right-4 transform -translate-y-1/2 flex flex-col items-center bg-slate-800/80 p-2 rounded-full z-50 gap-2">
-         <span className="text-xs text-white font-mono">{Math.round(zoomLevel * 100)}%</span>
+      <div className="absolute top-1/2 right-4 transform -translate-y-1/2 flex flex-col items-center bg-slate-800/80 p-2 rounded-xl z-50 gap-2 shadow-xl border border-slate-700">
+         <div className="flex flex-col items-center gap-1 mb-2">
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider">Zoom</span>
+            <input 
+              type="number" 
+              value={Math.round(zoomLevel * 100)} 
+              onChange={handleZoomInput}
+              className="w-12 bg-slate-900 text-white text-xs text-center rounded border border-slate-600 py-1 focus:border-blue-500 outline-none"
+            />
+            <span className="text-xs text-slate-400">%</span>
+         </div>
          <input 
             type="range" 
             min="0.1" 
@@ -911,7 +937,7 @@ const DwgRenderer: React.FC<Props> = ({
             step="0.1"
             value={zoomLevel} 
             onChange={handleManualZoom}
-            className="h-32 w-2 appearance-none bg-slate-600 rounded-lg outline-none slider-vertical"
+            className="h-40 w-2 appearance-none bg-slate-600 rounded-lg outline-none slider-vertical"
             style={{ writingMode: 'bt-lr', WebkitAppearance: 'slider-vertical' } as any}
             {...{ orient: "vertical" } as any}
          />
