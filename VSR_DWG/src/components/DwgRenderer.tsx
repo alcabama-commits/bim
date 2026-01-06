@@ -182,12 +182,20 @@ const DwgRenderer: React.FC<Props> = ({
       const w = containerRef.current?.clientWidth || 800
       const h = containerRef.current?.clientHeight || 600
       r.setSize(w, h)
+      
+      // Update camera frustum maintaining current scale
       const aspect = w / h
-      const viewSize = 50
-      camera.left = -viewSize * aspect
-      camera.right = viewSize * aspect
-      camera.top = viewSize
-      camera.bottom = -viewSize
+      const frustumHeight = camera.top - camera.bottom
+      const frustumWidth = frustumHeight * aspect
+      
+      const cy = (camera.top + camera.bottom) / 2
+      const cx = (camera.left + camera.right) / 2
+      
+      camera.left = cx - frustumWidth / 2
+      camera.right = cx + frustumWidth / 2
+      camera.top = cy + frustumHeight / 2
+      camera.bottom = cy - frustumHeight / 2
+      
       camera.updateProjectionMatrix()
     }
     window.addEventListener('resize', onResize)
@@ -204,12 +212,17 @@ const DwgRenderer: React.FC<Props> = ({
     controls.enabled = true
     controls.enableRotate = false
     controls.screenSpacePanning = true
-    controls.zoomSpeed = 1.5
+    controls.zoomSpeed = 0.5
     controls.panSpeed = 1.0
     controls.minZoom = 0.001
     controls.maxZoom = 10000
     controls.enableDamping = true
     controls.dampingFactor = 0.2
+    // Strictly lock camera to 2D view (top-down)
+    controls.minPolarAngle = Math.PI / 2
+    controls.maxPolarAngle = Math.PI / 2
+    controls.minAzimuthAngle = 0
+    controls.maxAzimuthAngle = 0
     
     // Update mouse buttons based on tool
     if (tool === 'hand') {
