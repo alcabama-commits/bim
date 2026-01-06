@@ -808,6 +808,41 @@ const DwgRenderer: React.FC<Props> = ({
     return `${d.toFixed(3)} u`
   }
 
+  const fitToView = () => {
+    if (!entityRoot || !camera || !controls || !containerRef.current) return
+
+    const box = new THREE.Box3().setFromObject(entityRoot)
+    if (box.isEmpty()) return
+
+    const center = box.getCenter(new THREE.Vector3())
+    const size = box.getSize(new THREE.Vector3())
+    const maxSize = Math.max(size.x, size.y)
+    
+    // Expand view slightly (1.2x)
+    const viewSize = maxSize * 1.2
+    
+    const w = containerRef.current.clientWidth
+    const h = containerRef.current.clientHeight
+    const aspect = w / h
+    
+    // Update camera frustum centered on 0,0 relative to camera position
+    // We want the total width/height to cover viewSize
+    const halfH = viewSize / 2
+    const halfW = halfH * aspect
+    
+    camera.left = -halfW
+    camera.right = halfW
+    camera.top = halfH
+    camera.bottom = -halfH
+    
+    // Move camera and controls to center of object
+    camera.position.set(center.x, center.y, 100)
+    camera.updateProjectionMatrix()
+    
+    controls.target.set(center.x, center.y, 0)
+    controls.update()
+  }
+
   return (
     <div
       ref={containerRef}
@@ -817,6 +852,18 @@ const DwgRenderer: React.FC<Props> = ({
       onDoubleClick={onDoubleClick}
       onMouseMove={onMouseMove}
     >
+      {/* Fit to View Button */}
+      <button 
+        onClick={fitToView}
+        className="absolute top-2 right-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded shadow-lg text-sm font-medium z-50 flex items-center gap-2"
+        title="Centrar dibujo"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+        </svg>
+        Centrar
+      </button>
+
       {/* Debug Info Overlay */}
       <div className="absolute top-2 left-2 bg-black/70 text-white p-2 text-xs rounded pointer-events-none z-50">
         <div>Pos: {debugInfo.pos}</div>
