@@ -263,8 +263,8 @@ const DwgRenderer: React.FC<Props> = ({
     controls.screenSpacePanning = true
     controls.zoomSpeed = 0.1
     controls.panSpeed = 1.0
-    controls.minZoom = 0.01
-    controls.maxZoom = 50
+    controls.minZoom = 0.1
+    controls.maxZoom = 10
     controls.enableDamping = true
     controls.dampingFactor = 0.2
     // Strictly lock camera to 2D view (top-down)
@@ -876,7 +876,7 @@ const DwgRenderer: React.FC<Props> = ({
     // Clamp zoom if coming from input
     if (isNaN(newZoom)) return
     if (newZoom < 0.1) newZoom = 0.1
-    if (newZoom > 50) newZoom = 50
+    if (newZoom > 10) newZoom = 10
 
     camera.zoom = newZoom
     camera.updateProjectionMatrix()
@@ -889,7 +889,10 @@ const DwgRenderer: React.FC<Props> = ({
     const val = parseFloat(e.target.value)
     if (!isNaN(val)) {
         // Convert percentage to zoom level
-        const zoom = val / 100
+        let zoom = val / 100
+        if (zoom < 0.1) zoom = 0.1
+        if (zoom > 10) zoom = 10
+
         camera.zoom = zoom
         camera.updateProjectionMatrix()
         controls.update()
