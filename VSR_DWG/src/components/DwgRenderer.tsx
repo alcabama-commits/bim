@@ -1123,17 +1123,22 @@ const DwgRenderer: React.FC<Props> = ({
         </svg>
       )}
 
-      <div className="absolute top-16 right-6 z-50 flex gap-2">
+      <div 
+        className="absolute top-16 right-6 z-[60] flex gap-2"
+        onMouseDown={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
+      >
         <button
-          onClick={() => setDimensions([])}
-          className="text-[10px] px-2 py-1 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700"
+          onClick={(e) => { e.stopPropagation(); setDimensions([]); }}
+          className="text-[10px] text-white px-2 py-1 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 shadow-md transition-colors"
           title="Limpiar Cotas"
         >
           Limpiar Cotas
         </button>
         <button
-          onClick={() => setAreas([])}
-          className="text-[10px] px-2 py-1 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700"
+          onClick={(e) => { e.stopPropagation(); setAreas([]); }}
+          className="text-[10px] text-white px-2 py-1 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 shadow-md transition-colors"
           title="Limpiar Áreas"
         >
           Limpiar Áreas
