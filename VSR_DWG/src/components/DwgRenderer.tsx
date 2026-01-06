@@ -1124,25 +1124,43 @@ const DwgRenderer: React.FC<Props> = ({
       )}
 
       <div 
-        className="absolute top-16 right-6 z-[60] flex gap-2"
+        className="absolute top-14 right-2 z-[100] flex flex-col gap-2 pointer-events-auto"
         onMouseDown={(e) => e.stopPropagation()}
         onDoubleClick={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
-        <button
-          onClick={(e) => { e.stopPropagation(); setDimensions([]); }}
-          className="text-[10px] text-white px-2 py-1 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 shadow-md transition-colors"
-          title="Limpiar Cotas"
-        >
-          Limpiar Cotas
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); setAreas([]); }}
-          className="text-[10px] text-white px-2 py-1 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700 shadow-md transition-colors"
-          title="Limpiar Áreas"
-        >
-          Limpiar Áreas
-        </button>
+        {dimensions.length > 0 && (
+          <button
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              console.log('Clearing dimensions');
+              setDimensions([]); 
+            }}
+            className="text-xs text-white px-3 py-1.5 rounded bg-red-900/80 border border-red-700 hover:bg-red-800 shadow-lg transition-colors flex items-center gap-2 backdrop-blur-sm"
+            title="Borrar todas las cotas"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Borrar Cotas
+          </button>
+        )}
+        {areas.length > 0 && (
+          <button
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              console.log('Clearing areas');
+              setAreas([]); 
+            }}
+            className="text-xs text-white px-3 py-1.5 rounded bg-red-900/80 border border-red-700 hover:bg-red-800 shadow-lg transition-colors flex items-center gap-2 backdrop-blur-sm"
+            title="Borrar todas las áreas"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Borrar Áreas
+          </button>
+        )}
       </div>
       {loading && (
         <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50">
