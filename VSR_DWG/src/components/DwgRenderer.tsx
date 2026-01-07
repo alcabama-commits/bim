@@ -27,7 +27,6 @@ const DwgRenderer: React.FC<Props> = ({
   const [scene] = useState(() => new THREE.Scene())
   const [camera] = useState(() => new THREE.OrthographicCamera(-50, 50, 50, -50, -1000000, 1000000))
   const [controls, setControls] = useState<OrbitControls | null>(null)
-  const [gridHelper, setGridHelper] = useState<THREE.GridHelper | null>(null)
   const [entityRoot, setEntityRoot] = useState<THREE.Object3D | null>(null)
   const [points, setPoints] = useState<THREE.Vector3[]>([])
   const [snap, setSnap] = useState<{ type: 'endpoint' | 'midpoint', pos: THREE.Vector3 } | null>(null)
@@ -351,18 +350,55 @@ const DwgRenderer: React.FC<Props> = ({
   }, [isBlueprint, renderer, entityRoot])
 
   useEffect(() => {
-    if (!renderer) return
-    if (showGrid && !gridHelper) {
-      const gh = new THREE.GridHelper(1000, 100, 0x334155, 0x334155)
-      ;(gh.material as THREE.LineBasicMaterial).opacity = 0.2
-      ;(gh.material as THREE.LineBasicMaterial).transparent = true
-      scene.add(gh)
-      setGridHelper(gh)
-    } else if (!showGrid && gridHelper) {
-      scene.remove(gridHelper)
-      setGridHelper(null)
+    if (!renderer || !showGrid) return
+
+    let size = 2000
+    let divisions = 20
+    let center = new THREE.Vector3(0, 0, 0)
+
+    if (entityRoot) {
+      const box = new THREE.Box3().setFromObject(entityRoot)
+      if (!box.isEmpty()) {
+        const boxCenter = box.getCenter(new THREE.Vector3())
+        const boxSize = box.getSize(new THREE.Vector3())
+        const maxDim = Math.max(boxSize.x, boxSize.y)
+        
+        // Make grid large enough to cover everything plus margin
+        size = Math.max(2000, maxDim * 5)
+        center.copy(boxCenter)
+        
+        // Calculate divisions for reasonable density
+        // Aim for lines every ~50-100 units or so depending on scale
+        // magnitude = 10^floor(log10(maxDim))
+        const magnitude = Math.pow(10, Math.floor(Math.log10(maxDim || 1)))
+        // spacing e.g. magnitude / 2
+        const spacing = magnitude / 2 || 10
+        divisions = Math.max(10, Math.floor(size / spacing))
+      }
     }
-  }, [showGrid, gridHelper, scene, renderer])
+
+    const gh = new THREE.GridHelper(size, divisions, 0x334155, 0x1e293b)
+    gh.rotation.x = Math.PI / 2
+    gh.position.copy(center)
+    // slightly behind to not z-fight with lines at z=0?
+    // Actually lines are at z=0. If grid is at z=0, z-fighting occurs.
+    // Move grid to z=-1
+    gh.position.z = -0.5
+    
+    ;(gh.material as THREE.LineBasicMaterial).opacity = 0.25
+    ;(gh.material as THREE.LineBasicMaterial).transparent = true
+    scene.add(gh)
+
+    return () => {
+      scene.remove(gh)
+      gh.geometry.dispose()
+      if (Array.isArray(gh.material)) {
+        gh.material.forEach(m => m.dispose())
+      } else {
+        gh.material.dispose()
+      }
+    }
+  }, [showGrid, entityRoot, scene, renderer])
 
   useEffect(() => {
     if (!file || !renderer) return
