@@ -59,12 +59,14 @@ window.addEventListener('resize', () => {
 
 // IFC Loading
 const ifcLoader = new IFCLoader();
-ifcLoader.ifcManager.setWasmPath('./wasm/'); // Relative path for GitHub Pages
+// EXPLICITLY set the WASM path to check if this is the issue
+// Using ./wasm/ assumes index.html is at root and wasm folder is next to it
+ifcLoader.ifcManager.setWasmPath('./wasm/'); 
 
 let currentModel: THREE.Object3D | null = null;
 
 async function loadModel(url: string) {
-    console.log(`[loadModel] Attempting to load: ${url}`);
+    logToScreen(`[loadModel] Starting load for: ${url}`);
     
     // Clear previous model
     if (currentModel) {
@@ -73,16 +75,19 @@ async function loadModel(url: string) {
     }
 
     try {
+        logToScreen(`[loadModel] Fetching...`);
         const model = await ifcLoader.loadAsync(url);
         currentModel = model;
         scene.add(model);
-        console.log('[loadModel] Success:', model);
+        logToScreen(`[loadModel] Success! Model added to scene.`);
 
         // Auto-center camera
         const box = new THREE.Box3().setFromObject(model);
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
         
+        logToScreen(`[loadModel] Model size: ${JSON.stringify(size)}`);
+
         const maxDim = Math.max(size.x, size.y, size.z);
         const fov = camera.fov * (Math.PI / 180);
         let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2));
@@ -99,8 +104,8 @@ async function loadModel(url: string) {
         controls.target.copy(center);
         controls.update();
         
-    } catch (error) {
-        console.error('[loadModel] Error:', error);
+    } catch (error: any) {
+        logToScreen(`[loadModel] ERROR: ${error.message || error}`, true);
         alert(`Error loading model: ${error}`);
     }
 }
