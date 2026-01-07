@@ -725,6 +725,7 @@ const DwgRenderer: React.FC<Props> = ({
   }
 
   const [debugInfo, setDebugInfo] = useState<{pos: string, candidates: number, zoom: string}>({ pos: '', candidates: 0, zoom: '' })
+  const [showInfo, setShowInfo] = useState(false)
 
   const onMouseMove = (e: React.MouseEvent) => {
     // console.log('MouseMove', tool, snapCandidates.length)

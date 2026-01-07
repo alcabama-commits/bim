@@ -14,14 +14,36 @@ if (!fs.existsSync(drawingsDir)) {
   process.exit(1);
 }
 
-// Get all files
-const files = fs.readdirSync(drawingsDir);
+// Helper to get all files recursively
+const getFiles = (dir, rootDir) => {
+  let results = [];
+  const list = fs.readdirSync(dir);
+  
+  list.forEach(file => {
+    const fullPath = path.join(dir, file);
+    const stat = fs.statSync(fullPath);
+    
+    if (stat && stat.isDirectory()) {
+      results = results.concat(getFiles(fullPath, rootDir));
+    } else {
+      const ext = path.extname(file).toLowerCase();
+      if (ext === '.dxf' || ext === '.dwg') {
+        // Calculate relative path from drawingsDir (e.g., "1/file.dxf")
+        // Use forward slashes for web compatibility
+        const relativePath = path.relative(rootDir, fullPath).split(path.sep).join('/');
+        results.push({
+            fullPath,
+            relativePath,
+            filename: file,
+            dirName: path.dirname(relativePath) // "1" or "."
+        });
+      }
+    }
+  });
+  return results;
+};
 
-// Filter for .dxf and .dwg
-const drawingFiles = files.filter(file => {
-  const ext = path.extname(file).toLowerCase();
-  return ext === '.dxf' || ext === '.dwg';
-});
+const allFiles = getFiles(drawingsDir, drawingsDir);
 
 // Get existing list if available to preserve descriptions
 let existingData = {};
@@ -38,10 +60,18 @@ if (fs.existsSync(outputFile)) {
 }
 
 // Create list
-const galleryList = drawingFiles.map(filename => {
-  // Use existing data if available
-  if (existingData[filename]) {
-    return existingData[filename];
+const galleryList = allFiles.map(fileInfo => {
+  const { relativePath, filename, dirName } = fileInfo;
+
+  // Use existing data if available (matching by the full relative path)
+  if (existingData[relativePath]) {
+    // Ensure the folder property is updated if the file moved (though user said "any folder")
+    // If we want to strictly enforce the directory structure as the folder name:
+    const folderName = dirName === '.' ? 'General' : dirName;
+    return {
+        ...existingData[relativePath],
+        folder: folderName // Update folder just in case
+    };
   }
 
   // Otherwise create new entry
@@ -49,10 +79,13 @@ const galleryList = drawingFiles.map(filename => {
     .replace(/[-_]/g, ' ') // Replace hyphens/underscores with spaces
     .replace(/\b\w/g, l => l.toUpperCase()); // Capitalize first letters
 
+  const folder = dirName === '.' ? 'General' : dirName;
+
   return {
     name: name,
-    filename: filename,
-    description: `Archivo ${path.extname(filename).toUpperCase().substring(1)} detectado autom\u00e1ticamente`
+    filename: relativePath, // Store relative path as filename identifier
+    folder: folder,
+    description: `Archivo ${path.extname(filename).toUpperCase().substring(1)} detectado automáticamente`
   };
 });
 
