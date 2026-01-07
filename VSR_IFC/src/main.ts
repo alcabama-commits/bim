@@ -105,3 +105,26 @@ if (input) {
         }
     }, false);
 }
+
+// Load models from JSON
+const modelSelect = document.getElementById('model-select') as HTMLSelectElement;
+if (modelSelect) {
+    fetch('models.json')
+        .then(response => response.json())
+        .then(models => {
+            models.forEach((model: { name: string; path: string }) => {
+                const option = document.createElement('option');
+                option.value = model.path;
+                option.textContent = model.name;
+                modelSelect.appendChild(option);
+            });
+        })
+        .catch(error => console.error('Error loading models.json:', error));
+
+    modelSelect.addEventListener('change', (event) => {
+        const url = (event.target as HTMLSelectElement).value;
+        if (url) {
+            loadModel(url);
+        }
+    });
+}
