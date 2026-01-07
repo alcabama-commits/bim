@@ -40,7 +40,7 @@ const App: React.FC = () => {
     setShowRepoModal(true)
     try {
       const baseUrl = (import.meta as any).env?.BASE_URL || './'
-      const res = await fetch(`${baseUrl}drawings/list.json?t=${Date.now()}`)
+      const res = await fetch(`${baseUrl}Drawing/list.json?t=${Date.now()}`)
       if (!res.ok) throw new Error('No se pudo cargar la lista de archivos')
       const data = await res.json()
       setRepoFiles(data)
@@ -56,7 +56,7 @@ const App: React.FC = () => {
     try {
       setIsLoadingRepo(true)
       const baseUrl = (import.meta as any).env?.BASE_URL || './'
-      const url = `${baseUrl}drawings/${rf.filename}`
+      const url = `${baseUrl}Drawing/${rf.filename}`
       const res = await fetch(url)
       if (!res.ok) throw new Error('Error al descargar archivo')
       const blob = await res.blob()
@@ -202,7 +202,7 @@ const App: React.FC = () => {
                   <div className="text-center py-12 text-slate-500">
                     <i className="fa-regular fa-folder-open text-4xl mb-3 opacity-50"></i>
                     <p>No hay archivos disponibles en la galería.</p>
-                    <p className="text-xs mt-2 text-slate-600">Sube archivos a /public/drawings y actualiza list.json</p>
+                    <p className="text-xs mt-2 text-slate-600">Sube archivos a /public/Drawing y actualiza list.json</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

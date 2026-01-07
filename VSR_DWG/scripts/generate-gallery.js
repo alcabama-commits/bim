@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const drawingsDir = path.join(__dirname, '../public/drawings');
+const drawingsDir = path.join(__dirname, '../public/Drawing');
 const outputFile = path.join(drawingsDir, 'list.json');
 
 // Ensure directory exists
