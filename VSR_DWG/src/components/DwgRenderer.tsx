@@ -168,6 +168,7 @@ const DwgRenderer: React.FC<Props> = ({
     
     const w = containerRef.current.clientWidth
     const h = containerRef.current.clientHeight
+    if (w === 0 || h === 0) return
     const aspect = w / h
     
     // Update camera frustum centered on 0,0 relative to camera position
@@ -434,8 +435,11 @@ const DwgRenderer: React.FC<Props> = ({
     animate()
 
     const onResize = () => {
-      const w = containerRef.current?.clientWidth || 800
-      const h = containerRef.current?.clientHeight || 600
+      if (!containerRef.current || !camera) return
+      const w = containerRef.current.clientWidth
+      const h = containerRef.current.clientHeight
+      if (w === 0 || h === 0) return
+
       r.setSize(w, h)
       
       // Update camera frustum maintaining current scale
@@ -453,9 +457,20 @@ const DwgRenderer: React.FC<Props> = ({
       
       camera.updateProjectionMatrix()
     }
-    window.addEventListener('resize', onResize)
+
+    const resizeObserver = new ResizeObserver(() => {
+      onResize()
+    })
+    
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+
+    // Initial size check
+    onResize()
+
     return () => {
-      window.removeEventListener('resize', onResize)
+      resizeObserver.disconnect()
       ctrls.dispose()
       r.dispose()
     }
