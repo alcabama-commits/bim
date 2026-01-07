@@ -59,49 +59,99 @@ window.addEventListener('resize', () => {
 
 // IFC Loading
 const ifcLoader = new IFCLoader();
-ifcLoader.ifcManager.setWasmPath('wasm/');
+ifcLoader.ifcManager.setWasmPath('./wasm/'); // Relative path for GitHub Pages
 
+let currentModel: THREE.Object3D | null = null;
+
+async function loadModel(url: string) {
+    console.log(`[loadModel] Attempting to load: ${url}`);
+    
+    // Clear previous model
+    if (currentModel) {
+        scene.remove(currentModel);
+        currentModel = null;
+    }
+
+    try {
+        const model = await ifcLoader.loadAsync(url);
+        currentModel = model;
+        scene.add(model);
+        console.log('[loadModel] Success:', model);
+
+        // Auto-center camera
+        const box = new THREE.Box3().setFromObject(model);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const fov = camera.fov * (Math.PI / 180);
+        let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2));
+        
+        cameraZ *= 1.5; // Add padding
+        
+        const direction = new THREE.Vector3()
+            .subVectors(camera.position, center)
+            .normalize();
+
+        camera.position.copy(direction.multiplyScalar(cameraZ).add(center));
+        camera.lookAt(center);
+        
+        controls.target.copy(center);
+        controls.update();
+        
+    } catch (error) {
+        console.error('[loadModel] Error:', error);
+        alert(`Error loading model: ${error}`);
+    }
+}
+
+// File Input Handler
 const input = document.getElementById('file-input') as HTMLInputElement;
 if (input) {
     input.addEventListener('change', async (event) => {
         const file = (event.target as HTMLInputElement).files?.[0];
         if (file) {
             const url = URL.createObjectURL(file);
-            try {
-                const model = await ifcLoader.loadAsync(url);
-                scene.add(model);
-                console.log('Model loaded:', model);
-
-                // Auto-center camera
-                if (model) {
-                    const box = new THREE.Box3().setFromObject(model);
-                    const center = box.getCenter(new THREE.Vector3());
-                    const size = box.getSize(new THREE.Vector3());
-                    
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    const fov = camera.fov * (Math.PI / 180);
-                    let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2)); // Basic distance calculation
-                    
-                    // Adjust for aspect ratio
-                    cameraZ *= 1.5; // Add some padding
-                    
-                    const direction = new THREE.Vector3()
-                        .subVectors(camera.position, center)
-                        .normalize();
-
-                    // Move camera to new position looking at center
-                    camera.position.copy(direction.multiplyScalar(cameraZ).add(center));
-                    camera.lookAt(center);
-                    
-                    // Update controls target
-                    controls.target.copy(center);
-                    controls.update();
-                    
-                    console.log('Camera centered at:', center, 'Distance:', cameraZ);
-                }
-            } catch (error) {
-                console.error('Error loading IFC:', error);
-            }
+            await loadModel(url);
         }
     }, false);
+}
+
+// Model Selector Logic
+const modelSelect = document.getElementById('model-select') as HTMLSelectElement;
+
+if (modelSelect) {
+    // Fetch models.json
+    fetch('./models.json')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(models => {
+            console.log('Loaded models list:', models);
+            models.forEach((model: { name: string; path: string }) => {
+                const option = document.createElement('option');
+                option.value = model.path; // e.g., "models/file.ifc"
+                option.textContent = model.name;
+                modelSelect.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading models.json:', error);
+            const option = document.createElement('option');
+            option.textContent = "Error loading list";
+            modelSelect.appendChild(option);
+        });
+
+    // Handle selection
+    modelSelect.addEventListener('change', (event) => {
+        const selectedPath = (event.target as HTMLSelectElement).value;
+        if (selectedPath) {
+            // Ensure path is relative
+            const finalPath = selectedPath.startsWith('./') ? selectedPath : `./${selectedPath}`;
+            loadModel(finalPath);
+        }
+    });
 }
