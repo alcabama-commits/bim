@@ -3,6 +3,8 @@ import { IFCLoader } from 'web-ifc-three/IFCLoader';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import './style.css';
 
+console.log("Main script imported");
+
 // --- VISUAL LOGGER SETUP ---
 const debugConsole = document.getElementById('debug-console');
 // Attach to window to ensure global availability and avoid ReferenceErrors

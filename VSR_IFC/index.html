@@ -12,6 +12,35 @@
       <div id="debug-console" style="position: fixed; bottom: 0; left: 0; width: 100%; height: 150px; background: rgba(0,0,0,0.8); color: lime; font-family: monospace; overflow-y: auto; z-index: 9999; padding: 10px; font-size: 12px; pointer-events: none;">
         <div>Debug Console initialized...</div>
       </div>
+      <script>
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+          const consoleDiv = document.getElementById('debug-console');
+          if (consoleDiv) {
+            const div = document.createElement('div');
+            div.style.color = 'red';
+            div.textContent = `[Global Error] ${msg} at ${url}:${lineNo}:${columnNo}`;
+            consoleDiv.appendChild(div);
+            // Also show stack trace if available
+            if (error && error.stack) {
+               const stackDiv = document.createElement('div');
+               stackDiv.style.color = '#ffaaaa';
+               stackDiv.style.whiteSpace = 'pre-wrap';
+               stackDiv.textContent = error.stack;
+               consoleDiv.appendChild(stackDiv);
+            }
+          }
+          return false;
+        };
+        window.addEventListener('unhandledrejection', function(event) {
+          const consoleDiv = document.getElementById('debug-console');
+          if (consoleDiv) {
+            const div = document.createElement('div');
+            div.style.color = 'orange';
+            div.textContent = `[Unhandled Promise] ${event.reason}`;
+            consoleDiv.appendChild(div);
+          }
+        });
+      </script>
       <div class="ui-container">
         <select id="model-select">
           <option value="" disabled selected>Select a model</option>
