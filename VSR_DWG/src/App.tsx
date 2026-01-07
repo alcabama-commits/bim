@@ -43,6 +43,7 @@ interface RepoFile {
   name: string
   filename: string
   description?: string
+  folder?: string
 }
 
 const App: React.FC = () => {

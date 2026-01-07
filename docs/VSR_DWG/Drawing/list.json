@@ -1,22 +1,26 @@
 [
   {
-    "name": "13   VIG 1.1   Copia",
-    "filename": "13 - VIG-1.1 - copia.dxf",
-    "description": "Archivo DXF detectado automáticamente"
+    "name": "13 - VIG 1.1",
+    "filename": "1/13 - VIG-1.1.dxf",
+    "folder": "1",
+    "description": "Vigas"
   },
   {
-    "name": "13   VIG 1.1",
-    "filename": "13 - VIG-1.1.dxf",
-    "description": "Archivo DXF detectado automáticamente"
+    "name": "22 - LOS 1.4",
+    "filename": "1/22 - LOS-1.4.dxf",
+    "folder": "1",
+    "description": "Losas"
   },
   {
-    "name": "22   LOS 1.4   Copia",
-    "filename": "22 - LOS-1.4 - copia.dxf",
-    "description": "Archivo DXF detectado automáticamente"
+    "name": "13 - VIG 1.1 (Copia)",
+    "filename": "2/13 - VIG-1.1 - copia.dxf",
+    "folder": "2",
+    "description": "Copia Vigas"
   },
   {
-    "name": "22   LOS 1.4",
-    "filename": "22 - LOS-1.4.dxf",
-    "description": "Archivo DXF detectado automáticamente"
+    "name": "22 - LOS 1.4 (Copia)",
+    "filename": "2/22 - LOS-1.4 - copia.dxf",
+    "folder": "2",
+    "description": "Copia Losas"
   }
 ]
