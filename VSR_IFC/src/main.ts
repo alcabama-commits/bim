@@ -109,8 +109,13 @@ if (input) {
 // Load models from JSON
 const modelSelect = document.getElementById('model-select') as HTMLSelectElement;
 if (modelSelect) {
-    fetch('models.json')
-        .then(response => response.json())
+    fetch('./models.json')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(models => {
             models.forEach((model: { name: string; path: string }) => {
                 const option = document.createElement('option');
@@ -119,7 +124,12 @@ if (modelSelect) {
                 modelSelect.appendChild(option);
             });
         })
-        .catch(error => console.error('Error loading models.json:', error));
+        .catch(error => {
+             console.error('Error loading models.json:', error);
+             const option = document.createElement('option');
+             option.textContent = "Error loading list";
+             modelSelect.appendChild(option);
+        });
 
     modelSelect.addEventListener('change', (event) => {
         const url = (event.target as HTMLSelectElement).value;
