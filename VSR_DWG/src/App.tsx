@@ -23,8 +23,13 @@ const App: React.FC = () => {
   
   // Repository files state
   const [repoFiles, setRepoFiles] = useState<RepoFile[]>([])
-  const [showRepoModal, setShowRepoModal] = useState(false)
   const [isLoadingRepo, setIsLoadingRepo] = useState(false)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+
+  // Load files on mount
+  React.useEffect(() => {
+    loadRepoFiles()
+  }, [])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
@@ -37,7 +42,6 @@ const App: React.FC = () => {
 
   const loadRepoFiles = async () => {
     setIsLoadingRepo(true)
-    setShowRepoModal(true)
     try {
       const baseUrl = (import.meta as any).env?.BASE_URL || './'
       const res = await fetch(`${baseUrl}Drawing/list.json?t=${Date.now()}`)
@@ -64,7 +68,6 @@ const App: React.FC = () => {
       setFile(newFile)
       setCalibration(null)
       setDocInfo('')
-      setShowRepoModal(false)
     } catch (err) {
       alert('Error al cargar el archivo del repositorio')
       console.error(err)
@@ -80,9 +83,73 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-full bg-slate-950 text-slate-100 overflow-hidden select-none">
+      {/* Sidebar */}
+      <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} bg-slate-900 border-r border-slate-800 transition-all duration-300 flex flex-col overflow-hidden relative`}>
+        <div className="h-12 flex items-center justify-between px-4 border-b border-slate-800 shrink-0">
+          <span className="text-sm font-bold uppercase tracking-wider text-slate-400">Galería</span>
+          <button onClick={() => setIsSidebarOpen(false)} className="text-slate-500 hover:text-white">
+            <i className="fa-solid fa-chevron-left"></i>
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+          {isLoadingRepo && repoFiles.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-slate-500">
+              <i className="fa-solid fa-circle-notch fa-spin text-xl mb-2"></i>
+              <span className="text-[10px]">Cargando...</span>
+            </div>
+          ) : repoFiles.length === 0 ? (
+            <div className="text-center py-8 text-slate-500 px-2">
+              <p className="text-xs">No hay archivos</p>
+            </div>
+          ) : (
+            repoFiles.map((rf, i) => (
+              <button
+                key={i}
+                onClick={() => selectRepoFile(rf)}
+                className={`w-full text-left p-2.5 rounded-lg border transition group flex flex-col gap-1
+                  ${file?.name === rf.filename 
+                    ? 'bg-indigo-600/20 border-indigo-500/50' 
+                    : 'bg-slate-800/50 border-slate-700 hover:bg-slate-800 hover:border-yellow-500/50'
+                  }`}
+              >
+                <div className="flex items-center gap-2">
+                  <i className={`fa-regular fa-file-lines text-xs ${file?.name === rf.filename ? 'text-indigo-400' : 'text-slate-500 group-hover:text-yellow-500'}`}></i>
+                  <span className={`text-xs font-bold truncate ${file?.name === rf.filename ? 'text-indigo-100' : 'text-slate-300 group-hover:text-white'}`}>
+                    {rf.name}
+                  </span>
+                </div>
+                {rf.description && (
+                  <span className="text-[10px] text-slate-500 line-clamp-1 ml-5">
+                    {rf.description}
+                  </span>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+
+        <div className="p-2 border-t border-slate-800 bg-slate-900/50">
+          <label className="cursor-pointer bg-yellow-600 hover:bg-yellow-500 text-slate-950 px-3 py-2 rounded-lg text-[10px] font-black uppercase transition active:scale-95 flex items-center justify-center gap-2 w-full">
+            <i className="fa-solid fa-upload"></i>
+            <span>Subir Archivo</span>
+            <input type="file" className="hidden" accept=".dxf,.dwg" onChange={handleFileChange} />
+          </label>
+        </div>
+      </div>
+
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
         <header className="h-12 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between z-30 shadow-md">
           <div className="flex items-center gap-4">
+            {!isSidebarOpen && (
+              <button 
+                onClick={() => setIsSidebarOpen(true)}
+                className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 text-slate-400 hover:text-white transition mr-2"
+                title="Mostrar Galería"
+              >
+                <i className="fa-solid fa-bars"></i>
+              </button>
+            )}
             <div className="flex items-center gap-2">
               <i className="fa-solid fa-ruler-combined text-yellow-500"></i>
               <span className="text-sm font-bold tracking-tighter uppercase">
@@ -160,80 +227,11 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={loadRepoFiles}
-              className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-100 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition active:scale-95 border border-slate-700 flex items-center gap-2"
-              title="Abrir desde Repositorio"
-            >
-              <i className="fa-solid fa-folder-open"></i>
-              <span className="hidden sm:inline">Galería</span>
-            </button>
-            <label className="cursor-pointer bg-yellow-600 hover:bg-yellow-500 text-slate-950 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition active:scale-95 flex items-center gap-2">
-              <i className="fa-solid fa-upload"></i>
-              <span className="hidden sm:inline">Nuevo Archivo</span>
-              <input type="file" className="hidden" accept=".dxf,.dwg" onChange={handleFileChange} />
-            </label>
+            {/* Gallery button removed, upload moved to sidebar */}
           </div>
         </header>
 
-        {showRepoModal && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[80vh]">
-              <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <i className="fa-solid fa-folder-open text-yellow-500"></i>
-                  Galería de Planos
-                </h3>
-                <button 
-                  onClick={() => setShowRepoModal(false)}
-                  className="w-8 h-8 rounded hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition"
-                >
-                  <i className="fa-solid fa-xmark"></i>
-                </button>
-              </div>
-              
-              <div className="p-4 overflow-y-auto flex-1">
-                {isLoadingRepo && repoFiles.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-slate-500">
-                    <i className="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i>
-                    <span className="text-xs uppercase tracking-widest">Cargando lista...</span>
-                  </div>
-                ) : repoFiles.length === 0 ? (
-                  <div className="text-center py-12 text-slate-500">
-                    <i className="fa-regular fa-folder-open text-4xl mb-3 opacity-50"></i>
-                    <p>No hay archivos disponibles en la galería.</p>
-                    <p className="text-xs mt-2 text-slate-600">Sube archivos a /public/Drawing y actualiza list.json</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {repoFiles.map((rf, i) => (
-                      <button
-                        key={i}
-                        onClick={() => selectRepoFile(rf)}
-                        className="flex flex-col items-start p-3 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700 hover:border-yellow-500/50 transition group text-left"
-                      >
-                        <div className="flex items-center gap-2 mb-1 w-full">
-                          <i className="fa-regular fa-file-lines text-yellow-500 group-hover:scale-110 transition"></i>
-                          <span className="font-bold text-sm truncate flex-1">{rf.name}</span>
-                        </div>
-                        {rf.description && (
-                          <p className="text-xs text-slate-400 line-clamp-2">{rf.description}</p>
-                        )}
-                        <span className="text-[10px] text-slate-500 font-mono mt-2">{rf.filename}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              
-              <div className="p-4 border-t border-slate-800 bg-slate-900/50 rounded-b-2xl">
-                <p className="text-[10px] text-slate-500 text-center">
-                  Selecciona un archivo para abrirlo inmediatamente.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Modal removed */}
 
         {!file ? (
           <div className="flex-1 flex flex-col items-center justify-center bg-slate-900 border-2 border-dashed border-slate-800 m-8 rounded-3xl">
