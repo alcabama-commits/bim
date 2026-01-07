@@ -149,7 +149,24 @@ const DwgRenderer: React.FC<Props> = ({
   }
 
   const fitToView = () => {
-    if (!entityRoot || !camera || !controls || !containerRef.current) return
+    if (!entityRoot || !camera || !controls || !containerRef.current || !renderer) return
+
+    // Force resize before fitting
+    const w = containerRef.current.clientWidth
+    const h = containerRef.current.clientHeight
+    
+    if (w === 0 || h === 0) {
+       // Retry if size is not ready
+       setTimeout(fitToView, 100)
+       return
+    }
+
+    renderer.setSize(w, h)
+    camera.left = -w / 2
+    camera.right = w / 2
+    camera.top = h / 2
+    camera.bottom = -h / 2
+    camera.updateProjectionMatrix()
 
     const box = new THREE.Box3().setFromObject(entityRoot)
     if (box.isEmpty()) return
@@ -161,8 +178,6 @@ const DwgRenderer: React.FC<Props> = ({
     // Expand view slightly (1.2x)
     const viewSize = maxSize * 1.2
     
-    const w = containerRef.current.clientWidth
-    const h = containerRef.current.clientHeight
     const aspect = w / h
     
     // Update camera frustum centered on 0,0 relative to camera position
