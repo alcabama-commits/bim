@@ -156,6 +156,15 @@ const DwgRenderer: React.FC<Props> = ({
   const fitToView = () => {
     if (!entityRoot || !camera || !controls || !containerRef.current) return
 
+    const w = containerRef.current.clientWidth
+    const h = containerRef.current.clientHeight
+
+    if (w === 0 || h === 0) {
+       // Retry if size is not ready
+       setTimeout(fitToView, 100)
+       return
+    }
+
     const box = new THREE.Box3().setFromObject(entityRoot)
     if (box.isEmpty()) return
 
@@ -166,9 +175,6 @@ const DwgRenderer: React.FC<Props> = ({
     // Expand view slightly (1.2x)
     const viewSize = maxSize * 1.2
     
-    const w = containerRef.current.clientWidth
-    const h = containerRef.current.clientHeight
-    if (w === 0 || h === 0) return
     const aspect = w / h
     
     // Update camera frustum centered on 0,0 relative to camera position
@@ -1056,8 +1062,8 @@ const DwgRenderer: React.FC<Props> = ({
       </div>
 
       {/* Layout Tabs (Bottom) */}
-      {layouts.length > 1 && (
-        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-50 flex items-center bg-slate-800/90 p-1 rounded-lg border border-slate-700 shadow-xl max-w-[90vw] overflow-x-auto custom-scrollbar">
+      {layouts.length > 0 && (
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-[100] flex items-center bg-slate-800/90 p-1 rounded-lg border border-slate-700 shadow-xl max-w-[90vw] overflow-x-auto custom-scrollbar">
            {layouts.map(l => (
              <button
                key={l.id}
@@ -1079,6 +1085,7 @@ const DwgRenderer: React.FC<Props> = ({
         <div>Pos: {debugInfo.pos}</div>
         <div>Zoom: {debugInfo.zoom}</div>
         <div>Snaps: {debugInfo.candidates}</div>
+        <div>Layouts: {layouts.length}</div>
         <div>Objects: {debugStats || 'None'}</div>
         <div>Tool: {tool}</div>
         <div>Status: {snap ? `SNAP: ${snap.type}` : 'No Snap'}</div>
