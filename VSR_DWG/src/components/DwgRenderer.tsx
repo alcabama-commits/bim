@@ -43,7 +43,7 @@ const DwgRenderer: React.FC<Props> = ({
   const [zoomLevel, setZoomLevel] = useState<number>(1)
   
   // Layout Management
-  const [layouts, setLayouts] = useState<string[]>([])
+  const [layouts, setLayouts] = useState<{id: string, name: string}[]>([])
   const [activeLayout, setActiveLayout] = useState<string>('Model')
   const [parsedData, setParsedData] = useState<{ type: 'dwg' | 'dxf', data: any } | null>(null)
 
@@ -615,21 +615,29 @@ const DwgRenderer: React.FC<Props> = ({
               console.log('DWG Database:', Object.keys(db || {}), db)
               
               // Extract Layouts (Paper Spaces)
-              const layoutNames = ['Model']
+              const layoutList: {id: string, name: string}[] = [{ id: 'Model', name: 'Model' }]
+              
               if (db.blocks) {
                 const paperSpaces = Object.keys(db.blocks).filter(k => k.toLowerCase().startsWith('*paper_space'))
-                // Try to map *Paper_Space0 -> Layout1 etc if possible, but raw names are safer for now
-                // Usually *Paper_Space is active, others are numbered
-                paperSpaces.forEach(ps => {
-                   // Clean up name for display if possible, or just use raw
-                   layoutNames.push(ps) 
+                // Sort to keep order consistent: *Paper_Space, *Paper_Space0, *Paper_Space1...
+                paperSpaces.sort((a, b) => {
+                   if (a === '*Paper_Space') return -1
+                   if (b === '*Paper_Space') return 1
+                   return a.localeCompare(b)
+                })
+
+                paperSpaces.forEach((ps, index) => {
+                   // Generate a friendly name if we can't find real ones
+                   // *Paper_Space is usually Layout1, *Paper_Space0 is Layout2, etc.
+                   const friendlyName = `Layout ${index + 1}`
+                   layoutList.push({ id: ps, name: friendlyName }) 
                 })
               }
-              setLayouts(layoutNames)
+              setLayouts(layoutList)
               setActiveLayout('Model')
               setParsedData({ type: 'dwg', data: db })
               
-              onDocInfo(`DWG cargado. ${layoutNames.length > 1 ? `Layouts: ${layoutNames.length - 1}` : ''}`)
+              onDocInfo(`DWG cargado. ${layoutList.length > 1 ? `Layouts: ${layoutList.length - 1}` : ''}`)
             })(),
             new Promise((_, reject) => {
               loadTimeoutRef.current = window.setTimeout(() => reject(new Error('DWG_TIMEOUT')), 20000)
@@ -678,13 +686,20 @@ const DwgRenderer: React.FC<Props> = ({
           console.log('DXF loaded data:', data)
           
           // Extract Layouts (Paper Spaces) for DXF
-          const layoutNames = ['Model']
+          const layoutList: {id: string, name: string}[] = [{ id: 'Model', name: 'Model' }]
           if (data.blocks) {
             const paperSpaces = Object.keys(data.blocks).filter(k => k.toLowerCase().startsWith('*paper_space'))
-            paperSpaces.forEach(ps => layoutNames.push(ps))
+            paperSpaces.sort((a, b) => {
+                if (a === '*Paper_Space') return -1
+                if (b === '*Paper_Space') return 1
+                return a.localeCompare(b)
+            })
+            paperSpaces.forEach((ps, index) => {
+                layoutList.push({ id: ps, name: `Layout ${index + 1}` })
+            })
           }
           
-          setLayouts(layoutNames)
+          setLayouts(layoutList)
           setActiveLayout('Model')
           setParsedData({ type: 'dxf', data: data })
           
@@ -709,7 +724,7 @@ const DwgRenderer: React.FC<Props> = ({
             const viewer = new (mod as any).DXFViewer()
             const dxfObj = await viewer.getFromFile(file, fontUrl)
             if (dxfObj) {
-               setLayouts(['Model'])
+               setLayouts([{ id: 'Model', name: 'Model' }])
                setActiveLayout('Model')
                setParsedData({ type: 'dxf', data: dxfObj })
                onDocInfo(`DXF cargado (viewer).`)
@@ -736,7 +751,7 @@ const DwgRenderer: React.FC<Props> = ({
             timeout
           ])
           if (dxfObj && (dxfObj as any).isObject3D) {
-             setLayouts(['Model'])
+             setLayouts([{ id: 'Model', name: 'Model' }])
              setActiveLayout('Model')
              setParsedData({ type: 'dxf', data: dxfObj })
              
@@ -1040,21 +1055,22 @@ const DwgRenderer: React.FC<Props> = ({
          />
       </div>
 
-      {/* Layout Selector */}
+      {/* Layout Tabs (Bottom) */}
       {layouts.length > 1 && (
-        <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-2 bg-slate-800 p-1 rounded-lg border border-slate-700 shadow-xl">
-          <span className="text-[10px] text-slate-400 font-bold px-2 uppercase">Layout:</span>
-          <select 
-            value={activeLayout}
-            onChange={(e) => setActiveLayout(e.target.value)}
-            className="bg-slate-900 text-white text-xs px-2 py-1 rounded border border-slate-600 focus:border-yellow-500 outline-none cursor-pointer hover:bg-slate-700 transition-colors"
-          >
-            {layouts.map(l => (
-              <option key={l} value={l}>
-                {l === 'Model' ? 'Modelo (Model Space)' : l.replace(/^\*Paper_Space/, 'Layout ')}
-              </option>
-            ))}
-          </select>
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-50 flex items-center bg-slate-800/90 p-1 rounded-lg border border-slate-700 shadow-xl max-w-[90vw] overflow-x-auto custom-scrollbar">
+           {layouts.map(l => (
+             <button
+               key={l.id}
+               onClick={() => setActiveLayout(l.id)}
+               className={`px-4 py-2 text-xs font-medium rounded transition-colors whitespace-nowrap ${
+                 activeLayout === l.id 
+                   ? 'bg-blue-600 text-white shadow-sm' 
+                   : 'text-slate-400 hover:text-white hover:bg-slate-700'
+               }`}
+             >
+               {l.name}
+             </button>
+           ))}
         </div>
       )}
 
