@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ArchView BIM - Visor de Planos Profesional</title>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;800&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #020617;
+    }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body>
+
+    <h1>Mi Visor de PDF Online</h1>
+    <p>Mostrando el archivo desde la carpeta 'pdfs'.</p>
+
+    <iframe id="visor-pdf" src=""></iframe>
+
+    <script>
+        // --- CONFIGURACIÓN ---
+        // Use rutas relativas para que funcione localmente y en servidor
+        // Ajuste el nombre del PDF según el archivo en la carpeta `pdfs`
+        const rutaAlPdf = 'pdfs/13 - VIG-1.1.pdf';
+
+        // Construir URL del visor usando ruta relativa
+        const urlVisor = `pdfjs/web/viewer.html?file=${encodeURIComponent(rutaAlPdf)}`;
+
+        document.getElementById('visor-pdf').src = urlVisor;
+    </script>
+
+</body>
+</html>
