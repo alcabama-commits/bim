@@ -3,8 +3,6 @@ import { IFCLoader } from 'web-ifc-three/IFCLoader';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import './style.css';
 
-console.log("Main script imported");
-
 // --- VISUAL LOGGER SETUP ---
 const debugConsole = document.getElementById('debug-console');
 // Attach to window to ensure global availability and avoid ReferenceErrors
@@ -22,6 +20,9 @@ const debugConsole = document.getElementById('debug-console');
 };
 
 const logToScreen = (window as any).logToScreen;
+
+// IMMEDIATE LOG TO CONFIRM SCRIPT EXECUTION
+logToScreen("Main script starting execution...", false);
 
 // Scene setup
 const scene = new THREE.Scene();
