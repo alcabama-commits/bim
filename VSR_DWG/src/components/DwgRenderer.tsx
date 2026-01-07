@@ -41,6 +41,11 @@ const DwgRenderer: React.FC<Props> = ({
   const [areas, setAreas] = useState<AreaItem[]>([])
   const [debugStats, setDebugStats] = useState<string>('')
   const [zoomLevel, setZoomLevel] = useState<number>(1)
+  
+  // Layout Management
+  const [layouts, setLayouts] = useState<string[]>([])
+  const [activeLayout, setActiveLayout] = useState<string>('Model')
+  const [parsedData, setParsedData] = useState<{ type: 'dwg' | 'dxf', data: any } | null>(null)
 
   const extractSnapPoints = (root: THREE.Object3D) => {
     root.updateMatrixWorld(true)
@@ -192,16 +197,214 @@ const DwgRenderer: React.FC<Props> = ({
 
 
 
+  // Helper to create line from points
+  const createLine = (pts: THREE.Vector3[], closed: boolean, container: THREE.Object3D) => {
+    if (pts.length < 2) return
+    if (closed) pts.push(pts[0])
+    const material = new THREE.LineBasicMaterial({ color: 0xffffff })
+    const geo = new THREE.BufferGeometry().setFromPoints(pts)
+    container.add(new THREE.Line(geo, material))
+  }
+
+  // Function to parse entities into a container (DWG)
+  const parseDwgEntities = (entities: any, container: THREE.Object3D, db: any) => {
+    if (!entities) return
+
+    const material = new THREE.LineBasicMaterial({ color: 0xffffff })
+
+    // LINES
+    ;((entities.lines || []) as any[]).forEach((ln: any) => {
+       createLine([
+         new THREE.Vector3(ln.start.x, ln.start.y, 0),
+         new THREE.Vector3(ln.end.x, ln.end.y, 0)
+       ], false, container)
+    })
+    
+    // LWPOLYLINES
+    ;((entities.lwpolylines || []) as any[]).forEach((pl: any) => {
+      if (!pl.vertices) return
+      const pts = pl.vertices.map((v: any) => new THREE.Vector3(v.x, v.y, 0))
+      createLine(pts, pl.flag === 1 || pl.closed === true, container)
+    })
+
+    // POLYLINES
+    ;((entities.polylines || []) as any[]).forEach((pl: any) => {
+      if (!pl.vertices) return
+      const pts = pl.vertices.map((v: any) => new THREE.Vector3(v.x, v.y, 0))
+      createLine(pts, pl.flag === 1 || pl.closed === true, container)
+    })
+
+    // ARCS
+    ;((entities.arcs || []) as any[]).forEach((arc: any) => {
+      const segs = 64
+      const curve = new THREE.EllipseCurve(
+        arc.center.x, arc.center.y,
+        arc.radius, arc.radius,
+        arc.startAngle, arc.endAngle, false, 0
+      )
+      const pts = curve.getPoints(segs).map(p => new THREE.Vector3(p.x, p.y, 0))
+      const geo = new THREE.BufferGeometry().setFromPoints(pts)
+      container.add(new THREE.Line(geo, material))
+    })
+
+    // CIRCLES
+    ;((entities.circles || []) as any[]).forEach((c: any) => {
+      const segs = 64
+      const curve = new THREE.EllipseCurve(
+        c.center.x, c.center.y,
+        c.radius, c.radius, 0, Math.PI * 2, false, 0
+      )
+      const pts = curve.getPoints(segs).map(p => new THREE.Vector3(p.x, p.y, 0))
+      const geo = new THREE.BufferGeometry().setFromPoints(pts)
+      container.add(new THREE.Line(geo, material))
+    })
+    
+    // INSERTS (Block References)
+    ;((entities.inserts || []) as any[]).forEach((ins: any) => {
+      // Find block definition
+      const blockName = ins.name
+      if (!db.blocks || !db.blocks[blockName]) return
+      
+      const blockDef = db.blocks[blockName]
+      const blockGroup = new THREE.Group()
+      
+      // Apply Insert Transformations
+      blockGroup.position.set(ins.insertion_point.x, ins.insertion_point.y, 0)
+      if (ins.scale) {
+        blockGroup.scale.set(ins.scale.x, ins.scale.y, ins.scale.z || 1)
+      }
+      if (ins.rotation) {
+        blockGroup.rotation.z = ins.rotation * (Math.PI / 180) // Assuming degrees in JSON
+      }
+      
+      // Recursive parse
+      parseDwgEntities(blockDef, blockGroup, db)
+      
+      container.add(blockGroup)
+    })
+  }
+
+  // Function to parse DXF entities (similar to DWG but for DXF structure)
+  const parseDxfEntities = (entities: any[], container: THREE.Object3D, data: any) => {
+    if (!entities) return
+    
+    const material = new THREE.LineBasicMaterial({ color: 0xffffff })
+
+    entities.forEach((ent: any) => {
+      if (ent.type === 'LINE') {
+        if (ent.vertices && ent.vertices.length >= 2) {
+            const pts = ent.vertices.map((v: any) => new THREE.Vector3(v.x, v.y, 0))
+            createLine(pts, false, container)
+        }
+      } else if (ent.type === 'LWPOLYLINE' || ent.type === 'POLYLINE') {
+        if (ent.vertices) {
+            const pts = ent.vertices.map((v: any) => new THREE.Vector3(v.x, v.y, 0))
+            createLine(pts, ent.closed, container)
+        }
+      } else if (ent.type === 'CIRCLE') {
+        const curve = new THREE.EllipseCurve(ent.center.x, ent.center.y, ent.radius, ent.radius, 0, Math.PI * 2, false, 0)
+        const pts = curve.getPoints(64).map(p => new THREE.Vector3(p.x, p.y, 0))
+        const geo = new THREE.BufferGeometry().setFromPoints(pts)
+        container.add(new THREE.Line(geo, material))
+      } else if (ent.type === 'ARC') {
+        const curve = new THREE.EllipseCurve(ent.center.x, ent.center.y, ent.radius, ent.radius, ent.startAngle, ent.endAngle, false, 0)
+        const pts = curve.getPoints(64).map(p => new THREE.Vector3(p.x, p.y, 0))
+        const geo = new THREE.BufferGeometry().setFromPoints(pts)
+        container.add(new THREE.Line(geo, material))
+      } else if (ent.type === 'INSERT') {
+        const blockName = ent.name
+        if (!data.blocks || !data.blocks[blockName]) return
+        const block = data.blocks[blockName]
+        const group = new THREE.Group()
+        
+        if (ent.position) group.position.set(ent.position.x, ent.position.y, 0)
+        if (ent.scale) group.scale.set(ent.scale.x, ent.scale.y, ent.scale.z || 1)
+        if (ent.rotation) group.rotation.z = ent.rotation * (Math.PI / 180)
+        
+        parseDxfEntities(block.entities, group, data)
+        container.add(group)
+      }
+    })
+  }
+
+  // Effect to rebuild scene when active layout changes
+  useEffect(() => {
+    if (!parsedData || !renderer) return
+    
+    setLoading(true)
+    
+    // Clean up previous scene
+    if (entityRoot) {
+      scene.remove(entityRoot)
+      setEntityRoot(null)
+      setSnapCandidates([])
+      setPoints([])
+      setDimensions([])
+      setAreas([])
+      setPolyPoints([])
+    }
+
+    const root = new THREE.Group()
+
+    if (parsedData.type === 'dwg') {
+      const db = parsedData.data
+      let entitiesToParse = db // Default to Model Space (root)
+      
+      if (activeLayout !== 'Model') {
+        // Find the block for this layout
+        // activeLayout is the Block Name (e.g., *Paper_Space)
+        if (db.blocks && db.blocks[activeLayout]) {
+           entitiesToParse = db.blocks[activeLayout]
+        } else {
+           console.warn(`Layout block ${activeLayout} not found, falling back to Model`)
+        }
+      }
+      
+      parseDwgEntities(entitiesToParse, root, db)
+    } else if (parsedData.type === 'dxf') {
+      const data = parsedData.data
+      
+      if (activeLayout === 'Model') {
+          const entity = data.entity || data
+          if (entity && (entity.isObject3D || entity instanceof THREE.Object3D)) {
+             root.add(entity.clone())
+          } else {
+             // Fallback: parse raw entities if entity object is missing but we have raw data
+             if (data.entities) {
+                parseDxfEntities(data.entities, root, data)
+             }
+          }
+      } else {
+          // DXF Layout (Paper Space)
+          // Look for block with layout name
+          if (data.blocks && data.blocks[activeLayout]) {
+             const block = data.blocks[activeLayout]
+             parseDxfEntities(block.entities, root, data)
+          } else {
+             console.warn(`DXF Layout block ${activeLayout} not found`)
+          }
+      }
+    }
+
+    scene.add(root)
+    setEntityRoot(root)
+    
+    // Update world matrix and snap points
+    root.updateMatrixWorld(true)
+    extractSnapPoints(root)
+    
+    // Auto-fit
+    setTimeout(() => fitToView(), 100)
+    setLoading(false)
+
+  }, [activeLayout, parsedData])
+
   useEffect(() => {
     if (entityRoot) {
-      console.log('EntityRoot changed, extracting snap points...')
-      extractSnapPoints(entityRoot)
+      // console.log('EntityRoot changed, extracting snap points...')
+      // extractSnapPoints(entityRoot)
       
-      // Auto-Fit on load
-      // Use setTimeout to ensure renderer/controls are ready and layout is computed
-      setTimeout(() => {
-         fitToView()
-      }, 100)
+      // Auto-Fit handled in the layout effect
     }
   }, [entityRoot])
 
@@ -396,121 +599,22 @@ const DwgRenderer: React.FC<Props> = ({
               const db: any = lib.convert(dwg as number)
               console.log('DWG Database:', Object.keys(db || {}), db)
               
-              const root = new THREE.Group()
-              const material = new THREE.LineBasicMaterial({ color: 0xffffff })
+              // Extract Layouts (Paper Spaces)
+              const layoutNames = ['Model']
+              if (db.blocks) {
+                const paperSpaces = Object.keys(db.blocks).filter(k => k.toLowerCase().startsWith('*paper_space'))
+                // Try to map *Paper_Space0 -> Layout1 etc if possible, but raw names are safer for now
+                // Usually *Paper_Space is active, others are numbered
+                paperSpaces.forEach(ps => {
+                   // Clean up name for display if possible, or just use raw
+                   layoutNames.push(ps) 
+                })
+              }
+              setLayouts(layoutNames)
+              setActiveLayout('Model')
+              setParsedData({ type: 'dwg', data: db })
               
-              // Helper to create line from points
-              const createLine = (pts: THREE.Vector3[], closed: boolean, container: THREE.Object3D) => {
-                if (pts.length < 2) return
-                if (closed) pts.push(pts[0])
-                const geo = new THREE.BufferGeometry().setFromPoints(pts)
-                container.add(new THREE.Line(geo, material))
-              }
-
-              // Function to parse entities into a container
-              const parseEntities = (entities: any, container: THREE.Object3D) => {
-                if (!entities) return
-
-                // LINES
-                ;((entities.lines || []) as any[]).forEach((ln: any) => {
-                   createLine([
-                     new THREE.Vector3(ln.start.x, ln.start.y, 0),
-                     new THREE.Vector3(ln.end.x, ln.end.y, 0)
-                   ], false, container)
-                })
-                
-                // LWPOLYLINES
-                ;((entities.lwpolylines || []) as any[]).forEach((pl: any) => {
-                  if (!pl.vertices) return
-                  const pts = pl.vertices.map((v: any) => new THREE.Vector3(v.x, v.y, 0))
-                  createLine(pts, pl.flag === 1 || pl.closed === true, container)
-                })
-  
-                // POLYLINES
-                ;((entities.polylines || []) as any[]).forEach((pl: any) => {
-                  if (!pl.vertices) return
-                  const pts = pl.vertices.map((v: any) => new THREE.Vector3(v.x, v.y, 0))
-                  createLine(pts, pl.flag === 1 || pl.closed === true, container)
-                })
-  
-                // ARCS
-                ;((entities.arcs || []) as any[]).forEach((arc: any) => {
-                  const segs = 64
-                  const curve = new THREE.EllipseCurve(
-                    arc.center.x, arc.center.y,
-                    arc.radius, arc.radius,
-                    arc.startAngle, arc.endAngle, false, 0
-                  )
-                  const pts = curve.getPoints(segs).map(p => new THREE.Vector3(p.x, p.y, 0))
-                  const geo = new THREE.BufferGeometry().setFromPoints(pts)
-                  container.add(new THREE.Line(geo, material))
-                })
-
-                // CIRCLES
-                ;((entities.circles || []) as any[]).forEach((c: any) => {
-                  const segs = 64
-                  const curve = new THREE.EllipseCurve(
-                    c.center.x, c.center.y,
-                    c.radius, c.radius, 0, Math.PI * 2, false, 0
-                  )
-                  const pts = curve.getPoints(segs).map(p => new THREE.Vector3(p.x, p.y, 0))
-                  const geo = new THREE.BufferGeometry().setFromPoints(pts)
-                  container.add(new THREE.Line(geo, material))
-                })
-                
-                // INSERTS (Block References)
-                ;((entities.inserts || []) as any[]).forEach((ins: any) => {
-                  // Find block definition
-                  const blockName = ins.name
-                  if (!db.blocks || !db.blocks[blockName]) return
-                  
-                  const blockDef = db.blocks[blockName]
-                  const blockGroup = new THREE.Group()
-                  
-                  // Apply Insert Transformations
-                  blockGroup.position.set(ins.insertion_point.x, ins.insertion_point.y, 0)
-                  if (ins.scale) {
-                    blockGroup.scale.set(ins.scale.x, ins.scale.y, ins.scale.z || 1)
-                  }
-                  if (ins.rotation) {
-                    blockGroup.rotation.z = ins.rotation * (Math.PI / 180) // Assuming degrees in JSON
-                  }
-                  
-                  // Recursive parse
-                  parseEntities(blockDef, blockGroup)
-                  
-                  container.add(blockGroup)
-                })
-              }
-
-              // Parse Root Entities
-              parseEntities(db, root)
-
-              scene.add(root)
-              setEntityRoot(root)
-              // Extract snap points immediately after creating the root
-              // We need to update matrix world to get correct coordinates if root had transforms (it doesn't, but safe)
-              root.updateMatrixWorld(true)
-              extractSnapPoints(root)
-
-              const box = new THREE.Box3().setFromObject(root)
-              const center = box.getCenter(new THREE.Vector3())
-              const size = box.getSize(new THREE.Vector3())
-              const maxSize = Math.max(size.x, size.y)
-              const viewSize = maxSize * 0.6
-              const w = renderer.domElement.clientWidth
-              const h = renderer.domElement.clientHeight
-              const aspect = w / h
-              camera.left = -viewSize * aspect
-              camera.right = viewSize * aspect
-              camera.top = viewSize
-              camera.bottom = -viewSize
-              camera.position.set(center.x, center.y, 10)
-              camera.zoom = 1
-              camera.updateProjectionMatrix()
-              controls?.target.set(center.x, center.y, 0)
-              controls?.update()
-              onDocInfo(`DWG cargado. Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
+              onDocInfo(`DWG cargado. ${layoutNames.length > 1 ? `Layouts: ${layoutNames.length - 1}` : ''}`)
             })(),
             new Promise((_, reject) => {
               loadTimeoutRef.current = window.setTimeout(() => reject(new Error('DWG_TIMEOUT')), 20000)
@@ -557,39 +661,25 @@ const DwgRenderer: React.FC<Props> = ({
  
         loader.load(url, (data: any) => {
           console.log('DXF loaded data:', data)
+          
+          // Extract Layouts (Paper Spaces) for DXF
+          const layoutNames = ['Model']
+          if (data.blocks) {
+            const paperSpaces = Object.keys(data.blocks).filter(k => k.toLowerCase().startsWith('*paper_space'))
+            paperSpaces.forEach(ps => layoutNames.push(ps))
+          }
+          
+          setLayouts(layoutNames)
+          setActiveLayout('Model')
+          setParsedData({ type: 'dxf', data: data })
+          
           const root = data?.entity || data
           if (root) {
-            if (!root.isObject3D && !root.traverse) {
-              console.error('Loaded object is not a valid Object3D', root)
-            } else {
-              scene.add(root)
-              setEntityRoot(root)
-              // Extract snap points
-              root.updateMatrixWorld(true)
-              extractSnapPoints(root)
-
-              const box = new THREE.Box3().setFromObject(root)
-              const center = box.getCenter(new THREE.Vector3())
-              const size = box.getSize(new THREE.Vector3())
-              const maxSize = Math.max(size.x, size.y)
-              const viewSize = maxSize * 0.6
-              const w = renderer.domElement.clientWidth
-              const h = renderer.domElement.clientHeight
-              const aspect = w / h
-              camera.left = -viewSize * aspect
-              camera.right = viewSize * aspect
-              camera.top = viewSize
-              camera.bottom = -viewSize
-              camera.position.set(center.x, center.y, 10)
-              camera.zoom = 1
-              camera.updateProjectionMatrix()
-              controls?.target.set(center.x, center.y, 0)
-              controls?.update()
-              onDocInfo(`DXF cargado. Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
-            }
+             onDocInfo(`DXF cargado. Tamaño: - unidades`)
           } else {
-            console.error('No entity found in DXF data')
+             console.error('No entity found in DXF data')
           }
+
           setLoading(false)
           if (loadTimeoutRef.current) {
             clearTimeout(loadTimeoutRef.current)
@@ -604,27 +694,10 @@ const DwgRenderer: React.FC<Props> = ({
             const viewer = new (mod as any).DXFViewer()
             const dxfObj = await viewer.getFromFile(file, fontUrl)
             if (dxfObj) {
-              scene.add(dxfObj)
-              setEntityRoot(dxfObj)
-              const box = new THREE.Box3().setFromObject(dxfObj)
-              const center = box.getCenter(new THREE.Vector3())
-              const size = box.getSize(new THREE.Vector3())
-              const maxSize = Math.max(size.x, size.y)
-              const viewSize = maxSize * 0.6
-              const w = renderer.domElement.clientWidth
-              const h = renderer.domElement.clientHeight
-              const aspect = w / h
-              camera.left = -viewSize * aspect
-              camera.right = viewSize * aspect
-              camera.top = viewSize
-              camera.bottom = -viewSize
-              camera.position.set(center.x, center.y, 10)
-              camera.zoom = 1
-              camera.updateProjectionMatrix()
-              controls?.target.set(center.x, center.y, 0)
-              controls?.update()
-              setErrorMsg(null)
-              onDocInfo(`DXF cargado (viewer). Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
+               setLayouts(['Model'])
+               setActiveLayout('Model')
+               setParsedData({ type: 'dxf', data: dxfObj })
+               onDocInfo(`DXF cargado (viewer).`)
             }
           } catch (e) {
             console.error('Viewer loader failed', e)
@@ -648,29 +721,14 @@ const DwgRenderer: React.FC<Props> = ({
             timeout
           ])
           if (dxfObj && (dxfObj as any).isObject3D) {
-            scene.add(dxfObj as any)
-            setEntityRoot(dxfObj as any)
-            const box = new THREE.Box3().setFromObject(dxfObj as any)
-            const center = box.getCenter(new THREE.Vector3())
-            const size = box.getSize(new THREE.Vector3())
-            const maxSize = Math.max(size.x, size.y)
-            const viewSize = maxSize * 0.6
-            const w = renderer.domElement.clientWidth
-            const h = renderer.domElement.clientHeight
-            const aspect = w / h
-            camera.left = -viewSize * aspect
-            camera.right = viewSize * aspect
-            camera.top = viewSize
-            camera.bottom = -viewSize
-            camera.position.set(center.x, center.y, 10)
-            camera.zoom = 1
-            camera.updateProjectionMatrix()
-            controls?.target.set(center.x, center.y, 0)
-            controls?.update()
-            setErrorMsg(null)
-            onDocInfo(`DXF cargado (viewer). Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
-            setLoading(false)
-            URL.revokeObjectURL(url)
+             setLayouts(['Model'])
+             setActiveLayout('Model')
+             setParsedData({ type: 'dxf', data: dxfObj })
+             
+             setErrorMsg(null)
+             onDocInfo(`DXF cargado (viewer).`)
+             setLoading(false)
+             URL.revokeObjectURL(url)
           } else {
             console.warn('Viewer returned invalid object, falling back to DXFLoader')
             loadWithDXFLoader()
@@ -966,6 +1024,24 @@ const DwgRenderer: React.FC<Props> = ({
             {...{ orient: "vertical" } as any}
          />
       </div>
+
+      {/* Layout Selector */}
+      {layouts.length > 1 && (
+        <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-2 bg-slate-800 p-1 rounded-lg border border-slate-700 shadow-xl">
+          <span className="text-[10px] text-slate-400 font-bold px-2 uppercase">Layout:</span>
+          <select 
+            value={activeLayout}
+            onChange={(e) => setActiveLayout(e.target.value)}
+            className="bg-slate-900 text-white text-xs px-2 py-1 rounded border border-slate-600 focus:border-yellow-500 outline-none cursor-pointer hover:bg-slate-700 transition-colors"
+          >
+            {layouts.map(l => (
+              <option key={l} value={l}>
+                {l === 'Model' ? 'Modelo (Model Space)' : l.replace(/^\*Paper_Space/, 'Layout ')}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Debug Info Overlay */}
       <div className="absolute top-2 left-2 bg-black/70 text-white p-2 text-xs rounded pointer-events-none z-50">
