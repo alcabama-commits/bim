@@ -967,15 +967,52 @@ const DwgRenderer: React.FC<Props> = ({
          />
       </div>
 
+      {/* Debug Info Toggle */}
+      <button 
+        onClick={() => setShowInfo(!showInfo)}
+        className={`absolute top-2 left-2 z-50 w-8 h-8 flex items-center justify-center rounded-lg transition-all border ${
+          showInfo 
+            ? 'bg-slate-800 border-yellow-500/50 text-yellow-500 shadow-lg shadow-yellow-500/10' 
+            : 'bg-slate-900/50 border-transparent text-slate-600 hover:text-slate-400 hover:bg-slate-800'
+        }`}
+        title="Información Técnica"
+      >
+        <i className="fa-solid fa-circle-info text-xs"></i>
+      </button>
+
       {/* Debug Info Overlay */}
-      <div className="absolute top-2 left-2 bg-black/70 text-white p-2 text-xs rounded pointer-events-none z-50">
-        <div>Pos: {debugInfo.pos}</div>
-        <div>Zoom: {debugInfo.zoom}</div>
-        <div>Snaps: {debugInfo.candidates}</div>
-        <div>Objects: {debugStats || 'None'}</div>
-        <div>Tool: {tool}</div>
-        <div>Status: {snap ? `SNAP: ${snap.type}` : 'No Snap'}</div>
-      </div>
+      {showInfo && (
+        <div className="absolute top-12 left-2 bg-slate-900/90 backdrop-blur border border-slate-700 text-slate-300 p-3 text-[10px] rounded-xl pointer-events-none z-50 shadow-2xl font-mono min-w-[180px]">
+          <div className="space-y-1">
+            <div className="flex justify-between border-b border-slate-800 pb-1 mb-1">
+              <span className="text-slate-500">Pos</span>
+              <span className="text-white">{debugInfo.pos || '0.00, 0.00'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Zoom</span>
+              <span className="text-yellow-500">{debugInfo.zoom}x</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Snaps</span>
+              <span>{debugInfo.candidates} pts</span>
+            </div>
+            <div className="flex justify-between items-start gap-2">
+              <span className="text-slate-500 shrink-0">Objs</span>
+              <span className="text-right leading-tight opacity-70 break-all">{debugStats || '-'}</span>
+            </div>
+            <div className="flex justify-between border-t border-slate-800 pt-1 mt-1">
+              <span className="text-slate-500">Tool</span>
+              <span className="uppercase font-bold text-indigo-400">{tool}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Status</span>
+              <span className={`${snap ? 'text-green-400' : 'text-slate-600'}`}>
+                {snap ? snap.type.toUpperCase() : 'IDLE'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div
         ref={controlsTargetRef}
