@@ -3,6 +3,24 @@ import { IFCLoader } from 'web-ifc-three/IFCLoader';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import './style.css';
 
+// --- VISUAL LOGGER SETUP ---
+const debugConsole = document.getElementById('debug-console');
+// Attach to window to ensure global availability and avoid ReferenceErrors
+(window as any).logToScreen = function(message: string, isError = false) {
+    if (debugConsole) {
+        const div = document.createElement('div');
+        div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        if (isError) div.style.color = 'red';
+        debugConsole.appendChild(div);
+        debugConsole.scrollTop = debugConsole.scrollHeight;
+    }
+    // Also log to browser console
+    if (isError) console.error(message);
+    else console.log(message);
+};
+
+const logToScreen = (window as any).logToScreen;
+
 // Scene setup
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xa0a0a0);
@@ -106,7 +124,8 @@ async function loadModel(url: string) {
         
     } catch (error: any) {
         logToScreen(`[loadModel] ERROR: ${error.message || error}`, true);
-        alert(`Error loading model: ${error}`);
+        // Also alert for visibility if console is missed
+        console.error(error);
     }
 }
 
@@ -135,7 +154,7 @@ if (modelSelect) {
             return response.json();
         })
         .then(models => {
-            console.log('Loaded models list:', models);
+            logToScreen('Loaded models list: ' + JSON.stringify(models));
             models.forEach((model: { name: string; path: string }) => {
                 const option = document.createElement('option');
                 option.value = model.path; // e.g., "models/file.ifc"
@@ -144,7 +163,7 @@ if (modelSelect) {
             });
         })
         .catch(error => {
-            console.error('Error loading models.json:', error);
+            logToScreen('Error loading models.json: ' + error, true);
             const option = document.createElement('option');
             option.textContent = "Error loading list";
             modelSelect.appendChild(option);
