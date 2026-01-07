@@ -61,47 +61,66 @@ window.addEventListener('resize', () => {
 const ifcLoader = new IFCLoader();
 ifcLoader.ifcManager.setWasmPath('wasm/');
 
+let currentModel: THREE.Object3D | null = null;
+
+const loadModel = async (url: string) => {
+    if (currentModel) {
+        scene.remove(currentModel);
+        currentModel = null;
+    }
+    
+    try {
+        console.log('Loading model from:', url);
+        const model = await ifcLoader.loadAsync(url);
+        scene.add(model);
+        currentModel = model;
+        console.log('Model loaded:', model);
+
+        // Auto-center camera
+        const box = new THREE.Box3().setFromObject(model);
+        if (!box.isEmpty()) {
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera.fov * (Math.PI / 180);
+            let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2)); 
+            cameraZ *= 1.5; // Padding
+            
+            // Limit minimum distance
+            if (cameraZ < 10) cameraZ = 10;
+
+            const direction = new THREE.Vector3()
+                .subVectors(camera.position, center)
+                .normalize();
+                
+            // Handle case where camera is exactly at center
+            if (direction.lengthSq() === 0) {
+                direction.set(0, 0, 1);
+            }
+
+            // Move camera to new position looking at center
+            camera.position.copy(direction.multiplyScalar(cameraZ).add(center));
+            camera.lookAt(center);
+            
+            // Update controls target
+            controls.target.copy(center);
+            controls.update();
+            
+            console.log('Camera centered at:', center, 'Distance:', cameraZ);
+        }
+    } catch (error) {
+        console.error('Error loading IFC:', error);
+    }
+}
+
 const input = document.getElementById('file-input') as HTMLInputElement;
 if (input) {
     input.addEventListener('change', async (event) => {
         const file = (event.target as HTMLInputElement).files?.[0];
         if (file) {
             const url = URL.createObjectURL(file);
-            try {
-                const model = await ifcLoader.loadAsync(url);
-                scene.add(model);
-                console.log('Model loaded:', model);
-
-                // Auto-center camera
-                if (model) {
-                    const box = new THREE.Box3().setFromObject(model);
-                    const center = box.getCenter(new THREE.Vector3());
-                    const size = box.getSize(new THREE.Vector3());
-                    
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    const fov = camera.fov * (Math.PI / 180);
-                    let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2)); // Basic distance calculation
-                    
-                    // Adjust for aspect ratio
-                    cameraZ *= 1.5; // Add some padding
-                    
-                    const direction = new THREE.Vector3()
-                        .subVectors(camera.position, center)
-                        .normalize();
-
-                    // Move camera to new position looking at center
-                    camera.position.copy(direction.multiplyScalar(cameraZ).add(center));
-                    camera.lookAt(center);
-                    
-                    // Update controls target
-                    controls.target.copy(center);
-                    controls.update();
-                    
-                    console.log('Camera centered at:', center, 'Distance:', cameraZ);
-                }
-            } catch (error) {
-                console.error('Error loading IFC:', error);
-            }
+            loadModel(url);
         }
     }, false);
 }
