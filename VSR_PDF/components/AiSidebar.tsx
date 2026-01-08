@@ -6,9 +6,10 @@ import { getDocumentSummary, askDocumentQuestion } from '../services/gemini';
 interface AiSidebarProps {
   documentText: string;
   isPdfLoaded: boolean;
+  onClose?: () => void;
 }
 
-const AiSidebar: React.FC<AiSidebarProps> = ({ documentText, isPdfLoaded }) => {
+const AiSidebar: React.FC<AiSidebarProps> = ({ documentText, isPdfLoaded, onClose }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
