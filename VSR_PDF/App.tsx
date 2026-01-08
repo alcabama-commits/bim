@@ -1,7 +1,6 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import PdfRenderer from './components/PdfRenderer';
-import AiSidebar from './components/AiSidebar';
 import { Calibration, Tool } from './types';
 
 interface RepoFile {
@@ -236,13 +235,6 @@ const App: React.FC = () => {
             <button onClick={handleRotate} className="w-8 h-8 hover:bg-slate-800 rounded transition" title="Rotar"><i className="fa-solid fa-rotate-right text-xs"></i></button>
             <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded transition ${showGrid ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
             <button onClick={() => setIsBlueprint(!isBlueprint)} className={`w-8 h-8 rounded transition ${isBlueprint ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Modo Blueprint"><i className="fa-solid fa-eye-slash text-xs"></i></button>
-            <button 
-              onClick={() => setShowAiSidebar(!showAiSidebar)} 
-              className={`w-8 h-8 rounded transition ${showAiSidebar ? 'text-indigo-500 bg-indigo-500/10' : 'text-slate-500 hover:bg-slate-800'}`} 
-              title="Asistente IA"
-            >
-              <i className="fa-solid fa-wand-magic-sparkles text-xs"></i>
-            </button>
           </div>
 
           <div className="flex items-center gap-3">
