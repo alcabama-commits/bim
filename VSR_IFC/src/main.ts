@@ -60,6 +60,82 @@ window.addEventListener('resize', () => {
 // IFC Loading
 const ifcLoader = new IFCLoader();
 ifcLoader.ifcManager.setWasmPath('wasm/');
+// Optimize for large models and precision
+ifcLoader.ifcManager.applyWebIfcConfig({
+    COORDINATE_TO_ORIGIN: true,
+    USE_FAST_BOOLS: true
+});
+
+let currentModel: any = null;
+
+async function loadIfc(url: string) {
+    if (currentModel) {
+        scene.remove(currentModel);
+        currentModel = null;
+    }
+
+    try {
+        const model = await ifcLoader.loadAsync(url);
+        currentModel = model;
+        scene.add(model);
+        console.log('Model loaded:', model);
+
+        // Auto-center camera
+        if (model) {
+            const box = new THREE.Box3().setFromObject(model);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+
+            // Since COORDINATE_TO_ORIGIN is used, center should be near (0,0,0)
+            // But we still center camera on the actual geometry center just in case
+            
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera.fov * (Math.PI / 180);
+            let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2));
+            
+            cameraZ *= 2.0; // Padding
+            
+            const direction = new THREE.Vector3(1, 1, 1).normalize();
+            camera.position.copy(center.clone().add(direction.multiplyScalar(cameraZ)));
+            camera.lookAt(center);
+            
+            controls.target.copy(center);
+            controls.update();
+            
+            console.log('Camera centered at:', center, 'Distance:', cameraZ);
+        }
+    } catch (error) {
+        console.error('Error loading IFC:', error);
+    }
+}
+
+// Load models from JSON
+async function loadModelList() {
+    const select = document.getElementById('model-select') as HTMLSelectElement;
+    if (!select) return;
+
+    try {
+        const response = await fetch('models.json');
+        const models = await response.json();
+
+        models.forEach((m: { name: string; path: string }) => {
+            const option = document.createElement('option');
+            option.value = m.path;
+            option.textContent = m.name;
+            select.appendChild(option);
+        });
+
+        select.addEventListener('change', (e) => {
+            const path = (e.target as HTMLSelectElement).value;
+            if (path) loadIfc(path);
+        });
+
+    } catch (err) {
+        console.error('Error loading model list:', err);
+    }
+}
+
+loadModelList();
 
 const input = document.getElementById('file-input') as HTMLInputElement;
 if (input) {
@@ -67,45 +143,7 @@ if (input) {
         const file = (event.target as HTMLInputElement).files?.[0];
         if (file) {
             const url = URL.createObjectURL(file);
-            try {
-                const model = await ifcLoader.loadAsync(url);
-                scene.add(model);
-                console.log('Model loaded:', model);
-
-                // Auto-center camera and fix jitter
-                if (model) {
-                    const box = new THREE.Box3().setFromObject(model);
-                    const center = box.getCenter(new THREE.Vector3());
-                    const size = box.getSize(new THREE.Vector3());
-
-                    // Move model to origin to fix floating point jitter (temblor)
-                    // This is crucial for large coordinate models (BIM/GIS)
-                    model.position.sub(center);
-
-                    // Re-calculate bounds relative to new origin (0,0,0)
-                    // box.setFromObject(model); // box is now centered at 0,0,0
-                    
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    const fov = camera.fov * (Math.PI / 180);
-                    let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2)); // Basic distance calculation
-                    
-                    // Adjust for aspect ratio
-                    cameraZ *= 2.0; // Add some padding
-                    
-                    // Position camera looking at origin
-                    const direction = new THREE.Vector3(1, 1, 1).normalize();
-                    camera.position.copy(direction.multiplyScalar(cameraZ));
-                    camera.lookAt(0, 0, 0);
-                    
-                    // Update controls target to origin
-                    controls.target.set(0, 0, 0);
-                    controls.update();
-                    
-                    console.log('Model centered at origin. Camera distance:', cameraZ);
-                }
-            } catch (error) {
-                console.error('Error loading IFC:', error);
-            }
+            loadIfc(url);
         }
     }, false);
 }
