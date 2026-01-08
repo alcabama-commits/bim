@@ -20,24 +20,8 @@
     .font-mono { font-family: 'JetBrains Mono', monospace; }
   </style>
 </head>
-<body>
-
-    <h1>Mi Visor de PDF Online</h1>
-    <p>Mostrando el archivo desde la carpeta 'pdfs'.</p>
-
-    <iframe id="visor-pdf" src=""></iframe>
-
-    <script>
-        // --- CONFIGURACIÓN ---
-        // Use rutas relativas para que funcione localmente y en servidor
-        // Ajuste el nombre del PDF según el archivo en la carpeta `pdfs`
-        const rutaAlPdf = 'pdfs/13 - VIG-1.1.pdf';
-
-        // Construir URL del visor usando ruta relativa
-        const urlVisor = `pdfjs/web/viewer.html?file=${encodeURIComponent(rutaAlPdf)}`;
-
-        document.getElementById('visor-pdf').src = urlVisor;
-    </script>
-
+<body class="bg-slate-950">
+  <div id="root"></div>
+  <script type="module" src="./index.tsx"></script>
 </body>
 </html>

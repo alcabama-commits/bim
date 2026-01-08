@@ -3,9 +3,14 @@ import { GoogleGenAI } from "@google/genai";
 
 export const getDocumentSummary = async (text: string): Promise<string> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
+    const apiKey = import.meta.env.VITE_API_KEY;
+    if (!apiKey) {
+      return "Error: API Key no configurada. Por favor contacta al administrador.";
+    }
+    
+    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.0-flash-exp',
       contents: `Eres un asistente experto en arquitectura y construcción. Resume técnicamente este contenido extraído de un plano o memoria descriptiva: \n\n${text.substring(0, 30000)}`,
     });
     return response.text || "No se pudo generar el resumen.";

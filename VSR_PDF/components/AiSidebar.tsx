@@ -67,23 +67,37 @@ const AiSidebar: React.FC<AiSidebarProps> = ({ documentText, isPdfLoaded }) => {
   return (
     <div className="w-96 border-l border-slate-200 bg-white flex flex-col h-full shadow-xl">
       <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-          <i className="fa-solid fa-wand-magic-sparkles text-indigo-600"></i>
-          Asistente AI
-        </h2>
-        <div className="flex bg-slate-100 p-1 rounded-lg">
-          <button 
-            onClick={() => setActiveTab('chat')}
-            className={`px-3 py-1 text-sm rounded-md transition ${activeTab === 'chat' ? 'bg-white shadow-sm text-indigo-600 font-medium' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Chat
-          </button>
-          <button 
-            onClick={() => setActiveTab('summary')}
-            className={`px-3 py-1 text-sm rounded-md transition ${activeTab === 'summary' ? 'bg-white shadow-sm text-indigo-600 font-medium' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Resumen
-          </button>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <i className="fa-solid fa-wand-magic-sparkles text-indigo-600"></i>
+            Asistente AI
+          </h2>
+          {onClose && (
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 sm:hidden">
+              <i className="fa-solid fa-times"></i>
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex bg-slate-100 p-1 rounded-lg">
+            <button 
+              onClick={() => setActiveTab('chat')}
+              className={`px-3 py-1 text-sm rounded-md transition ${activeTab === 'chat' ? 'bg-white shadow-sm text-indigo-600 font-medium' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Chat
+            </button>
+            <button 
+              onClick={() => setActiveTab('summary')}
+              className={`px-3 py-1 text-sm rounded-md transition ${activeTab === 'summary' ? 'bg-white shadow-sm text-indigo-600 font-medium' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Resumen
+            </button>
+          </div>
+          {onClose && (
+            <button onClick={onClose} className="ml-2 text-slate-400 hover:text-red-500 hidden sm:block">
+              <i className="fa-solid fa-times"></i>
+            </button>
+          )}
         </div>
       </div>
 
