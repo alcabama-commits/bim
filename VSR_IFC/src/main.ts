@@ -120,24 +120,44 @@ async function loadModelList() {
     if (!select) return;
 
     try {
-        const response = await fetch(baseUrl + 'models.json');
+        const baseUrl = (import.meta as any).env?.BASE_URL || './';
+        const response = await fetch(`${baseUrl}models.json?t=${Date.now()}`);
         if (!response.ok) throw new Error('Failed to load models list');
         
         const models = await response.json();
 
         models.forEach((m: { name: string; path: string }) => {
             const option = document.createElement('option');
-            option.value = m.path; // Keep relative path from JSON
+            option.value = m.path;
             option.textContent = m.name;
             select.appendChild(option);
         });
 
-        select.addEventListener('change', (e) => {
+        select.addEventListener('change', async (e) => {
             const path = (e.target as HTMLSelectElement).value;
             if (path) {
-                // Construct full path using baseUrl
-                const fullPath = baseUrl + path;
-                loadIfc(fullPath);
+                try {
+                    // Show loading state (optional but good)
+                    console.log('Downloading model...');
+                    
+                    // Encode path parts to handle spaces
+                    const encodedPath = path.split('/').map(part => encodeURIComponent(part)).join('/');
+                    const fullPath = `${baseUrl}${encodedPath}`;
+                    
+                    const res = await fetch(fullPath);
+                    if (!res.ok) throw new Error(`Error downloading model (${res.status})`);
+                    
+                    const blob = await res.blob();
+                    const blobUrl = URL.createObjectURL(blob);
+                    
+                    await loadIfc(blobUrl);
+                    
+                    // Clean up blob URL after loading (optional, depending on if loadIfc needs it persistent)
+                    // URL.revokeObjectURL(blobUrl); 
+                } catch (error) {
+                    console.error('Error fetching model:', error);
+                    alert('Error downloading model: ' + (error as Error).message);
+                }
             }
         });
 
