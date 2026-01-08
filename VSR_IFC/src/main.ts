@@ -116,15 +116,26 @@ async function loadIfc(url: string) {
 
 // Load models from JSON
 async function loadModelList() {
+    // Wait for DOM to be ready if needed, though module scripts are deferred.
+    // Double check element existence
     const select = document.getElementById('model-select') as HTMLSelectElement;
-    if (!select) return;
+    if (!select) {
+        console.error('Model select element not found!');
+        return;
+    }
 
     try {
         const baseUrl = (import.meta as any).env?.BASE_URL || './';
-        const response = await fetch(`${baseUrl}models.json?t=${Date.now()}`);
-        if (!response.ok) throw new Error('Failed to load models list');
+        console.log('Base URL:', baseUrl);
+        
+        const modelsUrl = `${baseUrl}models.json?t=${Date.now()}`;
+        console.log('Fetching models from:', modelsUrl);
+
+        const response = await fetch(modelsUrl);
+        if (!response.ok) throw new Error(`Failed to load models list (${response.status})`);
         
         const models = await response.json();
+        console.log('Models list loaded:', models);
 
         models.forEach((m: { name: string; path: string }) => {
             const option = document.createElement('option');
@@ -137,23 +148,25 @@ async function loadModelList() {
             const path = (e.target as HTMLSelectElement).value;
             if (path) {
                 try {
-                    // Show loading state (optional but good)
-                    console.log('Downloading model...');
+                    console.log('Downloading model from path:', path);
                     
                     // Encode path parts to handle spaces
                     const encodedPath = path.split('/').map(part => encodeURIComponent(part)).join('/');
                     const fullPath = `${baseUrl}${encodedPath}`;
                     
+                    console.log('Full URL:', fullPath);
+                    
                     const res = await fetch(fullPath);
                     if (!res.ok) throw new Error(`Error downloading model (${res.status})`);
                     
                     const blob = await res.blob();
+                    // Log blob size to ensure it's not empty
+                    console.log('Model downloaded, blob size:', blob.size);
+                    if (blob.size === 0) throw new Error('Downloaded model is empty');
+
                     const blobUrl = URL.createObjectURL(blob);
                     
                     await loadIfc(blobUrl);
-                    
-                    // Clean up blob URL after loading (optional, depending on if loadIfc needs it persistent)
-                    // URL.revokeObjectURL(blobUrl); 
                 } catch (error) {
                     console.error('Error fetching model:', error);
                     alert('Error downloading model: ' + (error as Error).message);
@@ -163,8 +176,14 @@ async function loadModelList() {
 
     } catch (err) {
         console.error('Error loading model list:', err);
+        alert('Error loading model list: ' + (err as Error).message);
     }
 }
+
+// Ensure DOM is fully loaded
+// window.addEventListener('DOMContentLoaded', () => {
+//     loadModelList();
+// });
 
 loadModelList();
 
