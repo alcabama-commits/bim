@@ -192,6 +192,12 @@ async function loadModelList() {
             }
         });
 
+        // Auto-load first model if available
+        if (models.length > 0) {
+            select.value = models[0].path;
+            select.dispatchEvent(new Event('change'));
+        }
+
     } catch (err) {
         logToScreen(`Error loading model list: ${err}`, true);
         alert('Error loading model list: ' + (err as Error).message);
