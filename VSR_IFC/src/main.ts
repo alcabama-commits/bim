@@ -6,9 +6,9 @@ import './style.css';
 // Scene setup
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xa0a0a0);
-scene.fog = new THREE.Fog(0xa0a0a0, 10, 50);
+// Fog removed to improve clarity and visibility of distant elements
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.5, 10000);
 camera.position.z = 5;
 camera.position.y = 2;
 camera.position.x = 2;
@@ -72,32 +72,36 @@ if (input) {
                 scene.add(model);
                 console.log('Model loaded:', model);
 
-                // Auto-center camera
+                // Auto-center camera and fix jitter
                 if (model) {
                     const box = new THREE.Box3().setFromObject(model);
                     const center = box.getCenter(new THREE.Vector3());
                     const size = box.getSize(new THREE.Vector3());
+
+                    // Move model to origin to fix floating point jitter (temblor)
+                    // This is crucial for large coordinate models (BIM/GIS)
+                    model.position.sub(center);
+
+                    // Re-calculate bounds relative to new origin (0,0,0)
+                    // box.setFromObject(model); // box is now centered at 0,0,0
                     
                     const maxDim = Math.max(size.x, size.y, size.z);
                     const fov = camera.fov * (Math.PI / 180);
                     let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2)); // Basic distance calculation
                     
                     // Adjust for aspect ratio
-                    cameraZ *= 1.5; // Add some padding
+                    cameraZ *= 2.0; // Add some padding
                     
-                    const direction = new THREE.Vector3()
-                        .subVectors(camera.position, center)
-                        .normalize();
-
-                    // Move camera to new position looking at center
-                    camera.position.copy(direction.multiplyScalar(cameraZ).add(center));
-                    camera.lookAt(center);
+                    // Position camera looking at origin
+                    const direction = new THREE.Vector3(1, 1, 1).normalize();
+                    camera.position.copy(direction.multiplyScalar(cameraZ));
+                    camera.lookAt(0, 0, 0);
                     
-                    // Update controls target
-                    controls.target.copy(center);
+                    // Update controls target to origin
+                    controls.target.set(0, 0, 0);
                     controls.update();
                     
-                    console.log('Camera centered at:', center, 'Distance:', cameraZ);
+                    console.log('Model centered at origin. Camera distance:', cameraZ);
                 }
             } catch (error) {
                 console.error('Error loading IFC:', error);
