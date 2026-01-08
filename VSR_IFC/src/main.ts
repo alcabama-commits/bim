@@ -114,28 +114,41 @@ async function loadIfc(url: string) {
     }
 }
 
+// Helper to log to screen
+function logToScreen(msg: string, isError = false) {
+    const debugEl = document.getElementById('debug-console');
+    if (debugEl) {
+        debugEl.style.display = 'block';
+        const line = document.createElement('div');
+        line.textContent = `> ${msg}`;
+        if (isError) line.style.color = '#ff4444';
+        debugEl.appendChild(line);
+        debugEl.scrollTop = debugEl.scrollHeight;
+    }
+    if (isError) console.error(msg);
+    else console.log(msg);
+}
+
 // Load models from JSON
 async function loadModelList() {
-    // Wait for DOM to be ready if needed, though module scripts are deferred.
-    // Double check element existence
     const select = document.getElementById('model-select') as HTMLSelectElement;
     if (!select) {
-        console.error('Model select element not found!');
+        logToScreen('Model select element not found!', true);
         return;
     }
 
     try {
         const baseUrl = (import.meta as any).env?.BASE_URL || './';
-        console.log('Base URL:', baseUrl);
+        logToScreen(`Base URL: ${baseUrl}`);
         
         const modelsUrl = `${baseUrl}models.json?t=${Date.now()}`;
-        console.log('Fetching models from:', modelsUrl);
+        logToScreen(`Fetching models from: ${modelsUrl}`);
 
         const response = await fetch(modelsUrl);
         if (!response.ok) throw new Error(`Failed to load models list (${response.status})`);
         
         const models = await response.json();
-        console.log('Models list loaded:', models);
+        logToScreen(`Models list loaded: ${models.length} models found`);
 
         models.forEach((m: { name: string; path: string }) => {
             const option = document.createElement('option');
@@ -147,35 +160,40 @@ async function loadModelList() {
         select.addEventListener('change', async (e) => {
             const path = (e.target as HTMLSelectElement).value;
             if (path) {
+                const overlay = document.getElementById('loading-overlay');
+                if (overlay) overlay.style.display = 'flex';
+                
                 try {
-                    console.log('Downloading model from path:', path);
+                    logToScreen(`Downloading model from path: ${path}`);
                     
                     // Encode path parts to handle spaces
                     const encodedPath = path.split('/').map(part => encodeURIComponent(part)).join('/');
                     const fullPath = `${baseUrl}${encodedPath}`;
                     
-                    console.log('Full URL:', fullPath);
+                    logToScreen(`Full URL: ${fullPath}`);
                     
                     const res = await fetch(fullPath);
                     if (!res.ok) throw new Error(`Error downloading model (${res.status})`);
                     
                     const blob = await res.blob();
-                    // Log blob size to ensure it's not empty
-                    console.log('Model downloaded, blob size:', blob.size);
+                    logToScreen(`Model downloaded, blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
+                    
                     if (blob.size === 0) throw new Error('Downloaded model is empty');
 
                     const blobUrl = URL.createObjectURL(blob);
                     
                     await loadIfc(blobUrl);
                 } catch (error) {
-                    console.error('Error fetching model:', error);
+                    logToScreen(`Error fetching model: ${error}`, true);
                     alert('Error downloading model: ' + (error as Error).message);
+                } finally {
+                    if (overlay) overlay.style.display = 'none';
                 }
             }
         });
 
     } catch (err) {
-        console.error('Error loading model list:', err);
+        logToScreen(`Error loading model list: ${err}`, true);
         alert('Error loading model list: ' + (err as Error).message);
     }
 }
@@ -185,6 +203,7 @@ async function loadModelList() {
 //     loadModelList();
 // });
 
+logToScreen('Script initializing...');
 loadModelList();
 
 const input = document.getElementById('file-input') as HTMLInputElement;
