@@ -15,6 +15,7 @@ const App: React.FC = () => {
   const [activeTool, setActiveTool] = useState<Tool>('hand');
   const [showGrid, setShowGrid] = useState(false);
   const [isBlueprint, setIsBlueprint] = useState(false);
+  const [showAiSidebar, setShowAiSidebar] = useState(false);
   const [calibration, setCalibration] = useState<Calibration | null>(null);
 
   const handleFileSelect = (selectedFile: File) => {
