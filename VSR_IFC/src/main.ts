@@ -59,7 +59,10 @@ window.addEventListener('resize', () => {
 
 // IFC Loading
 const ifcLoader = new IFCLoader();
-ifcLoader.ifcManager.setWasmPath('wasm/');
+// Ensure correct path to WASM files
+const baseUrl = import.meta.env.BASE_URL || './';
+ifcLoader.ifcManager.setWasmPath(baseUrl + 'wasm/');
+
 // Optimize for large models and precision
 ifcLoader.ifcManager.applyWebIfcConfig({
     COORDINATE_TO_ORIGIN: true,
@@ -75,6 +78,7 @@ async function loadIfc(url: string) {
     }
 
     try {
+        console.log('Attempting to load IFC from:', url);
         const model = await ifcLoader.loadAsync(url);
         currentModel = model;
         scene.add(model);
@@ -106,6 +110,7 @@ async function loadIfc(url: string) {
         }
     } catch (error) {
         console.error('Error loading IFC:', error);
+        alert('Error loading model: ' + (error as Error).message);
     }
 }
 
@@ -115,19 +120,25 @@ async function loadModelList() {
     if (!select) return;
 
     try {
-        const response = await fetch('models.json');
+        const response = await fetch(baseUrl + 'models.json');
+        if (!response.ok) throw new Error('Failed to load models list');
+        
         const models = await response.json();
 
         models.forEach((m: { name: string; path: string }) => {
             const option = document.createElement('option');
-            option.value = m.path;
+            option.value = m.path; // Keep relative path from JSON
             option.textContent = m.name;
             select.appendChild(option);
         });
 
         select.addEventListener('change', (e) => {
             const path = (e.target as HTMLSelectElement).value;
-            if (path) loadIfc(path);
+            if (path) {
+                // Construct full path using baseUrl
+                const fullPath = baseUrl + path;
+                loadIfc(fullPath);
+            }
         });
 
     } catch (err) {
