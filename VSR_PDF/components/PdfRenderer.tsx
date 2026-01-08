@@ -17,6 +17,7 @@ interface PdfRendererProps {
   onDocumentLoad: (totalPages: number, fullText: string) => void;
   onFileSelect: (file: File) => void;
   onToolChange?: (tool: Tool) => void;
+  onZoom?: (scale: number) => void;
 }
 
 const PdfRenderer: React.FC<PdfRendererProps> = ({ 
@@ -31,10 +32,12 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   onCalibrationComplete,
   onDocumentLoad,
   onFileSelect,
-  onToolChange
+  onToolChange,
+  onZoom
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const zoomPoint = useRef<{x: number, y: number, oldScale: number, scrollLeft: number, scrollTop: number} | null>(null);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [libReady, setLibReady] = useState(false);
@@ -124,14 +127,34 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
     setPoints([]);
   }, [pdfDoc, currentPage, scale, rotation, renderPage]);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      if (isDragging) {
+        setIsDragging(false);
+      }
+    };
+    
+    if (isDragging) {
+      window.addEventListener('pointerup', handleGlobalPointerUp);
+    }
+    
+    return () => {
+      window.removeEventListener('pointerup', handleGlobalPointerUp);
+    };
+  }, [isDragging]);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
     if (!file) return;
     if (tool === 'hand') {
       setIsDragging(true);
-      setStartX(e.pageX - (containerRef.current?.offsetLeft || 0));
-      setStartY(e.pageY - (containerRef.current?.offsetTop || 0));
-      setScrollLeft(containerRef.current?.scrollLeft || 0);
-      setScrollTop(containerRef.current?.scrollTop || 0);
+      e.currentTarget.setPointerCapture(e.pointerId);
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setStartX(e.clientX - rect.left);
+        setStartY(e.clientY - rect.top);
+        setScrollLeft(containerRef.current.scrollLeft);
+        setScrollTop(containerRef.current.scrollTop);
+      }
     } else if ((tool === 'measure' || tool === 'calibrate') && canvasRef.current) {
       const rect = canvasRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
@@ -161,13 +184,56 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || tool !== 'hand' || !containerRef.current) return;
-    const x = e.pageX - containerRef.current.offsetLeft;
-    const y = e.pageY - containerRef.current.offsetTop;
-    containerRef.current.scrollLeft = scrollLeft - (x - startX) * 1.5;
-    containerRef.current.scrollTop = scrollTop - (y - startY) * 1.5;
+  const handlePointerUp = (e: React.PointerEvent) => {
+    setIsDragging(false);
+    e.currentTarget.releasePointerCapture(e.pointerId);
   };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging || tool !== 'hand' || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    containerRef.current.scrollLeft = scrollLeft - (x - startX);
+    containerRef.current.scrollTop = scrollTop - (y - startY);
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    if (!onZoom) return;
+    const delta = -Math.sign(e.deltaY);
+    const zoomStep = 0.1;
+    let newScale = scale + delta * zoomStep;
+    newScale = Math.max(0.1, Math.min(5.0, parseFloat(newScale.toFixed(2))));
+    
+    if (newScale === scale) return;
+
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      zoomPoint.current = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+        oldScale: scale,
+        scrollLeft: containerRef.current.scrollLeft,
+        scrollTop: containerRef.current.scrollTop
+      };
+    }
+    onZoom(newScale);
+  };
+
+  useEffect(() => {
+    if (zoomPoint.current && containerRef.current) {
+      const { x, y, oldScale, scrollLeft: oldScrollLeft, scrollTop: oldScrollTop } = zoomPoint.current;
+      const scaleRatio = scale / oldScale;
+      
+      const newScrollLeft = (oldScrollLeft + x) * scaleRatio - x;
+      const newScrollTop = (oldScrollTop + y) * scaleRatio - y;
+      
+      containerRef.current.scrollLeft = newScrollLeft;
+      containerRef.current.scrollTop = newScrollTop;
+      
+      zoomPoint.current = null;
+    }
+  }, [scale]);
 
   if (!file) {
     return (
@@ -210,14 +276,14 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   return (
     <div 
       ref={containerRef}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={() => setIsDragging(false)}
-      onMouseLeave={() => setIsDragging(false)}
-      className={`relative flex-1 overflow-auto bg-slate-900 h-full no-scrollbar ${tool === 'hand' ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onWheel={handleWheel}
+      className={`relative flex-1 overflow-auto bg-slate-900 h-full no-scrollbar touch-none ${tool === 'hand' ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
     >
-      <div className="relative inline-block m-auto min-w-full min-h-full flex items-center justify-center p-20">
-        <div className={`relative transition-all duration-300 ${isBlueprint ? 'invert hue-rotate-180 brightness-110 contrast-125' : ''}`}>
+      <div className="relative w-fit min-w-full min-h-full flex p-20">
+        <div className={`relative transition-all duration-300 m-auto ${isBlueprint ? 'invert hue-rotate-180 brightness-110 contrast-125' : ''}`}>
           <canvas ref={canvasRef} className="bg-white shadow-[0_0_60px_rgba(0,0,0,0.6)] border border-slate-700" />
           
           {showGrid && (

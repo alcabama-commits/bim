@@ -115,7 +115,10 @@ const App: React.FC = () => {
   }, []);
 
   const handleRotate = () => setRotation(prev => (prev + 90) % 360);
-  const handleZoom = (delta: number) => setScale(prev => Math.max(0.1, Math.min(10, prev + delta)));
+  const handleZoom = (delta: number) => setScale(prev => {
+    const newScale = prev + delta;
+    return Math.max(0.1, Math.min(10, parseFloat(newScale.toFixed(2))));
+  });
 
   return (
     <div className="flex h-screen w-full bg-slate-950 text-slate-100 overflow-hidden select-none">
@@ -288,7 +291,46 @@ const App: React.FC = () => {
             onFileSelect={handleFileSelect}
             // Pass the tool setter as onToolChange prop
             onToolChange={setActiveTool}
+            onZoom={setScale}
           />
+
+          {/* Zoom Sidebar */}
+          {file && (
+            <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col gap-1 bg-slate-900/90 backdrop-blur border border-slate-700 p-1.5 rounded-xl shadow-2xl z-40">
+              <button 
+                onClick={() => handleZoom(0.1)} 
+                className="w-8 h-8 flex items-center justify-center rounded hover:bg-indigo-600 text-slate-300 hover:text-white transition"
+                title="Zoom In (+)"
+              >
+                <i className="fa-solid fa-plus text-xs"></i>
+              </button>
+              
+              <div className="py-2 flex items-center justify-center cursor-default group relative">
+                <span className="text-[10px] font-mono font-bold text-slate-400 group-hover:text-white transition-colors">
+                  {Math.round(scale * 100)}%
+                </span>
+                {/* Tooltip or popup could go here */}
+              </div>
+
+              <button 
+                onClick={() => handleZoom(-0.1)} 
+                className="w-8 h-8 flex items-center justify-center rounded hover:bg-indigo-600 text-slate-300 hover:text-white transition"
+                title="Zoom Out (-)"
+              >
+                <i className="fa-solid fa-minus text-xs"></i>
+              </button>
+              
+              <div className="h-px w-4 bg-slate-700 mx-auto my-1"></div>
+              
+              <button 
+                onClick={() => setScale(1)} 
+                className="w-8 h-8 flex items-center justify-center rounded hover:bg-indigo-600 text-slate-300 hover:text-white transition text-[10px] font-bold"
+                title="Reset Zoom (100%)"
+              >
+                1:1
+              </button>
+            </div>
+          )}
         </main>
       </div>
 
