@@ -39,11 +39,11 @@
             }
 
             // 2. Lógica de seguridad: Denegar acceso si el rol del usuario no está permitido.
-            const allowedRoles = ['EDGE', 'COMBOS Y REFORMAS', 'ARQUITECTURA', 'ADMINISTRADOR'];
+            const allowedRoles = ['COMBOS Y REFORMAS', 'ACÚSTICA', 'ADMINISTRADOR'];
             const userRole = userAccount.role;
             const isAllowed = userRole && allowedRoles.includes(userRole);
 
-            console.log(`DEBUG (Security): User role is '${userRole}'. Allowed roles: ${allowedRoles}. Access granted: ${isAllowed}`);
+            console.log(`DEBUG (Publicaciones Security): User role is '${userRole}'. Allowed roles: ${allowedRoles}. Access granted: ${isAllowed}`);
 
             if (!isAllowed) {
                 alert('Acceso denegado. No tiene permisos para ver esta página.');
