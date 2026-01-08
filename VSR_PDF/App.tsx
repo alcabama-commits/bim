@@ -333,14 +333,6 @@ const App: React.FC = () => {
           )}
         </main>
       </div>
-
-      {showAiSidebar && (
-        <AiSidebar 
-          isPdfLoaded={!!file} 
-          documentText={documentText}
-          onClose={() => setShowAiSidebar(false)}
-        />
-      )}
     </div>
   );
 };
