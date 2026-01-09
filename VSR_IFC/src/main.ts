@@ -72,7 +72,8 @@ ifcLoader.ifcManager.applyWebIfcConfig({
 // Setup Web Workers for performance
 async function setupIFCWorker() {
     try {
-        await ifcLoader.ifcManager.useWebWorkers(true, baseUrl + 'wasm/IFCWorker.js');
+        // Worker is now at the root (public/IFCWorker.js)
+        await ifcLoader.ifcManager.useWebWorkers(true, baseUrl + 'IFCWorker.js');
         logToScreen('Web Workers enabled for IFC loading');
     } catch (err) {
         logToScreen('Failed to setup Web Workers: ' + err, true);
