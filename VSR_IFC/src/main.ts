@@ -65,7 +65,7 @@ ifcLoader.ifcManager.setWasmPath(baseUrl + 'wasm/');
 
 // Optimize for large models and precision
 ifcLoader.ifcManager.applyWebIfcConfig({
-    COORDINATE_TO_ORIGIN: true,
+    COORDINATE_TO_ORIGIN: false, // Disabled to manually handle relative positioning
     USE_FAST_BOOLS: true
 });
 
@@ -73,11 +73,25 @@ ifcLoader.ifcManager.applyWebIfcConfig({
 // Key: path, Value: Model object
 const loadedModels = new Map<string, any>();
 
+// Global offset to fix floating point jitter while maintaining relative positions
+let firstModelCenter: THREE.Vector3 | null = null;
+
 async function loadIfc(url: string, path: string) {
     try {
         console.log('Attempting to load IFC from:', url);
         const model = await ifcLoader.loadAsync(url);
         
+        // Handle geometry offset to fix jitter
+        if (model.isMesh) {
+            handleGeometryOffset(model.geometry);
+        } else if (model.isGroup) {
+            model.traverse((child: any) => {
+                if (child.isMesh) {
+                    handleGeometryOffset(child.geometry);
+                }
+            });
+        }
+
         // Add to scene and tracking map
         scene.add(model);
         loadedModels.set(path, model);
@@ -110,6 +124,35 @@ async function loadIfc(url: string, path: string) {
     } catch (error) {
         console.error('Error loading IFC:', error);
         throw error;
+    }
+}
+
+function handleGeometryOffset(geometry: THREE.BufferGeometry) {
+    // If this is the very first geometry processed, calculate the global center
+    if (!firstModelCenter) {
+        geometry.computeBoundingBox();
+        if (geometry.boundingBox) {
+            firstModelCenter = geometry.boundingBox.getCenter(new THREE.Vector3());
+            logToScreen(`Setting scene origin to: ${firstModelCenter.x.toFixed(2)}, ${firstModelCenter.y.toFixed(2)}, ${firstModelCenter.z.toFixed(2)}`);
+        }
+    }
+
+    // Apply the global offset to all geometries (including the first one)
+    if (firstModelCenter) {
+        const positions = geometry.attributes.position;
+        for (let i = 0; i < positions.count; i++) {
+            positions.setXYZ(
+                i,
+                positions.getX(i) - firstModelCenter.x,
+                positions.getY(i) - firstModelCenter.y,
+                positions.getZ(i) - firstModelCenter.z
+            );
+        }
+        positions.needsUpdate = true;
+        
+        // Recompute bounds after modification
+        geometry.computeBoundingBox();
+        geometry.computeBoundingSphere();
     }
 }
 
