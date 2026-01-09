@@ -5,17 +5,35 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VSR IFC Viewer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="module" src="/src/main.ts"></script>
   </head>
   <body>
     <div id="app">
-      <div class="ui-container">
-        <select id="model-select">
-          <option value="" disabled selected>Select a model</option>
-        </select>
-        <input type="file" id="file-input" accept=".ifc">
-        <label for="file-input" class="file-label">Upload IFC</label>
+      <!-- Toggle Sidebar Button -->
+      <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Toggle Sidebar">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+
+      <!-- Sidebar -->
+      <div id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+          <h3><i class="fa-solid fa-cubes"></i> Modelos IFC</h3>
+          <button id="sidebar-close" class="close-btn"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        
+        <div class="sidebar-content" id="model-list">
+          <!-- Populated by JS -->
+        </div>
+
+        <div class="sidebar-footer">
+           <input type="file" id="file-input" accept=".ifc" style="display: none;">
+           <label for="file-input" class="upload-btn">
+             <i class="fa-solid fa-upload"></i> Cargar Local
+           </label>
+        </div>
       </div>
+
       <div id="loading-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000;">
         <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
             <div style="margin-bottom: 10px; font-weight: bold;">Loading Model...</div>
