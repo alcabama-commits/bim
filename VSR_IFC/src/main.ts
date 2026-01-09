@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { IFCLoader } from 'web-ifc-three/IFCLoader';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import './style.css';
 
 // Scene setup
@@ -79,7 +79,7 @@ let firstModelCenter: THREE.Vector3 | null = null;
 async function loadIfc(url: string, path: string) {
     try {
         console.log('Attempting to load IFC from:', url);
-        const model = await ifcLoader.loadAsync(url);
+        const model = await (ifcLoader as any).loadAsync(url);
         
         // Handle geometry offset to fix jitter
         if (model.isMesh) {
@@ -139,7 +139,8 @@ function handleGeometryOffset(geometry: THREE.BufferGeometry) {
 
     // Apply the global offset to all geometries (including the first one)
     if (firstModelCenter) {
-        const positions = geometry.attributes.position;
+        const positions = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+        if (!positions) return;
         for (let i = 0; i < positions.count; i++) {
             positions.setXYZ(
                 i,
@@ -188,6 +189,24 @@ function initSidebar() {
     }
 }
 
+function getSpecialtyFromIfcPath(path: string): string {
+    const filename = path.split('/').pop() ?? path;
+    const cleanFilename = filename.split('?')[0];
+    const baseName = cleanFilename.replace(/\.ifc$/i, '');
+    const parts = baseName.split('_');
+    const raw = (parts[3] ?? '').trim();
+
+    if (!raw) return 'General';
+
+    const normalized = raw
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+
+    if (normalized === 'desagues') return 'Desagües';
+    return raw;
+}
+
 // Load models from JSON and populate sidebar
 async function loadModelList() {
     const listContainer = document.getElementById('model-list');
@@ -209,12 +228,12 @@ async function loadModelList() {
         const models = await response.json();
         logToScreen(`Models list loaded: ${models.length} models found`);
 
-        // Group models by folder
+        // Group models by specialty
         const groups: Record<string, any[]> = {};
         models.forEach((m: { name: string; path: string; folder?: string }) => {
-            const folder = m.folder || 'General';
-            if (!groups[folder]) groups[folder] = [];
-            groups[folder].push(m);
+            const specialty = getSpecialtyFromIfcPath(m.path) || m.folder || 'General';
+            if (!groups[specialty]) groups[specialty] = [];
+            groups[specialty].push(m);
         });
 
         // Clear container

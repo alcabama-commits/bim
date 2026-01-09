@@ -1,14 +1,8 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import PdfRenderer from './components/PdfRenderer';
+import AiSidebar from './components/AiSidebar';
 import { Calibration, Tool } from './types';
-
-interface RepoFile {
-  name: string
-  filename: string
-  description?: string
-  folder?: string
-}
 
 const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -23,75 +17,6 @@ const App: React.FC = () => {
   const [isBlueprint, setIsBlueprint] = useState(false);
   const [calibration, setCalibration] = useState<Calibration | null>(null);
 
-  // Repository files state
-  const [repoFiles, setRepoFiles] = useState<RepoFile[]>([]);
-  const [selectedRepoFile, setSelectedRepoFile] = useState<RepoFile | null>(null);
-  const [isLoadingRepo, setIsLoadingRepo] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
-
-  // Load files on mount
-  useEffect(() => {
-    loadRepoFiles();
-  }, []);
-
-  const loadRepoFiles = async () => {
-    setIsLoadingRepo(true);
-    try {
-      const baseUrl = (import.meta as any).env?.BASE_URL || './';
-      const res = await fetch(`${baseUrl}Drawing/list.json?t=${Date.now()}`);
-      if (!res.ok) throw new Error('No se pudo cargar la lista de archivos');
-      const data = await res.json();
-      setRepoFiles(data);
-    } catch (err) {
-      console.error(err);
-      setRepoFiles([]);
-    } finally {
-      setIsLoadingRepo(false);
-    }
-  };
-
-  const selectRepoFile = async (rf: RepoFile) => {
-    try {
-      setIsDownloading(true);
-      setDownloadError(null);
-      const baseUrl = (import.meta as any).env?.BASE_URL || './';
-      // Encode path parts to handle spaces, but keep slashes
-      const encodedPath = rf.filename.split('/').map(part => encodeURIComponent(part)).join('/');
-      const url = `${baseUrl}Drawing/${encodedPath}`;
-      
-      console.log('Downloading file from:', url);
-      
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Error al descargar archivo (${res.status})`);
-      const blob = await res.blob();
-      
-      if (blob.size === 0) throw new Error('El archivo está vacío');
-
-      // Use only the basename for the File object to avoid issues with slashes in name
-      const simpleName = rf.filename.split('/').pop() || rf.filename;
-      const newFile = new File([blob], simpleName, { type: 'application/pdf' });
-      
-      handleFileSelect(newFile);
-      setSelectedRepoFile(rf);
-    } catch (err) {
-      console.error(err);
-      setDownloadError((err as Error).message || 'Error al cargar el archivo');
-      setFile(null);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
-  const toggleFolder = (folder: string) => {
-    setCollapsedFolders(prev => ({
-      ...prev,
-      [folder]: !prev[folder]
-    }));
-  };
-
   const handleFileSelect = (selectedFile: File) => {
     setFile(selectedFile);
     setCurrentPage(1);
@@ -101,10 +26,7 @@ const App: React.FC = () => {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      handleFileSelect(selectedFile);
-      setSelectedRepoFile(null);
-    }
+    if (selectedFile) handleFileSelect(selectedFile);
   };
 
   const onDocumentLoad = useCallback((pages: number, text: string) => {
@@ -113,86 +35,13 @@ const App: React.FC = () => {
   }, []);
 
   const handleRotate = () => setRotation(prev => (prev + 90) % 360);
-  const handleZoom = (delta: number) => setScale(prev => {
-    const newScale = prev + delta;
-    return Math.max(0.1, Math.min(10, parseFloat(newScale.toFixed(2))));
-  });
+  const handleZoom = (delta: number) => setScale(prev => Math.max(0.1, Math.min(10, prev + delta)));
 
   return (
     <div className="flex h-screen w-full bg-slate-950 text-slate-100 overflow-hidden select-none">
-      {/* Sidebar de Archivos */}
-      <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} bg-slate-900 border-r border-slate-800 transition-all duration-300 flex flex-col overflow-hidden relative z-20`}>
-        <div className="h-12 flex items-center justify-between px-4 border-b border-slate-800 shrink-0">
-          <span className="text-sm font-bold uppercase tracking-wider text-slate-400">Galería</span>
-          <button onClick={() => setIsSidebarOpen(false)} className="text-slate-500 hover:text-white">
-            <i className="fa-solid fa-chevron-left"></i>
-          </button>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-2 space-y-2">
-          {isLoadingRepo && repoFiles.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-slate-500">
-              <i className="fa-solid fa-circle-notch fa-spin text-xl mb-2"></i>
-              <span className="text-[10px]">Cargando...</span>
-            </div>
-          ) : repoFiles.length === 0 ? (
-            <div className="text-center py-8 text-slate-500 px-2">
-              <p className="text-xs">No hay archivos disponibles</p>
-            </div>
-          ) : (
-            Object.entries(repoFiles.reduce((acc, f) => {
-              const k = f.folder || 'General';
-              if (!acc[k]) acc[k] = [];
-              acc[k].push(f);
-              return acc;
-            }, {} as Record<string, RepoFile[]>)).map(([folder, files]) => (
-              <div key={folder} className="mb-4">
-                <button 
-                  onClick={() => toggleFolder(folder)}
-                  className="w-full text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-2 flex items-center justify-between sticky top-0 bg-slate-900 py-1 z-10 border-b border-slate-800/50 hover:text-slate-300 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <i className={`fa-regular ${collapsedFolders[folder] ? 'fa-folder' : 'fa-folder-open'} text-slate-600`}></i>
-                    {folder}
-                  </div>
-                  <i className={`fa-solid fa-chevron-down transition-transform text-[10px] ${collapsedFolders[folder] ? '-rotate-90' : 'rotate-0'}`}></i>
-                </button>
-                
-                <div className={`space-y-1 overflow-hidden transition-all duration-300 ${collapsedFolders[folder] ? 'max-h-0 opacity-0' : 'max-h-[1000px] opacity-100'}`}>
-                  {files.map((rf, i) => (
-                    <button
-                      key={i}
-                      onClick={() => selectRepoFile(rf)}
-                      className={`w-full text-left p-2.5 rounded-lg border transition group flex flex-col gap-1
-                        ${selectedRepoFile?.filename === rf.filename 
-                          ? 'bg-indigo-600/20 border-indigo-500/50' 
-                          : 'bg-slate-800/50 border-slate-700 hover:bg-slate-800 hover:border-yellow-500/50'
-                        }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <i className={`fa-regular fa-file-pdf text-xs ${selectedRepoFile?.filename === rf.filename ? 'text-indigo-400' : 'text-slate-500 group-hover:text-yellow-500'}`}></i>
-                        <span className={`text-xs font-medium truncate ${selectedRepoFile?.filename === rf.filename ? 'text-indigo-300' : 'text-slate-300 group-hover:text-slate-200'}`}>
-                          {rf.name}
-                        </span>
-                      </div>
-                      {rf.description && <span className="text-[10px] text-slate-500 truncate pl-5 block">{rf.description}</span>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
         <header className="h-12 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between z-30 shadow-md">
           <div className="flex items-center gap-4">
-            {!isSidebarOpen && (
-              <button onClick={() => setIsSidebarOpen(true)} className="text-slate-500 hover:text-white mr-2">
-                <i className="fa-solid fa-bars"></i>
-              </button>
-            )}
             <div className="flex items-center gap-2">
               <i className="fa-solid fa-drafting-compass text-yellow-500"></i>
               <span className="text-sm font-bold tracking-tighter uppercase">ArchView <span className="text-yellow-500 text-[10px] ml-1">BIM PRO</span></span>
@@ -282,48 +131,14 @@ const App: React.FC = () => {
             onFileSelect={handleFileSelect}
             // Pass the tool setter as onToolChange prop
             onToolChange={setActiveTool}
-            onZoom={setScale}
           />
-
-          {/* Zoom Sidebar */}
-          {file && (
-            <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col gap-1 bg-slate-900/90 backdrop-blur border border-slate-700 p-1.5 rounded-xl shadow-2xl z-40">
-              <button 
-                onClick={() => handleZoom(0.1)} 
-                className="w-8 h-8 flex items-center justify-center rounded hover:bg-indigo-600 text-slate-300 hover:text-white transition"
-                title="Zoom In (+)"
-              >
-                <i className="fa-solid fa-plus text-xs"></i>
-              </button>
-              
-              <div className="py-2 flex items-center justify-center cursor-default group relative">
-                <span className="text-[10px] font-mono font-bold text-slate-400 group-hover:text-white transition-colors">
-                  {Math.round(scale * 100)}%
-                </span>
-                {/* Tooltip or popup could go here */}
-              </div>
-
-              <button 
-                onClick={() => handleZoom(-0.1)} 
-                className="w-8 h-8 flex items-center justify-center rounded hover:bg-indigo-600 text-slate-300 hover:text-white transition"
-                title="Zoom Out (-)"
-              >
-                <i className="fa-solid fa-minus text-xs"></i>
-              </button>
-              
-              <div className="h-px w-4 bg-slate-700 mx-auto my-1"></div>
-              
-              <button 
-                onClick={() => setScale(1)} 
-                className="w-8 h-8 flex items-center justify-center rounded hover:bg-indigo-600 text-slate-300 hover:text-white transition text-[10px] font-bold"
-                title="Reset Zoom (100%)"
-              >
-                1:1
-              </button>
-            </div>
-          )}
         </main>
       </div>
+
+      <AiSidebar 
+        isPdfLoaded={!!file} 
+        documentText={documentText}
+      />
     </div>
   );
 };
