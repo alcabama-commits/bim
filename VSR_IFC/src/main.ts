@@ -297,7 +297,8 @@ async function loadModelList() {
             listContainer.appendChild(groupDiv);
         }
 
-        // Auto-load first model
+        // Auto-load first model DISABLED by user request
+        /*
         if (firstModelPath) {
             logToScreen(`Auto-loading first model: ${firstModelPath}`);
             const firstItem = document.querySelector(`.model-item[data-path="${firstModelPath}"]`) as HTMLElement;
@@ -305,6 +306,7 @@ async function loadModelList() {
                 await toggleModel(firstModelPath, baseUrl, firstItem);
             }
         }
+        */
 
     } catch (err) {
         logToScreen(`Error loading model list: ${err}`, true);

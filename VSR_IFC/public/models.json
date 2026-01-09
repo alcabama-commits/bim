@@ -1,5 +1,10 @@
 [
   {
+    "name": "19 ZI ALL Arquitectura Torre ModuloA",
+    "path": "models/19_ZI_ALL_Arquitectura_Torre_ModuloA.ifc",
+    "folder": "Auto"
+  },
+  {
     "name": "19 ZI ALL Desagües Torre ModuloA T1-T2",
     "path": "models/19_ZI_ALL_Desagües_Torre_ModuloA_T1-T2.ifc",
     "folder": "Auto"
