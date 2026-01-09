@@ -1,161 +1,66 @@
 import * as THREE from 'three';
-import { IFCLoader } from 'web-ifc-three/IFCLoader';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as OBC from '@thatopen/components';
+import { FragmentsManager } from '@thatopen/components';
+
 import './style.css';
 
-// Scene setup
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xa0a0a0);
-// Fog removed to improve clarity and visibility of distant elements
+// --- Initialization of That Open Engine ---
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.5, 10000);
-camera.position.z = 5;
-camera.position.y = 2;
-camera.position.x = 2;
+const components = new OBC.Components();
+const worlds = components.get(OBC.Worlds);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
+const world = worlds.create<
+  OBC.SimpleScene,
+  OBC.OrthoPerspectiveCamera,
+  OBC.SimpleRenderer
+>();
 
-const container = document.getElementById('viewer-container');
-if (container) {
-    container.appendChild(renderer.domElement);
-}
+world.scene = new OBC.SimpleScene(components);
+world.scene.setup();
+world.scene.three.background = new THREE.Color(0xa0a0a0);
 
-// Controls
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
+const container = document.getElementById('viewer-container') as HTMLElement;
+world.renderer = new OBC.SimpleRenderer(components, container);
+world.camera = new OBC.OrthoPerspectiveCamera(components);
 
-// Lights
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-scene.add(ambientLight);
+components.init();
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-directionalLight.position.set(1, 1, 1);
-scene.add(directionalLight);
+// Grids
+const grids = components.get(OBC.Grids);
+grids.create(world);
 
-const directionalLight2 = new THREE.DirectionalLight(0xffffff, 1);
-directionalLight2.position.set(-1, -1, -1);
-scene.add(directionalLight2);
+// --- IFC & Fragments Setup ---
 
-// Grid
-const grid = new THREE.GridHelper(50, 50);
-scene.add(grid);
+const ifcLoader = components.get(OBC.IfcLoader);
+const fragments = components.get(OBC.FragmentsManager);
 
-// Animation loop
-function animate() {
-    requestAnimationFrame(animate);
-    controls.update();
-    renderer.render(scene, camera);
-}
-animate();
-
-// Resize handler
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
-// IFC Loading
-const ifcLoader = new IFCLoader();
-// Ensure correct path to WASM files
+// Setup WASM paths for IFC loading
 const baseUrl = import.meta.env.BASE_URL || './';
-ifcLoader.ifcManager.setWasmPath(baseUrl + 'wasm/');
-
-// Optimize for large models and precision
-ifcLoader.ifcManager.applyWebIfcConfig({
-    COORDINATE_TO_ORIGIN: false, // Disabled to manually handle relative positioning
-    USE_FAST_BOOLS: true
+await ifcLoader.setup({
+    wasm: {
+        path: baseUrl + 'wasm/',
+        absolute: true
+    }
 });
+
+// Configure Fragments Manager (Culling, etc.)
+// Offload heavy tasks to worker if possible (FragmentsManager has internal workers for geometry)
+// Note: We are not setting up a separate Fragments worker URL here as we are loading IFCs directly mostly,
+// but if we were loading .frag files we would need it. 
+// However, the tutorial mentions initializing FragmentsManager with a worker.
+// Since we are primarily loading IFCs which *become* fragments, the IfcLoader handles the conversion.
+
+// Enable culling for performance
+// const culler = components.get(OBC.Cullers).create(world);
+// culler.threshold = 10; // Threshold for culling
+
+// world.camera.controls.addEventListener('sleep', () => {
+//    culler.needsUpdate = true;
+// });
 
 // Track loaded models
-// Key: path, Value: Model object
+// Key: path, Value: FragmentsGroup (the model)
 const loadedModels = new Map<string, any>();
-
-// Global offset to fix floating point jitter while maintaining relative positions
-let firstModelCenter: THREE.Vector3 | null = null;
-
-async function loadIfc(url: string, path: string) {
-    try {
-        console.log('Attempting to load IFC from:', url);
-        const model = await (ifcLoader as any).loadAsync(url);
-        
-        // Handle geometry offset to fix jitter
-        if (model.isMesh) {
-            handleGeometryOffset(model.geometry);
-        } else if (model.isGroup) {
-            model.traverse((child: any) => {
-                if (child.isMesh) {
-                    handleGeometryOffset(child.geometry);
-                }
-            });
-        }
-
-        // Add to scene and tracking map
-        scene.add(model);
-        loadedModels.set(path, model);
-        
-        console.log('Model loaded:', model);
-
-        // Auto-center camera if it's the first model
-        if (loadedModels.size === 1) {
-            const box = new THREE.Box3().setFromObject(model);
-            const center = box.getCenter(new THREE.Vector3());
-            const size = box.getSize(new THREE.Vector3());
-
-            const maxDim = Math.max(size.x, size.y, size.z);
-            const fov = camera.fov * (Math.PI / 180);
-            let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2));
-            
-            cameraZ *= 2.0; // Padding
-            
-            const direction = new THREE.Vector3(1, 1, 1).normalize();
-            camera.position.copy(center.clone().add(direction.multiplyScalar(cameraZ)));
-            camera.lookAt(center);
-            
-            controls.target.copy(center);
-            controls.update();
-            
-            console.log('Camera centered at:', center, 'Distance:', cameraZ);
-        }
-        
-        return model;
-    } catch (error) {
-        console.error('Error loading IFC:', error);
-        throw error;
-    }
-}
-
-function handleGeometryOffset(geometry: THREE.BufferGeometry) {
-    // If this is the very first geometry processed, calculate the global center
-    if (!firstModelCenter) {
-        geometry.computeBoundingBox();
-        if (geometry.boundingBox) {
-            firstModelCenter = geometry.boundingBox.getCenter(new THREE.Vector3());
-            logToScreen(`Setting scene origin to: ${firstModelCenter.x.toFixed(2)}, ${firstModelCenter.y.toFixed(2)}, ${firstModelCenter.z.toFixed(2)}`);
-        }
-    }
-
-    // Apply the global offset to all geometries (including the first one)
-    if (firstModelCenter) {
-        const positions = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
-        if (!positions) return;
-        for (let i = 0; i < positions.count; i++) {
-            positions.setXYZ(
-                i,
-                positions.getX(i) - firstModelCenter.x,
-                positions.getY(i) - firstModelCenter.y,
-                positions.getZ(i) - firstModelCenter.z
-            );
-        }
-        positions.needsUpdate = true;
-        
-        // Recompute bounds after modification
-        geometry.computeBoundingBox();
-        geometry.computeBoundingSphere();
-    }
-}
 
 // Helper to log to screen
 function logToScreen(msg: string, isError = false) {
@@ -172,7 +77,51 @@ function logToScreen(msg: string, isError = false) {
     else console.log(msg);
 }
 
-// Sidebar Logic
+// --- Model Loading Logic ---
+
+async function loadIfc(url: string, path: string) {
+    try {
+        logToScreen(`Fetching IFC: ${url}`);
+        const file = await fetch(url);
+        if (!file.ok) throw new Error(`Failed to fetch ${url}`);
+        
+        const data = await file.arrayBuffer();
+        const buffer = new Uint8Array(data);
+        
+        logToScreen(`Parsing IFC... (Size: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+        
+        // Load the model using That Open Engine's IfcLoader
+        // This automatically converts to fragments and adds to scene
+        const model = await ifcLoader.load(buffer);
+        model.name = path.split('/').pop() || 'Model';
+
+        // Add to world scene (OBC adds it, but we ensure it's in the right world)
+        world.scene.three.add(model);
+        
+        // Track it
+        loadedModels.set(path, model);
+        
+        logToScreen('Model loaded successfully as Fragments');
+
+        // Auto-center camera if it's the first model
+        if (loadedModels.size === 1) {
+             world.camera.controls.fitToSphere(model.boundingSphere, true);
+             logToScreen('Camera centered on model');
+        }
+        
+        // Enable culling for this model
+        // culler.add(model.mesh);
+        // culler.needsUpdate = true;
+
+        return model;
+    } catch (error) {
+        logToScreen(`Error loading IFC: ${error}`, true);
+        throw error;
+    }
+}
+
+// --- Sidebar Logic (Kept mostly same, updated for new loading) ---
+
 function initSidebar() {
     const sidebar = document.getElementById('sidebar');
     const toggleBtn = document.getElementById('sidebar-toggle');
@@ -211,17 +160,12 @@ function getSpecialtyFromIfcPath(path: string): string {
 async function loadModelList() {
     const listContainer = document.getElementById('model-list');
     if (!listContainer) {
-        logToScreen('Model list container not found!', true);
         return;
     }
 
     try {
-        const baseUrl = (import.meta as any).env?.BASE_URL || './';
-        logToScreen(`Base URL: ${baseUrl}`);
-        
         const modelsUrl = `${baseUrl}models.json?t=${Date.now()}`;
-        logToScreen(`Fetching models from: ${modelsUrl}`);
-
+        
         const response = await fetch(modelsUrl);
         if (!response.ok) throw new Error(`Failed to load models list (${response.status})`);
         
@@ -238,9 +182,6 @@ async function loadModelList() {
 
         // Clear container
         listContainer.innerHTML = '';
-
-        // Render groups
-        let firstModelPath: string | null = null;
 
         for (const [folder, items] of Object.entries(groups)) {
             const groupDiv = document.createElement('div');
@@ -268,8 +209,6 @@ async function loadModelList() {
             });
 
             items.forEach((m) => {
-                if (!firstModelPath) firstModelPath = m.path;
-
                 const li = document.createElement('li');
                 li.className = 'model-item';
                 li.dataset.path = m.path;
@@ -297,20 +236,8 @@ async function loadModelList() {
             listContainer.appendChild(groupDiv);
         }
 
-        // Auto-load first model DISABLED by user request
-        /*
-        if (firstModelPath) {
-            logToScreen(`Auto-loading first model: ${firstModelPath}`);
-            const firstItem = document.querySelector(`.model-item[data-path="${firstModelPath}"]`) as HTMLElement;
-            if (firstItem) {
-                await toggleModel(firstModelPath, baseUrl, firstItem);
-            }
-        }
-        */
-
     } catch (err) {
         logToScreen(`Error loading model list: ${err}`, true);
-        alert('Error loading model list: ' + (err as Error).message);
     }
 }
 
@@ -320,7 +247,19 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
     // Check if already loaded
     if (loadedModels.has(path)) {
         const model = loadedModels.get(path);
+        
+        // Toggle visibility
         model.visible = !model.visible;
+        
+        // Also update culler
+        if(model.visible) {
+             // culler.add(model.mesh);
+        } else {
+            // There isn't a direct remove from culler in simple API sometimes, 
+            // but hiding the mesh handles it visually. 
+            // Culler updates based on scene visibility usually.
+        }
+        // culler.needsUpdate = true;
         
         // Update UI
         if (model.visible) {
@@ -340,16 +279,10 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
     if (overlay) overlay.style.display = 'flex';
     
     try {
-        logToScreen(`Downloading model from path: ${path}`);
-        
         // Encode path parts to handle spaces
         const encodedPath = path.split('/').map(part => encodeURIComponent(part)).join('/');
         const fullPath = `${baseUrl}${encodedPath}`;
         
-        logToScreen(`Full URL: ${fullPath}`);
-        
-        // Load the model
-        // loadIfc now handles scene addition and map tracking
         await loadIfc(fullPath, path);
         
         // Update UI to loaded/visible state
@@ -357,14 +290,13 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
         toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
         
     } catch (error) {
-        logToScreen(`Error fetching model: ${error}`, true);
         alert('Error downloading model: ' + (error as Error).message);
     } finally {
         if (overlay) overlay.style.display = 'none';
     }
 }
 
-logToScreen('Script initializing...');
+logToScreen('Initializing That Open Engine...');
 initSidebar();
 loadModelList();
 
@@ -373,10 +305,10 @@ if (input) {
     input.addEventListener('change', async (event) => {
         const file = (event.target as HTMLInputElement).files?.[0];
         if (file) {
-            const url = URL.createObjectURL(file);
-            // Use filename as unique path for local files
-            const path = `local/${file.name}`;
-            await loadIfc(url, path);
+             const buffer = await file.arrayBuffer();
+             const model = await ifcLoader.load(new Uint8Array(buffer));
+             world.scene.three.add(model);
+             world.camera.controls.fitToSphere(model.boundingSphere, true);
         }
     }, false);
 }

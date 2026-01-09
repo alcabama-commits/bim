@@ -65,6 +65,7 @@ export default defineConfig({
   plugins: [modelsGenerator()],
   base: './', // Ensures relative paths for GitHub Pages
   build: {
+    target: 'esnext', // Enable top-level await
     outDir: '../docs/VSR_IFC', // Deploys to docs/VSR_IFC for GitHub Pages
     emptyOutDir: true,
     rollupOptions: {
