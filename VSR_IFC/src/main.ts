@@ -69,30 +69,27 @@ ifcLoader.ifcManager.applyWebIfcConfig({
     USE_FAST_BOOLS: true
 });
 
-let currentModel: any = null;
+// Track loaded models
+// Key: path, Value: Model object
+const loadedModels = new Map<string, any>();
 
-async function loadIfc(url: string) {
-    if (currentModel) {
-        scene.remove(currentModel);
-        currentModel = null;
-    }
-
+async function loadIfc(url: string, path: string) {
     try {
         console.log('Attempting to load IFC from:', url);
         const model = await ifcLoader.loadAsync(url);
-        currentModel = model;
+        
+        // Add to scene and tracking map
         scene.add(model);
+        loadedModels.set(path, model);
+        
         console.log('Model loaded:', model);
 
-        // Auto-center camera
-        if (model) {
+        // Auto-center camera if it's the first model
+        if (loadedModels.size === 1) {
             const box = new THREE.Box3().setFromObject(model);
             const center = box.getCenter(new THREE.Vector3());
             const size = box.getSize(new THREE.Vector3());
 
-            // Since COORDINATE_TO_ORIGIN is used, center should be near (0,0,0)
-            // But we still center camera on the actual geometry center just in case
-            
             const maxDim = Math.max(size.x, size.y, size.z);
             const fov = camera.fov * (Math.PI / 180);
             let cameraZ = Math.abs(maxDim / 2 * Math.tan(fov * 2));
@@ -108,9 +105,11 @@ async function loadIfc(url: string) {
             
             console.log('Camera centered at:', center, 'Distance:', cameraZ);
         }
+        
+        return model;
     } catch (error) {
         console.error('Error loading IFC:', error);
-        alert('Error loading model: ' + (error as Error).message);
+        throw error;
     }
 }
 
@@ -211,16 +210,21 @@ async function loadModelList() {
 
                 const li = document.createElement('li');
                 li.className = 'model-item';
-                li.innerHTML = `<i class="fa-solid fa-cube"></i> ${m.name}`;
                 li.dataset.path = m.path;
 
-                li.addEventListener('click', async () => {
-                    // Highlight active
-                    document.querySelectorAll('.model-item').forEach(el => el.classList.remove('active'));
-                    li.classList.add('active');
+                // Structure: Name + Visibility Toggle
+                li.innerHTML = `
+                    <div class="model-name"><i class="fa-solid fa-cube"></i> ${m.name}</div>
+                    <div class="visibility-toggle" title="Toggle Visibility">
+                        <i class="fa-regular fa-eye-slash"></i>
+                    </div>
+                `;
 
-                    // Load model
-                    await loadModelFromPath(m.path, baseUrl);
+                // Handle click on the whole item or specific toggle
+                li.addEventListener('click', async (e) => {
+                    // Prevent propagation if clicking nested elements
+                    e.stopPropagation();
+                    await toggleModel(m.path, baseUrl, li);
                 });
 
                 itemsList.appendChild(li);
@@ -234,9 +238,10 @@ async function loadModelList() {
         // Auto-load first model
         if (firstModelPath) {
             logToScreen(`Auto-loading first model: ${firstModelPath}`);
-            const firstItem = document.querySelector(`.model-item[data-path="${firstModelPath}"]`);
-            if (firstItem) firstItem.classList.add('active');
-            await loadModelFromPath(firstModelPath, baseUrl);
+            const firstItem = document.querySelector(`.model-item[data-path="${firstModelPath}"]`) as HTMLElement;
+            if (firstItem) {
+                await toggleModel(firstModelPath, baseUrl, firstItem);
+            }
         }
 
     } catch (err) {
@@ -245,7 +250,28 @@ async function loadModelList() {
     }
 }
 
-async function loadModelFromPath(path: string, baseUrl: string) {
+async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement) {
+    const toggleIcon = liElement.querySelector('.visibility-toggle i');
+    
+    // Check if already loaded
+    if (loadedModels.has(path)) {
+        const model = loadedModels.get(path);
+        model.visible = !model.visible;
+        
+        // Update UI
+        if (model.visible) {
+            liElement.classList.add('visible');
+            toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
+        } else {
+            liElement.classList.remove('visible');
+            toggleIcon?.classList.replace('fa-eye', 'fa-eye-slash');
+        }
+        
+        logToScreen(`Toggled model visibility: ${path} -> ${model.visible}`);
+        return;
+    }
+
+    // Not loaded, load it
     const overlay = document.getElementById('loading-overlay');
     if (overlay) overlay.style.display = 'flex';
     
@@ -258,17 +284,14 @@ async function loadModelFromPath(path: string, baseUrl: string) {
         
         logToScreen(`Full URL: ${fullPath}`);
         
-        const res = await fetch(fullPath);
-        if (!res.ok) throw new Error(`Error downloading model (${res.status})`);
+        // Load the model
+        // loadIfc now handles scene addition and map tracking
+        await loadIfc(fullPath, path);
         
-        const blob = await res.blob();
-        logToScreen(`Model downloaded, blob size: ${(blob.size / 1024 / 1024).toFixed(2)} MB`);
+        // Update UI to loaded/visible state
+        liElement.classList.add('visible');
+        toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
         
-        if (blob.size === 0) throw new Error('Downloaded model is empty');
-
-        const blobUrl = URL.createObjectURL(blob);
-        
-        await loadIfc(blobUrl);
     } catch (error) {
         logToScreen(`Error fetching model: ${error}`, true);
         alert('Error downloading model: ' + (error as Error).message);
@@ -287,7 +310,9 @@ if (input) {
         const file = (event.target as HTMLInputElement).files?.[0];
         if (file) {
             const url = URL.createObjectURL(file);
-            loadIfc(url);
+            // Use filename as unique path for local files
+            const path = `local/${file.name}`;
+            await loadIfc(url, path);
         }
     }, false);
 }

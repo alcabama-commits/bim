@@ -167,6 +167,7 @@ body {
   font-size: 13px;
   display: flex;
   align-items: center;
+  justify-content: space-between; /* Space between name and eye */
   gap: 8px;
   border-radius: 4px;
   transition: all 0.2s;
@@ -179,8 +180,38 @@ body {
 }
 
 .model-item.active {
-  background: #2563eb; /* Indigo-600 like */
+  background: #2d2d2d; /* Keep dark background, highlight text/icon */
   color: #fff;
+}
+
+.model-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.visibility-toggle {
+  padding: 4px;
+  border-radius: 4px;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.visibility-toggle:hover {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+}
+
+.model-item.visible .visibility-toggle {
+  color: #4ade80; /* Green-400 */
+}
+
+.model-item.visible {
+    border-left: 3px solid #4ade80;
 }
 
 .upload-btn {
