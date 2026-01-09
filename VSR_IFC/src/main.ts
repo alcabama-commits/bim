@@ -69,18 +69,6 @@ ifcLoader.ifcManager.applyWebIfcConfig({
     USE_FAST_BOOLS: true
 });
 
-// Setup Web Workers for performance
-async function setupIFCWorker() {
-    try {
-        // Worker is now in wasm/ folder with the .wasm files
-        await ifcLoader.ifcManager.useWebWorkers(true, baseUrl + 'wasm/IFCWorker.js');
-        logToScreen('Web Workers enabled for IFC loading');
-    } catch (err) {
-        logToScreen('Failed to setup Web Workers: ' + err, true);
-    }
-}
-setupIFCWorker();
-
 // Track loaded models
 // Key: path, Value: Model object
 const loadedModels = new Map<string, any>();
