@@ -131,7 +131,7 @@ const loadedModels = new Map<string, any>();
 function logToScreen(msg: string, isError = false) {
     const debugEl = document.getElementById('debug-console');
     if (debugEl) {
-        debugEl.style.display = 'block';
+        // debugEl.style.display = 'block'; // Removed to keep it hidden by default
         const line = document.createElement('div');
         line.textContent = `> ${msg}`;
         if (isError) line.style.color = '#ff4444';
@@ -452,6 +452,99 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
 logToScreen('Initializing That Open Engine...');
 initSidebar();
 loadModelList();
+
+// --- View Controls & Console Toggle ---
+
+const consoleToggle = document.getElementById('console-toggle');
+if (consoleToggle) {
+    consoleToggle.addEventListener('click', () => {
+        const consoleEl = document.getElementById('debug-console');
+        if (consoleEl) {
+            const isVisible = consoleEl.style.display !== 'none';
+            consoleEl.style.display = isVisible ? 'none' : 'block';
+            consoleToggle.classList.toggle('active', !isVisible);
+        }
+    });
+}
+
+// Helper to get current model center
+function getModelCenter(): THREE.Vector3 {
+    // If we have loaded models, calculate bounding sphere of the whole scene or last model
+    // Simple approach: Use bounding box of all meshes in scene
+    const box = new THREE.Box3();
+    const meshes: THREE.Mesh[] = [];
+    world.scene.three.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+             meshes.push(child as THREE.Mesh);
+        }
+    });
+    
+    if (meshes.length === 0) return new THREE.Vector3(0, 0, 0);
+    
+    meshes.forEach(mesh => {
+        box.expandByObject(mesh);
+    });
+    
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    return center;
+}
+
+// Helper to get model size (radius)
+function getModelRadius(): number {
+    const box = new THREE.Box3();
+    let hasMeshes = false;
+    world.scene.three.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+             box.expandByObject(child);
+             hasMeshes = true;
+        }
+    });
+    
+    if (!hasMeshes) return 10; // Default size
+    
+    const sphere = new THREE.Sphere();
+    box.getBoundingSphere(sphere);
+    return sphere.radius || 10;
+}
+
+const viewButtons = document.querySelectorAll('.view-btn');
+viewButtons.forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const view = btn.getAttribute('data-view');
+        const center = getModelCenter();
+        const radius = getModelRadius();
+        const dist = radius * 2; // Distance factor
+        
+        // Ensure controls are enabled
+        world.camera.controls.enabled = true;
+
+        switch (view) {
+            case 'top':
+                await world.camera.controls.setLookAt(center.x, center.y + dist, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'bottom':
+                await world.camera.controls.setLookAt(center.x, center.y - dist, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'front':
+                await world.camera.controls.setLookAt(center.x, center.y, center.z + dist, center.x, center.y, center.z, true);
+                break;
+            case 'back':
+                await world.camera.controls.setLookAt(center.x, center.y, center.z - dist, center.x, center.y, center.z, true);
+                break;
+            case 'left':
+                await world.camera.controls.setLookAt(center.x - dist, center.y, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'right':
+                await world.camera.controls.setLookAt(center.x + dist, center.y, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'iso':
+                await world.camera.controls.setLookAt(center.x + dist, center.y + dist, center.z + dist, center.x, center.y, center.z, true);
+                break;
+        }
+    });
+});
+
 
 
 const input = document.getElementById('file-input') as HTMLInputElement;

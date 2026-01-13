@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VSR IFC Viewer</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script type="module" crossorigin src="./assets/main-4yoFdqMs.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/main-UAc-8N4T.css">
+    <script type="module" crossorigin src="./assets/main-BZlbhIY2.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/main-Dg8MU-6U.css">
   </head>
   <body>
     <div id="app">
@@ -43,6 +43,23 @@
       </div>
       <div id="debug-console" style="position: fixed; bottom: 0; left: 0; width: 100%; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace; font-size: 12px; padding: 10px; pointer-events: none; z-index: 999; display: none;"></div>
       <div id="viewer-container"></div>
+
+      <!-- View Toolbar & Console Toggle -->
+      <div class="view-controls">
+          <div class="view-cube-controls">
+              <button class="view-btn" data-view="top" title="Superior (Top)">T</button>
+              <button class="view-btn" data-view="bottom" title="Inferior (Bottom)">B</button>
+              <button class="view-btn" data-view="front" title="Frontal (Front)">F</button>
+              <button class="view-btn" data-view="back" title="Posterior (Back)">Bk</button>
+              <button class="view-btn" data-view="left" title="Izquierda (Left)">L</button>
+              <button class="view-btn" data-view="right" title="Derecha (Right)">R</button>
+              <button class="view-btn" data-view="iso" title="Isométrica (Iso)">Iso</button>
+          </div>
+          <button id="console-toggle" class="console-btn" title="Toggle Console">
+              <i class="fa-solid fa-terminal"></i>
+          </button>
+      </div>
+
     </div>
   </body>
 </html>
