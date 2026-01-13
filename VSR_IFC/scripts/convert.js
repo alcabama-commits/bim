@@ -1,8 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { IfcImporter } from '@thatopen/fragments';
 import * as WEBIFC from 'web-ifc';
 import * as THREE from 'three';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Set up the importer
 const importer = new IfcImporter();
@@ -10,7 +14,7 @@ const importer = new IfcImporter();
 // Configure WASM path for web-ifc
 // In Node, we point to the directory containing the wasm file
 importer.wasm = {
-    path: './node_modules/web-ifc/', 
+    path: path.resolve(__dirname, '../node_modules/web-ifc/') + '/', 
     absolute: true
 };
 
@@ -47,6 +51,8 @@ async function convert() {
                 }
             });
             
+            console.log(`Generated fragment size: ${result.length} bytes`);
+
             fs.writeFileSync(outputPath, result);
             console.log(`\nSaved ${path.basename(outputPath)}`);
             
