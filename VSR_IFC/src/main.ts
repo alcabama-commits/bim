@@ -34,6 +34,9 @@ grids.create(world);
 const fragments = components.get(OBC.FragmentsManager);
 const baseUrl = import.meta.env.BASE_URL || './';
 
+// Initialize fragments with the worker
+fragments.init(`${baseUrl}fragments/fragments.js`);
+
 // --- Helper Functions ---
 function getSpecialtyFromIfcPath(path: string): string {
     const filename = path.split('/').pop() ?? path;
@@ -101,11 +104,12 @@ async function loadModel(url: string, path: string) {
         logToScreen(`Loading Fragments... (Size: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
         
         // Load the fragment model
-        const model = await fragments.load(buffer);
+        // Use core.load because FragmentsManager doesn't expose load directly
+        const model = await fragments.core.load(buffer, { modelId: path });
         model.name = path.split('/').pop() || 'Model';
 
         // Add to world scene
-        world.scene.three.add(model.mesh);
+        world.scene.three.add(model.object);
         
         // Track it
         loadedModels.set(path, model);
@@ -300,8 +304,8 @@ if (input) {
         if (file) {
              const buffer = await file.arrayBuffer();
              // Assume .frag file
-             const model = await fragments.load(new Uint8Array(buffer));
-             world.scene.three.add(model.mesh);
+             const model = await fragments.core.load(new Uint8Array(buffer), { modelId: file.name });
+             world.scene.three.add(model.object);
              
              const boxer = components.get(OBC.BoundingBoxer);
              boxer.add(model);
