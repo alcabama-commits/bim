@@ -19,13 +19,13 @@ const modelsGenerator = () => {
       server.watcher.add(modelsPath);
       
       server.watcher.on('add', (file) => {
-        if (file.includes('models') && file.endsWith('.ifc')) {
+        if (file.includes('models') && file.endsWith('.frag')) {
             console.log(`File added: ${file}`);
             generateModels();
         }
       });
       server.watcher.on('unlink', (file) => {
-        if (file.includes('models') && file.endsWith('.ifc')) {
+        if (file.includes('models') && file.endsWith('.frag')) {
             console.log(`File removed: ${file}`);
             generateModels();
         }
@@ -41,12 +41,12 @@ function generateModels() {
   if (!fs.existsSync(modelsDir)) return;
 
   try {
-    const files = fs.readdirSync(modelsDir).filter(file => file.toLowerCase().endsWith('.ifc'));
+    const files = fs.readdirSync(modelsDir).filter(file => file.toLowerCase().endsWith('.frag'));
     
     const models = files.map(file => {
       // Basic cleanup for name: remove extension, replace _ with space
       // You can customize this name generation logic
-      const name = file.replace(/\.ifc$/i, '').replace(/_/g, ' ');
+      const name = file.replace(/\.frag$/i, '').replace(/_/g, ' ');
       return {
         name: name,
         path: `models/${file}`,

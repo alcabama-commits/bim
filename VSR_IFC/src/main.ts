@@ -31,17 +31,27 @@ grids.create(world);
 
 // --- IFC & Fragments Setup ---
 
-const ifcLoader = components.get(OBC.IfcLoader);
 const fragments = components.get(OBC.FragmentsManager);
-
-// Setup WASM paths for IFC loading
 const baseUrl = import.meta.env.BASE_URL || './';
-await ifcLoader.setup({
-    wasm: {
-        path: baseUrl + 'wasm/',
-        absolute: true
-    }
-});
+
+// --- Helper Functions ---
+function getSpecialtyFromIfcPath(path: string): string {
+    const filename = path.split('/').pop() ?? path;
+    const cleanFilename = filename.split('?')[0];
+    const baseName = cleanFilename.replace(/\.(ifc|frag)$/i, '');
+    const parts = baseName.split('_');
+    const raw = (parts[3] ?? '').trim();
+
+    if (!raw) return 'General';
+
+    const normalized = raw
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+
+    if (normalized === 'desagues') return 'Desagües';
+    return raw;
+}
 
 // Configure Fragments Manager (Culling, etc.)
 // Offload heavy tasks to worker if possible (FragmentsManager has internal workers for geometry)
@@ -79,24 +89,23 @@ function logToScreen(msg: string, isError = false) {
 
 // --- Model Loading Logic ---
 
-async function loadIfc(url: string, path: string) {
+async function loadModel(url: string, path: string) {
     try {
-        logToScreen(`Fetching IFC: ${url}`);
+        logToScreen(`Fetching Fragment: ${url}`);
         const file = await fetch(url);
         if (!file.ok) throw new Error(`Failed to fetch ${url}`);
         
         const data = await file.arrayBuffer();
         const buffer = new Uint8Array(data);
         
-        logToScreen(`Parsing IFC... (Size: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+        logToScreen(`Loading Fragments... (Size: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
         
-        // Load the model using That Open Engine's IfcLoader
-        // This automatically converts to fragments and adds to scene
-        const model = await ifcLoader.load(buffer);
+        // Load the fragment model
+        const model = await fragments.load(buffer);
         model.name = path.split('/').pop() || 'Model';
 
-        // Add to world scene (OBC adds it, but we ensure it's in the right world)
-        world.scene.three.add(model);
+        // Add to world scene
+        world.scene.three.add(model.mesh);
         
         // Track it
         loadedModels.set(path, model);
@@ -105,17 +114,17 @@ async function loadIfc(url: string, path: string) {
 
         // Auto-center camera if it's the first model
         if (loadedModels.size === 1) {
-             world.camera.controls.fitToSphere(model.boundingSphere, true);
+             const boxer = components.get(OBC.BoundingBoxer);
+             boxer.add(model);
+             const bbox = boxer.get();
+             world.camera.controls.fitToSphere(bbox, true);
+             boxer.reset();
              logToScreen('Camera centered on model');
         }
         
-        // Enable culling for this model
-        // culler.add(model.mesh);
-        // culler.needsUpdate = true;
-
         return model;
     } catch (error) {
-        logToScreen(`Error loading IFC: ${error}`, true);
+        logToScreen(`Error loading model: ${error}`, true);
         throw error;
     }
 }
@@ -138,23 +147,7 @@ function initSidebar() {
     }
 }
 
-function getSpecialtyFromIfcPath(path: string): string {
-    const filename = path.split('/').pop() ?? path;
-    const cleanFilename = filename.split('?')[0];
-    const baseName = cleanFilename.replace(/\.ifc$/i, '');
-    const parts = baseName.split('_');
-    const raw = (parts[3] ?? '').trim();
 
-    if (!raw) return 'General';
-
-    const normalized = raw
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase();
-
-    if (normalized === 'desagues') return 'Desagües';
-    return raw;
-}
 
 // Load models from JSON and populate sidebar
 async function loadModelList() {
@@ -283,7 +276,7 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
         const encodedPath = path.split('/').map(part => encodeURIComponent(part)).join('/');
         const fullPath = `${baseUrl}${encodedPath}`;
         
-        await loadIfc(fullPath, path);
+        await loadModel(fullPath, path);
         
         // Update UI to loaded/visible state
         liElement.classList.add('visible');
@@ -306,9 +299,14 @@ if (input) {
         const file = (event.target as HTMLInputElement).files?.[0];
         if (file) {
              const buffer = await file.arrayBuffer();
-             const model = await ifcLoader.load(new Uint8Array(buffer));
-             world.scene.three.add(model);
-             world.camera.controls.fitToSphere(model.boundingSphere, true);
+             // Assume .frag file
+             const model = await fragments.load(new Uint8Array(buffer));
+             world.scene.three.add(model.mesh);
+             
+             const boxer = components.get(OBC.BoundingBoxer);
+             boxer.add(model);
+             world.camera.controls.fitToSphere(boxer.get(), true);
+             boxer.reset();
         }
     }, false);
 }
