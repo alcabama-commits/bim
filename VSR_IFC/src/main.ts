@@ -231,30 +231,70 @@ function initSidebar() {
             if (target.files && target.files.length > 0) {
                 const file = target.files[0];
                 const buffer = await file.arrayBuffer();
-                const data = new Uint8Array(buffer);
                 
                 try {
-                    logToScreen(`Loading uploaded IFC: ${file.name}...`);
-                    const ifcLoader = components.get(OBC.IfcLoader);
-                    await ifcLoader.setup({
-                        wasm: {
-                            path: `${baseUrl}wasm/`,
-                            absolute: true
+                    if (file.name.toLowerCase().endsWith('.frag')) {
+                        logToScreen(`Loading fragments: ${file.name}...`);
+                        const model = await fragments.core.load(buffer, { modelId: file.name });
+                        model.useCamera(world.camera.three);
+                        world.scene.three.add(model.object);
+                        await fragments.core.update(true);
+                        
+                        const bbox = new THREE.Box3().setFromObject(model.object);
+                        const sphere = new THREE.Sphere();
+                        bbox.getBoundingSphere(sphere);
+                        world.camera.controls.fitToSphere(sphere, true);
+                        logToScreen(`Loaded .frag: ${file.name}`);
+                    } else {
+                        // Assume IFC
+                        logToScreen(`Loading and converting IFC: ${file.name}...`);
+                        const data = new Uint8Array(buffer);
+                        const ifcLoader = components.get(OBC.IfcLoader);
+                        await ifcLoader.setup({
+                            wasm: {
+                                path: `${baseUrl}wasm/`,
+                                absolute: true
+                            }
+                        });
+                        
+                        const model = await ifcLoader.load(data, true, file.name);
+                        world.scene.three.add(model.object);
+                        
+                        // Center camera
+                        const bbox = new THREE.Box3().setFromObject(model.object);
+                        const sphere = new THREE.Sphere();
+                        bbox.getBoundingSphere(sphere);
+                        world.camera.controls.fitToSphere(sphere, true);
+                        
+                        logToScreen(`Loaded IFC: ${file.name}`);
+                        
+                        // AUTO EXPORT AND DOWNLOAD
+                        logToScreen('Exporting to .frag...');
+                        try {
+                             // Try saving using internal method if public one is missing
+                             // @ts-ignore
+                             const savedData = model._save ? await model._save() : null;
+                             
+                             if (savedData) {
+                                 const blob = new Blob([savedData], { type: 'application/octet-stream' });
+                                 const url = URL.createObjectURL(blob);
+                                 const a = document.createElement('a');
+                                 a.href = url;
+                                 a.download = file.name.replace(/\.ifc$/i, '') + '.frag';
+                                 document.body.appendChild(a);
+                                 a.click();
+                                 document.body.removeChild(a);
+                                 URL.revokeObjectURL(url);
+                                 logToScreen('Converted file downloaded automatically!');
+                             } else {
+                                 logToScreen('Export failed: Save method not found on model', true);
+                             }
+                        } catch (exportErr) {
+                             logToScreen(`Export error: ${exportErr}`, true);
                         }
-                    });
-                    
-                    const model = await ifcLoader.load(data, true, file.name);
-                    world.scene.three.add(model.object);
-                    
-                    // Center camera
-                    const bbox = new THREE.Box3().setFromObject(model.object);
-                    const sphere = new THREE.Sphere();
-                    bbox.getBoundingSphere(sphere);
-                    world.camera.controls.fitToSphere(sphere, true);
-                    
-                    logToScreen(`Loaded IFC: ${file.name} with success!`);
+                    }
                 } catch (e) {
-                    logToScreen(`Error loading IFC: ${e}`, true);
+                    logToScreen(`Error loading file: ${e}`, true);
                 }
                 
                 // Reset input
@@ -411,21 +451,7 @@ logToScreen('Initializing That Open Engine...');
 initSidebar();
 loadModelList();
 
-const input = document.getElementById('file-input') as HTMLInputElement;
-if (input) {
-    input.addEventListener('change', async (event) => {
-        const file = (event.target as HTMLInputElement).files?.[0];
-        if (file) {
-             const buffer = await file.arrayBuffer();
-             const model = await fragments.core.load(buffer, { modelId: file.name });
-             model.useCamera(world.camera.three);
-             world.scene.three.add(model.object);
-             await fragments.core.update(true);
 
-             const bbox = new THREE.Box3().setFromObject(model.object);
-             const sphere = new THREE.Sphere();
-             bbox.getBoundingSphere(sphere);
-             world.camera.controls.fitToSphere(sphere, true);
-        }
-    }, false);
-}
+const input = document.getElementById('file-input') as HTMLInputElement;
+// Listener moved to initSidebar to handle both IFC and Frag files centrally
+
