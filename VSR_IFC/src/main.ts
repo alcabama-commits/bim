@@ -37,17 +37,21 @@ const baseUrl = import.meta.env.BASE_URL || './';
 // Initialize fragments with the worker
 fragments.init(`${baseUrl}fragments/fragments.mjs`);
 
+// Initialize IfcLoader once
+const ifcLoader = components.get(OBC.IfcLoader);
+ifcLoader.setup({
+    wasm: {
+        path: `${baseUrl}wasm/`,
+        absolute: true
+    }
+});
+
 // Expose IFC conversion test for debugging
 (window as any).testIFC = async () => {
     try {
         logToScreen('Starting IFC conversion test...');
         const ifcLoader = components.get(OBC.IfcLoader);
-        await ifcLoader.setup({
-            wasm: {
-                path: `${baseUrl}wasm/`,
-                absolute: true
-            }
-        });
+        // Setup is done globally, but ensure it's ready
         
         logToScreen('Fetching temp.ifc...');
         const file = await fetch(`${baseUrl}temp.ifc`);
@@ -249,13 +253,11 @@ function initSidebar() {
                         // Assume IFC
                         logToScreen(`Loading and converting IFC: ${file.name}...`);
                         const data = new Uint8Array(buffer);
+                        
+                        // IfcLoader is already setup globally
                         const ifcLoader = components.get(OBC.IfcLoader);
-                        await ifcLoader.setup({
-                            wasm: {
-                                path: `${baseUrl}wasm/`,
-                                absolute: true
-                            }
-                        });
+                        // Optional: Ensure WASM path is correct if setup failed previously
+                        // await ifcLoader.setup({ wasm: { path: `${baseUrl}wasm/`, absolute: true } });
                         
                         const model = await ifcLoader.load(data, true, file.name);
                         world.scene.three.add(model.object);
