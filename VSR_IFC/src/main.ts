@@ -35,7 +35,7 @@ const fragments = components.get(OBC.FragmentsManager);
 const baseUrl = import.meta.env.BASE_URL || './';
 
 // Initialize fragments with the worker
-fragments.init(`${baseUrl}fragments/fragments.js`);
+fragments.init(`${baseUrl}fragments/fragments.mjs`);
 
 // Keep Fragments engine in sync with camera for culling/LOD
 world.camera.controls.addEventListener('rest', () => {
