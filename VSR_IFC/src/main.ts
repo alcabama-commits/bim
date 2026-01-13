@@ -37,6 +37,49 @@ const baseUrl = import.meta.env.BASE_URL || './';
 // Initialize fragments with the worker
 fragments.init(`${baseUrl}fragments/fragments.mjs`);
 
+// Expose IFC conversion test for debugging
+(window as any).testIFC = async () => {
+    try {
+        logToScreen('Starting IFC conversion test...');
+        const ifcLoader = components.get(OBC.IfcLoader);
+        await ifcLoader.setup({
+            wasm: {
+                path: `${baseUrl}wasm/`,
+                absolute: true
+            }
+        });
+        
+        logToScreen('Fetching temp.ifc...');
+        const file = await fetch(`${baseUrl}temp.ifc`);
+        if (!file.ok) throw new Error('Failed to fetch temp.ifc');
+        const buffer = await file.arrayBuffer();
+        const data = new Uint8Array(buffer);
+        
+        logToScreen(`IFC loaded (Size: ${(data.length / 1024 / 1024).toFixed(2)} MB). Processing...`);
+        const model = await ifcLoader.load(data, true, 'temp_model');
+        
+        logToScreen('IFC conversion complete!');
+        let meshCount = 0;
+        model.object.traverse((child: any) => {
+            if (child.isMesh) meshCount++;
+        });
+        logToScreen(`Converted Model meshes: ${meshCount}`);
+        
+        world.scene.three.add(model.object);
+        logToScreen('Added converted model to scene');
+        
+        // Center camera on it
+        const bbox = new THREE.Box3().setFromObject(model.object);
+        const sphere = new THREE.Sphere();
+        bbox.getBoundingSphere(sphere);
+        world.camera.controls.fitToSphere(sphere, true);
+        
+    } catch (e) {
+        logToScreen(`IFC Test Failed: ${e}`, true);
+        console.error(e);
+    }
+};
+
 // Keep Fragments engine in sync with camera for culling/LOD
 world.camera.controls.addEventListener('rest', () => {
     fragments.core.update(true);
@@ -177,6 +220,46 @@ function initSidebar() {
 
         closeBtn.addEventListener('click', () => {
             sidebar.classList.add('closed');
+        });
+    }
+    
+    // Setup file upload
+    const fileInput = document.getElementById('file-input') as HTMLInputElement;
+    if (fileInput) {
+        fileInput.addEventListener('change', async (event) => {
+            const target = event.target as HTMLInputElement;
+            if (target.files && target.files.length > 0) {
+                const file = target.files[0];
+                const buffer = await file.arrayBuffer();
+                const data = new Uint8Array(buffer);
+                
+                try {
+                    logToScreen(`Loading uploaded IFC: ${file.name}...`);
+                    const ifcLoader = components.get(OBC.IfcLoader);
+                    await ifcLoader.setup({
+                        wasm: {
+                            path: `${baseUrl}wasm/`,
+                            absolute: true
+                        }
+                    });
+                    
+                    const model = await ifcLoader.load(data, true, file.name);
+                    world.scene.three.add(model.object);
+                    
+                    // Center camera
+                    const bbox = new THREE.Box3().setFromObject(model.object);
+                    const sphere = new THREE.Sphere();
+                    bbox.getBoundingSphere(sphere);
+                    world.camera.controls.fitToSphere(sphere, true);
+                    
+                    logToScreen(`Loaded IFC: ${file.name} with success!`);
+                } catch (e) {
+                    logToScreen(`Error loading IFC: ${e}`, true);
+                }
+                
+                // Reset input
+                target.value = '';
+            }
         });
     }
 }
