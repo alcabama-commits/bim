@@ -118,11 +118,10 @@ async function loadModel(url: string, path: string) {
 
         // Auto-center camera if it's the first model
         if (loadedModels.size === 1) {
-             const boxer = components.get(OBC.BoundingBoxer);
-             boxer.add(model);
-             const bbox = boxer.get();
-             world.camera.controls.fitToSphere(bbox, true);
-             boxer.reset();
+             const bbox = new THREE.Box3().setFromObject(model.object);
+             const sphere = new THREE.Sphere();
+             bbox.getBoundingSphere(sphere);
+             world.camera.controls.fitToSphere(sphere, true);
              logToScreen('Camera centered on model');
         }
         
@@ -307,10 +306,10 @@ if (input) {
              const model = await fragments.core.load(new Uint8Array(buffer), { modelId: file.name });
              world.scene.three.add(model.object);
              
-             const boxer = components.get(OBC.BoundingBoxer);
-             boxer.add(model);
-             world.camera.controls.fitToSphere(boxer.get(), true);
-             boxer.reset();
+             const bbox = new THREE.Box3().setFromObject(model.object);
+             const sphere = new THREE.Sphere();
+             bbox.getBoundingSphere(sphere);
+             world.camera.controls.fitToSphere(sphere, true);
         }
     }, false);
 }
