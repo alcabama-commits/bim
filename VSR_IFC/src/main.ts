@@ -17,7 +17,7 @@ const world = worlds.create<
 
 world.scene = new OBC.SimpleScene(components);
 world.scene.setup();
-world.scene.three.background = new THREE.Color(0xa0a0a0);
+world.scene.three.background = new THREE.Color(0x202020); // Dark gray
 
 const container = document.getElementById('viewer-container') as HTMLElement;
 world.renderer = new OBC.SimpleRenderer(components, container);
@@ -116,13 +116,27 @@ async function loadModel(url: string, path: string) {
         
         logToScreen('Model loaded successfully as Fragments');
 
+        // Check geometry
+        let meshCount = 0;
+        model.object.traverse((child: any) => {
+            if (child.isMesh) meshCount++;
+        });
+        logToScreen(`Model meshes: ${meshCount}`);
+
         // Auto-center camera if it's the first model
         if (loadedModels.size === 1) {
              const bbox = new THREE.Box3().setFromObject(model.object);
              const sphere = new THREE.Sphere();
              bbox.getBoundingSphere(sphere);
-             world.camera.controls.fitToSphere(sphere, true);
-             logToScreen('Camera centered on model');
+             
+             logToScreen(`BBox: min(${bbox.min.x.toFixed(2)}, ${bbox.min.y.toFixed(2)}, ${bbox.min.z.toFixed(2)}) max(${bbox.max.x.toFixed(2)}, ${bbox.max.y.toFixed(2)}, ${bbox.max.z.toFixed(2)}) Radius: ${sphere.radius.toFixed(2)}`);
+
+             if (sphere.radius > 0.1) {
+                 world.camera.controls.fitToSphere(sphere, true);
+                 logToScreen('Camera centered on model');
+             } else {
+                 logToScreen('Model bounds too small or empty - Camera not moved', true);
+             }
         }
         
         return model;
