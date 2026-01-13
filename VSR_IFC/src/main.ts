@@ -107,30 +107,38 @@ async function loadModel(url: string, path: string) {
 
         logToScreen(`Loading Fragments... (Size: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
 
-        // Load the fragment model
         const model = await fragments.core.load(buffer, { modelId: path });
         model.name = path.split('/').pop() || 'Model';
 
-        // Attach model to camera and update fragments engine
         model.useCamera(world.camera.three);
 
-        // Add to world scene
         world.scene.three.add(model.object);
 
-        // Force initial update so tiles/meshes are created
         await fragments.core.update(true);
         
-        // Track it
         loadedModels.set(path, model);
         
         logToScreen('Model loaded successfully as Fragments');
 
-        // Check geometry
         let meshCount = 0;
         model.object.traverse((child: any) => {
             if (child.isMesh) meshCount++;
         });
         logToScreen(`Model meshes: ${meshCount}`);
+
+        setTimeout(async () => {
+            try {
+                const ids = await model.getItemsIdsWithGeometry();
+                logToScreen(`Deferred check - items with geometry: ${ids.length}`);
+                let delayedMeshes = 0;
+                model.object.traverse((child: any) => {
+                    if (child.isMesh) delayedMeshes++;
+                });
+                logToScreen(`Deferred check - meshes in scene: ${delayedMeshes}`);
+            } catch (e) {
+                logToScreen(`Deferred geometry check failed: ${e}`, true);
+            }
+        }, 5000);
 
         // Auto-center camera if it's the first model
         if (loadedModels.size === 1) {
