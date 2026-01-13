@@ -37,6 +37,11 @@ const baseUrl = import.meta.env.BASE_URL || './';
 // Initialize fragments with the worker
 fragments.init(`${baseUrl}fragments/fragments.js`);
 
+// Keep Fragments engine in sync with camera for culling/LOD
+world.camera.controls.addEventListener('rest', () => {
+    fragments.core.update(true);
+});
+
 // --- Helper Functions ---
 function getSpecialtyFromIfcPath(path: string): string {
     const filename = path.split('/').pop() ?? path;
@@ -97,19 +102,23 @@ async function loadModel(url: string, path: string) {
         logToScreen(`Fetching Fragment: ${url}`);
         const file = await fetch(url);
         if (!file.ok) throw new Error(`Failed to fetch ${url}`);
-        
-        const data = await file.arrayBuffer();
-        const buffer = new Uint8Array(data);
-        
+
+        const buffer = await file.arrayBuffer();
+
         logToScreen(`Loading Fragments... (Size: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
-        
+
         // Load the fragment model
-        // Use core.load because FragmentsManager doesn't expose load directly
         const model = await fragments.core.load(buffer, { modelId: path });
         model.name = path.split('/').pop() || 'Model';
 
+        // Attach model to camera and update fragments engine
+        model.useCamera(world.camera.three);
+
         // Add to world scene
         world.scene.three.add(model.object);
+
+        // Force initial update so tiles/meshes are created
+        await fragments.core.update(true);
         
         // Track it
         loadedModels.set(path, model);
@@ -259,10 +268,11 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
         const model = loadedModels.get(path);
         
         // Toggle visibility
-        model.visible = !model.visible;
+        const newVisible = !model.object.visible;
+        model.object.visible = newVisible;
         
         // Also update culler
-        if(model.visible) {
+        if(newVisible) {
              // culler.add(model.mesh);
         } else {
             // There isn't a direct remove from culler in simple API sometimes, 
@@ -272,7 +282,7 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
         // culler.needsUpdate = true;
         
         // Update UI
-        if (model.visible) {
+        if (newVisible) {
             liElement.classList.add('visible');
             toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
         } else {
@@ -280,7 +290,7 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
             toggleIcon?.classList.replace('fa-eye', 'fa-eye-slash');
         }
         
-        logToScreen(`Toggled model visibility: ${path} -> ${model.visible}`);
+        logToScreen(`Toggled model visibility: ${path} -> ${newVisible}`);
         return;
     }
 
@@ -316,10 +326,11 @@ if (input) {
         const file = (event.target as HTMLInputElement).files?.[0];
         if (file) {
              const buffer = await file.arrayBuffer();
-             // Assume .frag file
-             const model = await fragments.core.load(new Uint8Array(buffer), { modelId: file.name });
+             const model = await fragments.core.load(buffer, { modelId: file.name });
+             model.useCamera(world.camera.three);
              world.scene.three.add(model.object);
-             
+             await fragments.core.update(true);
+
              const bbox = new THREE.Box3().setFromObject(model.object);
              const sphere = new THREE.Sphere();
              bbox.getBoundingSphere(sphere);
