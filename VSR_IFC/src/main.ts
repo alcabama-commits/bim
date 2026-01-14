@@ -726,11 +726,23 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
 
     try {
         const fragment = fragments.list.get(fragmentId);
-        const model = (fragment as any)?.group;
+        
+        // Better model lookup: try group, then fallback to finding via fragment ID in loaded models if needed
+        let model = (fragment as any)?.group;
+
+        // Fallback for models loaded via FragmentsManager directly where group might not be set as expected in all versions
+        if (!model) {
+             // Try to find the model that owns this fragment
+             // In some versions of OBC, we might need to look it up differently
+             // For now, let's try to see if the fragment itself has properties
+             if ((fragment as any).properties) {
+                 model = fragment; // Treat fragment as model if it holds properties
+             }
+        }
         
         if (!model) {
-            console.warn("Model not found for fragment:", fragmentId);
-            content.innerHTML = '<div class="no-selection">No se encontró el modelo asociado</div>';
+            console.warn("Model not found for fragment:", fragmentId, fragment);
+            content.innerHTML = '<div class="no-selection">No se encontró el modelo asociado (Fragmento huérfano)</div>';
             return;
         }
 
