@@ -797,10 +797,8 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
         let psetsFound = false;
 
         if (!allProps) {
-             content.innerHTML = '<div class="no-selection">No se encontraron propiedades en el modelo. <br><small>Ver consola para depuración.</small></div>';
-             return;
-        }
-
+            console.warn("Properties not found on model directly, trying fallback...");
+        } else {
             const item = allProps[expressId];
             if (item) {
                 const general: Record<string, any> = {};
@@ -859,6 +857,7 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
                     }
                 }
             }
+        }
 
         // 3. Fallback: Use fragments.getData if manual traversal failed or returned no psets
         // This ensures we at least show something
