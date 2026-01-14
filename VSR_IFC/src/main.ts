@@ -698,11 +698,22 @@ highlighter.events.select.onClear.add(() => {
     updatePropertiesPanel({});
 });
 
+if (container) {
+    container.addEventListener('click', () => {
+        const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
+        if (selection) {
+            updatePropertiesPanel(selection);
+        }
+    });
+}
+
 async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>) {
     const content = document.getElementById('properties-content');
     if (!content) return;
 
     content.innerHTML = '';
+
+    logToScreen(`updatePropertiesPanel -> modelos: ${Object.keys(fragmentIdMap).length}`);
 
     const fragmentId = Object.keys(fragmentIdMap)[0];
     if (!fragmentId) {
@@ -713,18 +724,31 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
     const expressIds = fragmentIdMap[fragmentId];
     if (!expressIds || expressIds.size === 0) return;
 
-    const expressId = Array.from(expressIds)[0]; // Just show first selected
-    const model = fragments.list.get(fragmentId);
-    
-    if (!model) return;
+    const expressId = Array.from(expressIds)[0];
 
     try {
-        const properties = await (model as any).getProperties(expressId);
-        
-        if (!properties) {
+        const dataByModel = await fragments.getData(fragmentIdMap, {
+            attributesDefault: true,
+            relationsDefault: {
+                attributes: false,
+                relations: false,
+            },
+        });
+
+        const modelIds = Object.keys(dataByModel);
+        if (modelIds.length === 0) {
              content.innerHTML = '<div class="no-selection">No se encontraron propiedades</div>';
              return;
         }
+
+        const firstModelId = modelIds[0];
+        const items = dataByModel[firstModelId];
+        if (!items || items.length === 0) {
+            content.innerHTML = '<div class="no-selection">No se encontraron propiedades</div>';
+            return;
+        }
+
+        const item = items[0] as any;
 
         const renderGroup = (title: string, props: any) => {
              const group = document.createElement('div');
@@ -738,7 +762,7 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
              let hasProps = false;
              for (const key in props) {
                  const val = props[key];
-                 if (val === null || val === undefined || typeof val === 'object' || key === 'type') continue;
+                 if (val === null || val === undefined) continue;
                  
                  hasProps = true;
                  const row = document.createElement('div');
@@ -760,27 +784,40 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
              if (hasProps) content.appendChild(group);
         };
 
-        renderGroup('Información General', {
-            'GlobalId': properties.GlobalId?.value || properties.GlobalId,
-            'Name': properties.Name?.value || properties.Name,
-            'Description': properties.Description?.value || properties.Description,
-            'ObjectType': properties.ObjectType?.value || properties.ObjectType,
-            'Tag': properties.Tag?.value || properties.Tag
-        });
-        
-        // Render all other properties that are simple values
-        const otherProps: any = {};
-        for(const key in properties) {
-            if(['GlobalId', 'Name', 'Description', 'ObjectType', 'Tag', 'type', 'expressID'].includes(key)) continue;
-            const val = properties[key];
-            if (val && typeof val === 'object' && val.value !== undefined) {
-                 otherProps[key] = val.value;
-            } else if (val && typeof val !== 'object') {
-                 otherProps[key] = val;
-            }
+        const flatAttributes: Record<string, any> = {};
+        for (const key in item) {
+            const raw = item[key];
+            if (!raw) continue;
+            if (Array.isArray(raw)) continue;
+            const value = (raw as any).value ?? raw;
+            if (value === null || value === undefined) continue;
+            flatAttributes[key] = value;
         }
-        if (Object.keys(otherProps).length > 0) {
-            renderGroup('Otros Atributos', otherProps);
+
+        const general: Record<string, any> = {};
+
+        general['Fragment ID'] = fragmentId;
+        general['Express ID'] = expressId;
+
+        const pick = (label: string, key: string) => {
+            if (flatAttributes[key] !== undefined) {
+                general[label] = flatAttributes[key];
+                delete flatAttributes[key];
+            }
+        };
+
+        pick('GlobalId', 'GlobalId');
+        pick('Name', 'Name');
+        pick('Description', 'Description');
+        pick('ObjectType', 'ObjectType');
+        pick('Tag', 'Tag');
+
+        if (Object.keys(general).length > 0) {
+            renderGroup('Información General', general);
+        }
+        
+        if (Object.keys(flatAttributes).length > 0) {
+            renderGroup('Otros Atributos', flatAttributes);
         }
 
     } catch (e) {
