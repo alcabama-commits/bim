@@ -237,11 +237,10 @@ function initSidebar() {
         
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            
-            // Calculate new width based on mouse position from right edge
-            const newWidth = window.innerWidth - e.clientX;
-            
-            if (newWidth > 200 && newWidth < 800) { // Min 200px, Max 800px
+
+            const newWidth = e.clientX;
+
+            if (newWidth > 200 && newWidth < 800) {
                 sidebar.style.width = `${newWidth}px`;
             }
         });
