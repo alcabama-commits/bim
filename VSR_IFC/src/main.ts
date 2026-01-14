@@ -729,7 +729,8 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
         const model = (fragment as any)?.group;
         
         if (!model) {
-            content.innerHTML = '<div class="no-selection">No se encontró el modelo</div>';
+            console.warn("Model not found for fragment:", fragmentId);
+            content.innerHTML = '<div class="no-selection">No se encontró el modelo asociado</div>';
             return;
         }
 
@@ -774,98 +775,116 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
              if (hasProps) content.appendChild(group);
         };
 
-        // 1. Basic Attributes
+        // 1. Try to get All Properties (including relations) from model memory
         // @ts-ignore
         const allProps = model.getLocalProperties ? model.getLocalProperties() : model.properties;
         
-        if (!allProps) {
-             content.innerHTML = '<div class="no-selection">No se encontraron propiedades en el modelo</div>';
-             return;
-        }
+        let psetsFound = false;
 
-        const item = allProps[expressId];
-        if (!item) {
-             content.innerHTML = '<div class="no-selection">Elemento no encontrado en propiedades</div>';
-             return;
-        }
+        if (allProps) {
+            const item = allProps[expressId];
+            if (item) {
+                const general: Record<string, any> = {};
+                general['Entity'] = item.constructor?.name || 'Unknown';
+                general['GlobalId'] = getValue(item.GlobalId);
+                general['Name'] = getValue(item.Name);
+                general['Tag'] = getValue(item.Tag);
+                general['ObjectType'] = getValue(item.ObjectType);
 
-        const general: Record<string, any> = {};
-        general['Entity'] = item.constructor?.name || 'Unknown';
-        general['GlobalId'] = getValue(item.GlobalId);
-        general['Name'] = getValue(item.Name);
-        general['Tag'] = getValue(item.Tag);
-        general['ObjectType'] = getValue(item.ObjectType);
+                renderGroup('Información General', general);
 
-        renderGroup('Información General', general);
+                // 2. Find Property Sets via manual traversal
+                const psets: Record<string, Record<string, any>> = {};
+                
+                // Helper to check relation
+                const relatesToMe = (rel: any, field: string) => {
+                    if (!rel[field]) return false;
+                    const related = rel[field];
+                    if (Array.isArray(related)) {
+                        return related.some((r: any) => r.value === expressId);
+                    }
+                    return related.value === expressId;
+                };
 
-        // 2. Find Property Sets (Iterate all properties to find relations pointing to this element)
-        // This is a "brute-force" inverse relationship lookup because we don't have an Indexer set up
-        
-        const psets: Record<string, Record<string, any>> = {};
+                for (const id in allProps) {
+                    const prop = allProps[id];
+                    if (!prop) continue;
 
-        // Helper to check if a relation points to our element
-        const relatesToMe = (rel: any, field: string) => {
-            if (!rel[field]) return false;
-            const related = rel[field];
-            if (Array.isArray(related)) {
-                return related.some((r: any) => r.value === expressId);
-            }
-            return related.value === expressId;
-        };
+                    if (prop.type === WEBIFC.IFCRELDEFINESBYPROPERTIES) {
+                        if (relatesToMe(prop, 'RelatedObjects')) {
+                            const psetRef = prop.RelatingPropertyDefinition;
+                            if (psetRef) {
+                                const pset = allProps[psetRef.value];
+                                if (pset && pset.HasProperties) {
+                                    const psetName = getValue(pset.Name) || 'Unnamed Pset';
+                                    if (!psets[psetName]) psets[psetName] = {};
 
-        // Iterate entire property map (can be slow on huge models, but fine for now)
-        for (const id in allProps) {
-            const prop = allProps[id];
-            if (!prop) continue;
-
-            // Property Sets: IfcRelDefinesByProperties
-            if (prop.type === WEBIFC.IFCRELDEFINESBYPROPERTIES) {
-                if (relatesToMe(prop, 'RelatedObjects')) {
-                    const psetRef = prop.RelatingPropertyDefinition;
-                    if (psetRef) {
-                        const pset = allProps[psetRef.value];
-                        if (pset && pset.HasProperties) {
-                            const psetName = getValue(pset.Name) || 'Unnamed Pset';
-                            if (!psets[psetName]) psets[psetName] = {};
-
-                            // Iterate properties in the Pset
-                            for (const propRef of pset.HasProperties) {
-                                const singleProp = allProps[propRef.value];
-                                if (singleProp && singleProp.Name) {
-                                    const propName = getValue(singleProp.Name);
-                                    const propVal = getValue(singleProp.NominalValue);
-                                    psets[psetName][propName] = propVal;
+                                    for (const propRef of pset.HasProperties) {
+                                        const singleProp = allProps[propRef.value];
+                                        if (singleProp && singleProp.Name) {
+                                            const propName = getValue(singleProp.Name);
+                                            const propVal = getValue(singleProp.NominalValue);
+                                            psets[psetName][propName] = propVal;
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-            
-            // Type Properties: IfcRelDefinesByType
-            // (Similar logic if needed, but Psets are usually what users want)
-        }
 
-        // Render Psets
-        for (const [psetName, props] of Object.entries(psets)) {
-            renderGroup(psetName, props);
-        }
-        
-        // If no psets found, try attributes
-        if (Object.keys(psets).length === 0) {
-            const directProps: Record<string, any> = {};
-            for (const key in item) {
-                const val = item[key];
-                if (!Array.isArray(val) && val?.value !== undefined) {
-                    directProps[key] = getValue(val);
+                if (Object.keys(psets).length > 0) {
+                    psetsFound = true;
+                    for (const [psetName, props] of Object.entries(psets)) {
+                        renderGroup(psetName, props);
+                    }
                 }
             }
-            renderGroup('Atributos Directos', directProps);
+        }
+
+        // 3. Fallback: Use fragments.getData if manual traversal failed or returned no psets
+        // This ensures we at least show something
+        if (!psetsFound) {
+            console.warn("Manual Pset traversal empty, falling back to fragments.getData");
+            
+            // Try getting data with specific relation query? 
+            // For now, just get basic attributes to ensure *something* shows
+            const dataByModel = await fragments.getData(fragmentIdMap, {
+                attributesDefault: true,
+                relationsDefault: {
+                    attributes: false,
+                    relations: false,
+                },
+            });
+            
+            const modelIds = Object.keys(dataByModel);
+            if (modelIds.length > 0) {
+                const items = dataByModel[modelIds[0]];
+                if (items && items.length > 0) {
+                    const fallbackItem = items[0] as any;
+                    const fallbackProps: Record<string, any> = {};
+                    
+                    for (const key in fallbackItem) {
+                         const val = fallbackItem[key];
+                         if (key === 'expressID' || key === 'type') continue;
+                         if (!Array.isArray(val) && val?.value !== undefined) {
+                             fallbackProps[key] = getValue(val);
+                         } else if (typeof val !== 'object') {
+                             fallbackProps[key] = val;
+                         }
+                    }
+                    renderGroup('Propiedades (Básico)', fallbackProps);
+                }
+            } else {
+                 if (!allProps) {
+                    content.innerHTML += '<div class="no-selection">No se pudieron recuperar propiedades.</div>';
+                 }
+            }
         }
 
     } catch (e) {
         console.error("Error getting properties", e);
-        content.innerHTML = '<div class="no-selection">Error al leer propiedades</div>';
+        content.innerHTML = `<div class="no-selection">Error interno: ${e}</div>`;
     }
 }
 
