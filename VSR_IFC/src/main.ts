@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
+import * as WEBIFC from 'web-ifc';
 import './style.css';
 
 // --- Initialization of That Open Engine ---
@@ -712,8 +713,6 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
 
     content.innerHTML = '';
 
-    logToScreen(`updatePropertiesPanel -> modelos: ${Object.keys(fragmentIdMap).length}`);
-
     const fragmentId = Object.keys(fragmentIdMap)[0];
     if (!fragmentId) {
         content.innerHTML = '<div class="no-selection">Selecciona un elemento para ver sus propiedades</div>';
@@ -726,30 +725,22 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
     const expressId = Array.from(expressIds)[0];
 
     try {
-        const dataByModel = await fragments.getData(fragmentIdMap, {
-            attributesDefault: true,
-            relationsDefault: {
-                attributes: false,
-                relations: false,
-            },
-        });
-
-        const modelIds = Object.keys(dataByModel);
-        if (modelIds.length === 0) {
-             content.innerHTML = '<div class="no-selection">No se encontraron propiedades</div>';
-             return;
-        }
-
-        const firstModelId = modelIds[0];
-        const items = dataByModel[firstModelId];
-        if (!items || items.length === 0) {
-            content.innerHTML = '<div class="no-selection">No se encontraron propiedades</div>';
+        const fragment = fragments.list.get(fragmentId);
+        const model = (fragment as any)?.group;
+        
+        if (!model) {
+            content.innerHTML = '<div class="no-selection">No se encontró el modelo</div>';
             return;
         }
 
-        const item = items[0] as any;
+        // --- Helper to get property value safely ---
+        const getValue = (val: any): string => {
+            if (val === null || val === undefined) return '';
+            if (typeof val === 'object' && val.value !== undefined) return String(val.value);
+            return String(val);
+        };
 
-        const renderGroup = (title: string, props: any) => {
+        const renderGroup = (title: string, props: Record<string, any>) => {
              const group = document.createElement('div');
              group.className = 'property-group';
              
@@ -761,7 +752,7 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
              let hasProps = false;
              for (const key in props) {
                  const val = props[key];
-                 if (val === null || val === undefined) continue;
+                 if (val === null || val === undefined || val === '') continue;
                  
                  hasProps = true;
                  const row = document.createElement('div');
@@ -783,40 +774,93 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
              if (hasProps) content.appendChild(group);
         };
 
-        const flatAttributes: Record<string, any> = {};
-        for (const key in item) {
-            const raw = item[key];
-            if (!raw) continue;
-            if (Array.isArray(raw)) continue;
-            const value = (raw as any).value ?? raw;
-            if (value === null || value === undefined) continue;
-            flatAttributes[key] = value;
+        // 1. Basic Attributes
+        // @ts-ignore
+        const allProps = model.getLocalProperties ? model.getLocalProperties() : model.properties;
+        
+        if (!allProps) {
+             content.innerHTML = '<div class="no-selection">No se encontraron propiedades en el modelo</div>';
+             return;
+        }
+
+        const item = allProps[expressId];
+        if (!item) {
+             content.innerHTML = '<div class="no-selection">Elemento no encontrado en propiedades</div>';
+             return;
         }
 
         const general: Record<string, any> = {};
+        general['Entity'] = item.constructor?.name || 'Unknown';
+        general['GlobalId'] = getValue(item.GlobalId);
+        general['Name'] = getValue(item.Name);
+        general['Tag'] = getValue(item.Tag);
+        general['ObjectType'] = getValue(item.ObjectType);
 
-        general['Fragment ID'] = fragmentId;
-        general['Express ID'] = expressId;
+        renderGroup('Información General', general);
 
-        const pick = (label: string, key: string) => {
-            if (flatAttributes[key] !== undefined) {
-                general[label] = flatAttributes[key];
-                delete flatAttributes[key];
+        // 2. Find Property Sets (Iterate all properties to find relations pointing to this element)
+        // This is a "brute-force" inverse relationship lookup because we don't have an Indexer set up
+        
+        const psets: Record<string, Record<string, any>> = {};
+
+        // Helper to check if a relation points to our element
+        const relatesToMe = (rel: any, field: string) => {
+            if (!rel[field]) return false;
+            const related = rel[field];
+            if (Array.isArray(related)) {
+                return related.some((r: any) => r.value === expressId);
             }
+            return related.value === expressId;
         };
 
-        pick('GlobalId', 'GlobalId');
-        pick('Name', 'Name');
-        pick('Description', 'Description');
-        pick('ObjectType', 'ObjectType');
-        pick('Tag', 'Tag');
+        // Iterate entire property map (can be slow on huge models, but fine for now)
+        for (const id in allProps) {
+            const prop = allProps[id];
+            if (!prop) continue;
 
-        if (Object.keys(general).length > 0) {
-            renderGroup('Información General', general);
+            // Property Sets: IfcRelDefinesByProperties
+            if (prop.type === WEBIFC.IFCRELDEFINESBYPROPERTIES) {
+                if (relatesToMe(prop, 'RelatedObjects')) {
+                    const psetRef = prop.RelatingPropertyDefinition;
+                    if (psetRef) {
+                        const pset = allProps[psetRef.value];
+                        if (pset && pset.HasProperties) {
+                            const psetName = getValue(pset.Name) || 'Unnamed Pset';
+                            if (!psets[psetName]) psets[psetName] = {};
+
+                            // Iterate properties in the Pset
+                            for (const propRef of pset.HasProperties) {
+                                const singleProp = allProps[propRef.value];
+                                if (singleProp && singleProp.Name) {
+                                    const propName = getValue(singleProp.Name);
+                                    const propVal = getValue(singleProp.NominalValue);
+                                    psets[psetName][propName] = propVal;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Type Properties: IfcRelDefinesByType
+            // (Similar logic if needed, but Psets are usually what users want)
+        }
+
+        // Render Psets
+        for (const [psetName, props] of Object.entries(psets)) {
+            renderGroup(psetName, props);
         }
         
-        if (Object.keys(flatAttributes).length > 0) {
-            renderGroup('Otros Atributos', flatAttributes);
+        // If no psets found, try attributes
+        if (Object.keys(psets).length === 0) {
+            const directProps: Record<string, any> = {};
+            for (const key in item) {
+                const val = item[key];
+                if (!Array.isArray(val) && val?.value !== undefined) {
+                    directProps[key] = getValue(val);
+                }
+            }
+            renderGroup('Atributos Directos', directProps);
         }
 
     } catch (e) {
