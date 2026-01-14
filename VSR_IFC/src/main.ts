@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
-import { FragmentsManager } from '@thatopen/components';
-
+import * as OBF from '@thatopen/components-front';
 import './style.css';
 
 // --- Initialization of That Open Engine ---
@@ -155,7 +154,7 @@ async function loadModel(url: string, path: string) {
         logToScreen(`Loading Fragments... (Size: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
 
         const model = await fragments.core.load(buffer, { modelId: path });
-        model.name = path.split('/').pop() || 'Model';
+        (model as any).name = path.split('/').pop() || 'Model';
 
         model.useCamera(world.camera.three);
 
@@ -307,7 +306,7 @@ function initSidebar() {
                              const savedData = model._save ? await model._save() : null;
                              
                              if (savedData) {
-                                 const blob = new Blob([savedData], { type: 'application/octet-stream' });
+                                 const blob = new Blob([savedData as any], { type: 'application/octet-stream' });
                                  const url = URL.createObjectURL(blob);
                                  const a = document.createElement('a');
                                  a.href = url;
@@ -366,7 +365,7 @@ function initTheme() {
     updateThemeUI(isDark);
 
     themeBtn?.addEventListener('click', () => {
-        const isDarkMode = document.body.classList.toggle('dark-mode');
+        document.body.classList.toggle('dark-mode');
         // Force re-check of class because toggle returns boolean
         // But we want to be explicit
         const currentDark = document.body.classList.contains('dark-mode');
@@ -559,6 +558,7 @@ initSidebar();
 initTheme();
 initProjectionToggle();
 loadModelList();
+initPropertiesPanel();
 
 // --- View Controls & Console Toggle ---
 
@@ -580,7 +580,7 @@ function getModelCenter(): THREE.Vector3 {
     // Simple approach: Use bounding box of all meshes in scene
     const box = new THREE.Box3();
     const meshes: THREE.Mesh[] = [];
-    world.scene.three.traverse((child) => {
+    world.scene.three.traverse((child: any) => {
         if ((child as THREE.Mesh).isMesh) {
              meshes.push(child as THREE.Mesh);
         }
@@ -601,7 +601,7 @@ function getModelCenter(): THREE.Vector3 {
 function getModelRadius(): number {
     const box = new THREE.Box3();
     let hasMeshes = false;
-    world.scene.three.traverse((child) => {
+    world.scene.three.traverse((child: any) => {
         if ((child as THREE.Mesh).isMesh) {
              box.expandByObject(child);
              hasMeshes = true;
@@ -683,6 +683,148 @@ viewButtons.forEach(btn => {
 
 
 
-const input = document.getElementById('file-input') as HTMLInputElement;
 // Listener moved to initSidebar to handle both IFC and Frag files centrally
+
+// --- Highlighter & Properties Setup ---
+const highlighter = components.get(OBF.Highlighter);
+highlighter.setup({ world });
+highlighter.zoomToSelection = true;
+
+highlighter.events.select.onHighlight.add((fragmentIdMap) => {
+    updatePropertiesPanel(fragmentIdMap);
+});
+
+highlighter.events.select.onClear.add(() => {
+    updatePropertiesPanel({});
+});
+
+async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>) {
+    const content = document.getElementById('properties-content');
+    if (!content) return;
+
+    content.innerHTML = '';
+
+    const fragmentId = Object.keys(fragmentIdMap)[0];
+    if (!fragmentId) {
+        content.innerHTML = '<div class="no-selection">Selecciona un elemento para ver sus propiedades</div>';
+        return;
+    }
+
+    const expressIds = fragmentIdMap[fragmentId];
+    if (!expressIds || expressIds.size === 0) return;
+
+    const expressId = Array.from(expressIds)[0]; // Just show first selected
+    const model = fragments.list.get(fragmentId);
+    
+    if (!model) return;
+
+    try {
+        const properties = await (model as any).getProperties(expressId);
+        
+        if (!properties) {
+             content.innerHTML = '<div class="no-selection">No se encontraron propiedades</div>';
+             return;
+        }
+
+        const renderGroup = (title: string, props: any) => {
+             const group = document.createElement('div');
+             group.className = 'property-group';
+             
+             const header = document.createElement('div');
+             header.className = 'property-group-header';
+             header.textContent = title;
+             group.appendChild(header);
+
+             let hasProps = false;
+             for (const key in props) {
+                 const val = props[key];
+                 if (val === null || val === undefined || typeof val === 'object' || key === 'type') continue;
+                 
+                 hasProps = true;
+                 const row = document.createElement('div');
+                 row.className = 'property-row';
+                 
+                 const nameDiv = document.createElement('div');
+                 nameDiv.className = 'property-name';
+                 nameDiv.textContent = key;
+                 
+                 const valDiv = document.createElement('div');
+                 valDiv.className = 'property-value';
+                 valDiv.textContent = String(val);
+
+                 row.appendChild(nameDiv);
+                 row.appendChild(valDiv);
+                 group.appendChild(row);
+             }
+
+             if (hasProps) content.appendChild(group);
+        };
+
+        renderGroup('Información General', {
+            'GlobalId': properties.GlobalId?.value || properties.GlobalId,
+            'Name': properties.Name?.value || properties.Name,
+            'Description': properties.Description?.value || properties.Description,
+            'ObjectType': properties.ObjectType?.value || properties.ObjectType,
+            'Tag': properties.Tag?.value || properties.Tag
+        });
+        
+        // Render all other properties that are simple values
+        const otherProps: any = {};
+        for(const key in properties) {
+            if(['GlobalId', 'Name', 'Description', 'ObjectType', 'Tag', 'type', 'expressID'].includes(key)) continue;
+            const val = properties[key];
+            if (val && typeof val === 'object' && val.value !== undefined) {
+                 otherProps[key] = val.value;
+            } else if (val && typeof val !== 'object') {
+                 otherProps[key] = val;
+            }
+        }
+        if (Object.keys(otherProps).length > 0) {
+            renderGroup('Otros Atributos', otherProps);
+        }
+
+    } catch (e) {
+        console.error("Error getting properties", e);
+        content.innerHTML = '<div class="no-selection">Error al leer propiedades</div>';
+    }
+}
+
+function initPropertiesPanel() {
+    const panel = document.getElementById('properties-panel');
+    const toggleBtn = document.getElementById('properties-toggle');
+    const resizer = document.getElementById('properties-resizer');
+    
+    if (toggleBtn && panel) {
+        toggleBtn.addEventListener('click', () => {
+            panel.classList.toggle('closed');
+        });
+    }
+
+    if (resizer && panel) {
+        let isResizing = false;
+        
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('resizing');
+            document.body.style.cursor = 'ew-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newWidth = window.innerWidth - e.clientX;
+            if (newWidth > 200 && newWidth < 800) {
+                panel.style.width = `${newWidth}px`;
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('resizing');
+                document.body.style.cursor = 'default';
+            }
+        });
+    }
+}
 

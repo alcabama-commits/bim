@@ -10,9 +10,8 @@
   </head>
   <body>
     <div id="app">
-      <!-- Sidebar -->
+      <!-- Sidebar (Left - Models) -->
       <div id="sidebar" class="sidebar">
-        <div class="resizer" id="sidebar-resizer"></div>
         <div class="sidebar-header">
           <h3><i class="fa-solid fa-cubes"></i> Modelos IFC</h3>
         </div>
@@ -26,6 +25,18 @@
            <label for="file-input" class="upload-btn">
              <i class="fa-solid fa-upload"></i> Cargar Local
            </label>
+        </div>
+        <div class="resizer" id="sidebar-resizer"></div>
+      </div>
+
+      <!-- Properties Panel (Right) -->
+      <div id="properties-panel" class="properties-panel">
+        <div class="resizer-left" id="properties-resizer"></div>
+        <div class="properties-header">
+            <h3><i class="fa-solid fa-circle-info"></i> Propiedades</h3>
+        </div>
+        <div class="properties-content" id="properties-content">
+            <div class="no-selection">Selecciona un elemento para ver sus propiedades</div>
         </div>
       </div>
 
@@ -41,6 +52,9 @@
       <!-- Top Bar -->
       <header class="top-bar">
           <div class="logo-container">
+              <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar modelos">
+                  <i class="fa-solid fa-bars"></i>
+              </button>
               <img id="logo-img" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png" alt="Alcabama" class="logo-img" style="height: 40px;">
           </div>
 
@@ -84,8 +98,8 @@
                <span>Persp</span>
            </button>
  
-           <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar modelos">
-               <i class="fa-solid fa-bars"></i>
+           <button id="properties-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar propiedades">
+               <i class="fa-solid fa-circle-info"></i>
            </button>
       </div>
       </header>
