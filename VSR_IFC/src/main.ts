@@ -508,10 +508,39 @@ function getModelRadius(): number {
     return sphere.radius || 10;
 }
 
+const viewDropdownBtn = document.getElementById('view-dropdown-btn');
+const viewDropdownMenu = document.getElementById('view-dropdown-menu');
+
+if (viewDropdownBtn && viewDropdownMenu) {
+    // Toggle menu
+    viewDropdownBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        viewDropdownMenu.classList.toggle('show');
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', () => {
+        viewDropdownMenu.classList.remove('show');
+    });
+}
+
 const viewButtons = document.querySelectorAll('.view-btn');
 viewButtons.forEach(btn => {
     btn.addEventListener('click', async () => {
         const view = btn.getAttribute('data-view');
+        
+        // Update Main Button Text to show selected view
+        if (viewDropdownBtn) {
+             const icon = btn.querySelector('i')?.cloneNode(true);
+             const text = btn.textContent?.trim();
+             const span = viewDropdownBtn.querySelector('span');
+             if (span && icon && text) {
+                 span.innerHTML = '';
+                 span.appendChild(icon);
+                 span.appendChild(document.createTextNode(' ' + text));
+             }
+        }
+
         const center = getModelCenter();
         const radius = getModelRadius();
         const dist = radius * 2; // Distance factor

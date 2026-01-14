@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VSR IFC Viewer</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script type="module" crossorigin src="./assets/main-BZlbhIY2.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/main-Dg8MU-6U.css">
+    <script type="module" crossorigin src="./assets/main-mI3SXGk2.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/main-BhYtj9LK.css">
   </head>
   <body>
     <div id="app">
@@ -37,24 +37,53 @@
 
       <div id="loading-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000;">
         <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
-            <div style="margin-bottom: 10px; font-weight: bold;">Loading Model...</div>
-            <div id="loading-progress">0%</div>
+            <div style="margin-bottom: 10px; font-weight: bold; color: #333;">Loading Model...</div>
+            <div id="loading-progress" style="color: #333;">0%</div>
         </div>
       </div>
       <div id="debug-console" style="position: fixed; bottom: 0; left: 0; width: 100%; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace; font-size: 12px; padding: 10px; pointer-events: none; z-index: 999; display: none;"></div>
       <div id="viewer-container"></div>
 
-      <!-- View Toolbar & Console Toggle -->
-      <div class="view-controls">
-          <div class="view-cube-controls">
-              <button class="view-btn" data-view="top" title="Superior (Top)">T</button>
-              <button class="view-btn" data-view="bottom" title="Inferior (Bottom)">B</button>
-              <button class="view-btn" data-view="front" title="Frontal (Front)">F</button>
-              <button class="view-btn" data-view="back" title="Posterior (Back)">Bk</button>
-              <button class="view-btn" data-view="left" title="Izquierda (Left)">L</button>
-              <button class="view-btn" data-view="right" title="Derecha (Right)">R</button>
-              <button class="view-btn" data-view="iso" title="Isométrica (Iso)">Iso</button>
+      <!-- Top Bar -->
+      <header class="top-bar">
+          <div class="logo-container">
+              <!-- Simple text logo to match Alcabama style -->
+              <div class="logo-text">Alcabama</div>
           </div>
+
+          <div class="view-dropdown-container">
+              <button id="view-dropdown-btn" class="view-dropdown-btn">
+                  <span><i class="fa-solid fa-cube"></i> Vista axonométrica</span>
+                  <i class="fa-solid fa-chevron-down"></i>
+              </button>
+              <div id="view-dropdown-menu" class="view-dropdown-menu">
+                  <button class="view-dropdown-item view-btn" data-view="iso">
+                      <i class="fa-solid fa-cube"></i> Vista axonométrica
+                  </button>
+                  <button class="view-dropdown-item view-btn" data-view="top">
+                      <i class="fa-solid fa-arrow-up"></i> Vista superior
+                  </button>
+                  <button class="view-dropdown-item view-btn" data-view="front">
+                      <i class="fa-solid fa-square"></i> Vista frontal
+                  </button>
+                  <button class="view-dropdown-item view-btn" data-view="left">
+                      <i class="fa-solid fa-arrow-left"></i> Vista izquierda
+                  </button>
+                  <button class="view-dropdown-item view-btn" data-view="back">
+                      <i class="fa-regular fa-square"></i> Vista posterior
+                  </button>
+                  <button class="view-dropdown-item view-btn" data-view="right">
+                      <i class="fa-solid fa-arrow-right"></i> Vista derecha
+                  </button>
+                  <button class="view-dropdown-item view-btn" data-view="bottom">
+                      <i class="fa-solid fa-arrow-down"></i> Vista inferior
+                  </button>
+              </div>
+          </div>
+      </header>
+
+      <!-- Console Toggle (Moved to bottom left standalone) -->
+      <div class="console-toggle-container">
           <button id="console-toggle" class="console-btn" title="Toggle Console">
               <i class="fa-solid fa-terminal"></i>
           </button>
