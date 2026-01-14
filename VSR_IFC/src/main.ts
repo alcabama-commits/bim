@@ -730,14 +730,9 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
         // Better model lookup: try group, then fallback to finding via fragment ID in loaded models if needed
         let model = (fragment as any)?.group;
 
-        // Fallback for models loaded via FragmentsManager directly where group might not be set as expected in all versions
+        // Fallback: If fragment is the model itself (FragmentsGroup)
         if (!model) {
-             // Try to find the model that owns this fragment
-             // In some versions of OBC, we might need to look it up differently
-             // For now, let's try to see if the fragment itself has properties
-             if ((fragment as any).properties) {
-                 model = fragment; // Treat fragment as model if it holds properties
-             }
+             model = fragment;
         }
         
         if (!model) {
@@ -789,11 +784,23 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
 
         // 1. Try to get All Properties (including relations) from model memory
         // @ts-ignore
-        const allProps = model.getLocalProperties ? model.getLocalProperties() : model.properties;
+        let allProps = model.getLocalProperties ? model.getLocalProperties() : model.properties;
         
+        // Debug: Log keys if properties are missing
+        if (!allProps) {
+            console.warn("Properties not found on model. Available keys:", Object.keys(model));
+            // Try accessing via other common names or _properties
+            if ((model as any)._properties) allProps = (model as any)._properties;
+            if ((model as any).data) allProps = (model as any).data;
+        }
+
         let psetsFound = false;
 
-        if (allProps) {
+        if (!allProps) {
+             content.innerHTML = '<div class="no-selection">No se encontraron propiedades en el modelo. <br><small>Ver consola para depuración.</small></div>';
+             return;
+        }
+
             const item = allProps[expressId];
             if (item) {
                 const general: Record<string, any> = {};
@@ -852,7 +859,6 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
                     }
                 }
             }
-        }
 
         // 3. Fallback: Use fragments.getData if manual traversal failed or returned no psets
         // This ensures we at least show something
