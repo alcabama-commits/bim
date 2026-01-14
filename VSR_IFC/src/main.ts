@@ -792,6 +792,11 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
             // Try accessing via other common names or _properties
             if ((model as any)._properties) allProps = (model as any)._properties;
             if ((model as any).data) allProps = (model as any).data;
+            // Try _dataManager if available (might be internal)
+            if ((model as any)._dataManager && (model as any)._dataManager.data) {
+                 allProps = (model as any)._dataManager.data;
+                 console.log("Found properties in _dataManager");
+            }
         }
 
         let psetsFound = false;
@@ -955,8 +960,8 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
             const dataByModel = await fragments.getData(fragmentIdMap, {
                 attributesDefault: true,
                 relationsDefault: {
-                    attributes: false,
-                    relations: false,
+                    attributes: true,
+                    relations: true,
                 },
             });
             
