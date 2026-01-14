@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
-import * as WEBIFC from 'web-ifc';
+import * as BUI from '@thatopen/ui';
+import * as BUIC from '@thatopen/ui-obc';
 import './style.css';
 
 // --- Initialization of That Open Engine ---
@@ -24,6 +25,7 @@ world.renderer = new OBC.SimpleRenderer(components, container);
 world.camera = new OBC.OrthoPerspectiveCamera(components);
 
 components.init();
+BUI.Manager.init();
 
 // Grids
 const grids = components.get(OBC.Grids);
@@ -126,6 +128,11 @@ function getSpecialtyFromIfcPath(path: string): string {
 // Track loaded models
 // Key: path, Value: FragmentsGroup (the model)
 const loadedModels = new Map<string, any>();
+
+let propertiesTableElement: HTMLElement | null = null;
+let updateItemsDataTable:
+    | ((params: { modelIdMap: Record<string, Set<number>> }) => void)
+    | null = null;
 
 // Helper to log to screen
 function logToScreen(msg: string, isError = false) {
@@ -691,309 +698,26 @@ highlighter.setup({ world });
 highlighter.zoomToSelection = true;
 
 highlighter.events.select.onHighlight.add((fragmentIdMap) => {
-    updatePropertiesPanel(fragmentIdMap);
+    if (updateItemsDataTable) {
+        updateItemsDataTable({ modelIdMap: fragmentIdMap as any });
+    }
 });
 
 highlighter.events.select.onClear.add(() => {
-    updatePropertiesPanel({});
+    if (updateItemsDataTable) {
+        updateItemsDataTable({ modelIdMap: {} as any });
+    }
 });
 
 if (container) {
     container.addEventListener('click', () => {
         const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
         if (selection) {
-            updatePropertiesPanel(selection);
+            if (updateItemsDataTable) {
+                updateItemsDataTable({ modelIdMap: selection as any });
+            }
         }
     });
-}
-
-async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>) {
-    const content = document.getElementById('properties-content');
-    if (!content) return;
-
-    content.innerHTML = '';
-
-    const fragmentId = Object.keys(fragmentIdMap)[0];
-    if (!fragmentId) {
-        content.innerHTML = '<div class="no-selection">Selecciona un elemento para ver sus propiedades</div>';
-        return;
-    }
-
-    const expressIds = fragmentIdMap[fragmentId];
-    if (!expressIds || expressIds.size === 0) return;
-
-    const expressId = Array.from(expressIds)[0];
-
-    try {
-        const fragment = fragments.list.get(fragmentId);
-        
-        // Better model lookup: try group, then fallback to finding via fragment ID in loaded models if needed
-        let model = (fragment as any)?.group;
-
-        // Fallback: If fragment is the model itself (FragmentsGroup)
-        if (!model) {
-             model = fragment;
-        }
-        
-        if (!model) {
-            console.warn("Model not found for fragment:", fragmentId, fragment);
-            content.innerHTML = '<div class="no-selection">No se encontró el modelo asociado (Fragmento huérfano)</div>';
-            return;
-        }
-
-        // --- Helper to get property value safely ---
-        const getValue = (val: any): string => {
-            if (val === null || val === undefined) return '';
-            if (typeof val === 'object' && val.value !== undefined) return String(val.value);
-            return String(val);
-        };
-
-        const renderGroup = (title: string, props: Record<string, any>) => {
-             const group = document.createElement('div');
-             group.className = 'property-group';
-             
-             const header = document.createElement('div');
-             header.className = 'property-group-header';
-             header.textContent = title;
-             group.appendChild(header);
-
-             let hasProps = false;
-             for (const key in props) {
-                 const val = props[key];
-                 if (val === null || val === undefined || val === '') continue;
-                 
-                 hasProps = true;
-                 const row = document.createElement('div');
-                 row.className = 'property-row';
-                 
-                 const nameDiv = document.createElement('div');
-                 nameDiv.className = 'property-name';
-                 nameDiv.textContent = key;
-                 
-                 const valDiv = document.createElement('div');
-                 valDiv.className = 'property-value';
-                 valDiv.textContent = String(val);
-
-                 row.appendChild(nameDiv);
-                 row.appendChild(valDiv);
-                 group.appendChild(row);
-             }
-
-             if (hasProps) content.appendChild(group);
-        };
-
-        // 1. Try to get All Properties (including relations) from model memory
-        // @ts-ignore
-        let allProps = model.getLocalProperties ? model.getLocalProperties() : model.properties;
-        
-        // Debug: Log keys if properties are missing
-        if (!allProps) {
-            console.warn("Properties not found on model. Available keys:", Object.keys(model));
-            // Try accessing via other common names or _properties
-            if ((model as any)._properties) allProps = (model as any)._properties;
-            if ((model as any).data) allProps = (model as any).data;
-            // Try _dataManager if available (might be internal)
-            if ((model as any)._dataManager && (model as any)._dataManager.data) {
-                 allProps = (model as any)._dataManager.data;
-                 console.log("Found properties in _dataManager");
-            }
-        }
-
-        let psetsFound = false;
-
-        if (!allProps) {
-            console.warn("Properties not found on model directly, trying fallback...");
-        } else {
-            const item = allProps[expressId];
-            if (item) {
-                const general: Record<string, any> = {};
-                general['Entity'] = item.constructor?.name || 'Unknown';
-                general['GlobalId'] = getValue(item.GlobalId);
-                general['Name'] = getValue(item.Name);
-                general['Tag'] = getValue(item.Tag);
-                general['ObjectType'] = getValue(item.ObjectType);
-
-                renderGroup('Información General', general);
-
-                // 2. Find Property Sets via manual traversal
-                const psets: Record<string, Record<string, any>> = {};
-                
-                // Helper to check relation
-                const relatesToMe = (rel: any, field: string) => {
-                    if (!rel[field]) return false;
-                    const related = rel[field];
-                    if (Array.isArray(related)) {
-                        return related.some((r: any) => r.value === expressId);
-                    }
-                    return related.value === expressId;
-                };
-
-                // Helper to extract properties/quantities
-                const extractPsetProps = (pset: any, psetNamePrefix: string = '') => {
-                    const psetName = getValue(pset.Name) || 'Unnamed Set';
-                    const finalName = psetNamePrefix ? `${psetNamePrefix}${psetName}` : psetName;
-                    
-                    if (!psets[finalName]) psets[finalName] = {};
-
-                    // IfcPropertySet
-                    if (pset.HasProperties) {
-                        for (const propRef of pset.HasProperties) {
-                            const singleProp = allProps[propRef.value];
-                            if (singleProp && singleProp.Name) {
-                                const propName = getValue(singleProp.Name);
-                                const propVal = getValue(singleProp.NominalValue);
-                                psets[finalName][propName] = propVal;
-                            }
-                        }
-                    }
-                    
-                    // IfcElementQuantity
-                    if (pset.Quantities) {
-                         for (const qRef of pset.Quantities) {
-                             const quantity = allProps[qRef.value];
-                             if (quantity && quantity.Name) {
-                                 const qName = getValue(quantity.Name);
-                                 let qVal = '';
-                                 if (quantity.LengthValue !== undefined) qVal = getValue(quantity.LengthValue);
-                                 else if (quantity.AreaValue !== undefined) qVal = getValue(quantity.AreaValue);
-                                 else if (quantity.VolumeValue !== undefined) qVal = getValue(quantity.VolumeValue);
-                                 else if (quantity.CountValue !== undefined) qVal = getValue(quantity.CountValue);
-                                 else if (quantity.WeightValue !== undefined) qVal = getValue(quantity.WeightValue);
-                                 
-                                 psets[finalName][qName] = qVal;
-                             }
-                         }
-                    }
-                };
-
-                for (const id in allProps) {
-                    const prop = allProps[id];
-                    if (!prop) continue;
-
-                    // 1. Direct Properties & Quantities (IfcRelDefinesByProperties)
-                    if (prop.type === WEBIFC.IFCRELDEFINESBYPROPERTIES) {
-                        if (relatesToMe(prop, 'RelatedObjects')) {
-                            const psetRef = prop.RelatingPropertyDefinition;
-                            if (psetRef) {
-                                const pset = allProps[psetRef.value];
-                                if (pset) extractPsetProps(pset);
-                            }
-                        }
-                    }
-                    
-                    // 2. Type Properties (IfcRelDefinesByType)
-                    if (prop.type === WEBIFC.IFCRELDEFINESBYTYPE) {
-                        if (relatesToMe(prop, 'RelatedObjects')) {
-                            const typeRef = prop.RelatingType;
-                            if (typeRef) {
-                                const typeObj = allProps[typeRef.value];
-                                if (typeObj) {
-                                    // Show Type Name
-                                    if (!psets['Type Info']) psets['Type Info'] = {};
-                                    psets['Type Info']['Name'] = getValue(typeObj.Name);
-                                    
-                                    // Get Psets from Type
-                                    if (typeObj.HasPropertySets) {
-                                        for (const psetRef of typeObj.HasPropertySets) {
-                                            const pset = allProps[psetRef.value];
-                                            if (pset) extractPsetProps(pset, '[Type] ');
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    // 3. Material (IfcRelAssociatesMaterial)
-                    if (prop.type === WEBIFC.IFCRELASSOCIATESMATERIAL) {
-                         if (relatesToMe(prop, 'RelatedObjects')) {
-                             const matRef = prop.RelatingMaterial;
-                             if (matRef) {
-                                 const mat = allProps[matRef.value];
-                                 if (mat) {
-                                     if (!psets['Material']) psets['Material'] = {};
-                                     
-                                     if (mat.Name) {
-                                         psets['Material']['Name'] = getValue(mat.Name);
-                                     }
-                                     
-                                     // IfcMaterialLayerSetUsage
-                                     if (mat.ForLayerSet) {
-                                         const layerSet = allProps[mat.ForLayerSet.value];
-                                         if (layerSet && layerSet.MaterialLayers) {
-                                             layerSet.MaterialLayers.forEach((layerRef: any, idx: number) => {
-                                                 const layer = allProps[layerRef.value];
-                                                 if (layer && layer.Material) {
-                                                      const material = allProps[layer.Material.value];
-                                                      if (material) {
-                                                          psets['Material'][`Layer ${idx+1}`] = getValue(material.Name);
-                                                          if (layer.LayerThickness) {
-                                                              psets['Material'][`Layer ${idx+1} Thickness`] = getValue(layer.LayerThickness);
-                                                          }
-                                                      }
-                                                 }
-                                             });
-                                         }
-                                     }
-                                 }
-                             }
-                         }
-                    }
-                }
-
-                if (Object.keys(psets).length > 0) {
-                    psetsFound = true;
-                    for (const [psetName, props] of Object.entries(psets)) {
-                        renderGroup(psetName, props);
-                    }
-                }
-            }
-        }
-
-        // 3. Fallback: Use fragments.getData if manual traversal failed or returned no psets
-        // This ensures we at least show something
-        if (!psetsFound) {
-            console.warn("Manual Pset traversal empty, falling back to fragments.getData");
-            
-            // Try getting data with specific relation query? 
-            // For now, just get basic attributes to ensure *something* shows
-            const dataByModel = await fragments.getData(fragmentIdMap, {
-                attributesDefault: true,
-                relationsDefault: {
-                    attributes: true,
-                    relations: true,
-                },
-            });
-            
-            const modelIds = Object.keys(dataByModel);
-            if (modelIds.length > 0) {
-                const items = dataByModel[modelIds[0]];
-                if (items && items.length > 0) {
-                    const fallbackItem = items[0] as any;
-                    const fallbackProps: Record<string, any> = {};
-                    
-                    for (const key in fallbackItem) {
-                         const val = fallbackItem[key];
-                         if (key === 'expressID' || key === 'type') continue;
-                         if (!Array.isArray(val) && val?.value !== undefined) {
-                             fallbackProps[key] = getValue(val);
-                         } else if (typeof val !== 'object') {
-                             fallbackProps[key] = val;
-                         }
-                    }
-                    renderGroup('Propiedades (Básico)', fallbackProps);
-                }
-            } else {
-                 if (!allProps) {
-                    content.innerHTML += '<div class="no-selection">No se pudieron recuperar propiedades.</div>';
-                 }
-            }
-        }
-
-    } catch (e) {
-        console.error("Error getting properties", e);
-        content.innerHTML = `<div class="no-selection">Error interno: ${e}</div>`;
-    }
 }
 
 function initPropertiesPanel() {
@@ -1032,6 +756,22 @@ function initPropertiesPanel() {
                 document.body.style.cursor = 'default';
             }
         });
+    }
+
+    const content = document.getElementById('properties-content');
+    if (content && !propertiesTableElement) {
+        const [table, update] = BUIC.tables.itemsData({
+            components,
+            modelIdMap: {},
+        });
+        propertiesTableElement = table as unknown as HTMLElement;
+        updateItemsDataTable = update as unknown as (
+            params: { modelIdMap: Record<string, Set<number>> }
+        ) => void;
+        (propertiesTableElement as any).preserveStructureOnFilter = true;
+        (propertiesTableElement as any).indentationInText = false;
+        content.innerHTML = '';
+        content.appendChild(propertiesTableElement);
     }
 }
 

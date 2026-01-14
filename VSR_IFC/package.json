@@ -16,6 +16,8 @@
   "dependencies": {
     "@thatopen/components-front": "^3.2.17",
     "@thatopen/fragments": "^3.2.13",
+    "@thatopen/ui": "^3.2.4",
+    "@thatopen/ui-obc": "^3.2.3",
     "three": "^0.182.0",
     "web-ifc": "^0.0.46",
     "web-ifc-three": "^0.0.126"
