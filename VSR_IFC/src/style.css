@@ -401,6 +401,32 @@ body {
     color: var(--primary-color);
 }
 
+/* Botón proyección Perspectiva/Ortogonal */
+.projection-toggle-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-dark-gray);
+    padding: 8px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.projection-toggle-btn:hover {
+    background: var(--bg-light-gray);
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.projection-toggle-btn.active {
+    background: var(--primary-color);
+    color: #fff;
+    border-color: var(--primary-color);
+}
 
 /* Console Toggle (Bottom Left) */
 .console-toggle-container {

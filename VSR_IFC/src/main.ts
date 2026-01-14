@@ -215,19 +215,13 @@ async function loadModel(url: string, path: string) {
 function initSidebar() {
     const sidebar = document.getElementById('sidebar');
     const toggleBtn = document.getElementById('sidebar-toggle');
-    const closeBtn = document.getElementById('sidebar-close');
     const resizer = document.getElementById('sidebar-resizer');
 
-    // Toggle Logic
-    if (toggleBtn && closeBtn && sidebar) {
+    // Toggle Logic usando solo el botón de hamburguesa
+    if (toggleBtn && sidebar) {
         toggleBtn.addEventListener('click', () => {
-            document.body.classList.remove('sidebar-closed');
-            sidebar.classList.remove('closed');
-        });
-
-        closeBtn.addEventListener('click', () => {
-            document.body.classList.add('sidebar-closed');
-            sidebar.classList.add('closed');
+            const isClosed = sidebar.classList.toggle('closed');
+            document.body.classList.toggle('sidebar-closed', isClosed);
         });
     }
 
@@ -381,6 +375,41 @@ function initTheme() {
     });
 }
 
+function initProjectionToggle() {
+    const btn = document.getElementById('projection-toggle');
+    if (!btn) return;
+
+    const labelSpan = btn.querySelector('span');
+
+    const updateUI = () => {
+        const current = (world.camera as any).projection?.current as string | undefined;
+        const isOrtho = current === 'Orthographic';
+        btn.classList.toggle('active', isOrtho);
+        if (labelSpan) {
+            labelSpan.textContent = isOrtho ? 'Orto' : 'Persp';
+        }
+    };
+
+    updateUI();
+
+    btn.addEventListener('click', () => {
+        const projectionApi = (world.camera as any).projection;
+        if (!projectionApi || typeof projectionApi.set !== 'function') return;
+
+        const current = projectionApi.current as string;
+        const next = current === 'Orthographic' ? 'Perspective' : 'Orthographic';
+
+        projectionApi.set(next);
+
+        const rendererAny: any = world.renderer as any;
+        if (rendererAny?.postproduction?.updateCamera) {
+            rendererAny.postproduction.updateCamera();
+        }
+
+        updateUI();
+    });
+}
+
 
 
 
@@ -528,6 +557,7 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
 logToScreen('Initializing That Open Engine...');
 initSidebar();
 initTheme();
+initProjectionToggle();
 loadModelList();
 
 // --- View Controls & Console Toggle ---
