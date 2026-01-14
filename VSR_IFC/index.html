@@ -17,6 +17,7 @@
 
       <!-- Sidebar -->
       <div id="sidebar" class="sidebar">
+        <div class="resizer" id="sidebar-resizer"></div>
         <div class="sidebar-header">
           <h3><i class="fa-solid fa-cubes"></i> Modelos IFC</h3>
           <button id="sidebar-close" class="close-btn"><i class="fa-solid fa-xmark"></i></button>
@@ -46,37 +47,42 @@
       <!-- Top Bar -->
       <header class="top-bar">
           <div class="logo-container">
-              <!-- Simple text logo to match Alcabama style -->
-              <div class="logo-text">Alcabama</div>
+              <img src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png" alt="Alcabama" class="logo-img" style="height: 40px;">
           </div>
 
-          <div class="view-dropdown-container">
-              <button id="view-dropdown-btn" class="view-dropdown-btn">
-                  <span><i class="fa-solid fa-cube"></i> Vista axonométrica</span>
-                  <i class="fa-solid fa-chevron-down"></i>
+          <div class="top-controls" style="display: flex; align-items: center; gap: 15px;">
+              <button id="theme-toggle" class="theme-btn" title="Cambiar Tema" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-dark-gray);">
+                  <i class="fa-solid fa-moon"></i>
               </button>
-              <div id="view-dropdown-menu" class="view-dropdown-menu">
-                  <button class="view-dropdown-item view-btn" data-view="iso">
-                      <i class="fa-solid fa-cube"></i> Vista axonométrica
+
+              <div class="view-dropdown-container">
+                  <button id="view-dropdown-btn" class="view-dropdown-btn">
+                      <span><i class="fa-solid fa-cube"></i> Vista axonométrica</span>
+                      <i class="fa-solid fa-chevron-down"></i>
                   </button>
-                  <button class="view-dropdown-item view-btn" data-view="top">
-                      <i class="fa-solid fa-arrow-up"></i> Vista superior
-                  </button>
-                  <button class="view-dropdown-item view-btn" data-view="front">
-                      <i class="fa-solid fa-square"></i> Vista frontal
-                  </button>
-                  <button class="view-dropdown-item view-btn" data-view="left">
-                      <i class="fa-solid fa-arrow-left"></i> Vista izquierda
-                  </button>
-                  <button class="view-dropdown-item view-btn" data-view="back">
-                      <i class="fa-regular fa-square"></i> Vista posterior
-                  </button>
-                  <button class="view-dropdown-item view-btn" data-view="right">
-                      <i class="fa-solid fa-arrow-right"></i> Vista derecha
-                  </button>
-                  <button class="view-dropdown-item view-btn" data-view="bottom">
-                      <i class="fa-solid fa-arrow-down"></i> Vista inferior
-                  </button>
+                  <div id="view-dropdown-menu" class="view-dropdown-menu">
+                      <button class="view-dropdown-item view-btn" data-view="iso">
+                          <i class="fa-solid fa-cube"></i> Vista axonométrica
+                      </button>
+                      <button class="view-dropdown-item view-btn" data-view="top">
+                          <i class="fa-solid fa-arrow-up"></i> Vista superior
+                      </button>
+                      <button class="view-dropdown-item view-btn" data-view="front">
+                          <i class="fa-solid fa-square"></i> Vista frontal
+                      </button>
+                      <button class="view-dropdown-item view-btn" data-view="left">
+                          <i class="fa-solid fa-arrow-left"></i> Vista izquierda
+                      </button>
+                      <button class="view-dropdown-item view-btn" data-view="back">
+                          <i class="fa-regular fa-square"></i> Vista posterior
+                      </button>
+                      <button class="view-dropdown-item view-btn" data-view="right">
+                          <i class="fa-solid fa-arrow-right"></i> Vista derecha
+                      </button>
+                      <button class="view-dropdown-item view-btn" data-view="bottom">
+                          <i class="fa-solid fa-arrow-down"></i> Vista inferior
+                      </button>
+                  </div>
               </div>
           </div>
       </header>

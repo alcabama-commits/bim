@@ -216,14 +216,49 @@ function initSidebar() {
     const sidebar = document.getElementById('sidebar');
     const toggleBtn = document.getElementById('sidebar-toggle');
     const closeBtn = document.getElementById('sidebar-close');
+    const resizer = document.getElementById('sidebar-resizer');
 
-    if (sidebar && toggleBtn && closeBtn) {
+    // Toggle Logic
+    if (toggleBtn && closeBtn && sidebar) {
         toggleBtn.addEventListener('click', () => {
+            document.body.classList.remove('sidebar-closed');
             sidebar.classList.remove('closed');
         });
 
         closeBtn.addEventListener('click', () => {
+            document.body.classList.add('sidebar-closed');
             sidebar.classList.add('closed');
+        });
+    }
+
+    // Resize Logic
+    if (resizer && sidebar) {
+        let isResizing = false;
+        
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('resizing');
+            document.body.style.cursor = 'ew-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            
+            // Calculate new width based on mouse position from right edge
+            const newWidth = window.innerWidth - e.clientX;
+            
+            if (newWidth > 200 && newWidth < 800) { // Min 200px, Max 800px
+                sidebar.style.width = `${newWidth}px`;
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('resizing');
+                document.body.style.cursor = 'default';
+            }
         });
     }
     
@@ -305,6 +340,40 @@ function initSidebar() {
         });
     }
 }
+
+function initTheme() {
+    const themeBtn = document.getElementById('theme-toggle');
+    const icon = themeBtn?.querySelector('i');
+    
+    // Default to Light (false)
+    const savedTheme = localStorage.getItem('theme');
+    const isDark = savedTheme === 'dark';
+    
+    if (isDark) {
+        document.body.classList.add('dark-mode');
+        if(icon) icon.className = 'fa-solid fa-sun';
+        // Update scene bg if initialized
+        if (world && world.scene && world.scene.three) {
+             world.scene.three.background = new THREE.Color(0x1e1e1e); // Dark bg
+        }
+    } else {
+        // Light mode (default)
+        if (world && world.scene && world.scene.three) {
+             world.scene.three.background = new THREE.Color(0xf5f5f5); // Light bg
+        }
+    }
+
+    themeBtn?.addEventListener('click', () => {
+        const isDarkMode = document.body.classList.toggle('dark-mode');
+        localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+        if(icon) icon.className = isDarkMode ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+        
+        if (world && world.scene && world.scene.three) {
+             world.scene.three.background = new THREE.Color(isDarkMode ? 0x1e1e1e : 0xf5f5f5);
+        }
+    });
+}
+
 
 
 
@@ -451,6 +520,7 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
 
 logToScreen('Initializing That Open Engine...');
 initSidebar();
+initTheme();
 loadModelList();
 
 // --- View Controls & Console Toggle ---
