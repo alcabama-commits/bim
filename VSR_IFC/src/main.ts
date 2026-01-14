@@ -823,30 +823,116 @@ async function updatePropertiesPanel(fragmentIdMap: Record<string, Set<number>>)
                     return related.value === expressId;
                 };
 
+                // Helper to extract properties/quantities
+                const extractPsetProps = (pset: any, psetNamePrefix: string = '') => {
+                    const psetName = getValue(pset.Name) || 'Unnamed Set';
+                    const finalName = psetNamePrefix ? `${psetNamePrefix}${psetName}` : psetName;
+                    
+                    if (!psets[finalName]) psets[finalName] = {};
+
+                    // IfcPropertySet
+                    if (pset.HasProperties) {
+                        for (const propRef of pset.HasProperties) {
+                            const singleProp = allProps[propRef.value];
+                            if (singleProp && singleProp.Name) {
+                                const propName = getValue(singleProp.Name);
+                                const propVal = getValue(singleProp.NominalValue);
+                                psets[finalName][propName] = propVal;
+                            }
+                        }
+                    }
+                    
+                    // IfcElementQuantity
+                    if (pset.Quantities) {
+                         for (const qRef of pset.Quantities) {
+                             const quantity = allProps[qRef.value];
+                             if (quantity && quantity.Name) {
+                                 const qName = getValue(quantity.Name);
+                                 let qVal = '';
+                                 if (quantity.LengthValue !== undefined) qVal = getValue(quantity.LengthValue);
+                                 else if (quantity.AreaValue !== undefined) qVal = getValue(quantity.AreaValue);
+                                 else if (quantity.VolumeValue !== undefined) qVal = getValue(quantity.VolumeValue);
+                                 else if (quantity.CountValue !== undefined) qVal = getValue(quantity.CountValue);
+                                 else if (quantity.WeightValue !== undefined) qVal = getValue(quantity.WeightValue);
+                                 
+                                 psets[finalName][qName] = qVal;
+                             }
+                         }
+                    }
+                };
+
                 for (const id in allProps) {
                     const prop = allProps[id];
                     if (!prop) continue;
 
+                    // 1. Direct Properties & Quantities (IfcRelDefinesByProperties)
                     if (prop.type === WEBIFC.IFCRELDEFINESBYPROPERTIES) {
                         if (relatesToMe(prop, 'RelatedObjects')) {
                             const psetRef = prop.RelatingPropertyDefinition;
                             if (psetRef) {
                                 const pset = allProps[psetRef.value];
-                                if (pset && pset.HasProperties) {
-                                    const psetName = getValue(pset.Name) || 'Unnamed Pset';
-                                    if (!psets[psetName]) psets[psetName] = {};
-
-                                    for (const propRef of pset.HasProperties) {
-                                        const singleProp = allProps[propRef.value];
-                                        if (singleProp && singleProp.Name) {
-                                            const propName = getValue(singleProp.Name);
-                                            const propVal = getValue(singleProp.NominalValue);
-                                            psets[psetName][propName] = propVal;
+                                if (pset) extractPsetProps(pset);
+                            }
+                        }
+                    }
+                    
+                    // 2. Type Properties (IfcRelDefinesByType)
+                    if (prop.type === WEBIFC.IFCRELDEFINESBYTYPE) {
+                        if (relatesToMe(prop, 'RelatedObjects')) {
+                            const typeRef = prop.RelatingType;
+                            if (typeRef) {
+                                const typeObj = allProps[typeRef.value];
+                                if (typeObj) {
+                                    // Show Type Name
+                                    if (!psets['Type Info']) psets['Type Info'] = {};
+                                    psets['Type Info']['Name'] = getValue(typeObj.Name);
+                                    
+                                    // Get Psets from Type
+                                    if (typeObj.HasPropertySets) {
+                                        for (const psetRef of typeObj.HasPropertySets) {
+                                            const pset = allProps[psetRef.value];
+                                            if (pset) extractPsetProps(pset, '[Type] ');
                                         }
                                     }
                                 }
                             }
                         }
+                    }
+                    
+                    // 3. Material (IfcRelAssociatesMaterial)
+                    if (prop.type === WEBIFC.IFCRELASSOCIATESMATERIAL) {
+                         if (relatesToMe(prop, 'RelatedObjects')) {
+                             const matRef = prop.RelatingMaterial;
+                             if (matRef) {
+                                 const mat = allProps[matRef.value];
+                                 if (mat) {
+                                     if (!psets['Material']) psets['Material'] = {};
+                                     
+                                     if (mat.Name) {
+                                         psets['Material']['Name'] = getValue(mat.Name);
+                                     }
+                                     
+                                     // IfcMaterialLayerSetUsage
+                                     if (mat.ForLayerSet) {
+                                         const layerSet = allProps[mat.ForLayerSet.value];
+                                         if (layerSet && layerSet.MaterialLayers) {
+                                             layerSet.MaterialLayers.forEach((layerRef: any, idx: number) => {
+                                                 const layer = allProps[layerRef.value];
+                                                 if (layer && layer.Material) {
+                                                      const material = allProps[layer.Material.value];
+                                                      if (material) {
+                                                          psets['Material'][`Layer ${idx+1}`] = getValue(material.Name);
+                                                          if (layer.LayerThickness) {
+                                                              psets['Material'][`Layer ${idx+1} Thickness`] = getValue(layer.LayerThickness);
+                                                          }
+                                                      }
+                                                 }
+                                             });
+                                         }
+                                     }
+                                 }
+                             }
+                         }
                     }
                 }
 
