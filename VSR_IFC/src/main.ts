@@ -344,33 +344,40 @@ function initSidebar() {
 function initTheme() {
     const themeBtn = document.getElementById('theme-toggle');
     const icon = themeBtn?.querySelector('i');
+    const logoImg = document.getElementById('logo-img') as HTMLImageElement;
     
     // Default to Light (false)
     const savedTheme = localStorage.getItem('theme');
     const isDark = savedTheme === 'dark';
     
-    if (isDark) {
-        document.body.classList.add('dark-mode');
-        if(icon) icon.className = 'fa-solid fa-sun';
-        // Update scene bg if initialized
-        if (world && world.scene && world.scene.three) {
-             world.scene.three.background = new THREE.Color(0x1e1e1e); // Dark bg
+    const updateThemeUI = (dark: boolean) => {
+        if (dark) {
+            document.body.classList.add('dark-mode');
+            if(icon) icon.className = 'fa-solid fa-sun';
+            if(logoImg) logoImg.src = 'https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png';
+            if (world && world.scene && world.scene.three) {
+                 world.scene.three.background = new THREE.Color(0x1e1e1e); 
+            }
+        } else {
+            document.body.classList.remove('dark-mode');
+            if(icon) icon.className = 'fa-solid fa-moon';
+            if(logoImg) logoImg.src = 'https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png';
+            if (world && world.scene && world.scene.three) {
+                 world.scene.three.background = new THREE.Color(0xf5f5f5); 
+            }
         }
-    } else {
-        // Light mode (default)
-        if (world && world.scene && world.scene.three) {
-             world.scene.three.background = new THREE.Color(0xf5f5f5); // Light bg
-        }
-    }
+    };
+
+    // Initial set
+    updateThemeUI(isDark);
 
     themeBtn?.addEventListener('click', () => {
         const isDarkMode = document.body.classList.toggle('dark-mode');
-        localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
-        if(icon) icon.className = isDarkMode ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
-        
-        if (world && world.scene && world.scene.three) {
-             world.scene.three.background = new THREE.Color(isDarkMode ? 0x1e1e1e : 0xf5f5f5);
-        }
+        // Force re-check of class because toggle returns boolean
+        // But we want to be explicit
+        const currentDark = document.body.classList.contains('dark-mode');
+        localStorage.setItem('theme', currentDark ? 'dark' : 'light');
+        updateThemeUI(currentDark);
     });
 }
 
