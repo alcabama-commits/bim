@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as BUI from '@thatopen/ui';
+import * as BUIC from '@thatopen/ui-obc';
 import './style.css';
 
 // --- Initialization of That Open Engine ---
@@ -29,9 +30,6 @@ BUI.Manager.init();
 // Grids
 const grids = components.get(OBC.Grids);
 grids.create(world);
-
-// Indexer for Relations - Removed as it's not available in this version
-// const indexer = components.get(OBC.IfcRelationsIndexer);
 
 // --- IFC & Fragments Setup ---
 
@@ -131,6 +129,11 @@ function getSpecialtyFromIfcPath(path: string): string {
 // Key: path, Value: FragmentsGroup (the model)
 const loadedModels = new Map<string, any>();
 
+let propertiesTableElement: HTMLElement | null = null;
+let updateItemsDataTable:
+    | ((params: { modelIdMap: Record<string, Set<number>> }) => void)
+    | null = null;
+
 // Helper to log to screen
 function logToScreen(msg: string, isError = false) {
     const debugEl = document.getElementById('debug-console');
@@ -167,12 +170,6 @@ async function loadModel(url: string, path: string) {
 
         await fragments.core.update(true);
         
-        // try {
-        //    await indexer.process(model);
-        // } catch (err) {
-        //    logToScreen(`Indexer error: ${err}`, true);
-        // }
-
         loadedModels.set(path, model);
         
         logToScreen('Model loaded successfully as Fragments');
@@ -700,293 +697,81 @@ const highlighter = components.get(OBF.Highlighter);
 highlighter.setup({ world });
 highlighter.zoomToSelection = true;
 
-highlighter.events.select.onHighlight.add(async (fragmentIdMap) => {
-    for (const modelUUID in fragmentIdMap) {
-        const model = fragments.list.get(modelUUID);
-        if (!model) continue;
-
-        const expressIDs = fragmentIdMap[modelUUID];
-        if (expressIDs.size > 0) {
-            const expressID = Array.from(expressIDs)[0];
-            const data = await getFormattedProperties(model, expressID);
-            renderPropertiesTable(data);
-            return;
-        }
+highlighter.events.select.onHighlight.add((fragmentIdMap) => {
+    if (updateItemsDataTable) {
+        updateItemsDataTable({ modelIdMap: fragmentIdMap as any });
     }
 });
 
 highlighter.events.select.onClear.add(() => {
-    const content = document.getElementById('properties-content');
-    if (content) {
-        content.innerHTML = '<p class="placeholder-text">Selecciona un elemento para ver sus propiedades</p>';
+    if (updateItemsDataTable) {
+        updateItemsDataTable({ modelIdMap: {} as any });
     }
 });
 
-// Initialize Properties Panel
-function initPropertiesPanel() {
-    const propertiesPanel = document.getElementById('properties-panel');
-    if (propertiesPanel) {
-        propertiesPanel.innerHTML = `
-            <div class="panel-header">
-                <h3>Propiedades</h3>
-                <button class="toggle-btn"><i class="fa-solid fa-chevron-right"></i></button>
-            </div>
-            <div class="panel-content">
-                <div id="properties-content">
-                    <p class="placeholder-text">Selecciona un elemento para ver sus propiedades</p>
-                </div>
-            </div>
-        `;
-
-        const toggleBtn = propertiesPanel.querySelector('.toggle-btn');
-        const content = propertiesPanel.querySelector('.panel-content');
-        
-        if (toggleBtn && content) {
-            toggleBtn.addEventListener('click', () => {
-                propertiesPanel.classList.toggle('collapsed');
-                const icon = toggleBtn.querySelector('i');
-                if (propertiesPanel.classList.contains('collapsed')) {
-                    icon?.classList.replace('fa-chevron-right', 'fa-chevron-left');
-                } else {
-                    icon?.classList.replace('fa-chevron-left', 'fa-chevron-right');
-                }
-            });
-        }
-    }
-}
-
-
-
-// Custom function to fetch and format properties
-async function getFormattedProperties(model: any, expressID: number) {
-    const result: Array<{ group: string, name: string, value: string }> = [];
-    
-    // Helper to format a value
-    const formatValue = (val: any): string => {
-        if (val === null || val === undefined) return '';
-        if (typeof val === 'object') {
-            if (val.value !== undefined) return String(val.value);
-            if (val.type === 1 && val.value) return val.value; // IfcLabel/Text
-            return JSON.stringify(val); // Fallback
-        }
-        return String(val);
-    };
-
-    try {
-        // Fetch the entity directly from the model
-        // Note: This relies on the model having loaded properties. 
-        // IfcLoader in components v3 usually loads properties into the internal web-ifc state.
-        const entity = await model.getProperties(expressID);
-        
-        if (!entity) {
-            console.warn(`No entity found for ID ${expressID}`);
-            return result;
-        }
-
-        // 1. Basic Attributes
-        ['Name', 'GlobalId', 'Tag', 'ObjectType', 'PredefinedType', 'Description'].forEach(key => {
-            if (entity[key]) {
-                result.push({
-                    group: 'Attributes',
-                    name: key,
-                    value: formatValue(entity[key])
-                });
+if (container) {
+    container.addEventListener('click', () => {
+        const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
+        if (selection) {
+            if (updateItemsDataTable) {
+                updateItemsDataTable({ modelIdMap: selection as any });
             }
-        });
-
-        // Helper to resolve handle (recursively if needed, though usually just one level)
-        const resolve = async (handle: any): Promise<any> => {
-             if (!handle) return null;
-             if (Array.isArray(handle)) {
-                 // Return array of resolved items
-                 return Promise.all(handle.map(h => resolve(h)));
-             }
-             if (typeof handle === 'object' && handle.type === 5 && handle.value) { // Ref
-                 return await model.getProperties(handle.value);
-             }
-             return handle;
-        };
-
-        // 2. Relations (Psets, Materials, Type)
-        // We check standard inverse attributes. 
-        // If these are undefined, it means Inverse Attributes were not enabled during load.
-        
-        // IfcRelDefinesByProperties (Psets)
-        if (entity.IsDefinedBy) {
-            const definedBy = Array.isArray(entity.IsDefinedBy) ? entity.IsDefinedBy : [entity.IsDefinedBy];
-            for (const relHandle of definedBy) {
-                const rel = await resolve(relHandle);
-                if (!rel) continue;
-
-                if (rel.type === 'IfcRelDefinesByProperties') {
-                     const pset = await resolve(rel.RelatingPropertyDefinition);
-                     if (pset) {
-                         if (pset.type === 'IfcPropertySet') {
-                             const psetName = pset.Name?.value || 'Unknown Pset';
-                             if (pset.HasProperties) {
-                                 const props = Array.isArray(pset.HasProperties) ? pset.HasProperties : [pset.HasProperties];
-                                 for (const propHandle of props) {
-                                     const prop = await resolve(propHandle);
-                                     if (prop && prop.Name && prop.NominalValue) {
-                                          result.push({
-                                              group: psetName,
-                                              name: prop.Name.value,
-                                              value: formatValue(prop.NominalValue)
-                                          });
-                                     }
-                                 }
-                             }
-                         } else if (pset.type === 'IfcElementQuantity') {
-                             const qsetName = pset.Name?.value || 'Quantities';
-                             if (pset.Quantities) {
-                                 const quants = Array.isArray(pset.Quantities) ? pset.Quantities : [pset.Quantities];
-                                 for (const qHandle of quants) {
-                                     const q = await resolve(qHandle);
-                                     if (q && q.Name) {
-                                         let val = '';
-                                         if (q.LengthValue) val = formatValue(q.LengthValue);
-                                         else if (q.AreaValue) val = formatValue(q.AreaValue);
-                                         else if (q.VolumeValue) val = formatValue(q.VolumeValue);
-                                         else if (q.CountValue) val = formatValue(q.CountValue);
-                                         else if (q.WeightValue) val = formatValue(q.WeightValue);
-                                         else if (q.TimeValue) val = formatValue(q.TimeValue);
-                                         
-                                         if (val) {
-                                             result.push({
-                                                 group: qsetName,
-                                                 name: q.Name.value,
-                                                 value: val
-                                             });
-                                         }
-                                     }
-                                 }
-                             }
-                         }
-                     }
-                }
-            }
-        } else {
-            // Fallback: If no inverse attributes, we can't easily find Psets from the element.
-            // We might try to scan all Psets in the model, but that's expensive.
-            // For now, we leave it.
-            // console.log('No IsDefinedBy inverse attribute found.');
         }
-        
-        // Associations (Material)
-        if (entity.HasAssociations) {
-             const associations = Array.isArray(entity.HasAssociations) ? entity.HasAssociations : [entity.HasAssociations];
-             for (const assocHandle of associations) {
-                 const assoc = await resolve(assocHandle);
-                 if (assoc && assoc.type === 'IfcRelAssociatesMaterial') {
-                      const mat = await resolve(assoc.RelatingMaterial);
-                      if (mat) {
-                           // Material might be IfcMaterial, IfcMaterialLayerSetUsage, etc.
-                           if (mat.Name) {
-                               result.push({
-                                   group: 'Material',
-                                   name: 'Name',
-                                   value: formatValue(mat.Name)
-                               });
-                           }
-                           if (mat.ForLayerSet) {
-                               const layerSet = await resolve(mat.ForLayerSet);
-                               if (layerSet && layerSet.MaterialLayers) {
-                                   const layers = Array.isArray(layerSet.MaterialLayers) ? layerSet.MaterialLayers : [layerSet.MaterialLayers];
-                                   for (const layerHandle of layers) {
-                                       const layer = await resolve(layerHandle);
-                                       if (layer && layer.Material) {
-                                           const m = await resolve(layer.Material);
-                                            if (m && m.Name) {
-                                                result.push({
-                                                    group: 'Material Layer',
-                                                    name: 'Layer Material',
-                                                    value: formatValue(m.Name)
-                                                });
-                                            }
-                                       }
-                                   }
-                               }
-                           }
-                      }
-                 }
-             }
-        }
-        
-        // Type
-         if (entity.IsTypedBy) {
-             const typedBy = Array.isArray(entity.IsTypedBy) ? entity.IsTypedBy : [entity.IsTypedBy];
-             for (const relHandle of typedBy) {
-                 const rel = await resolve(relHandle);
-                 if (rel && rel.RelatingType) {
-                      const typeEntity = await resolve(rel.RelatingType);
-                      if (typeEntity) {
-                           result.push({
-                               group: 'Type',
-                               name: 'Name',
-                               value: formatValue(typeEntity.Name)
-                           });
-                           
-                           // Type Properties (Psets on Type)
-                           if (typeEntity.HasPropertySets) {
-                               const psets = Array.isArray(typeEntity.HasPropertySets) ? typeEntity.HasPropertySets : [typeEntity.HasPropertySets];
-                               for (const psetHandle of psets) {
-                                   const pset = await resolve(psetHandle);
-                                   if (pset && pset.HasProperties) {
-                                        const psetName = (pset.Name?.value || 'Type Pset') + ' (Type)';
-                                        const props = Array.isArray(pset.HasProperties) ? pset.HasProperties : [pset.HasProperties];
-                                        for (const propHandle of props) {
-                                            const prop = await resolve(propHandle);
-                                            if (prop && prop.Name && prop.NominalValue) {
-                                                result.push({
-                                                    group: psetName,
-                                                    name: prop.Name.value,
-                                                    value: formatValue(prop.NominalValue)
-                                                });
-                                            }
-                                        }
-                                   }
-                               }
-                           }
-                      }
-                 }
-             }
-        }
-
-    } catch (e) {
-        console.error('Error fetching properties', e);
-        result.push({ group: 'Error', name: 'Message', value: 'Error loading properties. See console.' });
-    }
-    
-    return result;
-}
-
-// Function to render the table
-function renderPropertiesTable(data: Array<{ group: string, name: string, value: string }>) {
-    const content = document.getElementById('properties-content');
-    if (!content) return;
-    
-    if (data.length === 0) {
-        content.innerHTML = '<p class="placeholder-text">No se encontraron propiedades</p>';
-        return;
-    }
-
-    let html = '<table class="properties-table"><thead><tr><th>Propiedad</th><th>Valor</th></tr></thead><tbody>';
-    
-    // Group by 'group'
-    const grouped: Record<string, Array<{ name: string, value: string }>> = {};
-    data.forEach(item => {
-        if (!grouped[item.group]) grouped[item.group] = [];
-        grouped[item.group].push(item);
     });
+}
+
+function initPropertiesPanel() {
+    const panel = document.getElementById('properties-panel');
+    const toggleBtn = document.getElementById('properties-toggle');
+    const resizer = document.getElementById('properties-resizer');
     
-    for (const groupName in grouped) {
-        html += `<tr class="group-header"><td colspan="2">${groupName}</td></tr>`;
-        grouped[groupName].forEach(item => {
-            html += `<tr><td>${item.name}</td><td>${item.value}</td></tr>`;
+    if (toggleBtn && panel) {
+        toggleBtn.addEventListener('click', () => {
+            panel.classList.toggle('closed');
         });
     }
-    
-    html += '</tbody></table>';
-    content.innerHTML = html;
+
+    if (resizer && panel) {
+        let isResizing = false;
+        
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('resizing');
+            document.body.style.cursor = 'ew-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newWidth = window.innerWidth - e.clientX;
+            if (newWidth > 200 && newWidth < 800) {
+                panel.style.width = `${newWidth}px`;
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('resizing');
+                document.body.style.cursor = 'default';
+            }
+        });
+    }
+
+    const content = document.getElementById('properties-content');
+    if (content && !propertiesTableElement) {
+        const [table, update] = BUIC.tables.itemsData({
+            components,
+            modelIdMap: {},
+        });
+        propertiesTableElement = table as unknown as HTMLElement;
+        updateItemsDataTable = update as unknown as (
+            params: { modelIdMap: Record<string, Set<number>> }
+        ) => void;
+        (propertiesTableElement as any).preserveStructureOnFilter = true;
+        (propertiesTableElement as any).indentationInText = false;
+        content.innerHTML = '';
+        content.appendChild(propertiesTableElement);
+    }
 }
 
