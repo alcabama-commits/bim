@@ -800,63 +800,75 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
 
             html += `</tbody></table>`;
 
-            // Process Relations (Psets)
-            // Look for IsDefinedBy (standard IFC relation for properties)
-            const relations = raw.IsDefinedBy || raw.isDefinedBy || attrs.IsDefinedBy || attrs.isDefinedBy;
+            const relationContainer = (raw as any).relations || (raw as any).Relations || (attrs as any).relations || (attrs as any).Relations || {};
+            const directIsDefinedBy = (raw as any).IsDefinedBy || (raw as any).isDefinedBy || (attrs as any).IsDefinedBy || (attrs as any).isDefinedBy;
+            const mappedIsDefinedBy = (relationContainer as any).IsDefinedBy || (relationContainer as any).isDefinedBy;
+
+            const relations: any[] = [];
+            if (Array.isArray(directIsDefinedBy)) relations.push(...directIsDefinedBy);
+            if (Array.isArray(mappedIsDefinedBy)) relations.push(...mappedIsDefinedBy);
+
+            console.log('[DEBUG] IsDefinedBy relations', {
+                modelID,
+                localId,
+                directCount: Array.isArray(directIsDefinedBy) ? directIsDefinedBy.length : 0,
+                mappedCount: Array.isArray(mappedIsDefinedBy) ? mappedIsDefinedBy.length : 0,
+                relationKeys: relationContainer ? Object.keys(relationContainer) : null
+            });
             
-            if (relations && Array.isArray(relations)) {
+            if (relations.length) {
                 for (const rel of relations) {
-                    // Check for IfcRelDefinesByProperties
-                    const isRelProps = rel.type === 4066205655 || (rel.constructor && rel.constructor.name === 'IfcRelDefinesByProperties') || rel.RelatingPropertyDefinition || rel.relatingPropertyDefinition;
+                    const isRelProps =
+                        rel.type === 4066205655 ||
+                        (rel.constructor && rel.constructor.name === 'IfcRelDefinesByProperties') ||
+                        rel.RelatingPropertyDefinition ||
+                        rel.relatingPropertyDefinition;
                     
-                    if (isRelProps) {
-                        const pset = rel.RelatingPropertyDefinition || rel.relatingPropertyDefinition;
-                        if (!pset) continue;
+                    if (!isRelProps) continue;
 
-                        const psetNameObj = pset.Name || pset.name;
-                        const psetName = (psetNameObj?.value ?? psetNameObj) || 'Sin Nombre';
-                        
-                        // Handle IfcPropertySet
-                        const props = pset.HasProperties || pset.hasProperties;
-                        if (props && Array.isArray(props)) {
-                            html += `<div class="prop-set-title">${psetName}</div><table class="prop-table"><tbody>`;
-                            for (const prop of props) {
-                                const propNameObj = prop.Name || prop.name;
-                                const propName = propNameObj?.value ?? propNameObj;
-                                
-                                const propValObj = prop.NominalValue || prop.nominalValue;
-                                const propVal = propValObj?.value ?? propValObj;
+                    const pset = rel.RelatingPropertyDefinition || rel.relatingPropertyDefinition;
+                    if (!pset) continue;
 
-                                if (propName && propVal !== undefined) {
-                                    html += `<tr><th>${propName}</th><td>${propVal}</td></tr>`;
-                                }
+                    const psetNameObj = pset.Name || pset.name;
+                    const psetName = (psetNameObj?.value ?? psetNameObj) || 'Sin Nombre';
+                    
+                    const props = pset.HasProperties || pset.hasProperties;
+                    if (props && Array.isArray(props)) {
+                        html += `<div class="prop-set-title">${psetName}</div><table class="prop-table"><tbody>`;
+                        for (const prop of props) {
+                            const propNameObj = prop.Name || prop.name;
+                            const propName = propNameObj?.value ?? propNameObj;
+                            
+                            const propValObj = prop.NominalValue || prop.nominalValue;
+                            const propVal = propValObj?.value ?? propValObj;
+
+                            if (propName && propVal !== undefined) {
+                                html += `<tr><th>${propName}</th><td>${propVal}</td></tr>`;
                             }
-                            html += `</tbody></table>`;
                         }
+                        html += `</tbody></table>`;
+                    }
 
-                        // Handle IfcElementQuantity
-                        const quantities = pset.Quantities || pset.quantities;
-                        if (quantities && Array.isArray(quantities)) {
-                             html += `<div class="prop-set-title">${psetName} (Cantidades)</div><table class="prop-table"><tbody>`;
-                             for (const q of quantities) {
-                                 const qNameObj = q.Name || q.name;
-                                 const qName = qNameObj?.value ?? qNameObj;
-                                 
-                                 // Quantities can have various value fields
-                                 const qVal = (q.LengthValue?.value ?? q.LengthValue) ?? 
-                                              (q.AreaValue?.value ?? q.AreaValue) ?? 
-                                              (q.VolumeValue?.value ?? q.VolumeValue) ?? 
-                                              (q.CountValue?.value ?? q.CountValue) ?? 
-                                              (q.WeightValue?.value ?? q.WeightValue) ?? 
-                                              (q.TimeValue?.value ?? q.TimeValue) ?? 
-                                              (q.nominalValue?.value ?? q.nominalValue);
-                                 
-                                 if (qName && qVal !== undefined) {
-                                      html += `<tr><th>${qName}</th><td>${qVal}</td></tr>`;
-                                 }
+                    const quantities = pset.Quantities || pset.quantities;
+                    if (quantities && Array.isArray(quantities)) {
+                         html += `<div class="prop-set-title">${psetName} (Cantidades)</div><table class="prop-table"><tbody>`;
+                         for (const q of quantities) {
+                             const qNameObj = q.Name || q.name;
+                             const qName = qNameObj?.value ?? qNameObj;
+                             
+                             const qVal = (q.LengthValue?.value ?? q.LengthValue) ?? 
+                                          (q.AreaValue?.value ?? q.AreaValue) ?? 
+                                          (q.VolumeValue?.value ?? q.VolumeValue) ?? 
+                                          (q.CountValue?.value ?? q.CountValue) ?? 
+                                          (q.WeightValue?.value ?? q.WeightValue) ?? 
+                                          (q.TimeValue?.value ?? q.TimeValue) ?? 
+                                          (q.nominalValue?.value ?? q.nominalValue);
+                             
+                             if (qName && qVal !== undefined) {
+                                  html += `<tr><th>${qName}</th><td>${qVal}</td></tr>`;
                              }
-                             html += `</tbody></table>`;
-                        }
+                         }
+                         html += `</tbody></table>`;
                     }
                 }
             }
