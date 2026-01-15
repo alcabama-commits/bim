@@ -881,8 +881,7 @@ function initPropertiesPanel() {
     if (resizer && panel) {
         let isResizing = false;
         
-        // Add Version Indicator for Debugging
-        const header = panel.querySelector('.prop-header');
+        const header = panel.querySelector('.properties-header');
         if (header && !header.querySelector('.version-tag')) {
              const v = document.createElement('span');
              v.className = 'version-tag';
