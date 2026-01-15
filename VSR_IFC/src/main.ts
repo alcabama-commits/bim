@@ -767,14 +767,15 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
             continue;
         }
 
-        if (typeof (model as any).getProperties !== 'function') {
-            console.warn(`Model ${modelID} does not support getProperties`);
+        // Check if properties exist on the model (direct access)
+        if (!model.properties) {
+            console.warn(`Model ${modelID} has no properties`);
             continue;
         }
 
         const ids = idsSet instanceof Set ? Array.from(idsSet) : (idsSet as any[]);
         for (const id of ids) {
-            const props = await model.getProperties(id);
+            const props = model.properties[id];
             if (!props) continue;
 
             const container = document.createElement('div');
@@ -813,7 +814,7 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
             // --- Property Sets ---
             const psetIDs = await getPsets(model, id);
             for (const psetID of psetIDs) {
-                const pset = await model.getProperties(psetID);
+                const pset = model.properties[psetID];
                 if (!pset) continue;
 
                 html += `<div class="prop-set-title">${pset.Name?.value || 'Propiedades'}</div>`;
@@ -822,7 +823,7 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                 if (pset.HasProperties) {
                     for (const propRef of pset.HasProperties) {
                         const propID = propRef.value;
-                        const prop = await model.getProperties(propID);
+                        const prop = model.properties[propID];
                         if (prop && prop.Name && prop.NominalValue) {
                             html += `<tr><th>${prop.Name.value}</th><td>${prop.NominalValue.value}</td></tr>`;
                         }
