@@ -168,6 +168,22 @@ async function loadModel(url: string, path: string) {
         
         loadedModels.set(path, model);
         
+        // Try to load associated properties (json)
+        try {
+            const jsonUrl = url.replace(/\.frag$/i, '.json');
+            logToScreen(`Checking for properties: ${jsonUrl}`);
+            const jsonResp = await fetch(jsonUrl);
+            if (jsonResp.ok) {
+                const props = await jsonResp.json();
+                (model as any).properties = props;
+                logToScreen(`Loaded properties for ${path} (Size: ${(JSON.stringify(props).length / 1024).toFixed(2)} KB)`);
+            } else {
+                logToScreen(`No properties file found for ${path} (checked .json)`);
+            }
+        } catch (e) {
+            logToScreen(`Failed to load properties: ${e}`, true);
+        }
+
         logToScreen('Model loaded successfully as Fragments');
 
         let meshCount = 0;
@@ -795,32 +811,82 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
 
             let html = `
                 <div class="prop-header-info">
-                    <strong>${nameValue}</strong>
-                    <div style="font-size: 11px; color: #666;">
-                        ID: ${localId ?? '-'} <span style="margin: 0 5px;">|</span> ExpressID: ${expressID ?? '-'} <span style="margin: 0 5px;">|</span> Modelo: ${modelID}
-                        ${category ? `<span style="margin: 0 5px;">|</span> Tipo: ${category}</span>` : ''}
-                        ${guidValue ? `<br/>GUID: ${guidValue}` : ''}
+                    <div class="prop-header-title">${nameValue}</div>
+                    <div class="prop-header-subtitle">
+                        <span class="badge badge-id">${localId ?? '-'}</span>
+                        <span class="badge badge-model">${modelID.split('/').pop()}</span>
+                    </div>
+                    <div class="prop-header-meta">
+                        ${category ? `<div><i class="fa-solid fa-tag"></i> ${category}</div>` : ''}
+                        ${expressID ? `<div><i class="fa-solid fa-code"></i> #${expressID}</div>` : ''}
                     </div>
                 </div>
             `;
 
-            html += `<div class="prop-set-title">Atributos Base</div>`;
-            html += `<table class="prop-table"><tbody>`;
+            // --- Recursive Tree Helper ---
+            const createTreeItem = (key: string, value: any, indent = 0): string => {
+                if (value === null || value === undefined) return '';
+                
+                // If value is simple, render row
+                if (typeof value !== 'object' || value === null) {
+                     return `
+                        <div class="tree-row" style="padding-left: ${indent * 15 + 10}px">
+                            <span class="tree-key">${key}</span>
+                            <span class="tree-value">${value}</span>
+                        </div>
+                     `;
+                }
+
+                // If object, render details/summary
+                // Check if it's a special wrapper like { type: 1, value: "foo" }
+                if ('value' in value && Object.keys(value).length < 3 && typeof value.value !== 'object') {
+                     return `
+                        <div class="tree-row" style="padding-left: ${indent * 15 + 10}px">
+                            <span class="tree-key">${key}</span>
+                            <span class="tree-value">${value.value}</span>
+                        </div>
+                     `;
+                }
+
+                // Render Group
+                let childrenHtml = '';
+                for (const [k, v] of Object.entries(value)) {
+                    childrenHtml += createTreeItem(k, v, indent + 1);
+                }
+
+                if (!childrenHtml) return '';
+
+                return `
+                    <details class="tree-group" open>
+                        <summary style="padding-left: ${indent * 15 + 10}px">
+                            <i class="fa-solid fa-chevron-right tree-arrow"></i>
+                            <span class="tree-group-title">${key}</span>
+                        </summary>
+                        <div class="tree-content">
+                            ${childrenHtml}
+                        </div>
+                    </details>
+                `;
+            };
+
+            // --- Base Attributes Group ---
+            html += `<details class="tree-group section-group" open>
+                        <summary>
+                            <i class="fa-solid fa-chevron-right tree-arrow"></i>
+                            <span class="tree-group-title">Atributos Base</span>
+                        </summary>
+                        <div class="tree-content">`;
 
             // Filter out internal/relation keys from base attributes
-            const ignoredKeys = new Set(['localId', 'category', 'guid', 'IsDefinedBy', 'isDefinedBy', 'relations', 'Relations', 'expressID', 'type']);
+            const ignoredKeys = new Set(['localId', 'category', 'guid', 'IsDefinedBy', 'isDefinedBy', 'relations', 'Relations', 'expressID', 'type', 'Name', 'name', 'GlobalId', 'globalId']);
             
             for (const [key, attr] of Object.entries(attrs)) {
                 if (!key || ignoredKeys.has(key)) continue;
-
                 const val = (attr as any)?.value ?? attr;
-                if (val === null || val === undefined) continue;
-                if (Array.isArray(val)) continue;
-                if (typeof val === 'object') continue;
-
-                html += `<tr><th>${key}</th><td>${val}</td></tr>`;
+                if (Array.isArray(val) || typeof val === 'object') continue;
+                html += createTreeItem(key, val, 1);
             }
-            html += `</tbody></table>`;
+            html += `</div></details>`;
 
             // --- Relations (Property Sets & Quantities) ---
             
@@ -845,6 +911,7 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
             }
 
             if (relationsList.length > 0) {
+                // Group by Pset Name
                 for (const relRef of relationsList) {
                     const rel = resolveRemote(relRef, model);
                     if (!rel) continue;
@@ -859,11 +926,13 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     const psetNameObj = pset.Name || pset.name;
                     const psetName = (psetNameObj?.value ?? psetNameObj) || 'Sin Nombre';
 
+                    // Prepare Pset Data
+                    let psetChildren = '';
+
                     // Case 1: IfcPropertySet -> HasProperties
                     const props = pset.HasProperties || pset.hasProperties;
                     if (props && Array.isArray(props)) {
                         foundDeepProps = true;
-                        html += `<div class="prop-set-title">${psetName}</div><table class="prop-table"><tbody>`;
                         for (const propRef of props) {
                             const prop = resolveRemote(propRef, model);
                             if (!prop) continue;
@@ -875,17 +944,15 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                             const propVal = propValObj?.value ?? propValObj;
 
                             if (propName && propVal !== undefined) {
-                                html += `<tr><th>${propName}</th><td>${propVal}</td></tr>`;
+                                psetChildren += createTreeItem(propName, propVal, 1);
                             }
                         }
-                        html += `</tbody></table>`;
                     }
 
                     // Case 2: IfcElementQuantity -> Quantities
                     const quantities = pset.Quantities || pset.quantities;
                     if (quantities && Array.isArray(quantities)) {
                         foundDeepProps = true;
-                        html += `<div class="prop-set-title">${psetName} (Cantidades)</div><table class="prop-table"><tbody>`;
                         for (const qRef of quantities) {
                             const q = resolveRemote(qRef, model);
                             if (!q) continue;
@@ -902,10 +969,23 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                                             (q.nominalValue?.value ?? q.nominalValue);
                             
                             if (qName && qVal !== undefined) {
-                                html += `<tr><th>${qName}</th><td>${qVal}</td></tr>`;
+                                psetChildren += createTreeItem(qName, qVal, 1);
                             }
                         }
-                        html += `</tbody></table>`;
+                    }
+
+                    if (psetChildren) {
+                         html += `
+                            <details class="tree-group section-group" open>
+                                <summary>
+                                    <i class="fa-solid fa-chevron-right tree-arrow"></i>
+                                    <span class="tree-group-title">${psetName}</span>
+                                </summary>
+                                <div class="tree-content">
+                                    ${psetChildren}
+                                </div>
+                            </details>
+                         `;
                     }
                 }
             }
@@ -913,16 +993,17 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
             if (!foundDeepProps) {
                  // Add debug info if nothing found
                  const propsStatus = (model && model.properties) ? 'Loaded' : 'Missing';
-                 html += `<div style="padding:10px; font-size:10px; color:orange; border-top:1px solid #eee;">
-                    No Psets found.<br/>
-                    Model Properties: ${propsStatus}<br/>
-                    IsDefinedBy Sources: ${relationsList.length}
+                 html += `<div style="padding:15px; font-size:12px; color:#888; border-top:1px solid #eee; margin-top:10px;">
+                    <i class="fa-solid fa-circle-info"></i> No se encontraron propiedades extendidas.<br/>
+                    Estado de Propiedades: ${propsStatus}<br/>
+                    Fuentes IsDefinedBy: ${relationsList.length}
                  </div>`;
             }
 
             container.innerHTML = html;
             content.appendChild(container);
         });
+
     }
 }
 
@@ -947,7 +1028,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                     v.innerText = 'v1.8 (Fixed Data)';
+                     v.innerText = 'v1.9 (Custom Tree)';
                      header.appendChild(v);
                 }
 

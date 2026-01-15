@@ -634,61 +634,124 @@ body {
     opacity: 1;
 }
 
-/* --- BIM Table Overrides for Flat Aesthetic (SOLO ESTÉTICO) --- */
-
-/* Use !important and high specificity to override component styles */
-bim-table {
-  --bim-ui_bg-base: transparent !important;
-  --bim-ui_tree-line-color: transparent !important; /* Hide vertical tree lines */
-  --bim-ui_row-border-bottom: 1px solid var(--border-color) !important;
-  
-  /* Force indentation to 0 to flatten the tree */
-  --bim-ui_tree-indent: 0px !important; 
+/* --- Custom Properties Tree (Speckle-like) --- */
+.prop-header-info {
+  padding: 15px;
+  background: #fdfdfd;
+  border-bottom: 1px solid var(--border-color);
 }
 
-/* Hide the toggle arrow completely */
-bim-table-row::part(toggle) {
-  display: none !important;
-  width: 0 !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
+.prop-header-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dark-gray);
+  margin-bottom: 5px;
 }
 
-/* Try to target internal tree structure if exposed via simple classes inside shadowroot */
-/* Since we can't easily reach into shadowroot without parts, we rely on the above variables */
-
-/* Flatten the rows and add spacing */
-bim-table-row {
-  border-bottom: 1px solid var(--border-color) !important;
-  transition: background-color 0.2s;
-  padding-left: 10px !important; /* Ensure some left padding */
+.prop-header-subtitle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
-bim-table-row:hover {
-  background-color: var(--bg-light-gray) !important;
+.badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #eee;
+  color: #666;
+  font-family: monospace;
 }
 
-/* Attempt to target the nested structure to reduce indentation */
-bim-table-row::part(indentation) {
-    width: 0 !important;
-    display: none !important;
+.badge-id { background: #e3f2fd; color: #1976d2; }
+.badge-model { background: #f3e5f5; color: #7b1fa2; }
+
+.prop-header-meta {
+  font-size: 11px;
+  color: #888;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-/* Force expand icons to disappear if they use this class */
-.bim-ui_tree-toggle {
-    display: none !important;
+.tree-group {
+  border-bottom: 1px solid var(--border-color);
 }
 
-/* Make the text larger/clearer */
-bim-label {
-    color: var(--text-dark-gray) !important;
-    font-size: 12px !important;
+.tree-group summary {
+  padding: 10px 15px;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s;
+  user-select: none;
 }
 
-/* Style the table container to match the reference image's card look */
-.properties-content {
-    background-color: var(--bg-white);
-    padding: 10px; 
+.tree-group summary:hover {
+  background: var(--bg-light-gray);
+}
+
+/* Custom arrow handling */
+.tree-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.tree-arrow {
+  font-size: 10px;
+  color: #999;
+  transition: transform 0.2s;
+}
+
+.tree-group[open] > summary .tree-arrow {
+  transform: rotate(90deg);
+}
+
+.tree-group-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dark-gray);
+}
+
+.tree-content {
+  padding-bottom: 5px;
+}
+
+.tree-row {
+  padding: 4px 15px 4px 10px; /* Indent handled by inline style */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  border-bottom: 1px solid transparent;
+}
+
+.tree-row:hover {
+  background: rgba(0,0,0,0.02);
+}
+
+.tree-key {
+  color: #666;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 10px;
+}
+
+.tree-value {
+  color: #333;
+  font-family: 'Roboto Mono', monospace;
+  max-width: 60%;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.section-group > summary {
+    background: #fafafa;
 }
 
 /* DEBUG MARKER: Change Header Color to verify CSS update */
