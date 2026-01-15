@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VSR IFC Viewer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script type="module" crossorigin src="./assets/main-Dt83JQKg.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/main-7wy5uZYK.css">
+  </head>
+  <body>
+    <div id="app">
+      <!-- Sidebar (Left - Models) -->
+      <div id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+          <h3><i class="fa-solid fa-cubes"></i> Modelos IFC</h3>
+        </div>
+        
+        <div class="sidebar-content" id="model-list">
+          <!-- Populated by JS -->
+        </div>
+
+        <div class="sidebar-footer">
+           <input type="file" id="file-input" accept=".ifc" style="display: none;">
+           <label for="file-input" class="upload-btn">
+             <i class="fa-solid fa-upload"></i> Cargar Local
+           </label>
+        </div>
+        <div class="resizer" id="sidebar-resizer"></div>
+      </div>
+
+      <!-- Properties Panel (Right) -->
+      <div id="properties-panel" class="properties-panel">
+        <div class="resizer-left" id="properties-resizer"></div>
+        <div class="properties-header">
+            <h3><i class="fa-solid fa-circle-info"></i> Propiedades</h3>
+        </div>
+        <div class="properties-content" id="properties-content">
+            <div class="no-selection">Selecciona un elemento para ver sus propiedades</div>
+        </div>
+      </div>
+
+      <div id="loading-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000;">
+        <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
+            <div style="margin-bottom: 10px; font-weight: bold; color: #333;">Loading Model...</div>
+            <div id="loading-progress" style="color: #333;">0%</div>
+        </div>
+      </div>
+      <div id="debug-console" style="position: fixed; bottom: 0; left: 0; width: 100%; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace; font-size: 12px; padding: 10px; pointer-events: none; z-index: 999; display: none;"></div>
+      <div id="viewer-container"></div>
+
+      <!-- Top Bar -->
+      <header class="top-bar">
+          <div class="logo-container">
+              <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar modelos">
+                  <i class="fa-solid fa-bars"></i>
+              </button>
+              <img id="logo-img" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png" alt="Alcabama" class="logo-img" style="height: 40px;">
+          </div>
+
+          <div class="top-controls" style="display: flex; align-items: center; gap: 15px;">
+           <button id="theme-toggle" class="theme-btn" title="Cambiar Tema" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-dark-gray);">
+               <i class="fa-solid fa-moon"></i>
+           </button>
+ 
+           <div class="view-dropdown-container">
+               <button id="view-dropdown-btn" class="view-dropdown-btn">
+                   <span><i class="fa-solid fa-cube"></i> Vista axonométrica</span>
+                   <i class="fa-solid fa-chevron-down"></i>
+               </button>
+               <div id="view-dropdown-menu" class="view-dropdown-menu">
+                   <button class="view-dropdown-item view-btn" data-view="iso">
+                       <i class="fa-solid fa-cube"></i> Vista axonométrica
+                   </button>
+                   <button class="view-dropdown-item view-btn" data-view="top">
+                       <i class="fa-solid fa-cube"></i> Vista superior
+                   </button>
+                   <button class="view-dropdown-item view-btn" data-view="front">
+                       <i class="fa-solid fa-cube"></i> Vista frontal
+                   </button>
+                   <button class="view-dropdown-item view-btn" data-view="left">
+                       <i class="fa-solid fa-cube"></i> Vista izquierda
+                   </button>
+                   <button class="view-dropdown-item view-btn" data-view="back">
+                       <i class="fa-solid fa-cube"></i> Vista posterior
+                   </button>
+                   <button class="view-dropdown-item view-btn" data-view="right">
+                       <i class="fa-solid fa-cube"></i> Vista derecha
+                   </button>
+                   <button class="view-dropdown-item view-btn" data-view="bottom">
+                       <i class="fa-solid fa-cube"></i> Vista inferior
+                   </button>
+               </div>
+           </div>
+
+           <button id="projection-toggle" class="projection-toggle-btn" title="Cambiar proyección (Perspectiva/Ortogonal)">
+               <i class="fa-solid fa-cubes"></i>
+               <span>Persp</span>
+           </button>
+ 
+           <button id="properties-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar propiedades">
+               <i class="fa-solid fa-circle-info"></i>
+           </button>
+      </div>
+      </header>
+
+      <!-- Console Toggle (Moved to bottom left standalone) -->
+      <div class="console-toggle-container">
+          <button id="console-toggle" class="console-btn" title="Toggle Console">
+              <i class="fa-solid fa-terminal"></i>
+          </button>
+      </div>
+
+    </div>
+  </body>
+</html>

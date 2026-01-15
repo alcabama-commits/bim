@@ -808,12 +808,31 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
             if (Array.isArray(directIsDefinedBy)) relations.push(...directIsDefinedBy);
             if (Array.isArray(mappedIsDefinedBy)) relations.push(...mappedIsDefinedBy);
 
+            // Fallback: Check if we can find properties via model.properties if available (for local models)
+            if (relations.length === 0 && (loadedModels.has(modelID) || fragments.groups.get(modelID))) {
+                 const model = loadedModels.get(modelID) || fragments.groups.get(modelID);
+                 if (model && model.properties) {
+                     // Try to find IsDefinedBy in local properties
+                     const propItem = model.properties[localId];
+                     if (propItem) {
+                         const localIsDefinedBy = propItem.IsDefinedBy || propItem.isDefinedBy;
+                         if (Array.isArray(localIsDefinedBy)) {
+                              // Resolve references if they are just IDs
+                              const resolved = localIsDefinedBy.map((ref: any) => {
+                                  if (typeof ref === 'number') return model.properties[ref];
+                                  if (ref && typeof ref.value === 'number') return model.properties[ref.value];
+                                  return ref;
+                              }).filter(Boolean);
+                              relations.push(...resolved);
+                         }
+                     }
+                 }
+            }
+
             console.log('[DEBUG] IsDefinedBy relations', {
                 modelID,
                 localId,
-                directCount: Array.isArray(directIsDefinedBy) ? directIsDefinedBy.length : 0,
-                mappedCount: Array.isArray(mappedIsDefinedBy) ? mappedIsDefinedBy.length : 0,
-                relationKeys: relationContainer ? Object.keys(relationContainer) : null
+                found: relations.length
             });
             
             if (relations.length) {
@@ -826,7 +845,17 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     
                     if (!isRelProps) continue;
 
-                    const pset = rel.RelatingPropertyDefinition || rel.relatingPropertyDefinition;
+                    let pset = rel.RelatingPropertyDefinition || rel.relatingPropertyDefinition;
+                    
+                    // If pset is a ref/handle, try to resolve it from model properties if possible
+                    if ((typeof pset === 'number' || (pset && typeof pset.value === 'number')) && (loadedModels.has(modelID) || fragments.groups.get(modelID))) {
+                         const model = loadedModels.get(modelID) || fragments.groups.get(modelID);
+                         const psetId = typeof pset === 'number' ? pset : pset.value;
+                         if (model && model.properties) {
+                             pset = model.properties[psetId];
+                         }
+                    }
+
                     if (!pset) continue;
 
                     const psetNameObj = pset.Name || pset.name;
@@ -835,7 +864,19 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     const props = pset.HasProperties || pset.hasProperties;
                     if (props && Array.isArray(props)) {
                         html += `<div class="prop-set-title">${psetName}</div><table class="prop-table"><tbody>`;
-                        for (const prop of props) {
+                        for (const propRef of props) {
+                            let prop = propRef;
+                            // Resolve prop if it's a ref
+                            if ((typeof prop === 'number' || (prop && typeof prop.value === 'number')) && (loadedModels.has(modelID) || fragments.groups.get(modelID))) {
+                                 const model = loadedModels.get(modelID) || fragments.groups.get(modelID);
+                                 const propId = typeof prop === 'number' ? prop : prop.value;
+                                 if (model && model.properties) {
+                                     prop = model.properties[propId];
+                                 }
+                            }
+                            
+                            if (!prop) continue;
+
                             const propNameObj = prop.Name || prop.name;
                             const propName = propNameObj?.value ?? propNameObj;
                             
@@ -852,7 +893,19 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     const quantities = pset.Quantities || pset.quantities;
                     if (quantities && Array.isArray(quantities)) {
                          html += `<div class="prop-set-title">${psetName} (Cantidades)</div><table class="prop-table"><tbody>`;
-                         for (const q of quantities) {
+                         for (const qRef of quantities) {
+                             let q = qRef;
+                             // Resolve q if it's a ref
+                             if ((typeof q === 'number' || (q && typeof q.value === 'number')) && (loadedModels.has(modelID) || fragments.groups.get(modelID))) {
+                                  const model = loadedModels.get(modelID) || fragments.groups.get(modelID);
+                                  const qId = typeof q === 'number' ? q : q.value;
+                                  if (model && model.properties) {
+                                      q = model.properties[qId];
+                                  }
+                             }
+                             
+                             if (!q) continue;
+
                              const qNameObj = q.Name || q.name;
                              const qName = qNameObj?.value ?? qNameObj;
                              
@@ -900,7 +953,7 @@ function initPropertiesPanel() {
              v.style.fontSize = '10px';
              v.style.color = '#888';
              v.style.marginLeft = '10px';
-             v.innerText = 'v1.1 (Relations Fix)';
+             v.innerText = 'v1.2 (Table Fix)';
              header.appendChild(v);
         }
 
