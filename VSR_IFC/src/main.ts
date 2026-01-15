@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as BUI from '@thatopen/ui';
-import * as BUIC from '@thatopen/ui-obc';
 import './style.css';
 
 // --- Initialization of That Open Engine ---
@@ -720,6 +719,114 @@ if (container) {
     });
 }
 
+// Cache for Psets (Model UUID -> Map<ExpressID, PsetIDs[]>)
+const psetsCache: Record<string, Map<number, number[]>> = {};
+
+async function getPsets(model: any, expressID: number) {
+    if (!psetsCache[model.uuid]) {
+        const map = new Map<number, number[]>();
+        if (model.properties) {
+            for (const id in model.properties) {
+                const entity = model.properties[id];
+                // Check for IfcRelDefinesByProperties signature
+                if (entity.RelatingPropertyDefinition && entity.RelatedObjects) {
+                    const psetID = entity.RelatingPropertyDefinition.value;
+                    const objects = entity.RelatedObjects;
+                    if (Array.isArray(objects)) {
+                        for (const obj of objects) {
+                            const relatedID = obj.value;
+                            if (!map.has(relatedID)) map.set(relatedID, []);
+                            map.get(relatedID)?.push(psetID);
+                        }
+                    }
+                }
+            }
+        }
+        psetsCache[model.uuid] = map;
+    }
+    return psetsCache[model.uuid]?.get(expressID) || [];
+}
+
+async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
+    const content = document.getElementById('properties-content');
+    if (!content) return;
+    content.innerHTML = '';
+
+    const modelIDs = Object.keys(modelIdMap);
+    if (modelIDs.length === 0) {
+        content.innerHTML = '<div style="padding: 15px; color: #666; text-align: center;">Selecciona un elemento para ver sus propiedades</div>';
+        return;
+    }
+
+    for (const modelID of modelIDs) {
+        const model = fragments.groups.get(modelID);
+        if (!model) continue;
+
+        const ids = modelIdMap[modelID];
+        for (const id of ids) {
+            const props = await model.getProperties(id);
+            if (!props) continue;
+
+            const container = document.createElement('div');
+            container.className = 'prop-item';
+
+            // --- Header ---
+            let html = `
+                <div class="prop-header-info">
+                    <strong>${props.Name?.value || 'Sin Nombre'}</strong>
+                    <div style="font-size: 11px; color: #666;">
+                        ID: ${id} <span style="margin: 0 5px;">|</span> Tipo: ${props.constructor?.name?.replace('Ifc', '') || 'Entity'}
+                    </div>
+                </div>
+            `;
+
+            // --- Attributes Table ---
+            html += `<div class="prop-set-title">Atributos Base</div>`;
+            html += `<table class="prop-table"><tbody>`;
+            
+            for (const [key, val] of Object.entries(props)) {
+                if (key === 'expressID' || key === 'type' || val === null || val === undefined) continue;
+                // Skip arrays/relations in base attributes to keep it clean
+                if (Array.isArray(val)) continue;
+                
+                let displayVal = val;
+                if (typeof val === 'object' && (val as any).value !== undefined) {
+                    displayVal = (val as any).value;
+                }
+                // Skip if it looks like a ref
+                if (typeof val === 'object' && (val as any).type === 5) continue;
+
+                html += `<tr><th>${key}</th><td>${displayVal}</td></tr>`;
+            }
+            html += `</tbody></table>`;
+
+            // --- Property Sets ---
+            const psetIDs = await getPsets(model, id);
+            for (const psetID of psetIDs) {
+                const pset = await model.getProperties(psetID);
+                if (!pset) continue;
+
+                html += `<div class="prop-set-title">${pset.Name?.value || 'Propiedades'}</div>`;
+                html += `<table class="prop-table"><tbody>`;
+
+                if (pset.HasProperties) {
+                    for (const propRef of pset.HasProperties) {
+                        const propID = propRef.value;
+                        const prop = await model.getProperties(propID);
+                        if (prop && prop.Name && prop.NominalValue) {
+                            html += `<tr><th>${prop.Name.value}</th><td>${prop.NominalValue.value}</td></tr>`;
+                        }
+                    }
+                }
+                html += `</tbody></table>`;
+            }
+
+            container.innerHTML = html;
+            content.appendChild(container);
+        }
+    }
+}
+
 function initPropertiesPanel() {
     const panel = document.getElementById('properties-panel');
     const toggleBtn = document.getElementById('properties-toggle');
@@ -758,20 +865,11 @@ function initPropertiesPanel() {
         });
     }
 
+    // Use our custom table instead of ItemsData
     const content = document.getElementById('properties-content');
-    if (content && !propertiesTableElement) {
-        const [table, update] = BUIC.tables.itemsData({
-            components,
-            modelIdMap: {},
-        });
-        propertiesTableElement = table as unknown as HTMLElement;
-        updateItemsDataTable = update as unknown as (
-            params: { modelIdMap: Record<string, Set<number>> }
-        ) => void;
-        (propertiesTableElement as any).preserveStructureOnFilter = true;
-        (propertiesTableElement as any).indentationInText = false;
-        content.innerHTML = '';
-        content.appendChild(propertiesTableElement);
+    if (content) {
+        updateItemsDataTable = renderPropertiesTable;
+        content.innerHTML = '<div style="padding: 15px; color: #666; text-align: center;">Selecciona un elemento</div>';
     }
 }
 
