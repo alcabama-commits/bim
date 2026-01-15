@@ -746,6 +746,7 @@ async function getPsets(model: any, expressID: number) {
 }
 
 async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
+    console.log('[DEBUG] renderPropertiesTable called with:', modelIdMap);
     const content = document.getElementById('properties-content');
     if (!content) return;
     content.innerHTML = '';
@@ -763,20 +764,57 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
         let model = fragments.list.get(modelID);
 
         if (!model) {
-            console.warn(`Model not found for ID: ${modelID}`);
+            console.warn(`[DEBUG] Model not found for ID: ${modelID}`);
             continue;
         }
 
-        // Check if properties exist on the model (direct access)
-        if (!model.properties) {
-            console.warn(`Model ${modelID} has no properties`);
-            continue;
-        }
-
+        console.log(`[DEBUG] Processing Model ${modelID}`, model);
         const ids = idsSet instanceof Set ? Array.from(idsSet) : (idsSet as any[]);
+        console.log(`[DEBUG] IDs to process:`, ids);
+        
         for (const id of ids) {
-            const props = model.properties[id];
-            if (!props) continue;
+            let props;
+            
+            // Try direct access (if properties are loaded locally)
+            if (model.properties && model.properties[id]) {
+                props = model.properties[id];
+                console.log(`[DEBUG] Found props via model.properties[${id}]`, props);
+            } 
+            // Try getItemsData (for streamed/fragment models)
+            else if (typeof (model as any).getItemsData === 'function') {
+                try {
+                    console.log(`[DEBUG] Trying getItemsData for ${id}...`);
+                    const data = await (model as any).getItemsData([id]);
+                    if (data && data.length > 0) {
+                        props = data[0];
+                        console.log(`[DEBUG] Found props via getItemsData`, props);
+                    } else {
+                        console.warn(`[DEBUG] getItemsData returned empty for ${id}`);
+                    }
+                } catch (e) {
+                    console.warn(`[DEBUG] Error fetching items data for ${id}:`, e);
+                }
+            } else {
+                console.log(`[DEBUG] No method to fetch properties for ${id}. model.properties is ${model.properties ? 'present' : 'missing'}`);
+            }
+
+            if (!props) {
+                // Fallback for debugging: create a dummy prop if needed or just log
+                console.warn(`[DEBUG] No properties found for item ${id} in model ${modelID}`);
+                
+                // Visual feedback for missing props
+                const container = document.createElement('div');
+                container.className = 'prop-item';
+                container.innerHTML = `
+                    <div class="prop-header-info">
+                        <strong>Elemento ${id}</strong>
+                        <div style="font-size: 11px; color: #999;">
+                            (Sin propiedades disponibles)
+                        </div>
+                    </div>`;
+                content.appendChild(container);
+                continue;
+            }
 
             const container = document.createElement('div');
             container.className = 'prop-item';
@@ -812,24 +850,30 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
             html += `</tbody></table>`;
 
             // --- Property Sets ---
-            const psetIDs = await getPsets(model, id);
-            for (const psetID of psetIDs) {
-                const pset = model.properties[psetID];
-                if (!pset) continue;
+            // Only try to get Psets if model.properties is available for now, 
+            // as iterating relations requires full property map or indexer.
+            if (model.properties) {
+                const psetIDs = await getPsets(model, id);
+                for (const psetID of psetIDs) {
+                    const pset = model.properties[psetID];
+                    if (!pset) continue;
 
-                html += `<div class="prop-set-title">${pset.Name?.value || 'Propiedades'}</div>`;
-                html += `<table class="prop-table"><tbody>`;
+                    html += `<div class="prop-set-title">${pset.Name?.value || 'Propiedades'}</div>`;
+                    html += `<table class="prop-table"><tbody>`;
 
-                if (pset.HasProperties) {
-                    for (const propRef of pset.HasProperties) {
-                        const propID = propRef.value;
-                        const prop = model.properties[propID];
-                        if (prop && prop.Name && prop.NominalValue) {
-                            html += `<tr><th>${prop.Name.value}</th><td>${prop.NominalValue.value}</td></tr>`;
+                    if (pset.HasProperties) {
+                        for (const propRef of pset.HasProperties) {
+                            const propID = propRef.value;
+                            const prop = model.properties[propID];
+                            if (prop && prop.Name && prop.NominalValue) {
+                                html += `<tr><th>${prop.Name.value}</th><td>${prop.NominalValue.value}</td></tr>`;
+                            }
                         }
                     }
+                    html += `</tbody></table>`;
                 }
-                html += `</tbody></table>`;
+            } else {
+                html += `<div style="padding:5px; font-size:11px; color:#888;">(Sets de propiedades no disponibles en modo stream)</div>`;
             }
 
             container.innerHTML = html;
