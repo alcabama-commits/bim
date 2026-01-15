@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as BUI from '@thatopen/ui';
-import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
 // --- Initialization of That Open Engine ---
@@ -130,7 +129,6 @@ function getSpecialtyFromIfcPath(path: string): string {
 const loadedModels = new Map<string, any>();
 
 let propertiesTableElement: HTMLElement | null = null;
-let updateItemsDataTable: ((modelIdMap: Record<string, Set<number>>) => void) | null = null;
 
 // Helper to log to screen
 function logToScreen(msg: string, isError = false) {
@@ -696,24 +694,18 @@ highlighter.setup({ world });
 highlighter.zoomToSelection = true;
 
 highlighter.events.select.onHighlight.add((modelIdMap) => {
-    if (updateItemsDataTable) {
-        updateItemsDataTable(modelIdMap as any);
-    }
+    renderPropertiesTable(modelIdMap as any);
 });
 
 highlighter.events.select.onClear.add(() => {
-    if (updateItemsDataTable) {
-        updateItemsDataTable({} as any);
-    }
+    renderPropertiesTable({} as any);
 });
 
 if (container) {
     container.addEventListener('click', () => {
         const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
         if (selection) {
-            if (updateItemsDataTable) {
-                updateItemsDataTable(selection as any);
-            }
+            renderPropertiesTable(selection as any);
         }
     });
 }
@@ -923,16 +915,16 @@ function initPropertiesPanel() {
     if (resizer && panel) {
         let isResizing = false;
         
-        const header = panel.querySelector('.properties-header');
-        if (header && !header.querySelector('.version-tag')) {
-             const v = document.createElement('span');
-             v.className = 'version-tag';
-             v.style.fontSize = '10px';
-             v.style.color = '#888';
-             v.style.marginLeft = '10px';
-             v.innerText = 'v1.6 (Style Debug)';
-             header.appendChild(v);
-        }
+                const header = panel.querySelector('.properties-header');
+                if (header && !header.querySelector('.version-tag')) {
+                     const v = document.createElement('span');
+                     v.className = 'version-tag';
+                     v.style.fontSize = '10px';
+                     v.style.color = '#888';
+                     v.style.marginLeft = '10px';
+                     v.innerText = 'v1.7 (Custom Table)';
+                     header.appendChild(v);
+                }
 
         resizer.addEventListener('mousedown', (e) => {
             isResizing = true;
@@ -958,21 +950,6 @@ function initPropertiesPanel() {
         });
     }
 
-    const content = document.getElementById('properties-content');
-    if (content) {
-        const [propsTable, updatePropsTable] = CUI.tables.itemsData({
-            components,
-            modelIdMap: {},
-        });
-        propsTable.style.width = '100%';
-        propsTable.style.height = '100%';
-        propsTable.preserveStructureOnFilter = true as any;
-        propsTable.expanded = true; 
-        content.innerHTML = '';
-        content.appendChild(propsTable as unknown as HTMLElement);
-        updateItemsDataTable = (modelIdMap: Record<string, Set<number>>) => {
-            updatePropsTable({ modelIdMap });
-        };
-    }
+    renderPropertiesTable({} as any);
 }
 
