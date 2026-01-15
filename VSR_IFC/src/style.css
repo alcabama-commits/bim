@@ -636,17 +636,32 @@ body {
 
 /* --- BIM Table Overrides for Flat Aesthetic (SOLO ESTÉTICO) --- */
 
-/* Remove default tree background and lines */
+/* Use !important and high specificity to override component styles */
 bim-table {
-  --bim-ui_bg-base: transparent;
-  --bim-ui_tree-line-color: transparent; /* Hide vertical tree lines */
-  --bim-ui_row-border-bottom: 1px solid var(--border-color);
+  --bim-ui_bg-base: transparent !important;
+  --bim-ui_tree-line-color: transparent !important; /* Hide vertical tree lines */
+  --bim-ui_row-border-bottom: 1px solid var(--border-color) !important;
+  
+  /* Force indentation to 0 to flatten the tree */
+  --bim-ui_tree-indent: 0px !important; 
 }
+
+/* Hide the toggle arrow completely */
+bim-table-row::part(toggle) {
+  display: none !important;
+  width: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Try to target internal tree structure if exposed via simple classes inside shadowroot */
+/* Since we can't easily reach into shadowroot without parts, we rely on the above variables */
 
 /* Flatten the rows and add spacing */
 bim-table-row {
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color) !important;
   transition: background-color 0.2s;
+  padding-left: 10px !important; /* Ensure some left padding */
 }
 
 bim-table-row:hover {
@@ -654,20 +669,29 @@ bim-table-row:hover {
 }
 
 /* Attempt to target the nested structure to reduce indentation */
-/* This assumes the library uses a specific internal structure for indentation */
 bim-table-row::part(indentation) {
     width: 0 !important;
     display: none !important;
 }
 
+/* Force expand icons to disappear if they use this class */
+.bim-ui_tree-toggle {
+    display: none !important;
+}
+
 /* Make the text larger/clearer */
 bim-label {
-    color: var(--text-dark-gray);
-    font-size: 12px;
+    color: var(--text-dark-gray) !important;
+    font-size: 12px !important;
 }
 
 /* Style the table container to match the reference image's card look */
 .properties-content {
     background-color: var(--bg-white);
-    padding: 10px; /* Restored padding */
+    padding: 10px; 
+}
+
+/* DEBUG MARKER: Change Header Color to verify CSS update */
+.properties-header {
+    background-color: #f9f9f9 !important; /* Slightly darker than white */
 }

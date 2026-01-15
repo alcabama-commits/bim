@@ -930,7 +930,7 @@ function initPropertiesPanel() {
              v.style.fontSize = '10px';
              v.style.color = '#888';
              v.style.marginLeft = '10px';
-             v.innerText = 'v1.5 (Flat Look)';
+             v.innerText = 'v1.6 (Style Debug)';
              header.appendChild(v);
         }
 
