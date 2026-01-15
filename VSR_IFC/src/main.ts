@@ -717,34 +717,6 @@ if (container) {
     });
 }
 
-// Cache for Psets (Model UUID -> Map<ExpressID, PsetIDs[]>)
-const psetsCache: Record<string, Map<number, number[]>> = {};
-
-async function getPsets(model: any, expressID: number) {
-    if (!psetsCache[model.uuid]) {
-        const map = new Map<number, number[]>();
-        if (model.properties) {
-            for (const id in model.properties) {
-                const entity = model.properties[id];
-                // Check for IfcRelDefinesByProperties signature
-                if (entity.RelatingPropertyDefinition && entity.RelatedObjects) {
-                    const psetID = entity.RelatingPropertyDefinition.value;
-                    const objects = entity.RelatedObjects;
-                    if (Array.isArray(objects)) {
-                        for (const obj of objects) {
-                            const relatedID = obj.value;
-                            if (!map.has(relatedID)) map.set(relatedID, []);
-                            map.get(relatedID)?.push(psetID);
-                        }
-                    }
-                }
-            }
-        }
-        psetsCache[model.uuid] = map;
-    }
-    return psetsCache[model.uuid]?.get(expressID) || [];
-}
-
 async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
     console.log('[DEBUG] renderPropertiesTable called with:', modelIdMap);
     const content = document.getElementById('properties-content');
@@ -760,125 +732,138 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
         return;
     }
 
+    const normalized: Record<string, number[]> = {};
     for (const [modelID, idsSet] of entries) {
-        let model = fragments.list.get(modelID);
-
-        if (!model) {
-            console.warn(`[DEBUG] Model not found for ID: ${modelID}`);
-            continue;
-        }
-
-        console.log(`[DEBUG] Processing Model ${modelID}`, model);
         const ids = idsSet instanceof Set ? Array.from(idsSet) : (idsSet as any[]);
-        console.log(`[DEBUG] IDs to process:`, ids);
-        
-        for (const id of ids) {
-            let props;
-            
-            // Try direct access (if properties are loaded locally)
-            if (model.properties && model.properties[id]) {
-                props = model.properties[id];
-                console.log(`[DEBUG] Found props via model.properties[${id}]`, props);
-            } 
-            // Try getItemsData (for streamed/fragment models)
-            else if (typeof (model as any).getItemsData === 'function') {
-                try {
-                    console.log(`[DEBUG] Trying getItemsData for ${id}...`);
-                    const data = await (model as any).getItemsData([id]);
-                    if (data && data.length > 0) {
-                        props = data[0];
-                        console.log(`[DEBUG] Found props via getItemsData`, props);
-                    } else {
-                        console.warn(`[DEBUG] getItemsData returned empty for ${id}`);
-                    }
-                } catch (e) {
-                    console.warn(`[DEBUG] Error fetching items data for ${id}:`, e);
-                }
-            } else {
-                console.log(`[DEBUG] No method to fetch properties for ${id}. model.properties is ${model.properties ? 'present' : 'missing'}`);
-            }
+        if (!ids || ids.length === 0) continue;
+        normalized[modelID] = ids as number[];
+    }
 
-            if (!props) {
-                // Fallback for debugging: create a dummy prop if needed or just log
-                console.warn(`[DEBUG] No properties found for item ${id} in model ${modelID}`);
-                
-                // Visual feedback for missing props
-                const container = document.createElement('div');
-                container.className = 'prop-item';
-                container.innerHTML = `
-                    <div class="prop-header-info">
-                        <strong>Elemento ${id}</strong>
-                        <div style="font-size: 11px; color: #999;">
-                            (Sin propiedades disponibles)
-                        </div>
-                    </div>`;
-                content.appendChild(container);
-                continue;
-            }
+    const modelIds = Object.keys(normalized);
+    if (modelIds.length === 0) {
+        content.innerHTML = '<div style="padding: 15px; color: #666; text-align: center;">Selecciona un elemento para ver sus propiedades</div>';
+        return;
+    }
+
+    const dataByModel = await fragments.getData(normalized as any, {
+        attributesDefault: true,
+        relationsDefault: { attributes: true, relations: true }
+    } as any);
+
+    for (const modelID of modelIds) {
+        const localIds = normalized[modelID] || [];
+        const items = (dataByModel as any)[modelID] || [];
+
+        items.forEach((item: any, index: number) => {
+            const localId = localIds[index];
+            const raw = item as any;
+            const attrs = raw.data || raw.attributes || raw;
+
+            const nameAttr = attrs.Name || attrs.name || attrs.IFCNAME || attrs.IfcName;
+            const nameValue = typeof nameAttr === 'object' && nameAttr !== null && 'value' in nameAttr
+                ? (nameAttr as any).value
+                : nameAttr || `Elemento ${localId ?? ''}`;
+
+            const category = raw.category || attrs.Category || attrs.category;
+            const guidAttr = raw.guid || attrs.GlobalId || attrs.globalId || attrs.GUID || attrs.guid;
+            const guidValue = typeof guidAttr === 'object' && guidAttr !== null && 'value' in guidAttr
+                ? (guidAttr as any).value
+                : guidAttr || '';
 
             const container = document.createElement('div');
             container.className = 'prop-item';
 
-            // --- Header ---
             let html = `
                 <div class="prop-header-info">
-                    <strong>${props.Name?.value || 'Sin Nombre'}</strong>
+                    <strong>${nameValue}</strong>
                     <div style="font-size: 11px; color: #666;">
-                        ID: ${id} <span style="margin: 0 5px;">|</span> Tipo: ${props.constructor?.name?.replace('Ifc', '') || 'Entity'}
+                        ID: ${localId ?? '-'} <span style="margin: 0 5px;">|</span> Modelo: ${modelID}
+                        ${category ? `<span style="margin: 0 5px;">|</span> Tipo: ${category}</span>` : ''}
+                        ${guidValue ? `<br/>GUID: ${guidValue}` : ''}
                     </div>
                 </div>
             `;
 
-            // --- Attributes Table ---
             html += `<div class="prop-set-title">Atributos Base</div>`;
             html += `<table class="prop-table"><tbody>`;
-            
-            for (const [key, val] of Object.entries(props)) {
-                if (key === 'expressID' || key === 'type' || val === null || val === undefined) continue;
-                // Skip arrays/relations in base attributes to keep it clean
-                if (Array.isArray(val)) continue;
-                
-                let displayVal = val;
-                if (typeof val === 'object' && (val as any).value !== undefined) {
-                    displayVal = (val as any).value;
-                }
-                // Skip if it looks like a ref
-                if (typeof val === 'object' && (val as any).type === 5) continue;
 
-                html += `<tr><th>${key}</th><td>${displayVal}</td></tr>`;
+            for (const [key, attr] of Object.entries(attrs)) {
+                if (!key || key === 'localId' || key === 'category' || key === 'guid' || key === 'IsDefinedBy' || key === 'isDefinedBy') continue;
+
+                const val = (attr as any)?.value ?? attr;
+                if (val === null || val === undefined) continue;
+                if (Array.isArray(val)) continue;
+                if (typeof val === 'object') continue;
+
+                html += `<tr><th>${key}</th><td>${val}</td></tr>`;
             }
+
             html += `</tbody></table>`;
 
-            // --- Property Sets ---
-            // Only try to get Psets if model.properties is available for now, 
-            // as iterating relations requires full property map or indexer.
-            if (model.properties) {
-                const psetIDs = await getPsets(model, id);
-                for (const psetID of psetIDs) {
-                    const pset = model.properties[psetID];
-                    if (!pset) continue;
+            // Process Relations (Psets)
+            // Look for IsDefinedBy (standard IFC relation for properties)
+            const relations = raw.IsDefinedBy || raw.isDefinedBy || attrs.IsDefinedBy || attrs.isDefinedBy;
+            
+            if (relations && Array.isArray(relations)) {
+                for (const rel of relations) {
+                    // Check for IfcRelDefinesByProperties
+                    const isRelProps = rel.type === 4066205655 || (rel.constructor && rel.constructor.name === 'IfcRelDefinesByProperties') || rel.RelatingPropertyDefinition || rel.relatingPropertyDefinition;
+                    
+                    if (isRelProps) {
+                        const pset = rel.RelatingPropertyDefinition || rel.relatingPropertyDefinition;
+                        if (!pset) continue;
 
-                    html += `<div class="prop-set-title">${pset.Name?.value || 'Propiedades'}</div>`;
-                    html += `<table class="prop-table"><tbody>`;
+                        const psetNameObj = pset.Name || pset.name;
+                        const psetName = (psetNameObj?.value ?? psetNameObj) || 'Sin Nombre';
+                        
+                        // Handle IfcPropertySet
+                        const props = pset.HasProperties || pset.hasProperties;
+                        if (props && Array.isArray(props)) {
+                            html += `<div class="prop-set-title">${psetName}</div><table class="prop-table"><tbody>`;
+                            for (const prop of props) {
+                                const propNameObj = prop.Name || prop.name;
+                                const propName = propNameObj?.value ?? propNameObj;
+                                
+                                const propValObj = prop.NominalValue || prop.nominalValue;
+                                const propVal = propValObj?.value ?? propValObj;
 
-                    if (pset.HasProperties) {
-                        for (const propRef of pset.HasProperties) {
-                            const propID = propRef.value;
-                            const prop = model.properties[propID];
-                            if (prop && prop.Name && prop.NominalValue) {
-                                html += `<tr><th>${prop.Name.value}</th><td>${prop.NominalValue.value}</td></tr>`;
+                                if (propName && propVal !== undefined) {
+                                    html += `<tr><th>${propName}</th><td>${propVal}</td></tr>`;
+                                }
                             }
+                            html += `</tbody></table>`;
+                        }
+
+                        // Handle IfcElementQuantity
+                        const quantities = pset.Quantities || pset.quantities;
+                        if (quantities && Array.isArray(quantities)) {
+                             html += `<div class="prop-set-title">${psetName} (Cantidades)</div><table class="prop-table"><tbody>`;
+                             for (const q of quantities) {
+                                 const qNameObj = q.Name || q.name;
+                                 const qName = qNameObj?.value ?? qNameObj;
+                                 
+                                 // Quantities can have various value fields
+                                 const qVal = (q.LengthValue?.value ?? q.LengthValue) ?? 
+                                              (q.AreaValue?.value ?? q.AreaValue) ?? 
+                                              (q.VolumeValue?.value ?? q.VolumeValue) ?? 
+                                              (q.CountValue?.value ?? q.CountValue) ?? 
+                                              (q.WeightValue?.value ?? q.WeightValue) ?? 
+                                              (q.TimeValue?.value ?? q.TimeValue) ?? 
+                                              (q.nominalValue?.value ?? q.nominalValue);
+                                 
+                                 if (qName && qVal !== undefined) {
+                                      html += `<tr><th>${qName}</th><td>${qVal}</td></tr>`;
+                                 }
+                             }
+                             html += `</tbody></table>`;
                         }
                     }
-                    html += `</tbody></table>`;
                 }
-            } else {
-                html += `<div style="padding:5px; font-size:11px; color:#888;">(Sets de propiedades no disponibles en modo stream)</div>`;
             }
 
             container.innerHTML = html;
             content.appendChild(container);
-        }
+        });
     }
 }
 
@@ -896,6 +881,18 @@ function initPropertiesPanel() {
     if (resizer && panel) {
         let isResizing = false;
         
+        // Add Version Indicator for Debugging
+        const header = panel.querySelector('.prop-header');
+        if (header && !header.querySelector('.version-tag')) {
+             const v = document.createElement('span');
+             v.className = 'version-tag';
+             v.style.fontSize = '10px';
+             v.style.color = '#888';
+             v.style.marginLeft = '10px';
+             v.innerText = 'v1.1 (Relations Fix)';
+             header.appendChild(v);
+        }
+
         resizer.addEventListener('mousedown', (e) => {
             isResizing = true;
             resizer.classList.add('resizing');
