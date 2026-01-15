@@ -129,9 +129,7 @@ function getSpecialtyFromIfcPath(path: string): string {
 const loadedModels = new Map<string, any>();
 
 let propertiesTableElement: HTMLElement | null = null;
-let updateItemsDataTable:
-    | ((params: { modelIdMap: Record<string, Set<number>> }) => void)
-    | null = null;
+let updateItemsDataTable: ((modelIdMap: Record<string, Set<number>>) => void) | null = null;
 
 // Helper to log to screen
 function logToScreen(msg: string, isError = false) {
@@ -696,15 +694,15 @@ const highlighter = components.get(OBF.Highlighter);
 highlighter.setup({ world });
 highlighter.zoomToSelection = true;
 
-highlighter.events.select.onHighlight.add((fragmentIdMap) => {
+highlighter.events.select.onHighlight.add((modelIdMap) => {
     if (updateItemsDataTable) {
-        updateItemsDataTable({ modelIdMap: fragmentIdMap as any });
+        updateItemsDataTable(modelIdMap as any);
     }
 });
 
 highlighter.events.select.onClear.add(() => {
     if (updateItemsDataTable) {
-        updateItemsDataTable({ modelIdMap: {} as any });
+        updateItemsDataTable({} as any);
     }
 });
 
@@ -713,7 +711,7 @@ if (container) {
         const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
         if (selection) {
             if (updateItemsDataTable) {
-                updateItemsDataTable({ modelIdMap: selection as any });
+                updateItemsDataTable(selection as any);
             }
         }
     });
@@ -752,17 +750,20 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
     if (!content) return;
     content.innerHTML = '';
 
-    const modelIDs = Object.keys(modelIdMap);
-    if (modelIDs.length === 0) {
+    const entries = modelIdMap instanceof Map
+        ? Array.from(modelIdMap.entries())
+        : Object.entries(modelIdMap);
+
+    if (entries.length === 0) {
         content.innerHTML = '<div style="padding: 15px; color: #666; text-align: center;">Selecciona un elemento para ver sus propiedades</div>';
         return;
     }
 
-    for (const modelID of modelIDs) {
-        const model = fragments.groups.get(modelID);
-        if (!model) continue;
+    for (const [modelID, idsSet] of entries) {
+        const model = loadedModels.get(modelID);
+        if (!model || typeof (model as any).getProperties !== 'function') continue;
 
-        const ids = modelIdMap[modelID];
+        const ids = idsSet instanceof Set ? Array.from(idsSet) : (idsSet as any[]);
         for (const id of ids) {
             const props = await model.getProperties(id);
             if (!props) continue;
