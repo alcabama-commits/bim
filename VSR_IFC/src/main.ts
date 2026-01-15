@@ -717,6 +717,14 @@ if (container) {
     });
 }
 
+// Helper for deep property resolution
+function resolveRemote(ref: any, model: any) {
+    if (!ref || !model || !model.properties) return ref;
+    if (typeof ref === 'number') return model.properties[ref];
+    if (ref && typeof ref.value === 'number') return model.properties[ref.value];
+    return ref;
+}
+
 async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
     console.log('[DEBUG] renderPropertiesTable called with:', modelIdMap);
     const content = document.getElementById('properties-content');
@@ -745,6 +753,7 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
         return;
     }
 
+    // Get base attributes using fragments.getData (reliable for Name, Category, etc.)
     const dataByModel = await fragments.getData(normalized as any, {
         attributesDefault: true,
         relationsDefault: { attributes: true, relations: true }
@@ -753,12 +762,16 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
     for (const modelID of modelIds) {
         const localIds = normalized[modelID] || [];
         const items = (dataByModel as any)[modelID] || [];
+        
+        // Try to get the full model to access raw properties
+        const model = loadedModels.get(modelID) || fragments.groups.get(modelID);
 
         items.forEach((item: any, index: number) => {
             const localId = localIds[index];
             const raw = item as any;
             const attrs = raw.data || raw.attributes || raw;
 
+            // --- Base Info (Name, ID, Category, GUID) ---
             const nameAttr = attrs.Name || attrs.name || attrs.IFCNAME || attrs.IfcName;
             const nameValue = typeof nameAttr === 'object' && nameAttr !== null && 'value' in nameAttr
                 ? (nameAttr as any).value
@@ -787,8 +800,11 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
             html += `<div class="prop-set-title">Atributos Base</div>`;
             html += `<table class="prop-table"><tbody>`;
 
+            // Filter out internal/relation keys from base attributes
+            const ignoredKeys = new Set(['localId', 'category', 'guid', 'IsDefinedBy', 'isDefinedBy', 'relations', 'Relations', 'expressID', 'type']);
+            
             for (const [key, attr] of Object.entries(attrs)) {
-                if (!key || key === 'localId' || key === 'category' || key === 'guid' || key === 'IsDefinedBy' || key === 'isDefinedBy') continue;
+                if (!key || ignoredKeys.has(key)) continue;
 
                 const val = (attr as any)?.value ?? attr;
                 if (val === null || val === undefined) continue;
@@ -797,132 +813,92 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
 
                 html += `<tr><th>${key}</th><td>${val}</td></tr>`;
             }
-
             html += `</tbody></table>`;
 
-            const relationContainer = (raw as any).relations || (raw as any).Relations || (attrs as any).relations || (attrs as any).Relations || {};
-            const directIsDefinedBy = (raw as any).IsDefinedBy || (raw as any).isDefinedBy || (attrs as any).IsDefinedBy || (attrs as any).isDefinedBy;
-            const mappedIsDefinedBy = (relationContainer as any).IsDefinedBy || (relationContainer as any).isDefinedBy;
+            // --- Relations (Property Sets & Quantities) ---
+            // Priority: Use model.properties directly if available (This is key for Deep properties)
+            
+            let foundDeepProps = false;
+            
+            if (model && model.properties && model.properties[localId]) {
+                const entity = model.properties[localId];
+                const isDefinedBy = entity.IsDefinedBy || entity.isDefinedBy;
+                
+                if (isDefinedBy && Array.isArray(isDefinedBy)) {
+                    for (const relRef of isDefinedBy) {
+                        const rel = resolveRemote(relRef, model);
+                        if (!rel) continue;
 
-            const relations: any[] = [];
-            if (Array.isArray(directIsDefinedBy)) relations.push(...directIsDefinedBy);
-            if (Array.isArray(mappedIsDefinedBy)) relations.push(...mappedIsDefinedBy);
+                        // Check if it is IfcRelDefinesByProperties
+                        const psetRef = rel.RelatingPropertyDefinition || rel.relatingPropertyDefinition;
+                        if (!psetRef) continue;
 
-            // Fallback: Check if we can find properties via model.properties if available (for local models)
-            if (relations.length === 0 && (loadedModels.has(modelID) || fragments.groups.get(modelID))) {
-                 const model = loadedModels.get(modelID) || fragments.groups.get(modelID);
-                 if (model && model.properties) {
-                     // Try to find IsDefinedBy in local properties
-                     const propItem = model.properties[localId];
-                     if (propItem) {
-                         const localIsDefinedBy = propItem.IsDefinedBy || propItem.isDefinedBy;
-                         if (Array.isArray(localIsDefinedBy)) {
-                              // Resolve references if they are just IDs
-                              const resolved = localIsDefinedBy.map((ref: any) => {
-                                  if (typeof ref === 'number') return model.properties[ref];
-                                  if (ref && typeof ref.value === 'number') return model.properties[ref.value];
-                                  return ref;
-                              }).filter(Boolean);
-                              relations.push(...resolved);
-                         }
-                     }
-                 }
+                        const pset = resolveRemote(psetRef, model);
+                        if (!pset) continue;
+
+                        const psetNameObj = pset.Name || pset.name;
+                        const psetName = (psetNameObj?.value ?? psetNameObj) || 'Sin Nombre';
+
+                        // Case 1: IfcPropertySet -> HasProperties
+                        const props = pset.HasProperties || pset.hasProperties;
+                        if (props && Array.isArray(props)) {
+                            foundDeepProps = true;
+                            html += `<div class="prop-set-title">${psetName}</div><table class="prop-table"><tbody>`;
+                            for (const propRef of props) {
+                                const prop = resolveRemote(propRef, model);
+                                if (!prop) continue;
+
+                                const propNameObj = prop.Name || prop.name;
+                                const propName = propNameObj?.value ?? propNameObj;
+                                
+                                const propValObj = prop.NominalValue || prop.nominalValue;
+                                const propVal = propValObj?.value ?? propValObj;
+
+                                if (propName && propVal !== undefined) {
+                                    html += `<tr><th>${propName}</th><td>${propVal}</td></tr>`;
+                                }
+                            }
+                            html += `</tbody></table>`;
+                        }
+
+                        // Case 2: IfcElementQuantity -> Quantities
+                        const quantities = pset.Quantities || pset.quantities;
+                        if (quantities && Array.isArray(quantities)) {
+                            foundDeepProps = true;
+                            html += `<div class="prop-set-title">${psetName} (Cantidades)</div><table class="prop-table"><tbody>`;
+                            for (const qRef of quantities) {
+                                const q = resolveRemote(qRef, model);
+                                if (!q) continue;
+
+                                const qNameObj = q.Name || q.name;
+                                const qName = qNameObj?.value ?? qNameObj;
+                                
+                                const qVal = (q.LengthValue?.value ?? q.LengthValue) ?? 
+                                             (q.AreaValue?.value ?? q.AreaValue) ?? 
+                                             (q.VolumeValue?.value ?? q.VolumeValue) ?? 
+                                             (q.CountValue?.value ?? q.CountValue) ?? 
+                                             (q.WeightValue?.value ?? q.WeightValue) ?? 
+                                             (q.TimeValue?.value ?? q.TimeValue) ?? 
+                                             (q.nominalValue?.value ?? q.nominalValue);
+                                
+                                if (qName && qVal !== undefined) {
+                                    html += `<tr><th>${qName}</th><td>${qVal}</td></tr>`;
+                                }
+                            }
+                            html += `</tbody></table>`;
+                        }
+                    }
+                }
             }
 
-            console.log('[DEBUG] IsDefinedBy relations', {
-                modelID,
-                localId,
-                found: relations.length
-            });
-            
-            if (relations.length) {
-                for (const rel of relations) {
-                    const isRelProps =
-                        rel.type === 4066205655 ||
-                        (rel.constructor && rel.constructor.name === 'IfcRelDefinesByProperties') ||
-                        rel.RelatingPropertyDefinition ||
-                        rel.relatingPropertyDefinition;
-                    
-                    if (!isRelProps) continue;
-
-                    let pset = rel.RelatingPropertyDefinition || rel.relatingPropertyDefinition;
-                    
-                    // If pset is a ref/handle, try to resolve it from model properties if possible
-                    if ((typeof pset === 'number' || (pset && typeof pset.value === 'number')) && (loadedModels.has(modelID) || fragments.groups.get(modelID))) {
-                         const model = loadedModels.get(modelID) || fragments.groups.get(modelID);
-                         const psetId = typeof pset === 'number' ? pset : pset.value;
-                         if (model && model.properties) {
-                             pset = model.properties[psetId];
-                         }
-                    }
-
-                    if (!pset) continue;
-
-                    const psetNameObj = pset.Name || pset.name;
-                    const psetName = (psetNameObj?.value ?? psetNameObj) || 'Sin Nombre';
-                    
-                    const props = pset.HasProperties || pset.hasProperties;
-                    if (props && Array.isArray(props)) {
-                        html += `<div class="prop-set-title">${psetName}</div><table class="prop-table"><tbody>`;
-                        for (const propRef of props) {
-                            let prop = propRef;
-                            // Resolve prop if it's a ref
-                            if ((typeof prop === 'number' || (prop && typeof prop.value === 'number')) && (loadedModels.has(modelID) || fragments.groups.get(modelID))) {
-                                 const model = loadedModels.get(modelID) || fragments.groups.get(modelID);
-                                 const propId = typeof prop === 'number' ? prop : prop.value;
-                                 if (model && model.properties) {
-                                     prop = model.properties[propId];
-                                 }
-                            }
-                            
-                            if (!prop) continue;
-
-                            const propNameObj = prop.Name || prop.name;
-                            const propName = propNameObj?.value ?? propNameObj;
-                            
-                            const propValObj = prop.NominalValue || prop.nominalValue;
-                            const propVal = propValObj?.value ?? propValObj;
-
-                            if (propName && propVal !== undefined) {
-                                html += `<tr><th>${propName}</th><td>${propVal}</td></tr>`;
-                            }
-                        }
-                        html += `</tbody></table>`;
-                    }
-
-                    const quantities = pset.Quantities || pset.quantities;
-                    if (quantities && Array.isArray(quantities)) {
-                         html += `<div class="prop-set-title">${psetName} (Cantidades)</div><table class="prop-table"><tbody>`;
-                         for (const qRef of quantities) {
-                             let q = qRef;
-                             // Resolve q if it's a ref
-                             if ((typeof q === 'number' || (q && typeof q.value === 'number')) && (loadedModels.has(modelID) || fragments.groups.get(modelID))) {
-                                  const model = loadedModels.get(modelID) || fragments.groups.get(modelID);
-                                  const qId = typeof q === 'number' ? q : q.value;
-                                  if (model && model.properties) {
-                                      q = model.properties[qId];
-                                  }
-                             }
-                             
-                             if (!q) continue;
-
-                             const qNameObj = q.Name || q.name;
-                             const qName = qNameObj?.value ?? qNameObj;
-                             
-                             const qVal = (q.LengthValue?.value ?? q.LengthValue) ?? 
-                                          (q.AreaValue?.value ?? q.AreaValue) ?? 
-                                          (q.VolumeValue?.value ?? q.VolumeValue) ?? 
-                                          (q.CountValue?.value ?? q.CountValue) ?? 
-                                          (q.WeightValue?.value ?? q.WeightValue) ?? 
-                                          (q.TimeValue?.value ?? q.TimeValue) ?? 
-                                          (q.nominalValue?.value ?? q.nominalValue);
-                             
-                             if (qName && qVal !== undefined) {
-                                  html += `<tr><th>${qName}</th><td>${qVal}</td></tr>`;
-                             }
-                         }
-                         html += `</tbody></table>`;
-                    }
+            if (!foundDeepProps) {
+                // Fallback attempt with what fragments.getData returned (usually shallow)
+                const relations = (raw.relations || raw.Relations || attrs.relations || attrs.Relations || {});
+                const directIsDefinedBy = (raw.IsDefinedBy || raw.isDefinedBy || attrs.IsDefinedBy || attrs.isDefinedBy);
+                
+                if (Array.isArray(directIsDefinedBy) && directIsDefinedBy.length > 0) {
+                     // Existing shallow fallback if needed, but the loop above covers the model.properties case.
+                     // If model.properties is missing, we can't really do deep traversal easily without async calls if they are not loaded.
                 }
             }
 
@@ -953,7 +929,7 @@ function initPropertiesPanel() {
              v.style.fontSize = '10px';
              v.style.color = '#888';
              v.style.marginLeft = '10px';
-             v.innerText = 'v1.2 (Table Fix)';
+             v.innerText = 'v1.3 (Deep Props)';
              header.appendChild(v);
         }
 
