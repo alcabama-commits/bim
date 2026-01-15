@@ -760,8 +760,28 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
     }
 
     for (const [modelID, idsSet] of entries) {
-        const model = loadedModels.get(modelID);
-        if (!model || typeof (model as any).getProperties !== 'function') continue;
+        // Try to get model from fragments manager first (standard way)
+        let model = fragments.groups.get(modelID);
+        
+        // Fallback: Check loadedModels if not found (though fragments.groups should have it)
+        if (!model) {
+            for (const m of loadedModels.values()) {
+                if (m.uuid === modelID) {
+                    model = m;
+                    break;
+                }
+            }
+        }
+
+        if (!model) {
+            console.warn(`Model not found for ID: ${modelID}`);
+            continue;
+        }
+
+        if (typeof (model as any).getProperties !== 'function') {
+            console.warn(`Model ${modelID} does not support getProperties`);
+            continue;
+        }
 
         const ids = idsSet instanceof Set ? Array.from(idsSet) : (idsSet as any[]);
         for (const id of ids) {
