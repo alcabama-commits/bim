@@ -930,7 +930,7 @@ function initPropertiesPanel() {
              v.style.fontSize = '10px';
              v.style.color = '#888';
              v.style.marginLeft = '10px';
-             v.innerText = 'v1.4 (ItemsData)';
+             v.innerText = 'v1.5 (Flat Look)';
              header.appendChild(v);
         }
 
@@ -967,6 +967,7 @@ function initPropertiesPanel() {
         propsTable.style.width = '100%';
         propsTable.style.height = '100%';
         propsTable.preserveStructureOnFilter = true as any;
+        propsTable.expanded = true; 
         content.innerHTML = '';
         content.appendChild(propsTable as unknown as HTMLElement);
         updateItemsDataTable = (modelIdMap: Record<string, Set<number>>) => {

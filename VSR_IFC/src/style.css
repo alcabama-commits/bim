@@ -199,12 +199,8 @@ body {
   color: #333;
 }
 
-.properties-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0;
-  background: var(--bg-white);
-}
+/* Removed duplicate .properties-content block that was resetting padding to 0 */
+
 
 .property-group {
   margin-bottom: 0;
@@ -636,4 +632,42 @@ body {
     color: #fff;
     border-color: var(--primary-color);
     opacity: 1;
+}
+
+/* --- BIM Table Overrides for Flat Aesthetic (SOLO ESTÉTICO) --- */
+
+/* Remove default tree background and lines */
+bim-table {
+  --bim-ui_bg-base: transparent;
+  --bim-ui_tree-line-color: transparent; /* Hide vertical tree lines */
+  --bim-ui_row-border-bottom: 1px solid var(--border-color);
+}
+
+/* Flatten the rows and add spacing */
+bim-table-row {
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.2s;
+}
+
+bim-table-row:hover {
+  background-color: var(--bg-light-gray) !important;
+}
+
+/* Attempt to target the nested structure to reduce indentation */
+/* This assumes the library uses a specific internal structure for indentation */
+bim-table-row::part(indentation) {
+    width: 0 !important;
+    display: none !important;
+}
+
+/* Make the text larger/clearer */
+bim-label {
+    color: var(--text-dark-gray);
+    font-size: 12px;
+}
+
+/* Style the table container to match the reference image's card look */
+.properties-content {
+    background-color: var(--bg-white);
+    padding: 10px; /* Restored padding */
 }
