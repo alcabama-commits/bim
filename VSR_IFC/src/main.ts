@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as BUI from '@thatopen/ui';
+import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
 // --- Initialization of That Open Engine ---
@@ -929,7 +930,7 @@ function initPropertiesPanel() {
              v.style.fontSize = '10px';
              v.style.color = '#888';
              v.style.marginLeft = '10px';
-             v.innerText = 'v1.3 (Deep Props)';
+             v.innerText = 'v1.4 (ItemsData)';
              header.appendChild(v);
         }
 
@@ -957,11 +958,20 @@ function initPropertiesPanel() {
         });
     }
 
-    // Use our custom table instead of ItemsData
     const content = document.getElementById('properties-content');
     if (content) {
-        updateItemsDataTable = renderPropertiesTable;
-        content.innerHTML = '<div style="padding: 15px; color: #666; text-align: center;">Selecciona un elemento</div>';
+        const [propsTable, updatePropsTable] = CUI.tables.itemsData({
+            components,
+            modelIdMap: {},
+        });
+        propsTable.style.width = '100%';
+        propsTable.style.height = '100%';
+        propsTable.preserveStructureOnFilter = true as any;
+        content.innerHTML = '';
+        content.appendChild(propsTable as unknown as HTMLElement);
+        updateItemsDataTable = (modelIdMap: Record<string, Set<number>>) => {
+            updatePropsTable({ modelIdMap });
+        };
     }
 }
 
