@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as BUI from '@thatopen/ui';
-import * as BUIC from '@thatopen/ui-obc';
 import './style.css';
 
 // --- Initialization of That Open Engine ---
@@ -706,42 +705,312 @@ viewButtons.forEach(btn => {
 // Listener moved to initSidebar to handle both IFC and Frag files centrally
 
 // --- Highlighter & Properties Setup ---
-components.get(OBC.Raycasters).get(world);
 const highlighter = components.get(OBF.Highlighter);
-highlighter.setup({
-    world,
-    autoHighlightOnClick: true,
-    selectMaterialDefinition: {
-        color: new THREE.Color('#bcf124'),
-        opacity: 0.8,
-        transparent: true,
-        renderedFaces: 0,
-    },
-});
+highlighter.setup({ world });
 highlighter.zoomToSelection = true;
 
 highlighter.events.select.onHighlight.add((modelIdMap) => {
-    const entries = Object.entries(modelIdMap ?? {});
-    let total = 0;
-    for (const [, ids] of entries) {
-        total += (ids as Set<number>).size ?? 0;
-    }
-    logToScreen(`Highlighter onHighlight: ${entries.length} models, ${total} items`);
+    renderPropertiesTable(modelIdMap as any);
 });
 
 highlighter.events.select.onClear.add(() => {
-    logToScreen('Highlighter onClear');
+    renderPropertiesTable({} as any);
 });
 
+if (container) {
+    container.addEventListener('click', () => {
+        const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
+        if (selection) {
+            renderPropertiesTable(selection as any);
+        }
+    });
+}
 
+// Helper for deep property resolution
+function resolveRemote(ref: any, model: any) {
+    if (ref === null || ref === undefined) return null;
+    
+    // Direct object
+    if (typeof ref === 'object' && !Array.isArray(ref) && (ref.type || ref.GlobalId || ref.Name || ref.HasProperties || ref.Quantities)) {
+        return ref;
+    }
 
+    // Reference object { type: 5, value: 123 }
+    let id = -1;
+    if (typeof ref === 'number') id = ref;
+    else if (ref && typeof ref.value === 'number') id = ref.value;
 
+    if (id !== -1 && model && model.properties) {
+        return model.properties[id];
+    }
+
+    return ref;
+}
+
+async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
+    console.log('[DEBUG] renderPropertiesTable called with:', modelIdMap);
+    const content = document.getElementById('properties-content');
+    if (!content) return;
+    content.innerHTML = '';
+
+    const entries = modelIdMap instanceof Map
+        ? Array.from(modelIdMap.entries())
+        : Object.entries(modelIdMap);
+
+    if (entries.length === 0) {
+        content.innerHTML = '<div style="padding: 15px; color: #666; text-align: center;">Selecciona un elemento para ver sus propiedades</div>';
+        return;
+    }
+
+    const normalized: Record<string, number[]> = {};
+    for (const [modelID, idsSet] of entries) {
+        const ids = idsSet instanceof Set ? Array.from(idsSet) : (idsSet as any[]);
+        if (!ids || ids.length === 0) continue;
+        normalized[modelID] = ids as number[];
+    }
+
+    const modelIds = Object.keys(normalized);
+    if (modelIds.length === 0) {
+        content.innerHTML = '<div style="padding: 15px; color: #666; text-align: center;">Selecciona un elemento para ver sus propiedades</div>';
+        return;
+    }
+
+    // Get base attributes using fragments.getData (reliable for Name, Category, etc.)
+    const dataByModel = await fragments.getData(normalized as any, {
+        attributesDefault: true,
+        relationsDefault: { attributes: true, relations: true }
+    } as any);
+
+    for (const modelID of modelIds) {
+        const localIds = normalized[modelID] || [];
+        const items = (dataByModel as any)[modelID] || [];
+        
+        // Try to get the full model to access raw properties
+        const model = loadedModels.get(modelID) || fragments.groups.get(modelID);
+
+        items.forEach((item: any, index: number) => {
+            const localId = localIds[index];
+            const raw = item as any;
+            const attrs = raw.data || raw.attributes || raw;
+            const expressID = attrs.expressID; // Get expressID for property lookup
+
+            // --- Base Info (Name, ID, Category, GUID) ---
+            const nameAttr = attrs.Name || attrs.name || attrs.IFCNAME || attrs.IfcName;
+            const nameValue = typeof nameAttr === 'object' && nameAttr !== null && 'value' in nameAttr
+                ? (nameAttr as any).value
+                : nameAttr || `Elemento ${localId ?? ''}`;
+
+            const category = raw.category || attrs.Category || attrs.category;
+            const guidAttr = raw.guid || attrs.GlobalId || attrs.globalId || attrs.GUID || attrs.guid;
+            const guidValue = typeof guidAttr === 'object' && guidAttr !== null && 'value' in guidAttr
+                ? (guidAttr as any).value
+                : guidAttr || '';
+
+            const container = document.createElement('div');
+            container.className = 'prop-item';
+
+            let html = `
+                <div class="prop-header-info">
+                    <div class="prop-header-title">${nameValue}</div>
+                    <div class="prop-header-subtitle">
+                        <span class="badge badge-id">${localId ?? '-'}</span>
+                        <span class="badge badge-model">${modelID.split('/').pop()}</span>
+                    </div>
+                    <div class="prop-header-meta">
+                        ${category ? `<div><i class="fa-solid fa-tag"></i> ${category}</div>` : ''}
+                        ${expressID ? `<div><i class="fa-solid fa-code"></i> #${expressID}</div>` : ''}
+                    </div>
+                </div>
+            `;
+
+            // --- Recursive Tree Helper ---
+            const createTreeItem = (key: string, value: any, indent = 0): string => {
+                if (value === null || value === undefined) return '';
+                
+                // If value is simple, render row
+                if (typeof value !== 'object' || value === null) {
+                     return `
+                        <div class="tree-row" style="padding-left: ${indent * 15 + 10}px">
+                            <span class="tree-key">${key}</span>
+                            <span class="tree-value">${value}</span>
+                        </div>
+                     `;
+                }
+
+                // If object, render details/summary
+                // Check if it's a special wrapper like { type: 1, value: "foo" }
+                if ('value' in value && Object.keys(value).length < 3 && typeof value.value !== 'object') {
+                     return `
+                        <div class="tree-row" style="padding-left: ${indent * 15 + 10}px">
+                            <span class="tree-key">${key}</span>
+                            <span class="tree-value">${value.value}</span>
+                        </div>
+                     `;
+                }
+
+                // Render Group
+                let childrenHtml = '';
+                for (const [k, v] of Object.entries(value)) {
+                    childrenHtml += createTreeItem(k, v, indent + 1);
+                }
+
+                if (!childrenHtml) return '';
+
+                return `
+                    <details class="tree-group" open>
+                        <summary style="padding-left: ${indent * 15 + 10}px">
+                            <i class="fa-solid fa-chevron-right tree-arrow"></i>
+                            <span class="tree-group-title">${key}</span>
+                        </summary>
+                        <div class="tree-content">
+                            ${childrenHtml}
+                        </div>
+                    </details>
+                `;
+            };
+
+            // --- Base Attributes Group ---
+            html += `<details class="tree-group section-group" open>
+                        <summary>
+                            <i class="fa-solid fa-chevron-right tree-arrow"></i>
+                            <span class="tree-group-title">Atributos Base</span>
+                        </summary>
+                        <div class="tree-content">`;
+
+            // Filter out internal/relation keys from base attributes
+            const ignoredKeys = new Set(['localId', 'category', 'guid', 'IsDefinedBy', 'isDefinedBy', 'relations', 'Relations', 'expressID', 'type', 'Name', 'name', 'GlobalId', 'globalId']);
+            
+            for (const [key, attr] of Object.entries(attrs)) {
+                if (!key || ignoredKeys.has(key)) continue;
+                const val = (attr as any)?.value ?? attr;
+                if (Array.isArray(val) || typeof val === 'object') continue;
+                html += createTreeItem(key, val, 1);
+            }
+            html += `</div></details>`;
+
+            // --- Relations (Property Sets & Quantities) ---
+            
+            let foundDeepProps = false;
+            let relationsList: any[] = [];
+
+            // 1. Try from model.properties[expressID] (Using correct ExpressID)
+            if (model && model.properties && expressID && model.properties[expressID]) {
+                const entity = model.properties[expressID];
+                const isDefinedBy = entity.IsDefinedBy || entity.isDefinedBy;
+                if (Array.isArray(isDefinedBy)) {
+                    relationsList = isDefinedBy;
+                }
+            } 
+            
+            // 2. Fallback: Try from fragments.getData attrs.IsDefinedBy
+            if (relationsList.length === 0) {
+                 const directIsDefinedBy = attrs.IsDefinedBy || attrs.isDefinedBy;
+                 if (Array.isArray(directIsDefinedBy)) {
+                     relationsList = directIsDefinedBy;
+                 }
+            }
+
+            if (relationsList.length > 0) {
+                // Group by Pset Name
+                for (const relRef of relationsList) {
+                    const rel = resolveRemote(relRef, model);
+                    if (!rel) continue;
+
+                    // Check if it is IfcRelDefinesByProperties
+                    const psetRef = rel.RelatingPropertyDefinition || rel.relatingPropertyDefinition;
+                    if (!psetRef) continue;
+
+                    const pset = resolveRemote(psetRef, model);
+                    if (!pset) continue;
+
+                    const psetNameObj = pset.Name || pset.name;
+                    const psetName = (psetNameObj?.value ?? psetNameObj) || 'Sin Nombre';
+
+                    // Prepare Pset Data
+                    let psetChildren = '';
+
+                    // Case 1: IfcPropertySet -> HasProperties
+                    const props = pset.HasProperties || pset.hasProperties;
+                    if (props && Array.isArray(props)) {
+                        foundDeepProps = true;
+                        for (const propRef of props) {
+                            const prop = resolveRemote(propRef, model);
+                            if (!prop) continue;
+
+                            const propNameObj = prop.Name || prop.name;
+                            const propName = propNameObj?.value ?? propNameObj;
+                            
+                            const propValObj = prop.NominalValue || prop.nominalValue;
+                            const propVal = propValObj?.value ?? propValObj;
+
+                            if (propName && propVal !== undefined) {
+                                psetChildren += createTreeItem(propName, propVal, 1);
+                            }
+                        }
+                    }
+
+                    // Case 2: IfcElementQuantity -> Quantities
+                    const quantities = pset.Quantities || pset.quantities;
+                    if (quantities && Array.isArray(quantities)) {
+                        foundDeepProps = true;
+                        for (const qRef of quantities) {
+                            const q = resolveRemote(qRef, model);
+                            if (!q) continue;
+
+                            const qNameObj = q.Name || q.name;
+                            const qName = qNameObj?.value ?? qNameObj;
+                            
+                            const qVal = (q.LengthValue?.value ?? q.LengthValue) ?? 
+                                            (q.AreaValue?.value ?? q.AreaValue) ?? 
+                                            (q.VolumeValue?.value ?? q.VolumeValue) ?? 
+                                            (q.CountValue?.value ?? q.CountValue) ?? 
+                                            (q.WeightValue?.value ?? q.WeightValue) ?? 
+                                            (q.TimeValue?.value ?? q.TimeValue) ?? 
+                                            (q.nominalValue?.value ?? q.nominalValue);
+                            
+                            if (qName && qVal !== undefined) {
+                                psetChildren += createTreeItem(qName, qVal, 1);
+                            }
+                        }
+                    }
+
+                    if (psetChildren) {
+                         html += `
+                            <details class="tree-group section-group" open>
+                                <summary>
+                                    <i class="fa-solid fa-chevron-right tree-arrow"></i>
+                                    <span class="tree-group-title">${psetName}</span>
+                                </summary>
+                                <div class="tree-content">
+                                    ${psetChildren}
+                                </div>
+                            </details>
+                         `;
+                    }
+                }
+            }
+
+            if (!foundDeepProps) {
+                 // Add debug info if nothing found
+                 const propsStatus = (model && model.properties) ? 'Loaded' : 'Missing';
+                 html += `<div style="padding:15px; font-size:12px; color:#888; border-top:1px solid #eee; margin-top:10px;">
+                    <i class="fa-solid fa-circle-info"></i> No se encontraron propiedades extendidas.<br/>
+                    Estado de Propiedades: ${propsStatus}<br/>
+                    Fuentes IsDefinedBy: ${relationsList.length}
+                 </div>`;
+            }
+
+            container.innerHTML = html;
+            content.appendChild(container);
+        });
+
+    }
+}
 
 function initPropertiesPanel() {
     const panel = document.getElementById('properties-panel');
     const toggleBtn = document.getElementById('properties-toggle');
     const resizer = document.getElementById('properties-resizer');
-    const content = document.getElementById('properties-content');
     
     if (toggleBtn && panel) {
         toggleBtn.addEventListener('click', () => {
@@ -752,16 +1021,16 @@ function initPropertiesPanel() {
     if (resizer && panel) {
         let isResizing = false;
         
-        const header = panel.querySelector('.properties-header');
-        if (header && !header.querySelector('.version-tag')) {
-             const v = document.createElement('span');
-             v.className = 'version-tag';
-             v.style.fontSize = '10px';
-             v.style.color = '#888';
-             v.style.marginLeft = '10px';
-             v.innerText = 'v2.0 (OBC)';
-             header.appendChild(v);
-        }
+                const header = panel.querySelector('.properties-header');
+                if (header && !header.querySelector('.version-tag')) {
+                     const v = document.createElement('span');
+                     v.className = 'version-tag';
+                     v.style.fontSize = '10px';
+                     v.style.color = '#888';
+                     v.style.marginLeft = '10px';
+                     v.innerText = 'v1.9 (Custom Tree)';
+                     header.appendChild(v);
+                }
 
         resizer.addEventListener('mousedown', (e) => {
             isResizing = true;
@@ -787,33 +1056,6 @@ function initPropertiesPanel() {
         });
     }
 
-    // --- ItemsData Table Setup ---
-    if (content) {
-        content.innerHTML = '';
-        
-        const [propsTable, updatePropsTable] = BUIC.tables.itemsData({
-            components,
-            modelIdMap: {},
-        });
-        
-        propsTable.preserveStructureOnFilter = true;
-
-        const propertiesTemplate = () => BUI.html`${propsTable}`;
-        const [tableElement] = BUI.Component.create(propertiesTemplate);
-        content.appendChild(tableElement);
-
-        const highlighter = components.get(OBF.Highlighter);
-        
-        highlighter.events.select.onHighlight.add((modelIdMap) => {
-            updatePropsTable({ modelIdMap });
-            if (panel?.classList.contains('closed')) {
-                panel.classList.remove('closed');
-            }
-        });
-
-        highlighter.events.select.onClear.add(() => {
-            updatePropsTable({ modelIdMap: {} });
-        });
-    }
+    renderPropertiesTable({} as any);
 }
 
