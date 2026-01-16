@@ -752,6 +752,96 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
         relationsDefault: { attributes: true, relations: true }
     } as any);
 
+    // --- SECOND PASS: Fetch Relations Entities (specifically IfcRelContainedInSpatialStructure) ---
+    // Identify which relation IDs we need to fetch
+    const relationsToFetch: Record<string, number[]> = {};
+    
+    for (const modelID of modelIds) {
+        const items = (dataByModel as any)[modelID] || [];
+        const modelRelations = new Set<number>();
+        
+        items.forEach((item: any) => {
+             const raw = item as any;
+             const attrs = raw.data || raw.attributes || raw;
+             const relations = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
+             const spatial = relations.containedInSpatialStructure || relations.ContainedInSpatialStructure;
+             if (Array.isArray(spatial)) {
+                 spatial.forEach((id: number) => modelRelations.add(id));
+             }
+        });
+        
+        if (modelRelations.size > 0) {
+            relationsToFetch[modelID] = Array.from(modelRelations);
+        }
+    }
+
+    let relationsData: any = {};
+    if (Object.keys(relationsToFetch).length > 0) {
+         try {
+             relationsData = await fragments.getData(relationsToFetch as any, {
+                 attributesDefault: true,
+                 relationsDefault: { attributes: true } // We just need the RelatingStructure ID
+             } as any);
+         } catch (e) {
+             console.error('Failed to fetch relations data:', e);
+         }
+    }
+
+    // --- THIRD PASS: Fetch Structure Entities (The Levels themselves) ---
+    const structuresToFetch: Record<string, number[]> = {};
+    const relIdToStructureId: Record<string, number> = {}; // Key: "modelID-relID" -> structureID
+
+    for (const modelID of Object.keys(relationsData)) {
+        const rels = relationsData[modelID];
+        const modelStructures = new Set<number>();
+
+        rels.forEach((rel: any) => {
+             const raw = rel as any;
+             const attrs = raw.data || raw.attributes || raw;
+             // IfcRelContainedInSpatialStructure has RelatingStructure
+             const structRef = attrs.RelatingStructure || attrs.relatingStructure;
+             const structID = (structRef && typeof structRef === 'object' && 'value' in structRef) ? structRef.value : structRef;
+             
+             if (typeof structID === 'number') {
+                 modelStructures.add(structID);
+                 // Map relation to structure for lookup later
+                 // Note: relationsData returns array of objects, we need to match by Express ID if possible
+                 // But fragments.getData returns objects which usually contain expressID. 
+                 // If not, we rely on the order or check if expressID is in attrs.
+                 const expressID = raw.expressID || attrs.expressID;
+                 if (expressID) {
+                     relIdToStructureId[`${modelID}-${expressID}`] = structID;
+                 }
+             }
+        });
+
+        if (modelStructures.size > 0) {
+            structuresToFetch[modelID] = Array.from(modelStructures);
+        }
+    }
+
+    let structuresData: any = {};
+    if (Object.keys(structuresToFetch).length > 0) {
+        try {
+            structuresData = await fragments.getData(structuresToFetch as any, {
+                attributesDefault: true
+            } as any);
+        } catch (e) {
+            console.error('Failed to fetch structure data:', e);
+        }
+    }
+    
+    // Helper to find structure name
+    const getStructureName = (modelID: string, structureID: number) => {
+        const structs = structuresData[modelID];
+        if (!structs) return null;
+        const s = structs.find((x: any) => (x.expressID || x.attributes?.expressID || x.data?.expressID) === structureID);
+        if (!s) return null;
+        const attrs = s.data || s.attributes || s;
+        const n = attrs.Name || attrs.name;
+        return (n?.value ?? n);
+    };
+
     for (const modelID of modelIds) {
         const localIds = normalized[modelID] || [];
         const items = (dataByModel as any)[modelID] || [];
@@ -921,16 +1011,29 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                 if (Array.isArray(spatial) && spatial.length > 0) {
                      // spatial contains IDs of IFCRELCONTAINEDINSPATIALSTRUCTURE
                      for (const relID of spatial) {
-                         const rel = resolveRemote(relID, model);
-                         if (rel) {
-                             const structureRef = rel.RelatingStructure || rel.relatingStructure;
-                             const structure = resolveRemote(structureRef, model);
-                             if (structure) {
-                                 const levelNameObj = structure.Name || structure.name;
-                                 const candidate = (levelNameObj?.value ?? levelNameObj);
-                                 if (candidate) {
-                                     levelName = String(candidate);
-                                     break; // Found it
+                         // New Lookup Logic using pre-fetched data
+                         const structID = relIdToStructureId[`${modelID}-${relID}`];
+                         if (structID) {
+                             const name = getStructureName(modelID, structID);
+                             if (name) {
+                                 levelName = String(name);
+                                 break;
+                             }
+                         }
+                         
+                         // Fallback to old logic (only works if model.properties is loaded)
+                         if (!levelName) {
+                             const rel = resolveRemote(relID, model);
+                             if (rel && typeof rel === 'object') {
+                                 const structureRef = rel.RelatingStructure || rel.relatingStructure;
+                                 const structure = resolveRemote(structureRef, model);
+                                 if (structure && typeof structure === 'object') {
+                                     const levelNameObj = structure.Name || structure.name;
+                                     const candidate = (levelNameObj?.value ?? levelNameObj);
+                                     if (candidate) {
+                                         levelName = String(candidate);
+                                         break; // Found it
+                                     }
                                  }
                              }
                          }
