@@ -416,11 +416,14 @@ function initProjectionToggle() {
 
 function initClipperTool() {
     const btn = document.getElementById('clipper-toggle');
+    const controls = document.getElementById('clipper-controls');
     const viewer = document.getElementById('viewer-container');
     if (!btn || !viewer) return;
 
     const updateUI = () => {
-        btn.classList.toggle('active', clipper.enabled);
+        const active = clipper.enabled;
+        btn.classList.toggle('active', active);
+        if (controls) controls.style.display = active ? 'flex' : 'none';
     };
 
     updateUI();
@@ -439,6 +442,44 @@ function initClipperTool() {
     window.addEventListener('keydown', (event) => {
         if (event.code === 'Delete' || event.code === 'Backspace') {
             clipper.delete(world);
+        }
+    });
+
+    // Clipper Controls
+    const deleteAllBtn = document.getElementById('clipper-delete-all');
+    if (deleteAllBtn) {
+        deleteAllBtn.addEventListener('click', () => {
+            clipper.deleteAll();
+        });
+    }
+
+    const planeBtns = document.querySelectorAll('.clipper-plane-btn');
+    planeBtns.forEach(pBtn => {
+        pBtn.addEventListener('click', () => {
+            if (!clipper.enabled) return;
+            
+            const axis = pBtn.getAttribute('data-axis');
+            const center = getModelCenter();
+            const normal = new THREE.Vector3();
+            
+            if (axis === 'x') normal.set(-1, 0, 0);
+            else if (axis === 'y') normal.set(0, -1, 0);
+            else if (axis === 'z') normal.set(0, 0, -1);
+            
+            clipper.createFromNormalAndCoplanarPoint(world, normal, center);
+        });
+    });
+}
+
+function initGridToggle() {
+    const btn = document.getElementById('grid-toggle');
+    if (!btn) return;
+
+    btn.addEventListener('click', () => {
+        const grid = grids.list.get(world.uuid);
+        if (grid) {
+            grid.visible = !grid.visible;
+            btn.classList.toggle('active', grid.visible);
         }
     });
 }
@@ -591,6 +632,7 @@ logToScreen('Initializing That Open Engine...');
 initSidebar();
 initTheme();
 initProjectionToggle();
+initGridToggle();
 initClipperTool();
 loadModelList();
 initPropertiesPanel();
@@ -611,20 +653,13 @@ if (consoleToggle) {
 
 // Helper to get current model center
 function getModelCenter(): THREE.Vector3 {
-    // If we have loaded models, calculate bounding sphere of the whole scene or last model
-    // Simple approach: Use bounding box of all meshes in scene
     const box = new THREE.Box3();
-    const meshes: THREE.Mesh[] = [];
-    world.scene.three.traverse((child: any) => {
-        if ((child as THREE.Mesh).isMesh) {
-             meshes.push(child as THREE.Mesh);
-        }
-    });
+    const models = Array.from(loadedModels.values());
     
-    if (meshes.length === 0) return new THREE.Vector3(0, 0, 0);
+    if (models.length === 0) return new THREE.Vector3(0, 0, 0);
     
-    meshes.forEach(mesh => {
-        box.expandByObject(mesh);
+    models.forEach(model => {
+        box.expandByObject(model.object);
     });
     
     const center = new THREE.Vector3();
