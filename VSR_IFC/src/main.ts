@@ -815,6 +815,31 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
             
             if (model && model.properties && model.properties[localId]) {
                 const entity = model.properties[localId];
+                
+                // --- Level / Spatial Structure ---
+                const containedIn = entity.ContainedInStructure || entity.containedInStructure;
+                if (containedIn && Array.isArray(containedIn)) {
+                    for (const relRef of containedIn) {
+                        const rel = resolveRemote(relRef, model);
+                        if (!rel) continue;
+
+                        const structureRef = rel.RelatingStructure || rel.relatingStructure;
+                        if (!structureRef) continue;
+
+                        const structure = resolveRemote(structureRef, model);
+                        if (!structure) continue;
+
+                        const levelNameObj = structure.Name || structure.name;
+                        const levelName = (levelNameObj?.value ?? levelNameObj) || 'Sin Nombre';
+                        
+                        html += `<div class="prop-set-title">Nivel</div><table class="prop-table"><tbody>`;
+                        html += `<tr><th>Nivel</th><td>${levelName}</td></tr>`;
+                        html += `</tbody></table>`;
+                        // Usually only one spatial container, so break after first valid one
+                        break;
+                    }
+                }
+
                 const isDefinedBy = entity.IsDefinedBy || entity.isDefinedBy;
                 
                 if (isDefinedBy && Array.isArray(isDefinedBy)) {
