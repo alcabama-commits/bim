@@ -701,9 +701,6 @@ viewButtons.forEach(btn => {
 
 // Listener moved to initSidebar to handle both IFC and Frag files centrally
 
-const raycasters = components.get(OBC.Raycasters);
-raycasters.get(world);
-
 const highlighter = components.get(OBF.Highlighter);
 highlighter.setup({ world });
 highlighter.zoomToSelection = true;
