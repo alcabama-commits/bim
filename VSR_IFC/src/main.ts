@@ -706,8 +706,17 @@ viewButtons.forEach(btn => {
 // Listener moved to initSidebar to handle both IFC and Frag files centrally
 
 // --- Highlighter & Properties Setup ---
+components.get(OBC.Raycasters).get(world);
 const highlighter = components.get(OBF.Highlighter);
-highlighter.setup({ world });
+highlighter.setup({
+    world,
+    selectMaterialDefinition: {
+        color: new THREE.Color('#bcf124'),
+        opacity: 0.8,
+        transparent: true,
+        renderedFaces: 0,
+    },
+});
 highlighter.zoomToSelection = true;
 
 
