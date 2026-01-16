@@ -763,6 +763,7 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
             const localId = localIds[index];
             const raw = item as any;
             const attrs = raw.data || raw.attributes || raw;
+            let levelName: string | null = null;
 
             // --- Base Info (Name, ID, Category, GUID) ---
             const nameAttr = attrs.Name || attrs.name || attrs.IFCNAME || attrs.IfcName;
@@ -806,10 +807,14 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
 
                 html += `<tr><th>${key}</th><td>${val}</td></tr>`;
             }
+
+            if (levelName) {
+                html += `<tr><th>Nivel</th><td>${levelName}</td></tr>`;
+            }
+
             html += `</tbody></table>`;
 
-            // --- Relations (Property Sets & Quantities) ---
-            // Priority: Use model.properties directly if available (This is key for Deep properties)
+            // --- Relations (Property Sets & Cantidades) ---
             
             let foundDeepProps = false;
             
@@ -830,13 +835,11 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                         if (!structure) continue;
 
                         const levelNameObj = structure.Name || structure.name;
-                        const levelName = (levelNameObj?.value ?? levelNameObj) || 'Sin Nombre';
-                        
-                        html += `<div class="prop-set-title">Nivel</div><table class="prop-table"><tbody>`;
-                        html += `<tr><th>Nivel</th><td>${levelName}</td></tr>`;
-                        html += `</tbody></table>`;
-                        // Usually only one spatial container, so break after first valid one
-                        break;
+                        const candidate = (levelNameObj?.value ?? levelNameObj) || 'Sin Nombre';
+                        if (candidate) {
+                            levelName = String(candidate);
+                            break;
+                        }
                     }
                 }
 
@@ -910,14 +913,30 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
             }
 
             if (!foundDeepProps) {
-                // Fallback attempt with what fragments.getData returned (usually shallow)
                 const relations = (raw.relations || raw.Relations || attrs.relations || attrs.Relations || {});
-                const directIsDefinedBy = (raw.IsDefinedBy || raw.isDefinedBy || attrs.IsDefinedBy || attrs.isDefinedBy);
-                
-                if (Array.isArray(directIsDefinedBy) && directIsDefinedBy.length > 0) {
-                     // Existing shallow fallback if needed, but the loop above covers the model.properties case.
-                     // If model.properties is missing, we can't really do deep traversal easily without async calls if they are not loaded.
+                const spatial = (relations as any).containedInSpatialStructure || (relations as any).ContainedInSpatialStructure;
+
+                if (!levelName && Array.isArray(spatial) && spatial.length > 0) {
+                    const rel = spatial[0];
+                    if (rel) {
+                        const structureRef = rel.RelatingStructure || rel.relatingStructure;
+                        const structure = structureRef || resolveRemote(structureRef, model);
+                        if (structure) {
+                            const levelNameObj = structure.Name || structure.name;
+                            const candidate = levelNameObj?.value ?? levelNameObj;
+                            if (candidate) {
+                                levelName = String(candidate);
+                            }
+                        }
+                    }
                 }
+            }
+
+            if (levelName && !html.includes("<th>Nivel</th>")) {
+                html = html.replace(
+                    "</tbody></table>",
+                    `<tr><th>Nivel</th><td>${levelName}</td></tr></tbody></table>`
+                );
             }
 
             container.innerHTML = html;
