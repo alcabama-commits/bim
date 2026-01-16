@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as BUI from '@thatopen/ui';
+import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
 // --- Initialization of That Open Engine ---
@@ -693,19 +694,32 @@ const highlighter = components.get(OBF.Highlighter);
 highlighter.setup({ world });
 highlighter.zoomToSelection = true;
 
+const [propsTable, updatePropsTable] = CUI.tables.itemsData({
+    components,
+    modelIdMap: {},
+});
+
+propsTable.preserveStructureOnFilter = true;
+
+const propertiesContent = document.getElementById('properties-content');
+if (propertiesContent) {
+    propertiesContent.innerHTML = '';
+    propertiesContent.appendChild(propsTable);
+}
+
 highlighter.events.select.onHighlight.add((modelIdMap) => {
-    renderPropertiesTable(modelIdMap as any);
+    updatePropsTable({ modelIdMap });
 });
 
 highlighter.events.select.onClear.add(() => {
-    renderPropertiesTable({} as any);
+    updatePropsTable({ modelIdMap: {} });
 });
 
 if (container) {
     container.addEventListener('click', () => {
         const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
         if (selection) {
-            renderPropertiesTable(selection as any);
+            updatePropsTable({ modelIdMap: selection });
         }
     });
 }
