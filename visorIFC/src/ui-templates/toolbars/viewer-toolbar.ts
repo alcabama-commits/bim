@@ -69,6 +69,15 @@ export const viewerToolbarTemplate: BUI.StatefullComponent<
 
   const highlighter = components.get(OBF.Highlighter);
   const hider = components.get(OBC.Hider);
+  const grids = components.get(OBC.Grids);
+
+  const onToggleGrid = ({ target }: { target: BUI.Button }) => {
+    const grid = grids.list.get(world.uuid);
+    if (grid) {
+      grid.visible = !grid.visible;
+      target.active = grid.visible;
+    }
+  };
 
   const onToggleGhost = () => {
     if (originalColors.size) {
@@ -159,6 +168,7 @@ export const viewerToolbarTemplate: BUI.StatefullComponent<
       <bim-toolbar-section label="Visibility" icon=${appIcons.SHOW}>
         <bim-button tooltip-title=${tooltips.SHOW_ALL.TITLE} tooltip-text=${tooltips.SHOW_ALL.TEXT} icon=${appIcons.SHOW} label="Show All" @click=${onShowAll}></bim-button> 
         <bim-button tooltip-title=${tooltips.GHOST.TITLE} tooltip-text=${tooltips.GHOST.TEXT} icon=${appIcons.TRANSPARENT} label="Toggle Ghost" @click=${onToggleGhost}></bim-button>
+        <bim-button icon=${appIcons.GRID} label="Grid" @click=${onToggleGrid} .active=${grids.list.get(world.uuid)?.visible}></bim-button>
       </bim-toolbar-section> 
       <bim-toolbar-section label="Selection" icon=${appIcons.SELECT}>
         ${focusBtn}

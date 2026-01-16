@@ -1,6 +1,7 @@
 import * as OBC from "@thatopen/components";
 import * as OBF from "@thatopen/components-front";
 import * as BUI from "@thatopen/ui";
+import * as THREE from "three";
 import { ViewerToolbarState, viewerToolbarTemplate } from "..";
 import { appIcons } from "../../globals";
 
@@ -60,6 +61,33 @@ export const viewportGridTemplate: BUI.StatefullComponent<ViewportGridState> = (
       update();
     };
 
+    const onClipperDeleteAll = () => {
+      clipper.deleteAll();
+    };
+
+    const createPlane = (axis: 'x' | 'y' | 'z') => {
+       if (!clipper.enabled) {
+          disableAll(["clipper"]);
+          clipper.enabled = true;
+          highlighter.enabled = false;
+          update();
+       }
+       const fragments = components.get(OBC.FragmentsManager);
+       const bbox = new THREE.Box3();
+       for (const model of fragments.list.values()) {
+            if(model.object) bbox.expandByObject(model.object);
+       }
+       const center = new THREE.Vector3();
+       if(!bbox.isEmpty()) bbox.getCenter(center);
+       
+       const normal = new THREE.Vector3();
+       if (axis === 'x') normal.set(-1, 0, 0);
+       if (axis === 'y') normal.set(0, -1, 0);
+       if (axis === 'z') normal.set(0, 0, -1);
+       
+       clipper.createFromNormalAndCoplanarPoint(world, normal, center);
+    };
+
     const onMeasurementsClick = () => {
       lengthMeasurer.enabled = false;
       areaMeasurer.enabled = false;
@@ -75,7 +103,18 @@ export const viewportGridTemplate: BUI.StatefullComponent<ViewportGridState> = (
               <bim-button ?active=${areaMeasurer.enabled} label="Area" @click=${onAreaMeasurement}></bim-button>
             </bim-context-menu>
           </bim-button>
-          <bim-button ?active=${clipper.enabled} @click=${onModelSection} label="Section" tooltip-title="Model Section" icon=${appIcons.CLIPPING}></bim-button> 
+          <bim-button ?active=${clipper.enabled} label="Section" tooltip-title="Model Section" icon=${appIcons.CLIPPING}>
+             <bim-context-menu>
+                <bim-button label="On/Off" @click=${onModelSection} ?active=${clipper.enabled} icon=${appIcons.CLIPPING}></bim-button>
+                <bim-button label="Delete All" @click=${onClipperDeleteAll} icon=${appIcons.DELETE}></bim-button>
+                <bim-label>Create Plane:</bim-label>
+                <div style="display: flex; gap: 0.5rem;">
+                    <bim-button label="X" @click=${() => createPlane('x')}></bim-button>
+                    <bim-button label="Y" @click=${() => createPlane('y')}></bim-button>
+                    <bim-button label="Z" @click=${() => createPlane('z')}></bim-button>
+                </div>
+             </bim-context-menu>
+          </bim-button> 
         </bim-toolbar-section>
       </bim-toolbar>
     `;
