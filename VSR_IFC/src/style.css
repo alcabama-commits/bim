@@ -147,7 +147,7 @@ body {
 
 .properties-content {
   flex: 1;
-  overflow-y: auto;
+  overflow: auto;
   padding: 10px;
 }
 
