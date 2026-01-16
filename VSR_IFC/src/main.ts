@@ -710,6 +710,7 @@ components.get(OBC.Raycasters).get(world);
 const highlighter = components.get(OBF.Highlighter);
 highlighter.setup({
     world,
+    autoHighlightOnClick: true,
     selectMaterialDefinition: {
         color: new THREE.Color('#bcf124'),
         opacity: 0.8,
@@ -718,6 +719,19 @@ highlighter.setup({
     },
 });
 highlighter.zoomToSelection = true;
+
+highlighter.events.select.onHighlight.add((modelIdMap) => {
+    const entries = Object.entries(modelIdMap ?? {});
+    let total = 0;
+    for (const [, ids] of entries) {
+        total += (ids as Set<number>).size ?? 0;
+    }
+    logToScreen(`Highlighter onHighlight: ${entries.length} models, ${total} items`);
+});
+
+highlighter.events.select.onClear.add(() => {
+    logToScreen('Highlighter onClear');
+});
 
 
 
