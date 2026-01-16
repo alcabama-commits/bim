@@ -215,6 +215,57 @@ async function loadModels() {
 
 loadModels();
 
+// -------------------------
+//   BCF TOPICS (Temas)
+// -------------------------
+const bcfTopics = components.get(OBC.BCFTopics);
+bcfTopics.setup({
+  author: "usuario@visor.com",
+  types: new Set([...bcfTopics.config.types, "Information", "Coordination"]),
+  statuses: new Set(["Active", "In Progress", "Done", "In Review", "Closed"]),
+  users: new Set(["usuario@visor.com"]),
+  version: "3",
+});
+
+const viewpoints = components.get(OBC.Viewpoints);
+
+// Crear viewpoint automáticamente al crear un tema
+bcfTopics.list.onItemSet.add(async ({ value: topic }) => {
+  const viewpoint = viewpoints.create(world);
+  topic.viewpoints.add(viewpoint.guid);
+
+  topic.comments.onItemSet.add(({ value: comment }) => {
+    comment.viewpoint = viewpoint.guid;
+  });
+});
+
+const exportBCF = async () => {
+  const bcf = await bcfTopics.export();
+  const bcfFile = new File([bcf], "temas.bcf");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(bcfFile);
+  a.download = bcfFile.name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+const loadBCF = () => {
+  const input = document.createElement("input");
+  input.multiple = false;
+  input.accept = ".bcf";
+  input.type = "file";
+
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const buffer = await file.arrayBuffer();
+    const { topics, viewpoints } = await bcfTopics.load(new Uint8Array(buffer));
+    console.log("BCF Cargado:", topics, viewpoints);
+  });
+
+  input.click();
+};
+
 // VIEWPORT LAYOUT
 const [viewportSettings] = BUI.Component.create(
   viewportSettingsTemplate,
@@ -281,6 +332,18 @@ const modelsPanel = BUI.Component.create(
   }
 );
 
+// Panel de BCF
+const bcfPanel = BUI.Component.create(() => {
+  return BUI.html`
+    <bim-panel label="Temas BCF">
+      <bim-panel-section label="Acciones">
+        <bim-button @click=${exportBCF} label="Exportar BCF" icon="ph:export-bold"></bim-button> 
+        <bim-button @click=${loadBCF} label="Cargar BCF" icon="ph:folder-open-bold"></bim-button>
+      </bim-panel-section>
+    </bim-panel>
+  `;
+});
+
 // APP GRID (SIDEBAR + VIEWPORT)
 const app = document.getElementById("app");
 
@@ -298,6 +361,12 @@ app.elements = {
           icon: appIcons.MODEL,
           label: "Models",
           component: modelsPanel,
+        },
+        {
+          id: "bcf",
+          icon: "ph:chat-teardrop-text-fill",
+          label: "BCF",
+          component: bcfPanel,
         }
       ],
     },

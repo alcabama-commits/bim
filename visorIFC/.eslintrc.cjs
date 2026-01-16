@@ -17,6 +17,9 @@ module.exports = {
       {
         endOfLine: "auto",
       },
+      {
+        endOfLine: "auto",
+      },
     ],
     indent: "off",
     "no-shadow": "off",
@@ -42,6 +45,10 @@ module.exports = {
       "ignorePackages",
       {
         ts: "never",
+        if.set
+        tsx: "never",
+        js: "never",
+        jsx: "never",
       },
     ],
     "import/prefer-default-export": "off",
@@ -51,6 +58,9 @@ module.exports = {
     "import/resolver": {
       node: {
         extensions: [".js", ".jsx", ".ts", ".tsx", ".d.ts"],
+        resolve: {
+          extensions: [".js", ".jsx", ".ts", ".tsx", ".d.ts"],
+        },
       },
     },
   },
