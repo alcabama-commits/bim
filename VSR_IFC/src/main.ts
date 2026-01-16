@@ -920,7 +920,7 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     const rel = spatial[0];
                     if (rel) {
                         const structureRef = rel.RelatingStructure || rel.relatingStructure;
-                        const structure = structureRef || resolveRemote(structureRef, model);
+                        const structure = resolveRemote(structureRef, model);
                         if (structure) {
                             const levelNameObj = structure.Name || structure.name;
                             const candidate = levelNameObj?.value ?? levelNameObj;
