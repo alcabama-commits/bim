@@ -5,19 +5,21 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@types/three": "0.160.0",
+    "@types/three": "^0.182.0",
     "typescript": "^5.2.2",
     "vite": "^5.0.0"
   },
   "dependencies": {
-    "@thatopen/components": "^3.2.7",
+    "@thatopen/components-front": "^3.2.17",
     "@thatopen/fragments": "^3.2.13",
     "@thatopen/ui": "^3.2.4",
+    "@thatopen/ui-obc": "^3.2.3",
     "three": "^0.182.0",
-    "web-ifc": "^0.0.74"
+    "web-ifc": "^0.0.46",
+    "web-ifc-three": "^0.0.126"
   }
 }
