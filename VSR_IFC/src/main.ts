@@ -912,23 +912,29 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                 }
             }
 
-            if (!foundDeepProps) {
-                const relations = (raw.relations || raw.Relations || attrs.relations || attrs.Relations || {});
-                const spatial = (relations as any).containedInSpatialStructure || (relations as any).ContainedInSpatialStructure;
-
-                if (!levelName && Array.isArray(spatial) && spatial.length > 0) {
-                    const rel = spatial[0];
-                    if (rel) {
-                        const structureRef = rel.RelatingStructure || rel.relatingStructure;
-                        const structure = resolveRemote(structureRef, model);
-                        if (structure) {
-                            const levelNameObj = structure.Name || structure.name;
-                            const candidate = levelNameObj?.value ?? levelNameObj;
-                            if (candidate) {
-                                levelName = String(candidate);
-                            }
-                        }
-                    }
+            // --- Robust Level Lookup (Independent of Deep Props) ---
+            if (!levelName) {
+                // Try from relations returned by fragments.getData
+                const relations = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
+                const spatial = relations.containedInSpatialStructure || relations.ContainedInSpatialStructure;
+                
+                if (Array.isArray(spatial) && spatial.length > 0) {
+                     // spatial contains IDs of IFCRELCONTAINEDINSPATIALSTRUCTURE
+                     for (const relID of spatial) {
+                         const rel = resolveRemote(relID, model);
+                         if (rel) {
+                             const structureRef = rel.RelatingStructure || rel.relatingStructure;
+                             const structure = resolveRemote(structureRef, model);
+                             if (structure) {
+                                 const levelNameObj = structure.Name || structure.name;
+                                 const candidate = (levelNameObj?.value ?? levelNameObj);
+                                 if (candidate) {
+                                     levelName = String(candidate);
+                                     break; // Found it
+                                 }
+                             }
+                         }
+                     }
                 }
             }
 
