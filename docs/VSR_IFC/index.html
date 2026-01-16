@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VSR IFC Viewer</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script type="module" crossorigin src="./assets/main-DvE9uyv4.js"></script>
+    <script type="module" crossorigin src="./assets/main-DjwdkrhD.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/main-DcjgMwxc.css">
   </head>
   <body>
@@ -95,14 +95,29 @@
            </div>
  
            <button id="projection-toggle" class="projection-toggle-btn" title="Cambiar proyección (Perspectiva/Ortogonal)">
-               <i class="fa-solid fa-cubes"></i>
-               <span>Persp</span>
-           </button>
+              <i class="fa-solid fa-cubes"></i>
+              <span>Persp</span>
+          </button>
 
-           <button id="clipper-toggle" class="projection-toggle-btn" title="Herramienta de recorte (doble clic para crear plano)">
-               <i class="fa-solid fa-scissors"></i>
-               <span>Recorte</span>
-           </button>
+          <button id="grid-toggle" class="projection-toggle-btn active" title="Mostrar/Ocultar Rejilla">
+              <i class="fa-solid fa-border-all"></i>
+              <span>Rejilla</span>
+          </button>
+
+          <button id="clipper-toggle" class="projection-toggle-btn" title="Herramienta de recorte (doble clic para crear plano)">
+              <i class="fa-solid fa-scissors"></i>
+              <span>Recorte</span>
+          </button>
+
+          <div id="clipper-controls" class="clipper-controls" style="display: none; gap: 5px; align-items: center; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 4px; margin-left: 10px;">
+              <button id="clipper-delete-all" class="projection-toggle-btn" title="Borrar todos los planos" style="padding: 5px 8px;">
+                  <i class="fa-solid fa-trash"></i>
+              </button>
+              <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
+              <button class="projection-toggle-btn clipper-plane-btn" data-axis="x" title="Cortar en X" style="padding: 5px 8px;">X</button>
+              <button class="projection-toggle-btn clipper-plane-btn" data-axis="y" title="Cortar en Y" style="padding: 5px 8px;">Y</button>
+              <button class="projection-toggle-btn clipper-plane-btn" data-axis="z" title="Cortar en Z" style="padding: 5px 8px;">Z</button>
+          </div>
  
            <button id="properties-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar propiedades">
                <i class="fa-solid fa-circle-info"></i>
