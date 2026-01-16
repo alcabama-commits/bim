@@ -746,10 +746,12 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
         return;
     }
 
-    // Get base attributes using fragments.getData (reliable for Name, Category, etc.)
     const dataByModel = await fragments.getData(normalized as any, {
         attributesDefault: true,
-        relationsDefault: { attributes: true, relations: true }
+        relations: {
+            ContainedInStructure: { attributes: true, relations: true },
+            IsDefinedBy: { attributes: true, relations: true }
+        }
     } as any);
 
     // --- SECOND PASS: Fetch Relations Entities (specifically IfcRelContainedInSpatialStructure) ---
@@ -764,7 +766,7 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
              const raw = item as any;
              const attrs = raw.data || raw.attributes || raw;
              const relations = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
-             const spatial = relations.containedInSpatialStructure || relations.ContainedInSpatialStructure;
+             const spatial = relations.ContainedInStructure || relations.containedInStructure || relations.containedInSpatialStructure || relations.ContainedInSpatialStructure;
              if (Array.isArray(spatial)) {
                  spatial.forEach((id: number) => modelRelations.add(id));
              }
@@ -1004,9 +1006,8 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
 
             // --- Robust Level Lookup (Independent of Deep Props) ---
             if (!levelName) {
-                // Try from relations returned by fragments.getData
                 const relations = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
-                const spatial = relations.containedInSpatialStructure || relations.ContainedInSpatialStructure;
+                const spatial = relations.ContainedInStructure || relations.containedInStructure || relations.containedInSpatialStructure || relations.ContainedInSpatialStructure;
                 
                 if (Array.isArray(spatial) && spatial.length > 0) {
                      // spatial contains IDs of IFCRELCONTAINEDINSPATIALSTRUCTURE
@@ -1048,10 +1049,9 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                 );
             }
 
-            // --- SAFE DEBUG INFO (No Circular Refs) ---
             const rels = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
             const relKeys = Object.keys(rels);
-            const spatial = rels.containedInSpatialStructure || rels.ContainedInSpatialStructure;
+            const spatial = rels.ContainedInStructure || rels.containedInStructure || rels.containedInSpatialStructure || rels.ContainedInSpatialStructure;
             
             html += `
                 <details style="margin-top: 15px; border-top: 1px solid #ddd; padding-top: 10px;">
