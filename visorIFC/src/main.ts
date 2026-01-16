@@ -117,6 +117,9 @@ await ifcLoader.setup({
   wasm: { absolute: true, path: "https://unpkg.com/web-ifc@0.0.71/" },
 });
 
+// Indexer
+const indexer = components.get(OBC.IfcRelationsIndexer);
+
 // Highlighter
 const highlighter = components.get(OBF.Highlighter);
 highlighter.setup({
@@ -209,6 +212,9 @@ fragments.list.onItemSet.add(async ({ value: model }) => {
 
   // 🔥 LOS MODELOS INICIAN APAGADOS 🔥
   model.object.visible = false;
+
+  // Procesar relaciones para ver propiedades completas (Psets)
+  await indexer.process(model);
 
   world.scene.three.add(model.object);
   await fragments.core.update(true);
