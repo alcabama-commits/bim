@@ -7,6 +7,7 @@ import * as THREE from "three";
 import * as OBC from "@thatopen/components";
 import * as OBF from "@thatopen/components-front";
 import * as BUI from "@thatopen/ui";
+import * as BUIC from "@thatopen/ui-obc";
 
 import * as TEMPLATES from "./ui-templates";
 import { appIcons, CONTENT_GRID_ID } from "./globals";
@@ -127,6 +128,22 @@ highlighter.setup({
     transparent: false,
   },
 });
+
+const [propertiesTable, updatePropertiesTable] = BUIC.tables.itemsData({
+  components,
+  modelIdMap: {},
+});
+
+propertiesTable.preserveStructureOnFilter = true;
+propertiesTable.indentationInText = false;
+
+highlighter.events.select.onHighlight.add((modelIdMap) => {
+  updatePropertiesTable({ modelIdMap });
+});
+
+highlighter.events.select.onClear.add(() =>
+  updatePropertiesTable({ modelIdMap: {} }),
+);
 
 // Clipper
 const clipper = components.get(OBC.Clipper);
@@ -332,6 +349,37 @@ const modelsPanel = BUI.Component.create(
   }
 );
 
+// Panel de Propiedades
+const propertiesPanel = BUI.Component.create(() => {
+  const onTextInput = (e: Event) => {
+    const input = e.target as BUI.TextInput;
+    propertiesTable.queryString = input.value !== "" ? input.value : null;
+  };
+
+  const expandTable = (e: Event) => {
+    const button = e.target as BUI.Button;
+    propertiesTable.expanded = !propertiesTable.expanded;
+    button.label = propertiesTable.expanded ? "Colapsar" : "Expandir";
+  };
+
+  const copyAsTSV = async () => {
+    await navigator.clipboard.writeText(propertiesTable.tsv);
+  };
+
+  return BUI.html`
+    <bim-panel label="Propiedades">
+      <bim-panel-section label="Datos del Elemento">
+        <div style="display: flex; gap: 0.5rem;">
+          <bim-button @click=${expandTable} label=${propertiesTable.expanded ? "Colapsar" : "Expandir"}></bim-button> 
+          <bim-button @click=${copyAsTSV} label="Copiar TSV"></bim-button> 
+        </div> 
+        <bim-text-input @input=${onTextInput} placeholder="Buscar Propiedad" debounce="250"></bim-text-input>
+        ${propertiesTable}
+      </bim-panel-section>
+    </bim-panel>
+  `;
+});
+
 // Panel de BCF
 const bcfPanel = BUI.Component.create(() => {
   return BUI.html`
@@ -361,6 +409,12 @@ app.elements = {
           icon: appIcons.MODEL,
           label: "Models",
           component: modelsPanel,
+        },
+        {
+          id: "properties",
+          icon: "fluent:info-16-filled",
+          label: "Propiedades",
+          component: propertiesPanel,
         },
         {
           id: "bcf",
