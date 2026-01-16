@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as BUI from '@thatopen/ui';
-import * as BUIC from '@thatopen/ui-obc';
 import './style.css';
 
 // --- Initialization of That Open Engine ---
@@ -130,9 +129,6 @@ function getSpecialtyFromIfcPath(path: string): string {
 const loadedModels = new Map<string, any>();
 
 let propertiesTableElement: HTMLElement | null = null;
-let updateItemsDataTable:
-    | ((params: { modelIdMap: Record<string, Set<number>> }) => void)
-    | null = null;
 
 // Helper to log to screen
 function logToScreen(msg: string, isError = false) {
@@ -697,27 +693,212 @@ const highlighter = components.get(OBF.Highlighter);
 highlighter.setup({ world });
 highlighter.zoomToSelection = true;
 
-highlighter.events.select.onHighlight.add((fragmentIdMap) => {
-    if (updateItemsDataTable) {
-        updateItemsDataTable({ modelIdMap: fragmentIdMap as any });
-    }
+highlighter.events.select.onHighlight.add((modelIdMap) => {
+    renderPropertiesTable(modelIdMap as any);
 });
 
 highlighter.events.select.onClear.add(() => {
-    if (updateItemsDataTable) {
-        updateItemsDataTable({ modelIdMap: {} as any });
-    }
+    renderPropertiesTable({} as any);
 });
 
 if (container) {
     container.addEventListener('click', () => {
         const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
         if (selection) {
-            if (updateItemsDataTable) {
-                updateItemsDataTable({ modelIdMap: selection as any });
-            }
+            renderPropertiesTable(selection as any);
         }
     });
+}
+
+// Helper for deep property resolution
+function resolveRemote(ref: any, model: any) {
+    if (!ref || !model || !model.properties) return ref;
+    if (typeof ref === 'number') return model.properties[ref];
+    if (ref && typeof ref.value === 'number') return model.properties[ref.value];
+    return ref;
+}
+
+async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
+    console.log('[DEBUG] renderPropertiesTable called with:', modelIdMap);
+    const content = document.getElementById('properties-content');
+    if (!content) return;
+    content.innerHTML = '';
+
+    const entries = modelIdMap instanceof Map
+        ? Array.from(modelIdMap.entries())
+        : Object.entries(modelIdMap);
+
+    if (entries.length === 0) {
+        content.innerHTML = '<div style="padding: 15px; color: #666; text-align: center;">Selecciona un elemento para ver sus propiedades</div>';
+        return;
+    }
+
+    const normalized: Record<string, number[]> = {};
+    for (const [modelID, idsSet] of entries) {
+        const ids = idsSet instanceof Set ? Array.from(idsSet) : (idsSet as any[]);
+        if (!ids || ids.length === 0) continue;
+        normalized[modelID] = ids as number[];
+    }
+
+    const modelIds = Object.keys(normalized);
+    if (modelIds.length === 0) {
+        content.innerHTML = '<div style="padding: 15px; color: #666; text-align: center;">Selecciona un elemento para ver sus propiedades</div>';
+        return;
+    }
+
+    // Get base attributes using fragments.getData (reliable for Name, Category, etc.)
+    const dataByModel = await fragments.getData(normalized as any, {
+        attributesDefault: true,
+        relationsDefault: { attributes: true, relations: true }
+    } as any);
+
+    for (const modelID of modelIds) {
+        const localIds = normalized[modelID] || [];
+        const items = (dataByModel as any)[modelID] || [];
+        
+        // Try to get the full model to access raw properties
+        const model = loadedModels.get(modelID) || fragments.groups.get(modelID);
+
+        items.forEach((item: any, index: number) => {
+            const localId = localIds[index];
+            const raw = item as any;
+            const attrs = raw.data || raw.attributes || raw;
+
+            // --- Base Info (Name, ID, Category, GUID) ---
+            const nameAttr = attrs.Name || attrs.name || attrs.IFCNAME || attrs.IfcName;
+            const nameValue = typeof nameAttr === 'object' && nameAttr !== null && 'value' in nameAttr
+                ? (nameAttr as any).value
+                : nameAttr || `Elemento ${localId ?? ''}`;
+
+            const category = raw.category || attrs.Category || attrs.category;
+            const guidAttr = raw.guid || attrs.GlobalId || attrs.globalId || attrs.GUID || attrs.guid;
+            const guidValue = typeof guidAttr === 'object' && guidAttr !== null && 'value' in guidAttr
+                ? (guidAttr as any).value
+                : guidAttr || '';
+
+            const container = document.createElement('div');
+            container.className = 'prop-item';
+
+            let html = `
+                <div class="prop-header-info">
+                    <strong>${nameValue}</strong>
+                    <div style="font-size: 11px; color: #666;">
+                        ID: ${localId ?? '-'} <span style="margin: 0 5px;">|</span> Modelo: ${modelID}
+                        ${category ? `<span style="margin: 0 5px;">|</span> Tipo: ${category}</span>` : ''}
+                        ${guidValue ? `<br/>GUID: ${guidValue}` : ''}
+                    </div>
+                </div>
+            `;
+
+            html += `<div class="prop-set-title">Atributos Base</div>`;
+            html += `<table class="prop-table"><tbody>`;
+
+            // Filter out internal/relation keys from base attributes
+            const ignoredKeys = new Set(['localId', 'category', 'guid', 'IsDefinedBy', 'isDefinedBy', 'relations', 'Relations', 'expressID', 'type']);
+            
+            for (const [key, attr] of Object.entries(attrs)) {
+                if (!key || ignoredKeys.has(key)) continue;
+
+                const val = (attr as any)?.value ?? attr;
+                if (val === null || val === undefined) continue;
+                if (Array.isArray(val)) continue;
+                if (typeof val === 'object') continue;
+
+                html += `<tr><th>${key}</th><td>${val}</td></tr>`;
+            }
+            html += `</tbody></table>`;
+
+            // --- Relations (Property Sets & Quantities) ---
+            // Priority: Use model.properties directly if available (This is key for Deep properties)
+            
+            let foundDeepProps = false;
+            
+            if (model && model.properties && model.properties[localId]) {
+                const entity = model.properties[localId];
+                const isDefinedBy = entity.IsDefinedBy || entity.isDefinedBy;
+                
+                if (isDefinedBy && Array.isArray(isDefinedBy)) {
+                    for (const relRef of isDefinedBy) {
+                        const rel = resolveRemote(relRef, model);
+                        if (!rel) continue;
+
+                        // Check if it is IfcRelDefinesByProperties
+                        const psetRef = rel.RelatingPropertyDefinition || rel.relatingPropertyDefinition;
+                        if (!psetRef) continue;
+
+                        const pset = resolveRemote(psetRef, model);
+                        if (!pset) continue;
+
+                        const psetNameObj = pset.Name || pset.name;
+                        const psetName = (psetNameObj?.value ?? psetNameObj) || 'Sin Nombre';
+
+                        // Case 1: IfcPropertySet -> HasProperties
+                        const props = pset.HasProperties || pset.hasProperties;
+                        if (props && Array.isArray(props)) {
+                            foundDeepProps = true;
+                            html += `<div class="prop-set-title">${psetName}</div><table class="prop-table"><tbody>`;
+                            for (const propRef of props) {
+                                const prop = resolveRemote(propRef, model);
+                                if (!prop) continue;
+
+                                const propNameObj = prop.Name || prop.name;
+                                const propName = propNameObj?.value ?? propNameObj;
+                                
+                                const propValObj = prop.NominalValue || prop.nominalValue;
+                                const propVal = propValObj?.value ?? propValObj;
+
+                                if (propName && propVal !== undefined) {
+                                    html += `<tr><th>${propName}</th><td>${propVal}</td></tr>`;
+                                }
+                            }
+                            html += `</tbody></table>`;
+                        }
+
+                        // Case 2: IfcElementQuantity -> Quantities
+                        const quantities = pset.Quantities || pset.quantities;
+                        if (quantities && Array.isArray(quantities)) {
+                            foundDeepProps = true;
+                            html += `<div class="prop-set-title">${psetName} (Cantidades)</div><table class="prop-table"><tbody>`;
+                            for (const qRef of quantities) {
+                                const q = resolveRemote(qRef, model);
+                                if (!q) continue;
+
+                                const qNameObj = q.Name || q.name;
+                                const qName = qNameObj?.value ?? qNameObj;
+                                
+                                const qVal = (q.LengthValue?.value ?? q.LengthValue) ?? 
+                                             (q.AreaValue?.value ?? q.AreaValue) ?? 
+                                             (q.VolumeValue?.value ?? q.VolumeValue) ?? 
+                                             (q.CountValue?.value ?? q.CountValue) ?? 
+                                             (q.WeightValue?.value ?? q.WeightValue) ?? 
+                                             (q.TimeValue?.value ?? q.TimeValue) ?? 
+                                             (q.nominalValue?.value ?? q.nominalValue);
+                                
+                                if (qName && qVal !== undefined) {
+                                    html += `<tr><th>${qName}</th><td>${qVal}</td></tr>`;
+                                }
+                            }
+                            html += `</tbody></table>`;
+                        }
+                    }
+                }
+            }
+
+            if (!foundDeepProps) {
+                // Fallback attempt with what fragments.getData returned (usually shallow)
+                const relations = (raw.relations || raw.Relations || attrs.relations || attrs.Relations || {});
+                const directIsDefinedBy = (raw.IsDefinedBy || raw.isDefinedBy || attrs.IsDefinedBy || attrs.isDefinedBy);
+                
+                if (Array.isArray(directIsDefinedBy) && directIsDefinedBy.length > 0) {
+                     // Existing shallow fallback if needed, but the loop above covers the model.properties case.
+                     // If model.properties is missing, we can't really do deep traversal easily without async calls if they are not loaded.
+                }
+            }
+
+            container.innerHTML = html;
+            content.appendChild(container);
+        });
+    }
 }
 
 function initPropertiesPanel() {
@@ -734,6 +915,17 @@ function initPropertiesPanel() {
     if (resizer && panel) {
         let isResizing = false;
         
+                const header = panel.querySelector('.properties-header');
+                if (header && !header.querySelector('.version-tag')) {
+                     const v = document.createElement('span');
+                     v.className = 'version-tag';
+                     v.style.fontSize = '10px';
+                     v.style.color = '#888';
+                     v.style.marginLeft = '10px';
+                     v.innerText = 'v1.7 (Custom Table)';
+                     header.appendChild(v);
+                }
+
         resizer.addEventListener('mousedown', (e) => {
             isResizing = true;
             resizer.classList.add('resizing');
@@ -758,20 +950,6 @@ function initPropertiesPanel() {
         });
     }
 
-    const content = document.getElementById('properties-content');
-    if (content && !propertiesTableElement) {
-        const [table, update] = BUIC.tables.itemsData({
-            components,
-            modelIdMap: {},
-        });
-        propertiesTableElement = table as unknown as HTMLElement;
-        updateItemsDataTable = update as unknown as (
-            params: { modelIdMap: Record<string, Set<number>> }
-        ) => void;
-        (propertiesTableElement as any).preserveStructureOnFilter = true;
-        (propertiesTableElement as any).indentationInText = false;
-        content.innerHTML = '';
-        content.appendChild(propertiesTableElement);
-    }
+    renderPropertiesTable({} as any);
 }
 

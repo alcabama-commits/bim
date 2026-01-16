@@ -7,7 +7,6 @@ import * as THREE from "three";
 import * as OBC from "@thatopen/components";
 import * as OBF from "@thatopen/components-front";
 import * as BUI from "@thatopen/ui";
-import * as BUIC from "@thatopen/ui-obc";
 
 import * as TEMPLATES from "./ui-templates";
 import { appIcons, CONTENT_GRID_ID } from "./globals";
@@ -117,9 +116,6 @@ await ifcLoader.setup({
   wasm: { absolute: true, path: "https://unpkg.com/web-ifc@0.0.71/" },
 });
 
-// Indexer
-const indexer = components.get(OBC.IfcRelationsIndexer);
-
 // Highlighter
 const highlighter = components.get(OBF.Highlighter);
 highlighter.setup({
@@ -131,22 +127,6 @@ highlighter.setup({
     transparent: false,
   },
 });
-
-const [propertiesTable, updatePropertiesTable] = BUIC.tables.itemsData({
-  components,
-  modelIdMap: {},
-});
-
-propertiesTable.preserveStructureOnFilter = true;
-propertiesTable.indentationInText = false;
-
-highlighter.events.select.onHighlight.add((modelIdMap) => {
-  updatePropertiesTable({ modelIdMap });
-});
-
-highlighter.events.select.onClear.add(() =>
-  updatePropertiesTable({ modelIdMap: {} }),
-);
 
 // Clipper
 const clipper = components.get(OBC.Clipper);
@@ -213,9 +193,6 @@ fragments.list.onItemSet.add(async ({ value: model }) => {
   // 🔥 LOS MODELOS INICIAN APAGADOS 🔥
   model.object.visible = false;
 
-  // Procesar relaciones para ver propiedades completas (Psets)
-  await indexer.process(model);
-
   world.scene.three.add(model.object);
   await fragments.core.update(true);
 });
@@ -237,57 +214,6 @@ async function loadModels() {
 }
 
 loadModels();
-
-// -------------------------
-//   BCF TOPICS (Temas)
-// -------------------------
-const bcfTopics = components.get(OBC.BCFTopics);
-bcfTopics.setup({
-  author: "usuario@visor.com",
-  types: new Set([...bcfTopics.config.types, "Information", "Coordination"]),
-  statuses: new Set(["Active", "In Progress", "Done", "In Review", "Closed"]),
-  users: new Set(["usuario@visor.com"]),
-  version: "3",
-});
-
-const viewpoints = components.get(OBC.Viewpoints);
-
-// Crear viewpoint automáticamente al crear un tema
-bcfTopics.list.onItemSet.add(async ({ value: topic }) => {
-  const viewpoint = viewpoints.create(world);
-  topic.viewpoints.add(viewpoint.guid);
-
-  topic.comments.onItemSet.add(({ value: comment }) => {
-    comment.viewpoint = viewpoint.guid;
-  });
-});
-
-const exportBCF = async () => {
-  const bcf = await bcfTopics.export();
-  const bcfFile = new File([bcf], "temas.bcf");
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(bcfFile);
-  a.download = bcfFile.name;
-  a.click();
-  URL.revokeObjectURL(a.href);
-};
-
-const loadBCF = () => {
-  const input = document.createElement("input");
-  input.multiple = false;
-  input.accept = ".bcf";
-  input.type = "file";
-
-  input.addEventListener("change", async () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    const buffer = await file.arrayBuffer();
-    const { topics, viewpoints } = await bcfTopics.load(new Uint8Array(buffer));
-    console.log("BCF Cargado:", topics, viewpoints);
-  });
-
-  input.click();
-};
 
 // VIEWPORT LAYOUT
 const [viewportSettings] = BUI.Component.create(
@@ -355,49 +281,6 @@ const modelsPanel = BUI.Component.create(
   }
 );
 
-// Panel de Propiedades
-const propertiesPanel = BUI.Component.create(() => {
-  const onTextInput = (e: Event) => {
-    const input = e.target as BUI.TextInput;
-    propertiesTable.queryString = input.value !== "" ? input.value : null;
-  };
-
-  const expandTable = (e: Event) => {
-    const button = e.target as BUI.Button;
-    propertiesTable.expanded = !propertiesTable.expanded;
-    button.label = propertiesTable.expanded ? "Colapsar" : "Expandir";
-  };
-
-  const copyAsTSV = async () => {
-    await navigator.clipboard.writeText(propertiesTable.tsv);
-  };
-
-  return BUI.html`
-    <bim-panel label="Propiedades">
-      <bim-panel-section label="Datos del Elemento">
-        <div style="display: flex; gap: 0.5rem;">
-          <bim-button @click=${expandTable} label=${propertiesTable.expanded ? "Colapsar" : "Expandir"}></bim-button> 
-          <bim-button @click=${copyAsTSV} label="Copiar TSV"></bim-button> 
-        </div> 
-        <bim-text-input @input=${onTextInput} placeholder="Buscar Propiedad" debounce="250"></bim-text-input>
-        ${propertiesTable}
-      </bim-panel-section>
-    </bim-panel>
-  `;
-});
-
-// Panel de BCF
-const bcfPanel = BUI.Component.create(() => {
-  return BUI.html`
-    <bim-panel label="Temas BCF">
-      <bim-panel-section label="Acciones">
-        <bim-button @click=${exportBCF} label="Exportar BCF" icon="ph:export-bold"></bim-button> 
-        <bim-button @click=${loadBCF} label="Cargar BCF" icon="ph:folder-open-bold"></bim-button>
-      </bim-panel-section>
-    </bim-panel>
-  `;
-});
-
 // APP GRID (SIDEBAR + VIEWPORT)
 const app = document.getElementById("app");
 
@@ -415,18 +298,6 @@ app.elements = {
           icon: appIcons.MODEL,
           label: "Models",
           component: modelsPanel,
-        },
-        {
-          id: "properties",
-          icon: "fluent:info-16-filled",
-          label: "Propiedades",
-          component: propertiesPanel,
-        },
-        {
-          id: "bcf",
-          icon: "ph:chat-teardrop-text-fill",
-          label: "BCF",
-          component: bcfPanel,
         }
       ],
     },
