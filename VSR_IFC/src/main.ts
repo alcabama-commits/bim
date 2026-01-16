@@ -1048,6 +1048,36 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                 );
             }
 
+            // --- DEBUG INFO SECTION ---
+            // This helps diagnose why relations (like Level) might be missing
+            const debugInfo = {
+                localId,
+                modelID,
+                hasModelProperties: !!(model && model.properties),
+                levelFound: levelName,
+                // Safe extraction of relations for display
+                relationsKeys: Object.keys(raw.relations || raw.Relations || attrs.relations || attrs.Relations || {}),
+                // Dump raw data (careful with size)
+                rawAttributes: attrs
+            };
+
+            html += `
+                <details style="margin-top: 15px; border-top: 1px solid #ddd; padding-top: 10px;">
+                    <summary style="font-size: 11px; color: #999; cursor: pointer; user-select: none;">
+                        🛠 Datos Técnicos (Debug)
+                    </summary>
+                    <div style="font-size: 10px; color: #444; background: #f5f5f5; padding: 10px; margin-top: 5px; border-radius: 4px; overflow-x: auto;">
+                        <strong>Estado de Propiedades:</strong><br/>
+                        Model Properties Loaded: ${debugInfo.hasModelProperties ? '✅ SI' : '❌ NO'}<br/>
+                        Relaciones encontradas: ${debugInfo.relationsKeys.length}<br/>
+                        Nivel detectado: ${levelName || 'NO'}<br/>
+                        <br/>
+                        <strong>Raw Data Dump:</strong>
+                        <pre style="margin: 0; white-space: pre-wrap; word-break: break-all;">${JSON.stringify(debugInfo, null, 2)}</pre>
+                    </div>
+                </details>
+            `;
+
             container.innerHTML = html;
             content.appendChild(container);
         });
