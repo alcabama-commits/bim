@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
-import * as OBF from '@thatopen/components-front';
-import * as BUI from '@thatopen/ui';
-import * as BUIC from '@thatopen/ui-obc';
+import { FragmentsManager } from '@thatopen/components';
+
 import './style.css';
 
 // --- Initialization of That Open Engine ---
@@ -25,7 +24,6 @@ world.renderer = new OBC.SimpleRenderer(components, container);
 world.camera = new OBC.OrthoPerspectiveCamera(components);
 
 components.init();
-BUI.Manager.init();
 
 // Grids
 const grids = components.get(OBC.Grids);
@@ -125,6 +123,8 @@ function getSpecialtyFromIfcPath(path: string): string {
 //    culler.needsUpdate = true;
 // });
 
+// Track loaded models
+// Key: path, Value: FragmentsGroup (the model)
 const loadedModels = new Map<string, any>();
 
 // Helper to log to screen
@@ -155,7 +155,7 @@ async function loadModel(url: string, path: string) {
         logToScreen(`Loading Fragments... (Size: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
 
         const model = await fragments.core.load(buffer, { modelId: path });
-        (model as any).name = path.split('/').pop() || 'Model';
+        model.name = path.split('/').pop() || 'Model';
 
         model.useCamera(world.camera.three);
 
@@ -165,22 +165,6 @@ async function loadModel(url: string, path: string) {
         
         loadedModels.set(path, model);
         
-        // Try to load associated properties (json)
-        try {
-            const jsonUrl = url.replace(/\.frag$/i, '.json');
-            logToScreen(`Checking for properties: ${jsonUrl}`);
-            const jsonResp = await fetch(jsonUrl);
-            if (jsonResp.ok) {
-                const props = await jsonResp.json();
-                (model as any).properties = props;
-                logToScreen(`Loaded properties for ${path} (Size: ${(JSON.stringify(props).length / 1024).toFixed(2)} KB)`);
-            } else {
-                logToScreen(`No properties file found for ${path} (checked .json)`);
-            }
-        } catch (e) {
-            logToScreen(`Failed to load properties: ${e}`, true);
-        }
-
         logToScreen('Model loaded successfully as Fragments');
 
         let meshCount = 0;
@@ -231,43 +215,15 @@ async function loadModel(url: string, path: string) {
 function initSidebar() {
     const sidebar = document.getElementById('sidebar');
     const toggleBtn = document.getElementById('sidebar-toggle');
-    const resizer = document.getElementById('sidebar-resizer');
+    const closeBtn = document.getElementById('sidebar-close');
 
-    // Toggle Logic usando solo el botón de hamburguesa
-    if (toggleBtn && sidebar) {
+    if (sidebar && toggleBtn && closeBtn) {
         toggleBtn.addEventListener('click', () => {
-            const isClosed = sidebar.classList.toggle('closed');
-            document.body.classList.toggle('sidebar-closed', isClosed);
+            sidebar.classList.remove('closed');
         });
-    }
 
-    // Resize Logic
-    if (resizer && sidebar) {
-        let isResizing = false;
-        
-        resizer.addEventListener('mousedown', (e) => {
-            isResizing = true;
-            resizer.classList.add('resizing');
-            document.body.style.cursor = 'ew-resize';
-            e.preventDefault();
-        });
-        
-        document.addEventListener('mousemove', (e) => {
-            if (!isResizing) return;
-
-            const newWidth = e.clientX;
-
-            if (newWidth > 200 && newWidth < 800) {
-                sidebar.style.width = `${newWidth}px`;
-            }
-        });
-        
-        document.addEventListener('mouseup', () => {
-            if (isResizing) {
-                isResizing = false;
-                resizer.classList.remove('resizing');
-                document.body.style.cursor = 'default';
-            }
+        closeBtn.addEventListener('click', () => {
+            sidebar.classList.add('closed');
         });
     }
     
@@ -322,7 +278,7 @@ function initSidebar() {
                              const savedData = model._save ? await model._save() : null;
                              
                              if (savedData) {
-                                 const blob = new Blob([savedData as any], { type: 'application/octet-stream' });
+                                 const blob = new Blob([savedData], { type: 'application/octet-stream' });
                                  const url = URL.createObjectURL(blob);
                                  const a = document.createElement('a');
                                  a.href = url;
@@ -349,82 +305,6 @@ function initSidebar() {
         });
     }
 }
-
-function initTheme() {
-    const themeBtn = document.getElementById('theme-toggle');
-    const icon = themeBtn?.querySelector('i');
-    const logoImg = document.getElementById('logo-img') as HTMLImageElement;
-    
-    // Default to Light (false)
-    const savedTheme = localStorage.getItem('theme');
-    const isDark = savedTheme === 'dark';
-    
-    const updateThemeUI = (dark: boolean) => {
-        if (dark) {
-            document.body.classList.add('dark-mode');
-            if(icon) icon.className = 'fa-solid fa-sun';
-            if(logoImg) logoImg.src = 'https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png';
-            if (world && world.scene && world.scene.three) {
-                 world.scene.three.background = new THREE.Color(0x1e1e1e); 
-            }
-        } else {
-            document.body.classList.remove('dark-mode');
-            if(icon) icon.className = 'fa-solid fa-moon';
-            if(logoImg) logoImg.src = 'https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png';
-            if (world && world.scene && world.scene.three) {
-                 world.scene.three.background = new THREE.Color(0xf5f5f5); 
-            }
-        }
-    };
-
-    // Initial set
-    updateThemeUI(isDark);
-
-    themeBtn?.addEventListener('click', () => {
-        document.body.classList.toggle('dark-mode');
-        // Force re-check of class because toggle returns boolean
-        // But we want to be explicit
-        const currentDark = document.body.classList.contains('dark-mode');
-        localStorage.setItem('theme', currentDark ? 'dark' : 'light');
-        updateThemeUI(currentDark);
-    });
-}
-
-function initProjectionToggle() {
-    const btn = document.getElementById('projection-toggle');
-    if (!btn) return;
-
-    const labelSpan = btn.querySelector('span');
-
-    const updateUI = () => {
-        const current = (world.camera as any).projection?.current as string | undefined;
-        const isOrtho = current === 'Orthographic';
-        btn.classList.toggle('active', isOrtho);
-        if (labelSpan) {
-            labelSpan.textContent = isOrtho ? 'Orto' : 'Persp';
-        }
-    };
-
-    updateUI();
-
-    btn.addEventListener('click', () => {
-        const projectionApi = (world.camera as any).projection;
-        if (!projectionApi || typeof projectionApi.set !== 'function') return;
-
-        const current = projectionApi.current as string;
-        const next = current === 'Orthographic' ? 'Perspective' : 'Orthographic';
-
-        projectionApi.set(next);
-
-        const rendererAny: any = world.renderer as any;
-        if (rendererAny?.postproduction?.updateCamera) {
-            rendererAny.postproduction.updateCamera();
-        }
-
-        updateUI();
-    });
-}
-
 
 
 
@@ -571,10 +451,7 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
 
 logToScreen('Initializing That Open Engine...');
 initSidebar();
-initTheme();
-initProjectionToggle();
 loadModelList();
-initPropertiesPanel();
 
 // --- View Controls & Console Toggle ---
 
@@ -596,7 +473,7 @@ function getModelCenter(): THREE.Vector3 {
     // Simple approach: Use bounding box of all meshes in scene
     const box = new THREE.Box3();
     const meshes: THREE.Mesh[] = [];
-    world.scene.three.traverse((child: any) => {
+    world.scene.three.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {
              meshes.push(child as THREE.Mesh);
         }
@@ -617,7 +494,7 @@ function getModelCenter(): THREE.Vector3 {
 function getModelRadius(): number {
     const box = new THREE.Box3();
     let hasMeshes = false;
-    world.scene.three.traverse((child: any) => {
+    world.scene.three.traverse((child) => {
         if ((child as THREE.Mesh).isMesh) {
              box.expandByObject(child);
              hasMeshes = true;
@@ -699,87 +576,6 @@ viewButtons.forEach(btn => {
 
 
 
+const input = document.getElementById('file-input') as HTMLInputElement;
 // Listener moved to initSidebar to handle both IFC and Frag files centrally
-
-const highlighter = components.get(OBF.Highlighter);
-highlighter.setup({ world });
-highlighter.zoomToSelection = true;
-
-function initPropertiesPanel() {
-    const panel = document.getElementById('properties-panel');
-    const toggleBtn = document.getElementById('properties-toggle');
-    const resizer = document.getElementById('properties-resizer');
-    const content = document.getElementById('properties-content');
-    
-    if (toggleBtn && panel) {
-        toggleBtn.addEventListener('click', () => {
-            panel.classList.toggle('closed');
-        });
-    }
-
-    if (resizer && panel) {
-        let isResizing = false;
-        
-                const header = panel.querySelector('.properties-header');
-                if (header && !header.querySelector('.version-tag')) {
-                     const v = document.createElement('span');
-                     v.className = 'version-tag';
-                     v.style.fontSize = '10px';
-                     v.style.color = '#888';
-                     v.style.marginLeft = '10px';
-                     v.innerText = 'v2.0 (OBC)';
-                     header.appendChild(v);
-                }
-
-        resizer.addEventListener('mousedown', (e) => {
-            isResizing = true;
-            resizer.classList.add('resizing');
-            document.body.style.cursor = 'ew-resize';
-            e.preventDefault();
-        });
-        
-        document.addEventListener('mousemove', (e) => {
-            if (!isResizing) return;
-            const newWidth = window.innerWidth - e.clientX;
-            if (newWidth > 200 && newWidth < 800) {
-                panel.style.width = `${newWidth}px`;
-            }
-        });
-        
-        document.addEventListener('mouseup', () => {
-            if (isResizing) {
-                isResizing = false;
-                resizer.classList.remove('resizing');
-                document.body.style.cursor = 'default';
-            }
-        });
-    }
-    
-    if (content) {
-        content.innerHTML = '';
-
-        const [propertiesTable, updatePropertiesTable] = BUIC.tables.itemsData({
-            components,
-            modelIdMap: {},
-        });
-
-        propertiesTable.preserveStructureOnFilter = true;
-        propertiesTable.indentationInText = false;
-
-        const template = () => BUI.html`${propertiesTable}`;
-        const [tableElement] = BUI.Component.create(template);
-        content.appendChild(tableElement);
-
-        highlighter.events.select.onHighlight.add((modelIdMap) => {
-            updatePropertiesTable({ modelIdMap });
-            if (panel && panel.classList.contains('closed')) {
-                panel.classList.remove('closed');
-            }
-        });
-
-        highlighter.events.select.onClear.add(() => {
-            updatePropertiesTable({ modelIdMap: {} });
-        });
-    }
-}
 
