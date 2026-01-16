@@ -34,6 +34,7 @@ grids.create(world);
 // --- IFC & Fragments Setup ---
 
 const fragments = components.get(OBC.FragmentsManager);
+const clipper = components.get(OBC.Clipper);
 const baseUrl = import.meta.env.BASE_URL || './';
 
 // Initialize fragments with the worker
@@ -413,6 +414,35 @@ function initProjectionToggle() {
     });
 }
 
+function initClipperTool() {
+    const btn = document.getElementById('clipper-toggle');
+    const viewer = document.getElementById('viewer-container');
+    if (!btn || !viewer) return;
+
+    const updateUI = () => {
+        btn.classList.toggle('active', clipper.enabled);
+    };
+
+    updateUI();
+
+    btn.addEventListener('click', () => {
+        clipper.enabled = !clipper.enabled;
+        updateUI();
+    });
+
+    viewer.addEventListener('dblclick', () => {
+        if (clipper.enabled) {
+            clipper.create(world);
+        }
+    });
+
+    window.addEventListener('keydown', (event) => {
+        if (event.code === 'Delete' || event.code === 'Backspace') {
+            clipper.delete(world);
+        }
+    });
+}
+
 
 
 
@@ -561,6 +591,7 @@ logToScreen('Initializing That Open Engine...');
 initSidebar();
 initTheme();
 initProjectionToggle();
+initClipperTool();
 loadModelList();
 initPropertiesPanel();
 
