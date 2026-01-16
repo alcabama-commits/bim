@@ -13,7 +13,7 @@ const worlds = components.get(OBC.Worlds);
 const world = worlds.create<
   OBC.SimpleScene,
   OBC.OrthoPerspectiveCamera,
-  OBF.PostproductionRenderer
+  OBC.SimpleRenderer
 >();
 
 world.scene = new OBC.SimpleScene(components);
@@ -21,7 +21,7 @@ world.scene.setup();
 world.scene.three.background = new THREE.Color(0x202020); // Dark gray
 
 const container = document.getElementById('viewer-container') as HTMLElement;
-world.renderer = new OBF.PostproductionRenderer(components, container);
+world.renderer = new OBC.SimpleRenderer(components, container);
 world.camera = new OBC.OrthoPerspectiveCamera(components);
 
 components.init();
