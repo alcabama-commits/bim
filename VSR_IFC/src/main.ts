@@ -1048,6 +1048,25 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                 );
             }
 
+            // --- SAFE DEBUG INFO (No Circular Refs) ---
+            const rels = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
+            const relKeys = Object.keys(rels);
+            const spatial = rels.containedInSpatialStructure || rels.ContainedInSpatialStructure;
+            
+            html += `
+                <details style="margin-top: 15px; border-top: 1px solid #ddd; padding-top: 10px;">
+                    <summary style="font-size: 11px; color: #999; cursor: pointer; user-select: none;">
+                        🛠 Diagnóstico de Datos
+                    </summary>
+                    <div style="font-size: 10px; color: #444; background: #f5f5f5; padding: 10px; margin-top: 5px; border-radius: 4px; overflow-x: auto;">
+                        <strong>ID Elemento:</strong> ${localId} (ExpressID)<br/>
+                        <strong>Relaciones Disponibles:</strong> ${relKeys.length > 0 ? relKeys.join(', ') : 'NINGUNA'}<br/>
+                        <strong>Relación Espacial (Nivel):</strong> ${spatial ? '✅ EXISTE' : '❌ FALTA'}<br/>
+                        ${spatial ? `Valores: ${JSON.stringify(spatial)}` : ''}
+                    </div>
+                </details>
+            `;
+
             container.innerHTML = html;
             content.appendChild(container);
         });
