@@ -670,16 +670,7 @@ function getModelBox() {
     const boxer = components.get(OBC.BoundingBoxer);
     boxer.list.clear();
     
-    // Add all loaded models
-    for (const model of loadedModels.values()) {
-        try {
-            boxer.add(model);
-        } catch (e) {
-            // Ignore if model is not compatible with boxer
-        }
-    }
-    
-    // Use addFromModels for simplicity and completeness
+    // Use addFromModels to automatically include all fragments registered in FragmentsManager
     boxer.addFromModels();
 
     let box = boxer.get();
