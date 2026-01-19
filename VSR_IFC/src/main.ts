@@ -34,6 +34,8 @@ grids.create(world);
 // --- IFC & Fragments Setup ---
 
 const fragments = components.get(OBC.FragmentsManager);
+const classifier = components.get(OBC.Classifier);
+const hider = components.get(OBC.Hider);
 const clipper = components.get(OBC.Clipper);
 const baseUrl = import.meta.env.BASE_URL || './';
 
@@ -172,6 +174,10 @@ async function loadModel(url: string, path: string) {
         await fragments.core.update(true);
         
         loadedModels.set(path, model);
+
+        // Classify the model
+        classifier.byEntity(model);
+        await updateClassificationUI();
         
         logToScreen('Model loaded successfully as Fragments');
 
@@ -219,6 +225,87 @@ async function loadModel(url: string, path: string) {
 }
 
 // --- Sidebar Logic (Kept mostly same, updated for new loading) ---
+
+function initSidebarTabs() {
+    const tabs = document.querySelectorAll('.tab-btn');
+    const contents = document.querySelectorAll('.tab-content');
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            contents.forEach(c => {
+                c.classList.remove('active');
+                (c as HTMLElement).style.display = 'none';
+            });
+
+            tab.classList.add('active');
+            const tabId = tab.getAttribute('data-tab');
+            const content = document.getElementById(`tab-${tabId}`);
+            if (content) {
+                content.classList.add('active');
+                content.style.display = 'flex';
+            }
+        });
+    });
+}
+
+async function updateClassificationUI() {
+    const container = document.getElementById('classification-list');
+    if (!container) return;
+
+    container.innerHTML = '';
+    
+    const entities = classifier.list.entities;
+    if (!entities || Object.keys(entities).length === 0) {
+        container.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">No hay clasificación disponible</div>';
+        return;
+    }
+
+    const list = document.createElement('ul');
+    list.className = 'folder-items';
+    list.style.padding = '10px';
+
+    for (const [type, fragmentIdMap] of Object.entries(entities)) {
+        const li = document.createElement('li');
+        li.className = 'model-item';
+        li.style.display = 'flex';
+        li.style.justifyContent = 'space-between';
+        
+        let count = 0;
+        for (const id in fragmentIdMap) {
+            count += fragmentIdMap[id].size;
+        }
+
+        li.innerHTML = `
+            <div class="model-name"><i class="fa-solid fa-layer-group"></i> ${type} <span style="font-size: 0.8em; color: #888;">(${count})</span></div>
+            <div class="visibility-toggle" title="Toggle Visibility">
+                <i class="fa-regular fa-eye"></i>
+            </div>
+        `;
+
+        const toggleIcon = li.querySelector('.visibility-toggle i');
+        let isVisible = true;
+
+        li.addEventListener('click', () => {
+            isVisible = !isVisible;
+            hider.set(isVisible, fragmentIdMap);
+            
+            if (isVisible) {
+                li.classList.add('visible');
+                toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
+                li.style.opacity = '1';
+            } else {
+                li.classList.remove('visible');
+                toggleIcon?.classList.replace('fa-eye', 'fa-eye-slash');
+                li.style.opacity = '0.5';
+            }
+        });
+
+        list.appendChild(li);
+    }
+
+    container.appendChild(list);
+}
 
 function initSidebar() {
     const sidebar = document.getElementById('sidebar');
@@ -310,6 +397,10 @@ function initSidebar() {
                         const sphere = new THREE.Sphere();
                         bbox.getBoundingSphere(sphere);
                         world.camera.controls.fitToSphere(sphere, true);
+                        
+                        // Classify
+                        classifier.byEntity(model);
+                        await updateClassificationUI();
                         
                         logToScreen(`Loaded IFC: ${file.name}`);
                         
@@ -643,6 +734,7 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
 
 logToScreen('Initializing That Open Engine...');
 initSidebar();
+initSidebarTabs();
 initTheme();
 initProjectionToggle();
 initGridToggle();

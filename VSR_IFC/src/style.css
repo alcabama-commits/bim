@@ -695,3 +695,44 @@ bim-label {
 .properties-header {
     background-color: #f9f9f9 !important; /* Slightly darker than white */
 }
+
+/* Sidebar Tabs */
+.sidebar-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-white);
+}
+
+.tab-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    padding: 12px;
+    cursor: pointer;
+    color: var(--text-med-gray);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    font-size: 16px;
+}
+
+.tab-btn:hover {
+    color: var(--primary-color);
+    background: var(--bg-light-gray);
+}
+
+.tab-btn.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+.tab-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    display: none; /* Hide by default */
+}
+
+.tab-content.active {
+    display: flex; /* Flex when active */
+}
