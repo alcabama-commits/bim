@@ -21,61 +21,188 @@ window.onerror = function(message, source, lineno, colno, error) {
     console.error('Global Error:', message, error);
 };
 
-// --- Initialization of That Open Engine ---
-
-const components = new OBC.Components();
-const worlds = components.get(OBC.Worlds);
-
-const world = worlds.create<
-  OBC.SimpleScene,
-  OBC.OrthoPerspectiveCamera,
-  OBC.SimpleRenderer
->();
-
-world.scene = new OBC.SimpleScene(components);
-world.scene.setup();
-world.scene.three.background = new THREE.Color(0xf5f5f5); // Default to light gray
-
-const container = document.getElementById('viewer-container') as HTMLElement;
-if (!container) {
-    console.error('Viewer container not found!');
-    throw new Error('Viewer container not found');
-}
-
-world.renderer = new OBC.SimpleRenderer(components, container);
-world.camera = new OBC.OrthoPerspectiveCamera(components);
-
-components.init();
-BUI.Manager.init();
-
-// Grids
-const grids = components.get(OBC.Grids);
-grids.create(world);
-
-// --- IFC & Fragments Setup ---
-
-const fragments = components.get(OBC.FragmentsManager);
-const baseUrl = import.meta.env.BASE_URL || './';
-
-// INITIALIZE FRAGMENTS IMMEDIATELY AND ASYNC
-const initPromise = (async () => {
-    try {
-        console.log('Initializing FragmentsManager...');
-        // @ts-ignore
-        await fragments.init(`${baseUrl}fragments/fragments.mjs`);
-        console.log('FragmentsManager initialized successfully.');
-    } catch (err) {
-        console.error('Failed to initialize FragmentsManager:', err);
-        throw err;
-    }
-})();
-
-// Define other components but don't use them until init is done if they depend on fragments
-// Define components variables (initialized in initApp)
+// --- Global Variables Declaration ---
+let components: OBC.Components;
+let worlds: OBC.Worlds;
+let world: OBC.SimpleWorld<OBC.SimpleScene, OBC.OrthoPerspectiveCamera, OBC.SimpleRenderer>;
+let fragments: OBC.FragmentsManager;
+let grids: OBC.Grids;
 let clipper: OBC.Clipper;
 let classifier: OBC.Classifier;
 let highlighter: OBF.Highlighter;
 let ifcLoader: OBC.IfcLoader;
+let fragmentsReady = false;
+
+const baseUrl = import.meta.env.BASE_URL || './';
+const loadedModels = new Map<string, any>();
+
+// --- Initialization Logic ---
+async function initApp() {
+    try {
+        logToScreen('Starting Application Initialization...');
+
+        const container = document.getElementById('viewer-container') as HTMLElement;
+        if (!container) throw new Error('Viewer container not found');
+
+        // 1. Initialize Components System
+        components = new OBC.Components();
+        worlds = components.get(OBC.Worlds);
+        
+        world = worlds.create<
+            OBC.SimpleScene,
+            OBC.OrthoPerspectiveCamera,
+            OBC.SimpleRenderer
+        >();
+
+        world.scene = new OBC.SimpleScene(components);
+        world.scene.setup();
+        world.scene.three.background = new THREE.Color(0xf5f5f5);
+
+        world.renderer = new OBC.SimpleRenderer(components, container);
+        world.camera = new OBC.OrthoPerspectiveCamera(components);
+
+        components.init();
+        
+        // 2. Initialize UI (Basic)
+        initTheme();
+        initSidebar();
+        initTabs(); // Ensure tabs are initialized
+        initFitModelTool();
+        initPropertiesPanel();
+
+        // 3. Initialize Fragments (Async - Critical)
+        logToScreen('Initializing Fragments Engine...');
+        fragments = components.get(OBC.FragmentsManager);
+        
+        // @ts-ignore
+        await fragments.init(`${baseUrl}fragments/fragments.mjs`);
+        fragmentsReady = true;
+        logToScreen('Fragments Engine Ready.');
+
+        // 4. Initialize Dependent Components
+        grids = components.get(OBC.Grids);
+        grids.create(world);
+        initGridToggle(); // Now grids is ready
+
+        clipper = components.get(OBC.Clipper);
+        classifier = components.get(OBC.Classifier);
+        highlighter = components.get(OBF.Highlighter);
+        ifcLoader = components.get(OBC.IfcLoader);
+
+        // Setup Highlighter
+        highlighter.setup({ world });
+        highlighter.zoomToSelection = true;
+
+        // Setup IfcLoader
+        const wasmPath = `${baseUrl}wasm/`;
+        console.log('Setting up IfcLoader with WASM path:', wasmPath);
+        ifcLoader.setup({
+            wasm: {
+                path: wasmPath,
+                absolute: true
+            }
+        });
+
+        // 5. Initialize Dependent UI & Tools
+        initProjectionToggle();
+        initClipperTool();
+        initPropertiesEvents();
+        
+        // Setup Camera Sync Event (Now safe)
+        world.camera.controls.addEventListener('rest', () => {
+            if (fragmentsReady && fragments && fragments.core) {
+                try {
+                    fragments.core.update(true);
+                } catch(e) {
+                    // Ignore update errors if not ready
+                }
+            }
+        });
+        
+        // 6. Final UI Setup
+        BUI.Manager.init();
+        initViewControls(); // Setup view buttons
+
+        // 7. Load Initial Content
+        loadModelList();
+        
+        logToScreen('System Fully Initialized.');
+        
+    } catch (e) {
+        console.error('CRITICAL ERROR DURING INITIALIZATION:', e);
+        logToScreen('CRITICAL ERROR DURING INITIALIZATION: ' + e, true);
+        alert('Error critico al iniciar la aplicacion. Ver consola para mas detalles.');
+    }
+}
+
+// Start
+initApp();
+
+// --- Helper Functions Definitions ---
+// (Moved initViewControls logic into a function to be called in initApp)
+function initViewControls() {
+    const consoleToggle = document.getElementById('console-toggle');
+    if (consoleToggle) {
+        consoleToggle.addEventListener('click', () => {
+            const consoleEl = document.getElementById('debug-console');
+            if (consoleEl) {
+                const isVisible = consoleEl.style.display !== 'none';
+                consoleEl.style.display = isVisible ? 'none' : 'block';
+                consoleToggle.classList.toggle('active', !isVisible);
+            }
+        });
+    }
+
+    const viewDropdownBtn = document.getElementById('view-dropdown-btn');
+    const viewDropdownMenu = document.getElementById('view-dropdown-menu');
+
+    if (viewDropdownBtn && viewDropdownMenu) {
+        viewDropdownBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            viewDropdownMenu.classList.toggle('show');
+        });
+
+        document.addEventListener('click', () => {
+            viewDropdownMenu.classList.remove('show');
+        });
+    }
+
+    const viewButtons = document.querySelectorAll('.view-btn');
+    viewButtons.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const view = btn.getAttribute('data-view');
+            
+            if (viewDropdownBtn) {
+                const icon = btn.querySelector('i')?.cloneNode(true);
+                const text = btn.textContent?.trim();
+                const span = viewDropdownBtn.querySelector('span');
+                if (span && text) {
+                    span.innerHTML = '';
+                    if(icon) span.appendChild(icon);
+                    span.append(` ${text}`);
+                }
+            }
+
+            const box = getModelBox();
+            const sphere = new THREE.Sphere();
+            box.getBoundingSphere(sphere);
+            const center = sphere.center;
+            const radius = sphere.radius || 20;
+            const dist = radius * 2;
+            const controls = world.camera.controls;
+
+            switch(view) {
+                case 'iso': await controls.setLookAt(center.x + dist, center.y + dist, center.z + dist, center.x, center.y, center.z, true); break;
+                case 'top': await controls.setLookAt(center.x, center.y + dist, center.z, center.x, center.y, center.z, true); break;
+                case 'front': await controls.setLookAt(center.x, center.y, center.z + dist, center.x, center.y, center.z, true); break;
+                case 'right': await controls.setLookAt(center.x + dist, center.y, center.z, center.x, center.y, center.z, true); break;
+                case 'back': await controls.setLookAt(center.x, center.y, center.z - dist, center.x, center.y, center.z, true); break;
+                case 'left': await controls.setLookAt(center.x - dist, center.y, center.z, center.x, center.y, center.z, true); break;
+                case 'bottom': await controls.setLookAt(center.x, center.y - dist, center.z, center.x, center.y, center.z, true); break;
+            }
+        });
+    });
+}
 
 // Expose IFC conversion test for debugging
 (window as any).testIFC = async () => {
