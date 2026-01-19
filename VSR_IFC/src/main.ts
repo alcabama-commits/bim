@@ -665,25 +665,41 @@ if (consoleToggle) {
     });
 }
 
-// Helper to get current model center using BoundingBoxer
+// Helper to get current model center using BoundingBoxer with fallback
 function getModelBox() {
     const boxer = components.get(OBC.BoundingBoxer);
     boxer.list.clear();
     
     // Add all loaded models
     for (const model of loadedModels.values()) {
-        boxer.add(model);
+        try {
+            boxer.add(model);
+        } catch (e) {
+            // Ignore if model is not compatible with boxer
+        }
     }
-    
-    // Also add fragments from FragmentsManager if any
-    // (loadedModels tracks them, but FragmentsManager has them too)
-    // boxer.addFromModels(); // This adds ALL models in FragmentsManager
     
     // Use addFromModels for simplicity and completeness
     boxer.addFromModels();
 
-    const box = boxer.get();
+    let box = boxer.get();
     boxer.list.clear();
+
+    // Fallback if BoundingBoxer returns empty (e.g. if models are not fragments)
+    if (box.isEmpty()) {
+        console.warn('BoundingBoxer empty, falling back to scene traversal');
+        box = new THREE.Box3();
+        let hasMeshes = false;
+        world.scene.three.traverse((child: any) => {
+             // Check if it's a mesh and part of a model (not grid/helper)
+             // Simple check: isMesh and visible
+             if (child.isMesh && child.visible) {
+                 box.expandByObject(child);
+                 hasMeshes = true;
+             }
+        });
+    }
+
     return box;
 }
 
@@ -711,12 +727,17 @@ function initFitModelTool() {
     if (!btn) return;
 
     btn.addEventListener('click', () => {
+        logToScreen('Fit Model clicked');
         const box = getModelBox();
         const sphere = new THREE.Sphere();
         box.getBoundingSphere(sphere);
         
+        logToScreen(`Fit Radius: ${sphere.radius.toFixed(2)} Center: ${sphere.center.x.toFixed(1)},${sphere.center.y.toFixed(1)},${sphere.center.z.toFixed(1)}`);
+
         if (sphere.radius > 0.1) {
              world.camera.controls.fitToSphere(sphere, true);
+        } else {
+             logToScreen('Model bounds too small/empty', true);
         }
     });
 }
