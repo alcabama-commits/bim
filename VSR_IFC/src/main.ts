@@ -755,6 +755,7 @@ initClipperTool();
 initFitModelTool();
 loadModelList();
 initPropertiesPanel();
+initTabs();
 
 // --- View Controls & Console Toggle ---
 
@@ -1355,5 +1356,32 @@ function initPropertiesPanel() {
     }
 
     renderPropertiesTable({} as any);
+}
+
+// --- Tabs Logic ---
+function initTabs() {
+    const tabs = document.querySelectorAll('.tab-btn');
+    const contents = document.querySelectorAll('.tab-content');
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            // Remove active class from all tabs
+            tabs.forEach(t => t.classList.remove('active'));
+            // Add active class to clicked tab
+            tab.classList.add('active');
+
+            // Hide all contents
+            contents.forEach(c => c.classList.remove('active'));
+            
+            // Show target content
+            const targetId = tab.getAttribute('data-target');
+            if (targetId) {
+                const targetContent = document.getElementById(targetId);
+                if (targetContent) {
+                    targetContent.classList.add('active');
+                }
+            }
+        });
+    });
 }
 
