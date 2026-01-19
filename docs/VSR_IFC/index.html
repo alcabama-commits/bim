@@ -6,19 +6,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VSR IFC Viewer</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script type="module" crossorigin src="./assets/main-qityIdyx.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/main-DcjgMwxc.css">
+    <script type="module" crossorigin src="./assets/main-B1MWihp_.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/main-DzsMHZWl.css">
   </head>
   <body>
     <div id="app">
       <!-- Sidebar (Left - Models) -->
       <div id="sidebar" class="sidebar">
-        <div class="sidebar-header">
-          <h3><i class="fa-solid fa-cubes"></i> Modelos IFC</h3>
+        <!-- Tabs Header -->
+        <div class="sidebar-tabs">
+          <button class="tab-btn active" data-target="model-list">
+            <i class="fa-solid fa-cubes"></i> Modelos
+          </button>
+          <button class="tab-btn" data-target="classification-list">
+            <i class="fa-solid fa-tags"></i> Clasificación
+          </button>
         </div>
         
-        <div class="sidebar-content" id="model-list">
+        <!-- Content: Models -->
+        <div class="sidebar-content tab-content active" id="model-list">
           <!-- Populated by JS -->
+        </div>
+
+        <!-- Content: Classification -->
+        <div class="sidebar-content tab-content" id="classification-list">
+            <div style="padding: 10px; color: #888; font-style: italic;">Carga un modelo para ver la clasificación...</div>
         </div>
 
         <div class="sidebar-footer">
