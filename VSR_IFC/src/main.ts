@@ -39,8 +39,8 @@ const loadedModels = new Map<string, any>();
 // --- Initialization Logic ---
 async function initApp() {
     try {
-        console.log('VSR_IFC Version: 1.2.0 - Fixed Race Condition & Z-Index');
-        logToScreen('Starting Application Initialization (v1.2.0)...');
+        console.log('VSR_IFC Version: 1.2.1 - Fixed Initialization Order');
+        logToScreen('Starting Application Initialization (v1.2.1)...');
 
         const container = document.getElementById('viewer-container') as HTMLElement;
         if (!container) throw new Error('Viewer container not found');
@@ -62,7 +62,7 @@ async function initApp() {
         world.renderer = new OBC.SimpleRenderer(components, container);
         world.camera = new OBC.OrthoPerspectiveCamera(components);
 
-        components.init();
+        // components.init(); // MOVED: Initialize after fragments to avoid update loop accessing uninitialized fragments
         
         // 2. Initialize UI (Basic)
         initTheme();
@@ -79,6 +79,9 @@ async function initApp() {
         await fragments.init(`${baseUrl}fragments/fragments.mjs`);
         fragmentsReady = true;
         logToScreen('Fragments Engine Ready.');
+
+        // NOW start the update loop
+        components.init();
 
         // 4. Initialize Dependent Components
         grids = components.get(OBC.Grids);
