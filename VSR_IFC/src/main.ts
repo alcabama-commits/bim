@@ -266,6 +266,13 @@ function initSidebar() {
         fileInput.addEventListener('change', async (event) => {
             const target = event.target as HTMLInputElement;
             if (target.files && target.files.length > 0) {
+                const overlay = document.getElementById('loading-overlay');
+                if (overlay) {
+                    overlay.style.display = 'flex';
+                    const progressDiv = document.getElementById('loading-progress');
+                    if (progressDiv) progressDiv.textContent = 'Procesando archivo...';
+                }
+
                 const file = target.files[0];
                 const buffer = await file.arrayBuffer();
                 
@@ -330,6 +337,9 @@ function initSidebar() {
                     }
                 } catch (e) {
                     logToScreen(`Error loading file: ${e}`, true);
+                    alert(`Error loading file: ${e}`);
+                } finally {
+                    if (overlay) overlay.style.display = 'none';
                 }
                 
                 // Reset input
