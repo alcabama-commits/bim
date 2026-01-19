@@ -209,7 +209,19 @@ async function loadModels() {
   for (const file of models) {
     const url = basePath + file;
     console.log("Cargando IFC:", url);
-    await fragments.load(url);
+    if (file.toLowerCase().endsWith(".ifc")) {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const buffer = await response.arrayBuffer();
+        const data = new Uint8Array(buffer);
+        await ifcLoader.load(data, true, file);
+      } catch (e) {
+        console.error("Error loading IFC:", e);
+      }
+    } else {
+      await fragments.load(url);
+    }
   }
 }
 

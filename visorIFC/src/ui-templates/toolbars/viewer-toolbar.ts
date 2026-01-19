@@ -70,6 +70,27 @@ export const viewerToolbarTemplate: BUI.StatefullComponent<
   const highlighter = components.get(OBF.Highlighter);
   const hider = components.get(OBC.Hider);
   const grids = components.get(OBC.Grids);
+  const ifcLoader = components.get(OBC.IfcLoader);
+  const fragments = components.get(OBC.FragmentsManager);
+
+  const onImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.ifc,.frag';
+    input.onchange = async (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      if (!target.files || target.files.length === 0) return;
+      const file = target.files[0];
+      const buffer = await file.arrayBuffer();
+      const data = new Uint8Array(buffer);
+      if (file.name.toLowerCase().endsWith('.ifc')) {
+        await ifcLoader.load(data, true, file.name);
+      } else {
+        await fragments.load(data);
+      }
+    };
+    input.click();
+  };
 
   const onToggleGrid = ({ target }: { target: BUI.Button }) => {
     const grid = grids.list.get(world.uuid);
@@ -165,6 +186,9 @@ export const viewerToolbarTemplate: BUI.StatefullComponent<
 
   return BUI.html`
     <bim-toolbar>
+      <bim-toolbar-section label="Import" icon=${appIcons.IMPORT}>
+        <bim-button label="Load File" @click=${onImport} icon=${appIcons.IMPORT} tooltip-title="Load IFC or Frag" tooltip-text="Load .ifc or .frag files locally."></bim-button>
+      </bim-toolbar-section>
       <bim-toolbar-section label="Visibility" icon=${appIcons.SHOW}>
         <bim-button tooltip-title=${tooltips.SHOW_ALL.TITLE} tooltip-text=${tooltips.SHOW_ALL.TEXT} icon=${appIcons.SHOW} label="Show All" @click=${onShowAll}></bim-button> 
         <bim-button tooltip-title=${tooltips.GHOST.TITLE} tooltip-text=${tooltips.GHOST.TEXT} icon=${appIcons.TRANSPARENT} label="Toggle Ghost" @click=${onToggleGhost}></bim-button>

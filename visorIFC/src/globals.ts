@@ -25,6 +25,7 @@ export const appIcons = {
   LAYOUT: "tabler:layout-filled",
   GRID: "mdi:grid",
   DELETE: "mdi:delete",
+  IMPORT: "mdi:file-import",
 };
 
 export const tooltips = {
