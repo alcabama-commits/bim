@@ -114,9 +114,23 @@ export const viewerToolbarTemplate: BUI.StatefullComponent<
       if (!(world.camera instanceof OBC.SimpleCamera)) return;
       const selection = highlighter.selection.select;
       target.loading = true;
-      await world.camera.fitToItems(
-        OBC.ModelIdMapUtils.isEmpty(selection) ? undefined : selection,
-      );
+      
+      if (OBC.ModelIdMapUtils.isEmpty(selection)) {
+        const boxer = components.get(OBC.BoundingBoxer);
+        boxer.list.clear();
+        boxer.addFromModels();
+        const box = boxer.get();
+        boxer.list.clear();
+        
+        if (!box.isEmpty()) {
+          const sphere = new THREE.Sphere();
+          box.getBoundingSphere(sphere);
+          await world.camera.controls.fitToSphere(sphere, true);
+        }
+      } else {
+        await world.camera.fitToItems(selection);
+      }
+
       target.loading = false;
     };
 

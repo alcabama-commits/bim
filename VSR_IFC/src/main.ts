@@ -42,9 +42,12 @@ fragments.init(`${baseUrl}fragments/fragments.mjs`);
 
 // Initialize IfcLoader once
 const ifcLoader = components.get(OBC.IfcLoader);
+const wasmPath = `${baseUrl}wasm/`;
+console.log('Setting up IfcLoader with WASM path:', wasmPath);
+
 ifcLoader.setup({
     wasm: {
-        path: `${baseUrl}wasm/`,
+        path: wasmPath,
         absolute: true
     }
 });
@@ -644,6 +647,7 @@ initTheme();
 initProjectionToggle();
 initGridToggle();
 initClipperTool();
+initFitModelTool();
 loadModelList();
 initPropertiesPanel();
 
@@ -661,16 +665,31 @@ if (consoleToggle) {
     });
 }
 
-// Helper to get current model center
+// Helper to get current model center using BoundingBoxer
+function getModelBox() {
+    const boxer = components.get(OBC.BoundingBoxer);
+    boxer.list.clear();
+    
+    // Add all loaded models
+    for (const model of loadedModels.values()) {
+        boxer.add(model);
+    }
+    
+    // Also add fragments from FragmentsManager if any
+    // (loadedModels tracks them, but FragmentsManager has them too)
+    // boxer.addFromModels(); // This adds ALL models in FragmentsManager
+    
+    // Use addFromModels for simplicity and completeness
+    boxer.addFromModels();
+
+    const box = boxer.get();
+    boxer.list.clear();
+    return box;
+}
+
 function getModelCenter(): THREE.Vector3 {
-    const box = new THREE.Box3();
-    const models = Array.from(loadedModels.values());
-    
-    if (models.length === 0) return new THREE.Vector3(0, 0, 0);
-    
-    models.forEach(model => {
-        box.expandByObject(model.object);
-    });
+    const box = getModelBox();
+    if (box.isEmpty()) return new THREE.Vector3(0,0,0);
     
     const center = new THREE.Vector3();
     box.getCenter(center);
@@ -679,20 +698,27 @@ function getModelCenter(): THREE.Vector3 {
 
 // Helper to get model size (radius)
 function getModelRadius(): number {
-    const box = new THREE.Box3();
-    let hasMeshes = false;
-    world.scene.three.traverse((child: any) => {
-        if ((child as THREE.Mesh).isMesh) {
-             box.expandByObject(child);
-             hasMeshes = true;
-        }
-    });
-    
-    if (!hasMeshes) return 10; // Default size
+    const box = getModelBox();
+    if (box.isEmpty()) return 10;
     
     const sphere = new THREE.Sphere();
     box.getBoundingSphere(sphere);
     return sphere.radius || 10;
+}
+
+function initFitModelTool() {
+    const btn = document.getElementById('fit-model-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', () => {
+        const box = getModelBox();
+        const sphere = new THREE.Sphere();
+        box.getBoundingSphere(sphere);
+        
+        if (sphere.radius > 0.1) {
+             world.camera.controls.fitToSphere(sphere, true);
+        }
+    });
 }
 
 const viewDropdownBtn = document.getElementById('view-dropdown-btn');
