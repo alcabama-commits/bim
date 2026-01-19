@@ -35,6 +35,8 @@ grids.create(world);
 
 const fragments = components.get(OBC.FragmentsManager);
 const clipper = components.get(OBC.Clipper);
+const classifier = components.get(OBC.Classifier);
+const highlighter = components.get(OBF.Highlighter);
 const baseUrl = import.meta.env.BASE_URL || './';
 
 // Initialize fragments with the worker
@@ -51,6 +53,10 @@ ifcLoader.setup({
         absolute: true
     }
 });
+
+// Setup Highlighter (moved up for global access)
+highlighter.setup({ world });
+highlighter.zoomToSelection = true;
 
 // Expose IFC conversion test for debugging
 (window as any).testIFC = async () => {
@@ -173,6 +179,9 @@ async function loadModel(url: string, path: string) {
         
         loadedModels.set(path, model);
         
+        classifier.byEntity(model);
+        await updateClassificationUI();
+        
         logToScreen('Model loaded successfully as Fragments');
 
         let meshCount = 0;
@@ -287,6 +296,9 @@ function initSidebar() {
                         world.scene.three.add(model.object);
                         await fragments.core.update(true);
                         
+                        classifier.byEntity(model);
+                        await updateClassificationUI();
+
                         const bbox = new THREE.Box3().setFromObject(model.object);
                         const sphere = new THREE.Sphere();
                         bbox.getBoundingSphere(sphere);
@@ -304,6 +316,9 @@ function initSidebar() {
                         
                         const model = await ifcLoader.load(data, true, file.name);
                         world.scene.three.add(model.object);
+                        
+                        classifier.byEntity(model);
+                        await updateClassificationUI();
                         
                         // Center camera
                         const bbox = new THREE.Box3().setFromObject(model.object);
@@ -499,6 +514,90 @@ function initGridToggle() {
 
 
 
+
+
+// Update Classification UI
+async function updateClassificationUI() {
+    const classificationList = document.getElementById('classification-list');
+    if (!classificationList) return;
+
+    classificationList.innerHTML = '';
+
+    const systems = classifier.list;
+    const systemNames = Object.keys(systems);
+    
+    // Check if there are any systems
+    if (systemNames.length === 0) {
+        classificationList.innerHTML = '<div style="padding: 10px; color: #888; font-style: italic;">No classification data available.</div>';
+        return;
+    }
+
+    for (const systemName of systemNames) {
+        const systemGroups = systems[systemName];
+        
+        // System Header (Collapsible)
+        const systemDiv = document.createElement('div');
+        systemDiv.className = 'folder-group';
+
+        const header = document.createElement('div');
+        header.className = 'folder-header';
+        header.innerHTML = `<span><i class="fa-solid fa-tags"></i> ${systemName}</span> <i class="fa-solid fa-chevron-down"></i>`;
+        
+        const itemsList = document.createElement('ul');
+        itemsList.className = 'folder-items'; // Open by default
+        
+        // Toggle Logic
+        header.addEventListener('click', () => {
+            const isCollapsed = itemsList.classList.contains('collapsed');
+            if (isCollapsed) {
+                itemsList.classList.remove('collapsed');
+                const icon = header.querySelector('.fa-chevron-right');
+                if(icon) icon.classList.replace('fa-chevron-right', 'fa-chevron-down');
+            } else {
+                itemsList.classList.add('collapsed');
+                const icon = header.querySelector('.fa-chevron-down');
+                if(icon) icon.classList.replace('fa-chevron-down', 'fa-chevron-right');
+            }
+        });
+
+        systemDiv.appendChild(header);
+        systemDiv.appendChild(itemsList);
+        classificationList.appendChild(systemDiv);
+
+        // Sort group names
+        const groupNames = Object.keys(systemGroups).sort();
+
+        for (const groupName of groupNames) {
+             const groupItem = document.createElement('li');
+             groupItem.className = 'file-item';
+             
+             // Create a container for the name
+             groupItem.style.display = 'flex';
+             groupItem.style.justifyContent = 'space-between';
+             groupItem.style.alignItems = 'center';
+             
+             const nameSpan = document.createElement('span');
+             nameSpan.innerHTML = `<i class="fa-solid fa-box"></i> ${groupName}`;
+             nameSpan.style.cursor = 'pointer';
+             nameSpan.style.width = '100%';
+             
+             // Click to highlight
+             nameSpan.addEventListener('click', async (e) => {
+                 e.stopPropagation();
+                 // Remove active class from all items
+                 document.querySelectorAll('.file-item span').forEach(el => el.style.fontWeight = 'normal');
+                 nameSpan.style.fontWeight = 'bold';
+
+                 const fragmentIdMap = systemGroups[groupName];
+                 highlighter.clear('select');
+                 highlighter.highlightByID('select', fragmentIdMap);
+             });
+             
+             groupItem.appendChild(nameSpan);
+             itemsList.appendChild(groupItem);
+        }
+    }
+}
 
 // Load models from JSON and populate sidebar
 async function loadModelList() {
@@ -805,11 +904,7 @@ viewButtons.forEach(btn => {
 
 // Listener moved to initSidebar to handle both IFC and Frag files centrally
 
-// --- Highlighter & Properties Setup ---
-const highlighter = components.get(OBF.Highlighter);
-highlighter.setup({ world });
-highlighter.zoomToSelection = true;
-
+// --- Properties Setup ---
 const [propsTable, updatePropsTable] = CUI.tables.itemsData({
     components,
     modelIdMap: {},
