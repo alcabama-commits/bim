@@ -26,7 +26,6 @@ export const appIcons = {
   GRID: "mdi:grid",
   DELETE: "mdi:delete",
   IMPORT: "mdi:file-import",
-  TAG: "mdi:tag",
 };
 
 export const tooltips = {
