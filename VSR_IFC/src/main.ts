@@ -370,7 +370,10 @@ async function updateClassificationUI() {
 async function loadModel(url: string, path: string) {
     try {
         // Wait for init to complete if it hasn't
-        await initPromise;
+        if (!fragmentsReady) {
+            console.warn('loadModel called before fragments ready');
+            return;
+        }
 
         logToScreen(`Fetching Fragment: ${url}`);
         const file = await fetch(url);
@@ -466,7 +469,10 @@ function initSidebar() {
                     const buffer = await file.arrayBuffer();
                     
                     try {
-                        await initPromise; // Wait for init
+                        if (!fragmentsReady) {
+                             alert('El sistema aún no está listo. Por favor espere.');
+                             return;
+                        }
 
                         if (file.name.toLowerCase().endsWith('.frag')) {
                             logToScreen(`Loading fragments: ${file.name}...`);
@@ -694,7 +700,10 @@ async function loadModelList() {
     if (!listContainer) return;
 
     try {
-        await initPromise; // Wait for init
+        if (!fragmentsReady) {
+             // Should not happen if called from initApp
+             console.warn('loadModelList called before fragments ready');
+        }
 
         const modelsUrl = `${baseUrl}models.json?t=${Date.now()}`;
         
@@ -971,139 +980,4 @@ function getModelCenter(): THREE.Vector3 {
     return center;
 }
 
-// --- Init Execution ---
-logToScreen('Initializing That Open Engine...');
 
-async function initApp() {
-    try {
-        // 1. UI Initialization (Immediate)
-        logToScreen('Initializing UI...');
-        initSidebar();
-        initTheme();
-        initTabs();
-        initProjectionToggle();
-        initGridToggle();
-        initFitModelTool();
-        initPropertiesPanel(); // Solo UI
-
-        logToScreen('Initializing 3D Engine...');
-        
-        // 2. Core Initialization
-        await initPromise; // Wait for fragments to be ready
-        
-        // Initialize dependent components AFTER fragments
-        clipper = components.get(OBC.Clipper);
-        classifier = components.get(OBC.Classifier);
-        highlighter = components.get(OBF.Highlighter);
-        ifcLoader = components.get(OBC.IfcLoader);
-
-        // Setup Highlighter
-        highlighter.setup({ world });
-        highlighter.zoomToSelection = true;
-
-        // Setup IfcLoader
-        const wasmPath = `${baseUrl}wasm/`;
-        console.log('Setting up IfcLoader with WASM path:', wasmPath);
-        ifcLoader.setup({
-            wasm: {
-                path: wasmPath,
-                absolute: true
-            }
-        });
-        
-        // 3. Dependent UI Initialization
-        initClipperTool();
-        initPropertiesEvents(); // Events that depend on highlighter
-        
-        // Load model list after UI init
-        loadModelList();
-        
-        logToScreen('System Ready.');
-        
-    } catch (e) {
-        console.error('CRITICAL ERROR DURING INITIALIZATION:', e);
-        logToScreen('CRITICAL ERROR DURING INITIALIZATION: ' + e, true);
-    }
-}
-
-// Start
-initApp();
-
-// --- View Controls & Console Toggle ---
-
-const consoleToggle = document.getElementById('console-toggle');
-if (consoleToggle) {
-    consoleToggle.addEventListener('click', () => {
-        const consoleEl = document.getElementById('debug-console');
-        if (consoleEl) {
-            const isVisible = consoleEl.style.display !== 'none';
-            consoleEl.style.display = isVisible ? 'none' : 'block';
-            consoleToggle.classList.toggle('active', !isVisible);
-        }
-    });
-}
-
-const viewDropdownBtn = document.getElementById('view-dropdown-btn');
-const viewDropdownMenu = document.getElementById('view-dropdown-menu');
-
-if (viewDropdownBtn && viewDropdownMenu) {
-    viewDropdownBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        viewDropdownMenu.classList.toggle('show');
-    });
-
-    document.addEventListener('click', () => {
-        viewDropdownMenu.classList.remove('show');
-    });
-}
-
-const viewButtons = document.querySelectorAll('.view-btn');
-viewButtons.forEach(btn => {
-    btn.addEventListener('click', async () => {
-        const view = btn.getAttribute('data-view');
-        
-        if (viewDropdownBtn) {
-            const icon = btn.querySelector('i')?.cloneNode(true);
-            const text = btn.textContent?.trim();
-            const span = viewDropdownBtn.querySelector('span');
-            if (span && text) {
-                span.innerHTML = '';
-                if(icon) span.appendChild(icon);
-                span.append(` ${text}`);
-            }
-        }
-
-        const box = getModelBox();
-        const sphere = new THREE.Sphere();
-        box.getBoundingSphere(sphere);
-        const center = sphere.center;
-        const radius = sphere.radius || 20;
-        const dist = radius * 2;
-
-        const controls = world.camera.controls;
-
-        switch(view) {
-            case 'iso':
-                await controls.setLookAt(center.x + dist, center.y + dist, center.z + dist, center.x, center.y, center.z, true);
-                break;
-            case 'top':
-                await controls.setLookAt(center.x, center.y + dist, center.z, center.x, center.y, center.z, true);
-                break;
-            case 'front':
-                await controls.setLookAt(center.x, center.y, center.z + dist, center.x, center.y, center.z, true);
-                break;
-            case 'right':
-                await controls.setLookAt(center.x + dist, center.y, center.z, center.x, center.y, center.z, true);
-                break;
-            case 'back':
-                await controls.setLookAt(center.x, center.y, center.z - dist, center.x, center.y, center.z, true);
-                break;
-            case 'left':
-                await controls.setLookAt(center.x - dist, center.y, center.z, center.x, center.y, center.z, true);
-                break;
-            case 'bottom':
-                await controls.setLookAt(center.x, center.y - dist, center.z, center.x, center.y, center.z, true);
-                break;
-        }
-    });
-});
