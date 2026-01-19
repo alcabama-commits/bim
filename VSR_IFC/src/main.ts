@@ -34,7 +34,7 @@ const world = worlds.create<
 
 world.scene = new OBC.SimpleScene(components);
 world.scene.setup();
-world.scene.three.background = new THREE.Color(0xf5f5f5); // Default to light gray (matching light theme)
+world.scene.three.background = new THREE.Color(0xf5f5f5); // Default to light gray
 
 const container = document.getElementById('viewer-container') as HTMLElement;
 if (!container) {
@@ -55,13 +55,25 @@ grids.create(world);
 // --- IFC & Fragments Setup ---
 
 const fragments = components.get(OBC.FragmentsManager);
+const baseUrl = import.meta.env.BASE_URL || './';
+
+// INITIALIZE FRAGMENTS IMMEDIATELY AND ASYNC
+const initPromise = (async () => {
+    try {
+        console.log('Initializing FragmentsManager...');
+        // @ts-ignore
+        await fragments.init(`${baseUrl}fragments/fragments.mjs`);
+        console.log('FragmentsManager initialized successfully.');
+    } catch (err) {
+        console.error('Failed to initialize FragmentsManager:', err);
+        throw err;
+    }
+})();
+
+// Define other components but don't use them until init is done if they depend on fragments
 const clipper = components.get(OBC.Clipper);
 const classifier = components.get(OBC.Classifier);
 const highlighter = components.get(OBF.Highlighter);
-const baseUrl = import.meta.env.BASE_URL || './';
-
-// Initialize fragments with the worker
-fragments.init(`${baseUrl}fragments/fragments.mjs`);
 
 // Initialize IfcLoader once
 const ifcLoader = components.get(OBC.IfcLoader);
@@ -117,7 +129,13 @@ highlighter.zoomToSelection = true;
 
 // Keep Fragments engine in sync with camera for culling/LOD
 world.camera.controls.addEventListener('rest', () => {
-    fragments.core.update(true);
+    if (fragments && fragments.core) { // Add safety check
+        try {
+            fragments.core.update(true);
+        } catch(e) {
+            // Ignore update errors if not ready
+        }
+    }
 });
 
 // --- Helper Functions ---
@@ -238,6 +256,9 @@ async function updateClassificationUI() {
 
 async function loadModel(url: string, path: string) {
     try {
+        // Wait for init to complete if it hasn't
+        await initPromise;
+
         logToScreen(`Fetching Fragment: ${url}`);
         const file = await fetch(url);
         if (!file.ok) throw new Error(`Failed to fetch ${url}`);
@@ -254,7 +275,9 @@ async function loadModel(url: string, path: string) {
         await fragments.core.update(true);
         loadedModels.set(path, model);
         
+        console.log('Clasificando modelo:', model);
         await classifier.byEntity(model);
+        await classifier.byPredefinedType(model);
         await updateClassificationUI();
         
         logToScreen('Model loaded successfully as Fragments');
@@ -330,6 +353,8 @@ function initSidebar() {
                     const buffer = await file.arrayBuffer();
                     
                     try {
+                        await initPromise; // Wait for init
+
                         if (file.name.toLowerCase().endsWith('.frag')) {
                             logToScreen(`Loading fragments: ${file.name}...`);
                             const model = await fragments.core.load(buffer, { modelId: file.name });
@@ -556,6 +581,8 @@ async function loadModelList() {
     if (!listContainer) return;
 
     try {
+        await initPromise; // Wait for init
+
         const modelsUrl = `${baseUrl}models.json?t=${Date.now()}`;
         
         const response = await fetch(modelsUrl);
@@ -696,34 +723,114 @@ function initTabs() {
     }
 }
 
-// --- Init Execution ---
-logToScreen('Initializing That Open Engine...');
+// --- Properties Panel ---
+function initPropertiesPanel() {
+    try {
+        const propertiesPanel = document.getElementById('properties-panel');
+        const propertiesToggle = document.getElementById('properties-toggle');
+        const propertiesContent = document.getElementById('properties-content');
+        const resizer = document.getElementById('properties-resizer');
 
-try {
-    initSidebar();
-    initTheme();
-    initProjectionToggle();
-    initGridToggle();
-    initClipperTool();
-    initFitModelTool();
-    loadModelList();
-    initPropertiesPanel();
-    initTabs();
-} catch (e) {
-    console.error('CRITICAL ERROR DURING INITIALIZATION:', e);
-    logToScreen('CRITICAL ERROR DURING INITIALIZATION: ' + e, true);
+        if (propertiesToggle && propertiesPanel) {
+            propertiesToggle.addEventListener('click', () => {
+                const isOpen = propertiesPanel.classList.toggle('open');
+                document.body.classList.toggle('properties-open', isOpen);
+                propertiesToggle.classList.toggle('active', isOpen);
+            });
+        }
+
+        // Resizing logic for properties panel
+        if (resizer && propertiesPanel) {
+            let isResizing = false;
+            
+            resizer.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                resizer.classList.add('resizing');
+                document.body.style.cursor = 'ew-resize';
+                e.preventDefault();
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                const windowWidth = window.innerWidth;
+                const newWidth = windowWidth - e.clientX;
+                if (newWidth > 250 && newWidth < 600) {
+                    propertiesPanel.style.width = `${newWidth}px`;
+                }
+            });
+            
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    resizer.classList.remove('resizing');
+                    document.body.style.cursor = 'default';
+                }
+            });
+        }
+
+        highlighter.events.select.onHighlight.add(async (fragmentMap) => {
+            if (!propertiesContent) return;
+            propertiesContent.innerHTML = '';
+            
+            const fragmentId = Object.keys(fragmentMap)[0];
+            const expressID = [...fragmentMap[fragmentId]][0];
+            
+            let model: any;
+            for (const m of loadedModels.values()) {
+                if (m.items.find((i: any) => i.id === fragmentId)) { // This check is approximate
+                     model = m;
+                     break;
+                }
+            }
+            // Better way: FragmentsManager should know the model
+            // For now, use the first model found or rely on CUI if possible
+            
+            // Actually, we should use highlighter's selection logic
+            // But let's keep it simple: if CUI has tables
+            const indexer = components.get(OBC.IfcRelationsIndexer);
+            // If indexer is not used/setup, we might just show basic info
+            
+            // Use Properties UI
+            // Since we didn't fully setup CUI tables, let's just show ID for now
+             propertiesContent.innerHTML = `
+                <div style="padding:10px;">
+                    <h4>Elemento Seleccionado</h4>
+                    <p><strong>Fragment ID:</strong> ${fragmentId}</p>
+                    <p><strong>Express ID:</strong> ${expressID}</p>
+                </div>
+            `;
+            
+            if (propertiesPanel && !propertiesPanel.classList.contains('open')) {
+                 propertiesPanel.classList.add('open');
+                 document.body.classList.add('properties-open');
+                 propertiesToggle?.classList.add('active');
+            }
+        });
+        
+        highlighter.events.select.onClear.add(() => {
+            if (propertiesContent) {
+                 propertiesContent.innerHTML = '<div class="no-selection">Selecciona un elemento para ver sus propiedades</div>';
+            }
+        });
+
+    } catch(e) {
+        console.error('Error initPropertiesPanel', e);
+    }
 }
 
-// --- View Controls & Console Toggle ---
+function initFitModelTool() {
+    const btn = document.getElementById('fit-model-btn');
+    if (!btn) return;
 
-const consoleToggle = document.getElementById('console-toggle');
-if (consoleToggle) {
-    consoleToggle.addEventListener('click', () => {
-        const consoleEl = document.getElementById('debug-console');
-        if (consoleEl) {
-            const isVisible = consoleEl.style.display !== 'none';
-            consoleEl.style.display = isVisible ? 'none' : 'block';
-            consoleToggle.classList.toggle('active', !isVisible);
+    btn.addEventListener('click', () => {
+        const box = getModelBox();
+        const sphere = new THREE.Sphere();
+        box.getBoundingSphere(sphere);
+        
+        if (sphere.radius > 0.1) {
+             world.camera.controls.fitToSphere(sphere, true);
+        } else {
+             alert('No se pudo encontrar el modelo para ajustar. Intenta recargar.');
         }
     });
 }
@@ -754,27 +861,44 @@ function getModelCenter(): THREE.Vector3 {
     return center;
 }
 
-function getModelRadius(): number {
-    const box = getModelBox();
-    if (box.isEmpty()) return 10;
-    const sphere = new THREE.Sphere();
-    box.getBoundingSphere(sphere);
-    return sphere.radius || 10;
+// --- Init Execution ---
+logToScreen('Initializing That Open Engine...');
+
+async function initApp() {
+    try {
+        await initPromise; // Wait for fragments to be ready
+        
+        initSidebar();
+        initTheme();
+        initProjectionToggle();
+        initGridToggle();
+        initClipperTool();
+        initFitModelTool();
+        initPropertiesPanel();
+        initTabs();
+        
+        // Load model list after UI init
+        loadModelList();
+        
+    } catch (e) {
+        console.error('CRITICAL ERROR DURING INITIALIZATION:', e);
+        logToScreen('CRITICAL ERROR DURING INITIALIZATION: ' + e, true);
+    }
 }
 
-function initFitModelTool() {
-    const btn = document.getElementById('fit-model-btn');
-    if (!btn) return;
+// Start
+initApp();
 
-    btn.addEventListener('click', () => {
-        const box = getModelBox();
-        const sphere = new THREE.Sphere();
-        box.getBoundingSphere(sphere);
-        
-        if (sphere.radius > 0.1) {
-             world.camera.controls.fitToSphere(sphere, true);
-        } else {
-             alert('No se pudo encontrar el modelo para ajustar. Intenta recargar.');
+// --- View Controls & Console Toggle ---
+
+const consoleToggle = document.getElementById('console-toggle');
+if (consoleToggle) {
+    consoleToggle.addEventListener('click', () => {
+        const consoleEl = document.getElementById('debug-console');
+        if (consoleEl) {
+            const isVisible = consoleEl.style.display !== 'none';
+            consoleEl.style.display = isVisible ? 'none' : 'block';
+            consoleToggle.classList.toggle('active', !isVisible);
         }
     });
 }
@@ -799,124 +923,47 @@ viewButtons.forEach(btn => {
         const view = btn.getAttribute('data-view');
         
         if (viewDropdownBtn) {
-             const icon = btn.querySelector('i')?.cloneNode(true);
-             const text = btn.textContent?.trim();
-             const span = viewDropdownBtn.querySelector('span');
-             if (span && icon && text) {
-                 span.innerHTML = '';
-                 span.appendChild(icon);
-                 span.appendChild(document.createTextNode(' ' + text));
-             }
+            const icon = btn.querySelector('i')?.cloneNode(true);
+            const text = btn.textContent?.trim();
+            const span = viewDropdownBtn.querySelector('span');
+            if (span && text) {
+                span.innerHTML = '';
+                if(icon) span.appendChild(icon);
+                span.append(` ${text}`);
+            }
         }
 
-        const center = getModelCenter();
-        const radius = getModelRadius();
+        const box = getModelBox();
+        const sphere = new THREE.Sphere();
+        box.getBoundingSphere(sphere);
+        const center = sphere.center;
+        const radius = sphere.radius || 20;
         const dist = radius * 2;
-        world.camera.controls.enabled = true;
 
-        switch (view) {
-            case 'top': await world.camera.controls.setLookAt(center.x, center.y + dist, center.z, center.x, center.y, center.z, true); break;
-            case 'bottom': await world.camera.controls.setLookAt(center.x, center.y - dist, center.z, center.x, center.y, center.z, true); break;
-            case 'front': await world.camera.controls.setLookAt(center.x, center.y, center.z + dist, center.x, center.y, center.z, true); break;
-            case 'back': await world.camera.controls.setLookAt(center.x, center.y, center.z - dist, center.x, center.y, center.z, true); break;
-            case 'left': await world.camera.controls.setLookAt(center.x - dist, center.y, center.z, center.x, center.y, center.z, true); break;
-            case 'right': await world.camera.controls.setLookAt(center.x + dist, center.y, center.z, center.x, center.y, center.z, true); break;
-            case 'iso': await world.camera.controls.setLookAt(center.x + dist, center.y + dist, center.z + dist, center.x, center.y, center.z, true); break;
+        const controls = world.camera.controls;
+
+        switch(view) {
+            case 'iso':
+                await controls.setLookAt(center.x + dist, center.y + dist, center.z + dist, center.x, center.y, center.z, true);
+                break;
+            case 'top':
+                await controls.setLookAt(center.x, center.y + dist, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'front':
+                await controls.setLookAt(center.x, center.y, center.z + dist, center.x, center.y, center.z, true);
+                break;
+            case 'right':
+                await controls.setLookAt(center.x + dist, center.y, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'back':
+                await controls.setLookAt(center.x, center.y, center.z - dist, center.x, center.y, center.z, true);
+                break;
+            case 'left':
+                await controls.setLookAt(center.x - dist, center.y, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'bottom':
+                await controls.setLookAt(center.x, center.y - dist, center.z, center.x, center.y, center.z, true);
+                break;
         }
     });
 });
-
-// --- Properties Setup ---
-
-const [propsTable, updatePropsTable] = CUI.tables.itemsData({
-    components,
-    modelIdMap: {},
-});
-
-propsTable.preserveStructureOnFilter = true;
-
-const propertiesContent = document.getElementById('properties-content');
-if (propertiesContent) {
-    propertiesContent.innerHTML = '';
-    propertiesContent.appendChild(propsTable);
-}
-
-highlighter.events.select.onHighlight.add((modelIdMap) => {
-    updatePropsTable({ modelIdMap });
-});
-
-highlighter.events.select.onClear.add(() => {
-    updatePropsTable({ modelIdMap: {} });
-});
-
-if (container) {
-    container.addEventListener('click', () => {
-        const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
-        if (selection) {
-            updatePropsTable({ modelIdMap: selection });
-        }
-    });
-}
-
-function resolveRemote(ref: any, model: any) {
-    if (!ref || !model || !model.properties) return ref;
-    if (typeof ref === 'number') return model.properties[ref];
-    if (ref && typeof ref.value === 'number') return model.properties[ref.value];
-    return ref;
-}
-
-async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
-    // Note: This function was previously manually rendering the table.
-    // Now we rely on CUI.tables.itemsData (propsTable) which is cleaner.
-    // But for "initPropertiesPanel" we might want to keep the resize logic.
-}
-
-function initPropertiesPanel() {
-    const panel = document.getElementById('properties-panel');
-    const toggleBtn = document.getElementById('properties-toggle');
-    const resizer = document.getElementById('properties-resizer');
-    
-    if (toggleBtn && panel) {
-        toggleBtn.addEventListener('click', () => {
-            panel.classList.toggle('closed');
-        });
-    }
-
-    if (resizer && panel) {
-        let isResizing = false;
-        
-        const header = panel.querySelector('.properties-header');
-        if (header && !header.querySelector('.version-tag')) {
-             const v = document.createElement('span');
-             v.className = 'version-tag';
-             v.style.fontSize = '10px';
-             v.style.color = '#888';
-             v.style.marginLeft = '10px';
-             v.innerText = 'v1.7 (CUI)';
-             header.appendChild(v);
-        }
-
-        resizer.addEventListener('mousedown', (e) => {
-            isResizing = true;
-            resizer.classList.add('resizing');
-            document.body.style.cursor = 'ew-resize';
-            e.preventDefault();
-        });
-        
-        document.addEventListener('mousemove', (e) => {
-            if (!isResizing) return;
-            const newWidth = window.innerWidth - e.clientX;
-            if (newWidth > 200 && newWidth < 800) {
-                panel.style.width = `${newWidth}px`;
-            }
-        });
-        
-        document.addEventListener('mouseup', () => {
-            if (isResizing) {
-                isResizing = false;
-                resizer.classList.remove('resizing');
-                document.body.style.cursor = 'default';
-            }
-        });
-    }
-}
