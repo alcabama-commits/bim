@@ -39,7 +39,8 @@ const loadedModels = new Map<string, any>();
 // --- Initialization Logic ---
 async function initApp() {
     try {
-        logToScreen('Starting Application Initialization...');
+        console.log('VSR_IFC Version: 1.2.0 - Fixed Race Condition & Z-Index');
+        logToScreen('Starting Application Initialization (v1.2.0)...');
 
         const container = document.getElementById('viewer-container') as HTMLElement;
         if (!container) throw new Error('Viewer container not found');
