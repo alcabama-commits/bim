@@ -115,7 +115,7 @@ let ifcLoader: OBC.IfcLoader;
 
 // Keep Fragments engine in sync with camera for culling/LOD
 world.camera.controls.addEventListener('rest', () => {
-    if (fragments && fragments.core) { // Add safety check
+    if (fragmentsReady && fragments && fragments.core) { // Add safety check
         try {
             fragments.core.update(true);
         } catch(e) {
