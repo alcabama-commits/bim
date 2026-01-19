@@ -71,25 +71,11 @@ const initPromise = (async () => {
 })();
 
 // Define other components but don't use them until init is done if they depend on fragments
-const clipper = components.get(OBC.Clipper);
-const classifier = components.get(OBC.Classifier);
-const highlighter = components.get(OBF.Highlighter);
-
-// Initialize IfcLoader once
-const ifcLoader = components.get(OBC.IfcLoader);
-const wasmPath = `${baseUrl}wasm/`;
-console.log('Setting up IfcLoader with WASM path:', wasmPath);
-
-ifcLoader.setup({
-    wasm: {
-        path: wasmPath,
-        absolute: true
-    }
-});
-
-// Setup Highlighter
-highlighter.setup({ world });
-highlighter.zoomToSelection = true;
+// Define components variables (initialized in initApp)
+let clipper: OBC.Clipper;
+let classifier: OBC.Classifier;
+let highlighter: OBF.Highlighter;
+let ifcLoader: OBC.IfcLoader;
 
 // Expose IFC conversion test for debugging
 (window as any).testIFC = async () => {
@@ -732,10 +718,14 @@ function initPropertiesPanel() {
         const resizer = document.getElementById('properties-resizer');
 
         if (propertiesToggle && propertiesPanel) {
-            propertiesToggle.addEventListener('click', () => {
+            // Remove existing listeners to avoid duplicates if called multiple times
+            const newToggle = propertiesToggle.cloneNode(true);
+            propertiesToggle.parentNode?.replaceChild(newToggle, propertiesToggle);
+            
+            newToggle.addEventListener('click', () => {
                 const isOpen = propertiesPanel.classList.toggle('open');
                 document.body.classList.toggle('properties-open', isOpen);
-                propertiesToggle.classList.toggle('active', isOpen);
+                (newToggle as HTMLElement).classList.toggle('active', isOpen);
             });
         }
 
@@ -767,54 +757,47 @@ function initPropertiesPanel() {
                 }
             });
         }
-
-        highlighter.events.select.onHighlight.add(async (fragmentMap) => {
-            if (!propertiesContent) return;
-            propertiesContent.innerHTML = '';
-            
-            const fragmentId = Object.keys(fragmentMap)[0];
-            const expressID = [...fragmentMap[fragmentId]][0];
-            
-            let model: any;
-            for (const m of loadedModels.values()) {
-                if (m.items.find((i: any) => i.id === fragmentId)) { // This check is approximate
-                     model = m;
-                     break;
-                }
-            }
-            // Better way: FragmentsManager should know the model
-            // For now, use the first model found or rely on CUI if possible
-            
-            // Actually, we should use highlighter's selection logic
-            // But let's keep it simple: if CUI has tables
-            const indexer = components.get(OBC.IfcRelationsIndexer);
-            // If indexer is not used/setup, we might just show basic info
-            
-            // Use Properties UI
-            // Since we didn't fully setup CUI tables, let's just show ID for now
-             propertiesContent.innerHTML = `
-                <div style="padding:10px;">
-                    <h4>Elemento Seleccionado</h4>
-                    <p><strong>Fragment ID:</strong> ${fragmentId}</p>
-                    <p><strong>Express ID:</strong> ${expressID}</p>
-                </div>
-            `;
-            
-            if (propertiesPanel && !propertiesPanel.classList.contains('open')) {
-                 propertiesPanel.classList.add('open');
-                 document.body.classList.add('properties-open');
-                 propertiesToggle?.classList.add('active');
-            }
-        });
-        
-        highlighter.events.select.onClear.add(() => {
-            if (propertiesContent) {
-                 propertiesContent.innerHTML = '<div class="no-selection">Selecciona un elemento para ver sus propiedades</div>';
-            }
-        });
-
     } catch(e) {
         console.error('Error initPropertiesPanel', e);
+    }
+}
+
+function initPropertiesEvents() {
+    try {
+        const propertiesPanel = document.getElementById('properties-panel');
+        const propertiesToggle = document.getElementById('properties-toggle');
+        const propertiesContent = document.getElementById('properties-content');
+
+        if (highlighter && propertiesContent) {
+             highlighter.events.select.onHighlight.add(async (fragmentMap) => {
+                propertiesContent.innerHTML = '';
+                
+                const fragmentId = Object.keys(fragmentMap)[0];
+                const expressID = [...fragmentMap[fragmentId]][0];
+                
+                propertiesContent.innerHTML = `
+                    <div style="padding:10px;">
+                        <h4>Elemento Seleccionado</h4>
+                        <p><strong>Fragment ID:</strong> ${fragmentId}</p>
+                        <p><strong>Express ID:</strong> ${expressID}</p>
+                    </div>
+                `;
+                
+                if (propertiesPanel && !propertiesPanel.classList.contains('open')) {
+                     propertiesPanel.classList.add('open');
+                     document.body.classList.add('properties-open');
+                     propertiesToggle?.classList.add('active');
+                }
+            });
+            
+            highlighter.events.select.onClear.add(() => {
+                if (propertiesContent) {
+                     propertiesContent.innerHTML = '<div class="no-selection">Selecciona un elemento para ver sus propiedades</div>';
+                }
+            });
+        }
+    } catch(e) {
+        console.error('Error initPropertiesEvents', e);
     }
 }
 
@@ -866,19 +849,49 @@ logToScreen('Initializing That Open Engine...');
 
 async function initApp() {
     try {
-        await initPromise; // Wait for fragments to be ready
-        
+        // 1. UI Initialization (Immediate)
+        logToScreen('Initializing UI...');
         initSidebar();
         initTheme();
+        initTabs();
         initProjectionToggle();
         initGridToggle();
-        initClipperTool();
         initFitModelTool();
-        initPropertiesPanel();
-        initTabs();
+        initPropertiesPanel(); // Solo UI
+
+        logToScreen('Initializing 3D Engine...');
+        
+        // 2. Core Initialization
+        await initPromise; // Wait for fragments to be ready
+        
+        // Initialize dependent components AFTER fragments
+        clipper = components.get(OBC.Clipper);
+        classifier = components.get(OBC.Classifier);
+        highlighter = components.get(OBF.Highlighter);
+        ifcLoader = components.get(OBC.IfcLoader);
+
+        // Setup Highlighter
+        highlighter.setup({ world });
+        highlighter.zoomToSelection = true;
+
+        // Setup IfcLoader
+        const wasmPath = `${baseUrl}wasm/`;
+        console.log('Setting up IfcLoader with WASM path:', wasmPath);
+        ifcLoader.setup({
+            wasm: {
+                path: wasmPath,
+                absolute: true
+            }
+        });
+        
+        // 3. Dependent UI Initialization
+        initClipperTool();
+        initPropertiesEvents(); // Events that depend on highlighter
         
         // Load model list after UI init
         loadModelList();
+        
+        logToScreen('System Ready.');
         
     } catch (e) {
         console.error('CRITICAL ERROR DURING INITIALIZATION:', e);
