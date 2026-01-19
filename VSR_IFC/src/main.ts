@@ -37,54 +37,20 @@ const fragments = components.get(OBC.FragmentsManager);
 const clipper = components.get(OBC.Clipper);
 const baseUrl = import.meta.env.BASE_URL || './';
 
-// Safe declaration of new components
-let classifier: any;
-let highlighter: any;
-
-try {
-    classifier = components.get(OBC.Classifier);
-} catch (e) {
-    console.error("Classifier init failed:", e);
-}
-
-try {
-    highlighter = components.get(OBF.Highlighter);
-} catch (e) {
-    console.error("Highlighter init failed:", e);
-}
-
 // Initialize fragments with the worker
-try {
-    fragments.init(`${baseUrl}fragments/fragments.mjs`);
-} catch (e) {
-    console.error("Fragments init failed:", e);
-}
+fragments.init(`${baseUrl}fragments/fragments.mjs`);
 
 // Initialize IfcLoader once
 const ifcLoader = components.get(OBC.IfcLoader);
 const wasmPath = `${baseUrl}wasm/`;
 console.log('Setting up IfcLoader with WASM path:', wasmPath);
 
-try {
-    ifcLoader.setup({
-        wasm: {
-            path: wasmPath,
-            absolute: true
-        }
-    });
-} catch (e) {
-    console.error("IfcLoader setup failed:", e);
-}
-
-// Setup Highlighter (moved up for global access)
-if (highlighter) {
-    try {
-        highlighter.setup({ world });
-        highlighter.zoomToSelection = true;
-    } catch (e) {
-        console.error("Highlighter setup failed:", e);
+ifcLoader.setup({
+    wasm: {
+        path: wasmPath,
+        absolute: true
     }
-}
+});
 
 // Expose IFC conversion test for debugging
 (window as any).testIFC = async () => {
@@ -207,15 +173,6 @@ async function loadModel(url: string, path: string) {
         
         loadedModels.set(path, model);
         
-        if (classifier) {
-            try {
-                classifier.byEntity(model);
-                await updateClassificationUI();
-            } catch (e) {
-                console.error("Classification failed:", e);
-            }
-        }
-        
         logToScreen('Model loaded successfully as Fragments');
 
         let meshCount = 0;
@@ -330,11 +287,6 @@ function initSidebar() {
                         world.scene.three.add(model.object);
                         await fragments.core.update(true);
                         
-                        if (classifier) {
-                            classifier.byEntity(model);
-                            await updateClassificationUI();
-                        }
-
                         const bbox = new THREE.Box3().setFromObject(model.object);
                         const sphere = new THREE.Sphere();
                         bbox.getBoundingSphere(sphere);
@@ -352,11 +304,6 @@ function initSidebar() {
                         
                         const model = await ifcLoader.load(data, true, file.name);
                         world.scene.three.add(model.object);
-                        
-                        if (classifier) {
-                            classifier.byEntity(model);
-                            await updateClassificationUI();
-                        }
                         
                         // Center camera
                         const bbox = new THREE.Box3().setFromObject(model.object);
@@ -552,93 +499,6 @@ function initGridToggle() {
 
 
 
-
-
-// Update Classification UI
-async function updateClassificationUI() {
-    if (!classifier) return;
-    const classificationList = document.getElementById('classification-list');
-    if (!classificationList) return;
-
-    classificationList.innerHTML = '';
-
-    const systems = classifier.list;
-    const systemNames = Object.keys(systems);
-    
-    // Check if there are any systems
-    if (systemNames.length === 0) {
-        classificationList.innerHTML = '<div style="padding: 10px; color: #888; font-style: italic;">No classification data available.</div>';
-        return;
-    }
-
-    for (const systemName of systemNames) {
-        const systemGroups = systems[systemName];
-        
-        // System Header (Collapsible)
-        const systemDiv = document.createElement('div');
-        systemDiv.className = 'folder-group';
-
-        const header = document.createElement('div');
-        header.className = 'folder-header';
-        header.innerHTML = `<span><i class="fa-solid fa-tags"></i> ${systemName}</span> <i class="fa-solid fa-chevron-down"></i>`;
-        
-        const itemsList = document.createElement('ul');
-        itemsList.className = 'folder-items'; // Open by default
-        
-        // Toggle Logic
-        header.addEventListener('click', () => {
-            const isCollapsed = itemsList.classList.contains('collapsed');
-            if (isCollapsed) {
-                itemsList.classList.remove('collapsed');
-                const icon = header.querySelector('.fa-chevron-right');
-                if(icon) icon.classList.replace('fa-chevron-right', 'fa-chevron-down');
-            } else {
-                itemsList.classList.add('collapsed');
-                const icon = header.querySelector('.fa-chevron-down');
-                if(icon) icon.classList.replace('fa-chevron-down', 'fa-chevron-right');
-            }
-        });
-
-        systemDiv.appendChild(header);
-        systemDiv.appendChild(itemsList);
-        classificationList.appendChild(systemDiv);
-
-        // Sort group names
-        const groupNames = Object.keys(systemGroups).sort();
-
-        for (const groupName of groupNames) {
-             const groupItem = document.createElement('li');
-             groupItem.className = 'file-item';
-             
-             // Create a container for the name
-             groupItem.style.display = 'flex';
-             groupItem.style.justifyContent = 'space-between';
-             groupItem.style.alignItems = 'center';
-             
-             const nameSpan = document.createElement('span');
-             nameSpan.innerHTML = `<i class="fa-solid fa-box"></i> ${groupName}`;
-             nameSpan.style.cursor = 'pointer';
-             nameSpan.style.width = '100%';
-             
-             // Click to highlight
-             nameSpan.addEventListener('click', async (e) => {
-                 e.stopPropagation();
-                 // Remove active class from all items
-                 document.querySelectorAll('.file-item span').forEach(el => el.style.fontWeight = 'normal');
-                 nameSpan.style.fontWeight = 'bold';
-
-                 const fragmentIdMap = systemGroups[groupName];
-                 if (highlighter) {
-                     highlighter.clear('select');
-                     highlighter.highlightByID('select', fragmentIdMap);
-                 }
-             });
-             
-             groupItem.appendChild(nameSpan);
-             itemsList.appendChild(groupItem);
-        }
-    }
-}
 
 // Load models from JSON and populate sidebar
 async function loadModelList() {
@@ -945,7 +805,11 @@ viewButtons.forEach(btn => {
 
 // Listener moved to initSidebar to handle both IFC and Frag files centrally
 
-// --- Properties Setup ---
+// --- Highlighter & Properties Setup ---
+const highlighter = components.get(OBF.Highlighter);
+highlighter.setup({ world });
+highlighter.zoomToSelection = true;
+
 const [propsTable, updatePropsTable] = CUI.tables.itemsData({
     components,
     modelIdMap: {},
@@ -959,23 +823,19 @@ if (propertiesContent) {
     propertiesContent.appendChild(propsTable);
 }
 
-if (highlighter && highlighter.events) {
-    highlighter.events.select.onHighlight.add((modelIdMap: any) => {
-        updatePropsTable({ modelIdMap });
-    });
+highlighter.events.select.onHighlight.add((modelIdMap) => {
+    updatePropsTable({ modelIdMap });
+});
 
-    highlighter.events.select.onClear.add(() => {
-        updatePropsTable({ modelIdMap: {} });
-    });
-}
+highlighter.events.select.onClear.add(() => {
+    updatePropsTable({ modelIdMap: {} });
+});
 
 if (container) {
     container.addEventListener('click', () => {
-        if (highlighter) {
-            const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
-            if (selection) {
-                updatePropsTable({ modelIdMap: selection });
-            }
+        const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
+        if (selection) {
+            updatePropsTable({ modelIdMap: selection });
         }
     });
 }
