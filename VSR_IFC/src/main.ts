@@ -265,7 +265,8 @@ async function loadModel(url: string, path: string) {
         
         loadedModels.set(path, model);
         
-        classifier.byEntity(model);
+        await classifier.byEntity(model);
+        // await classifier.byPredefinedType(model); // Available in newer versions
         await updateClassificationUI();
         
         logToScreen('Model loaded successfully as Fragments');
@@ -382,7 +383,8 @@ function initSidebar() {
                         world.scene.three.add(model.object);
                         await fragments.core.update(true);
                         
-                        classifier.byEntity(model);
+                        await classifier.byEntity(model);
+                        // await classifier.byPredefinedType(model);
                         await updateClassificationUI();
 
                         const bbox = new THREE.Box3().setFromObject(model.object);
@@ -403,7 +405,8 @@ function initSidebar() {
                         const model = await ifcLoader.load(data, true, file.name);
                         world.scene.three.add(model.object);
                         
-                        classifier.byEntity(model);
+                        await classifier.byEntity(model);
+                        // await classifier.byPredefinedType(model);
                         await updateClassificationUI();
                         
                         // Center camera
