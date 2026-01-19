@@ -35,28 +35,56 @@ grids.create(world);
 
 const fragments = components.get(OBC.FragmentsManager);
 const clipper = components.get(OBC.Clipper);
-const classifier = components.get(OBC.Classifier);
-const highlighter = components.get(OBF.Highlighter);
 const baseUrl = import.meta.env.BASE_URL || './';
 
+// Safe declaration of new components
+let classifier: any;
+let highlighter: any;
+
+try {
+    classifier = components.get(OBC.Classifier);
+} catch (e) {
+    console.error("Classifier init failed:", e);
+}
+
+try {
+    highlighter = components.get(OBF.Highlighter);
+} catch (e) {
+    console.error("Highlighter init failed:", e);
+}
+
 // Initialize fragments with the worker
-fragments.init(`${baseUrl}fragments/fragments.mjs`);
+try {
+    fragments.init(`${baseUrl}fragments/fragments.mjs`);
+} catch (e) {
+    console.error("Fragments init failed:", e);
+}
 
 // Initialize IfcLoader once
 const ifcLoader = components.get(OBC.IfcLoader);
 const wasmPath = `${baseUrl}wasm/`;
 console.log('Setting up IfcLoader with WASM path:', wasmPath);
 
-ifcLoader.setup({
-    wasm: {
-        path: wasmPath,
-        absolute: true
-    }
-});
+try {
+    ifcLoader.setup({
+        wasm: {
+            path: wasmPath,
+            absolute: true
+        }
+    });
+} catch (e) {
+    console.error("IfcLoader setup failed:", e);
+}
 
 // Setup Highlighter (moved up for global access)
-highlighter.setup({ world });
-highlighter.zoomToSelection = true;
+if (highlighter) {
+    try {
+        highlighter.setup({ world });
+        highlighter.zoomToSelection = true;
+    } catch (e) {
+        console.error("Highlighter setup failed:", e);
+    }
+}
 
 // Expose IFC conversion test for debugging
 (window as any).testIFC = async () => {
@@ -179,8 +207,14 @@ async function loadModel(url: string, path: string) {
         
         loadedModels.set(path, model);
         
-        classifier.byEntity(model);
-        await updateClassificationUI();
+        if (classifier) {
+            try {
+                classifier.byEntity(model);
+                await updateClassificationUI();
+            } catch (e) {
+                console.error("Classification failed:", e);
+            }
+        }
         
         logToScreen('Model loaded successfully as Fragments');
 
@@ -296,8 +330,10 @@ function initSidebar() {
                         world.scene.three.add(model.object);
                         await fragments.core.update(true);
                         
-                        classifier.byEntity(model);
-                        await updateClassificationUI();
+                        if (classifier) {
+                            classifier.byEntity(model);
+                            await updateClassificationUI();
+                        }
 
                         const bbox = new THREE.Box3().setFromObject(model.object);
                         const sphere = new THREE.Sphere();
@@ -317,8 +353,10 @@ function initSidebar() {
                         const model = await ifcLoader.load(data, true, file.name);
                         world.scene.three.add(model.object);
                         
-                        classifier.byEntity(model);
-                        await updateClassificationUI();
+                        if (classifier) {
+                            classifier.byEntity(model);
+                            await updateClassificationUI();
+                        }
                         
                         // Center camera
                         const bbox = new THREE.Box3().setFromObject(model.object);
@@ -518,6 +556,7 @@ function initGridToggle() {
 
 // Update Classification UI
 async function updateClassificationUI() {
+    if (!classifier) return;
     const classificationList = document.getElementById('classification-list');
     if (!classificationList) return;
 
@@ -589,8 +628,10 @@ async function updateClassificationUI() {
                  nameSpan.style.fontWeight = 'bold';
 
                  const fragmentIdMap = systemGroups[groupName];
-                 highlighter.clear('select');
-                 highlighter.highlightByID('select', fragmentIdMap);
+                 if (highlighter) {
+                     highlighter.clear('select');
+                     highlighter.highlightByID('select', fragmentIdMap);
+                 }
              });
              
              groupItem.appendChild(nameSpan);
@@ -918,19 +959,23 @@ if (propertiesContent) {
     propertiesContent.appendChild(propsTable);
 }
 
-highlighter.events.select.onHighlight.add((modelIdMap) => {
-    updatePropsTable({ modelIdMap });
-});
+if (highlighter && highlighter.events) {
+    highlighter.events.select.onHighlight.add((modelIdMap: any) => {
+        updatePropsTable({ modelIdMap });
+    });
 
-highlighter.events.select.onClear.add(() => {
-    updatePropsTable({ modelIdMap: {} });
-});
+    highlighter.events.select.onClear.add(() => {
+        updatePropsTable({ modelIdMap: {} });
+    });
+}
 
 if (container) {
     container.addEventListener('click', () => {
-        const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
-        if (selection) {
-            updatePropsTable({ modelIdMap: selection });
+        if (highlighter) {
+            const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
+            if (selection) {
+                updatePropsTable({ modelIdMap: selection });
+            }
         }
     });
 }
