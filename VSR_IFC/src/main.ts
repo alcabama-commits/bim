@@ -728,6 +728,7 @@ function initFitModelTool() {
 
     btn.addEventListener('click', () => {
         logToScreen('Fit Model clicked');
+        // alert('Fit Model Clicked'); // Uncomment for forceful debug
         const box = getModelBox();
         const sphere = new THREE.Sphere();
         box.getBoundingSphere(sphere);
@@ -738,6 +739,7 @@ function initFitModelTool() {
              world.camera.controls.fitToSphere(sphere, true);
         } else {
              logToScreen('Model bounds too small/empty', true);
+             alert('No se pudo encontrar el modelo para ajustar. Intenta recargar.');
         }
     });
 }
