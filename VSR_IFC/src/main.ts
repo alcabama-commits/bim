@@ -5,214 +5,59 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
-// Global Error Handler for debugging in production
-window.onerror = function(message, source, lineno, colno, error) {
-    const debugEl = document.getElementById('debug-console');
-    if (debugEl) {
-        debugEl.style.display = 'block';
-        const line = document.createElement('div');
-        line.textContent = `CRITICAL ERROR: ${message} at ${source}:${lineno}`;
-        line.style.color = '#ff0000';
-        line.style.backgroundColor = '#fff0f0';
-        line.style.padding = '5px';
-        line.style.borderBottom = '1px solid #ffcccc';
-        debugEl.appendChild(line);
-    }
-    console.error('Global Error:', message, error);
-};
+// --- Initialization of That Open Engine ---
 
-// --- Global Variables Declaration ---
-let components: OBC.Components;
-let worlds: OBC.Worlds;
-let world: OBC.SimpleWorld<OBC.SimpleScene, OBC.OrthoPerspectiveCamera, OBC.SimpleRenderer>;
-let fragments: OBC.FragmentsManager;
-let grids: OBC.Grids;
-let clipper: OBC.Clipper;
-let classifier: OBC.Classifier;
-let highlighter: OBF.Highlighter;
-let ifcLoader: OBC.IfcLoader;
-let fragmentsReady = false;
+const components = new OBC.Components();
+const worlds = components.get(OBC.Worlds);
 
+const world = worlds.create<
+  OBC.SimpleScene,
+  OBC.OrthoPerspectiveCamera,
+  OBC.SimpleRenderer
+>();
+
+world.scene = new OBC.SimpleScene(components);
+world.scene.setup();
+world.scene.three.background = new THREE.Color(0x202020); // Dark gray
+
+const container = document.getElementById('viewer-container') as HTMLElement;
+world.renderer = new OBC.SimpleRenderer(components, container);
+world.camera = new OBC.OrthoPerspectiveCamera(components);
+
+components.init();
+BUI.Manager.init();
+
+// Grids
+const grids = components.get(OBC.Grids);
+grids.create(world);
+
+// --- IFC & Fragments Setup ---
+
+const fragments = components.get(OBC.FragmentsManager);
+const clipper = components.get(OBC.Clipper);
 const baseUrl = import.meta.env.BASE_URL || './';
-const loadedModels = new Map<string, any>();
 
-// --- Initialization Logic ---
-async function initApp() {
-    try {
-        console.log('VSR_IFC Version: 1.2.2 - Final Initialization Fix');
-        logToScreen('Starting Application Initialization (v1.2.2)...');
+// Initialize fragments with the worker
+fragments.init(`${baseUrl}fragments/fragments.mjs`);
 
-        const container = document.getElementById('viewer-container') as HTMLElement;
-        if (!container) throw new Error('Viewer container not found');
+// Initialize IfcLoader once
+const ifcLoader = components.get(OBC.IfcLoader);
+const wasmPath = `${baseUrl}wasm/`;
+console.log('Setting up IfcLoader with WASM path:', wasmPath);
 
-        // 1. Initialize Components System
-        components = new OBC.Components();
-        worlds = components.get(OBC.Worlds);
-        
-        world = worlds.create<
-            OBC.SimpleScene,
-            OBC.OrthoPerspectiveCamera,
-            OBC.SimpleRenderer
-        >();
-
-        world.scene = new OBC.SimpleScene(components);
-        world.scene.setup();
-        world.scene.three.background = new THREE.Color(0xf5f5f5);
-
-        world.renderer = new OBC.SimpleRenderer(components, container);
-        world.camera = new OBC.OrthoPerspectiveCamera(components);
-
-        // components.init(); // MOVED: Initialize after fragments to avoid update loop accessing uninitialized fragments
-        
-        // 2. Initialize UI (Basic)
-        initTheme();
-        initSidebar();
-        initTabs(); // Ensure tabs are initialized
-        initFitModelTool();
-        initPropertiesPanel();
-
-        // 3. Initialize Fragments (Async - Critical)
-        logToScreen('Initializing Fragments Engine...');
-        fragments = components.get(OBC.FragmentsManager);
-        
-        // @ts-ignore
-        await fragments.init(`${baseUrl}fragments/fragments.mjs`);
-        fragmentsReady = true;
-        logToScreen('Fragments Engine Ready.');
-
-        // NOW start the update loop
-        components.init();
-
-        // 4. Initialize Dependent Components
-        grids = components.get(OBC.Grids);
-        grids.create(world);
-        initGridToggle(); // Now grids is ready
-
-        clipper = components.get(OBC.Clipper);
-        classifier = components.get(OBC.Classifier);
-        highlighter = components.get(OBF.Highlighter);
-        ifcLoader = components.get(OBC.IfcLoader);
-
-        // Setup Highlighter
-        highlighter.setup({ world });
-        highlighter.zoomToSelection = true;
-
-        // Setup IfcLoader
-        const wasmPath = `${baseUrl}wasm/`;
-        console.log('Setting up IfcLoader with WASM path:', wasmPath);
-        ifcLoader.setup({
-            wasm: {
-                path: wasmPath,
-                absolute: true
-            }
-        });
-
-        // 5. Initialize Dependent UI & Tools
-        initProjectionToggle();
-        initClipperTool();
-        initPropertiesEvents();
-        
-        // Setup Camera Sync Event (Now safe)
-        world.camera.controls.addEventListener('rest', () => {
-            if (fragmentsReady && fragments && fragments.core) {
-                try {
-                    fragments.core.update(true);
-                } catch(e) {
-                    // Ignore update errors if not ready
-                }
-            }
-        });
-        
-        // 6. Final UI Setup
-        BUI.Manager.init();
-        initViewControls(); // Setup view buttons
-
-        // 7. Load Initial Content
-        loadModelList();
-        
-        logToScreen('System Fully Initialized.');
-        
-    } catch (e) {
-        console.error('CRITICAL ERROR DURING INITIALIZATION:', e);
-        logToScreen('CRITICAL ERROR DURING INITIALIZATION: ' + e, true);
-        alert('Error critico al iniciar la aplicacion. Ver consola para mas detalles.');
+ifcLoader.setup({
+    wasm: {
+        path: wasmPath,
+        absolute: true
     }
-}
-
-// Start
-initApp();
-
-// --- Helper Functions Definitions ---
-// (Moved initViewControls logic into a function to be called in initApp)
-function initViewControls() {
-    const consoleToggle = document.getElementById('console-toggle');
-    if (consoleToggle) {
-        consoleToggle.addEventListener('click', () => {
-            const consoleEl = document.getElementById('debug-console');
-            if (consoleEl) {
-                const isVisible = consoleEl.style.display !== 'none';
-                consoleEl.style.display = isVisible ? 'none' : 'block';
-                consoleToggle.classList.toggle('active', !isVisible);
-            }
-        });
-    }
-
-    const viewDropdownBtn = document.getElementById('view-dropdown-btn');
-    const viewDropdownMenu = document.getElementById('view-dropdown-menu');
-
-    if (viewDropdownBtn && viewDropdownMenu) {
-        viewDropdownBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            viewDropdownMenu.classList.toggle('show');
-        });
-
-        document.addEventListener('click', () => {
-            viewDropdownMenu.classList.remove('show');
-        });
-    }
-
-    const viewButtons = document.querySelectorAll('.view-btn');
-    viewButtons.forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const view = btn.getAttribute('data-view');
-            
-            if (viewDropdownBtn) {
-                const icon = btn.querySelector('i')?.cloneNode(true);
-                const text = btn.textContent?.trim();
-                const span = viewDropdownBtn.querySelector('span');
-                if (span && text) {
-                    span.innerHTML = '';
-                    if(icon) span.appendChild(icon);
-                    span.append(` ${text}`);
-                }
-            }
-
-            const box = getModelBox();
-            const sphere = new THREE.Sphere();
-            box.getBoundingSphere(sphere);
-            const center = sphere.center;
-            const radius = sphere.radius || 20;
-            const dist = radius * 2;
-            const controls = world.camera.controls;
-
-            switch(view) {
-                case 'iso': await controls.setLookAt(center.x + dist, center.y + dist, center.z + dist, center.x, center.y, center.z, true); break;
-                case 'top': await controls.setLookAt(center.x, center.y + dist, center.z, center.x, center.y, center.z, true); break;
-                case 'front': await controls.setLookAt(center.x, center.y, center.z + dist, center.x, center.y, center.z, true); break;
-                case 'right': await controls.setLookAt(center.x + dist, center.y, center.z, center.x, center.y, center.z, true); break;
-                case 'back': await controls.setLookAt(center.x, center.y, center.z - dist, center.x, center.y, center.z, true); break;
-                case 'left': await controls.setLookAt(center.x - dist, center.y, center.z, center.x, center.y, center.z, true); break;
-                case 'bottom': await controls.setLookAt(center.x, center.y - dist, center.z, center.x, center.y, center.z, true); break;
-            }
-        });
-    });
-}
+});
 
 // Expose IFC conversion test for debugging
 (window as any).testIFC = async () => {
     try {
         logToScreen('Starting IFC conversion test...');
         const ifcLoader = components.get(OBC.IfcLoader);
+        // Setup is done globally, but ensure it's ready
         
         logToScreen('Fetching temp.ifc...');
         const file = await fetch(`${baseUrl}temp.ifc`);
@@ -233,6 +78,7 @@ function initViewControls() {
         world.scene.three.add(model.object);
         logToScreen('Added converted model to scene');
         
+        // Center camera on it
         const bbox = new THREE.Box3().setFromObject(model.object);
         const sphere = new THREE.Sphere();
         bbox.getBoundingSphere(sphere);
@@ -246,18 +92,11 @@ function initViewControls() {
 
 // Keep Fragments engine in sync with camera for culling/LOD
 world.camera.controls.addEventListener('rest', () => {
-    if (fragmentsReady && fragments && fragments.core) { // Add safety check
-        try {
-            fragments.core.update(true);
-        } catch(e) {
-            // Ignore update errors if not ready
-        }
-    }
+    fragments.core.update(true);
 });
 
 // --- Helper Functions ---
 function getSpecialtyFromIfcPath(path: string): string {
-    if (!path) return 'General';
     const filename = path.split('/').pop() ?? path;
     const cleanFilename = filename.split('?')[0];
     const baseName = cleanFilename.replace(/\.(ifc|frag)$/i, '');
@@ -275,11 +114,32 @@ function getSpecialtyFromIfcPath(path: string): string {
     return raw;
 }
 
+// Configure Fragments Manager (Culling, etc.)
+// Offload heavy tasks to worker if possible (FragmentsManager has internal workers for geometry)
+// Note: We are not setting up a separate Fragments worker URL here as we are loading IFCs directly mostly,
+// but if we were loading .frag files we would need it. 
+// However, the tutorial mentions initializing FragmentsManager with a worker.
+// Since we are primarily loading IFCs which *become* fragments, the IfcLoader handles the conversion.
+
+// Enable culling for performance
+// const culler = components.get(OBC.Cullers).create(world);
+// culler.threshold = 10; // Threshold for culling
+
+// world.camera.controls.addEventListener('sleep', () => {
+//    culler.needsUpdate = true;
+// });
+
+// Track loaded models
+// Key: path, Value: FragmentsGroup (the model)
 const loadedModels = new Map<string, any>();
 
+let propertiesTableElement: HTMLElement | null = null;
+
+// Helper to log to screen
 function logToScreen(msg: string, isError = false) {
     const debugEl = document.getElementById('debug-console');
     if (debugEl) {
+        // debugEl.style.display = 'block'; // Removed to keep it hidden by default
         const line = document.createElement('div');
         line.textContent = `> ${msg}`;
         if (isError) line.style.color = '#ff4444';
@@ -290,125 +150,64 @@ function logToScreen(msg: string, isError = false) {
     else console.log(msg);
 }
 
-// Update Classification UI
-async function updateClassificationUI() {
-    const classificationList = document.getElementById('classification-list');
-    if (!classificationList) return;
-
-    console.log('Actualizando UI de clasificación...');
-    const systems = classifier.list;
-    console.log('Sistemas encontrados:', systems);
-    const systemNames = Object.keys(systems);
-    
-    classificationList.innerHTML = '';
-
-    if (systemNames.length === 0) {
-        console.log('No se encontraron sistemas de clasificación.');
-        classificationList.innerHTML = '<div style="padding: 10px; color: #888; font-style: italic;">Carga un modelo para ver la clasificación...</div>';
-        return;
-    }
-
-    for (const systemName of systemNames) {
-        const systemGroups = systems[systemName];
-        
-        const systemDiv = document.createElement('div');
-        systemDiv.className = 'folder-group';
-
-        const header = document.createElement('div');
-        header.className = 'folder-header';
-        header.innerHTML = `<span><i class="fa-solid fa-tags"></i> ${systemName}</span> <i class="fa-solid fa-chevron-down"></i>`;
-        
-        const itemsList = document.createElement('ul');
-        itemsList.className = 'folder-items';
-        
-        header.addEventListener('click', () => {
-            const isCollapsed = itemsList.classList.contains('collapsed');
-            if (isCollapsed) {
-                itemsList.classList.remove('collapsed');
-                const icon = header.querySelector('.fa-chevron-right');
-                if(icon) icon.classList.replace('fa-chevron-right', 'fa-chevron-down');
-            } else {
-                itemsList.classList.add('collapsed');
-                const icon = header.querySelector('.fa-chevron-down');
-                if(icon) icon.classList.replace('fa-chevron-down', 'fa-chevron-right');
-            }
-        });
-
-        systemDiv.appendChild(header);
-        systemDiv.appendChild(itemsList);
-        classificationList.appendChild(systemDiv);
-
-        const groupNames = Object.keys(systemGroups).sort();
-
-        for (const groupName of groupNames) {
-             const groupItem = document.createElement('li');
-             groupItem.className = 'model-item';
-             
-             groupItem.style.display = 'flex';
-             groupItem.style.justifyContent = 'space-between';
-             groupItem.style.alignItems = 'center';
-             
-             const nameSpan = document.createElement('span');
-             nameSpan.innerHTML = `<i class="fa-solid fa-box"></i> ${groupName}`;
-             nameSpan.style.cursor = 'pointer';
-             nameSpan.style.width = '100%';
-             
-             nameSpan.addEventListener('click', async (e) => {
-                 e.stopPropagation();
-                 document.querySelectorAll('.model-item span').forEach(el => (el as HTMLElement).style.fontWeight = 'normal');
-                 nameSpan.style.fontWeight = 'bold';
-
-                 const fragmentIdMap = systemGroups[groupName];
-                 highlighter.clear('select');
-                 highlighter.highlightByID('select', fragmentIdMap);
-             });
-             
-             groupItem.appendChild(nameSpan);
-             itemsList.appendChild(groupItem);
-        }
-    }
-}
-
 // --- Model Loading Logic ---
 
 async function loadModel(url: string, path: string) {
     try {
-        // Wait for init to complete if it hasn't
-        if (!fragmentsReady) {
-            console.warn('loadModel called before fragments ready');
-            return;
-        }
-
         logToScreen(`Fetching Fragment: ${url}`);
         const file = await fetch(url);
         if (!file.ok) throw new Error(`Failed to fetch ${url}`);
 
         const buffer = await file.arrayBuffer();
+
         logToScreen(`Loading Fragments... (Size: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
 
         const model = await fragments.core.load(buffer, { modelId: path });
         (model as any).name = path.split('/').pop() || 'Model';
 
         model.useCamera(world.camera.three);
+
         world.scene.three.add(model.object);
 
         await fragments.core.update(true);
-        loadedModels.set(path, model);
         
-        console.log('Clasificando modelo:', model);
-        await classifier.byEntity(model);
-        await classifier.byPredefinedType(model);
-        await updateClassificationUI();
+        loadedModels.set(path, model);
         
         logToScreen('Model loaded successfully as Fragments');
 
-        // Center camera if first model
+        let meshCount = 0;
+        model.object.traverse((child: any) => {
+            if (child.isMesh) meshCount++;
+        });
+        logToScreen(`Model meshes: ${meshCount}`);
+
+        setTimeout(async () => {
+            try {
+                const ids = await model.getItemsIdsWithGeometry();
+                logToScreen(`Deferred check - items with geometry: ${ids.length}`);
+                let delayedMeshes = 0;
+                model.object.traverse((child: any) => {
+                    if (child.isMesh) delayedMeshes++;
+                });
+                logToScreen(`Deferred check - meshes in scene: ${delayedMeshes}`);
+            } catch (e) {
+                logToScreen(`Deferred geometry check failed: ${e}`, true);
+            }
+        }, 5000);
+
+        // Auto-center camera if it's the first model
         if (loadedModels.size === 1) {
              const bbox = new THREE.Box3().setFromObject(model.object);
              const sphere = new THREE.Sphere();
              bbox.getBoundingSphere(sphere);
+             
+             logToScreen(`BBox: min(${bbox.min.x.toFixed(2)}, ${bbox.min.y.toFixed(2)}, ${bbox.min.z.toFixed(2)}) max(${bbox.max.x.toFixed(2)}, ${bbox.max.y.toFixed(2)}, ${bbox.max.z.toFixed(2)}) Radius: ${sphere.radius.toFixed(2)}`);
+
              if (sphere.radius > 0.1) {
                  world.camera.controls.fitToSphere(sphere, true);
+                 logToScreen('Camera centered on model');
+             } else {
+                 logToScreen('Model bounds too small or empty - Camera not moved', true);
              }
         }
         
@@ -419,270 +218,270 @@ async function loadModel(url: string, path: string) {
     }
 }
 
-// --- Sidebar Logic ---
+// --- Sidebar Logic (Kept mostly same, updated for new loading) ---
 
 function initSidebar() {
-    try {
-        const sidebar = document.getElementById('sidebar');
-        const toggleBtn = document.getElementById('sidebar-toggle');
-        const resizer = document.getElementById('sidebar-resizer');
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.getElementById('sidebar-toggle');
+    const resizer = document.getElementById('sidebar-resizer');
 
-        if (toggleBtn && sidebar) {
-            toggleBtn.addEventListener('click', () => {
-                const isClosed = sidebar.classList.toggle('closed');
-                document.body.classList.toggle('sidebar-closed', isClosed);
-            });
-        }
+    // Toggle Logic usando solo el botón de hamburguesa
+    if (toggleBtn && sidebar) {
+        toggleBtn.addEventListener('click', () => {
+            const isClosed = sidebar.classList.toggle('closed');
+            document.body.classList.toggle('sidebar-closed', isClosed);
+        });
+    }
 
-        if (resizer && sidebar) {
-            let isResizing = false;
-            
-            resizer.addEventListener('mousedown', (e) => {
-                isResizing = true;
-                resizer.classList.add('resizing');
-                document.body.style.cursor = 'ew-resize';
-                e.preventDefault();
-            });
-            
-            document.addEventListener('mousemove', (e) => {
-                if (!isResizing) return;
-                const newWidth = e.clientX;
-                if (newWidth > 200 && newWidth < 800) {
-                    sidebar.style.width = `${newWidth}px`;
-                }
-            });
-            
-            document.addEventListener('mouseup', () => {
-                if (isResizing) {
-                    isResizing = false;
-                    resizer.classList.remove('resizing');
-                    document.body.style.cursor = 'default';
-                }
-            });
-        }
+    // Resize Logic
+    if (resizer && sidebar) {
+        let isResizing = false;
         
-        const fileInput = document.getElementById('file-input') as HTMLInputElement;
-        if (fileInput) {
-            fileInput.addEventListener('change', async (event) => {
-                const target = event.target as HTMLInputElement;
-                if (target.files && target.files.length > 0) {
-                    const overlay = document.getElementById('loading-overlay');
-                    if (overlay) overlay.style.display = 'flex';
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('resizing');
+            document.body.style.cursor = 'ew-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
 
-                    const file = target.files[0];
-                    const buffer = await file.arrayBuffer();
-                    
-                    try {
-                        if (!fragmentsReady) {
-                             alert('El sistema aún no está listo. Por favor espere.');
-                             return;
-                        }
+            const newWidth = e.clientX;
 
-                        if (file.name.toLowerCase().endsWith('.frag')) {
-                            logToScreen(`Loading fragments: ${file.name}...`);
-                            const model = await fragments.core.load(buffer, { modelId: file.name });
-                            model.useCamera(world.camera.three);
-                            world.scene.three.add(model.object);
-                            await fragments.core.update(true);
-                            
-                            await classifier.byEntity(model);
-                            await classifier.byPredefinedType(model);
-                            await updateClassificationUI();
-
-                            const bbox = new THREE.Box3().setFromObject(model.object);
-                            const sphere = new THREE.Sphere();
-                            bbox.getBoundingSphere(sphere);
-                            world.camera.controls.fitToSphere(sphere, true);
-                        } else {
-                            logToScreen(`Loading and converting IFC: ${file.name}...`);
-                            const data = new Uint8Array(buffer);
-                            const ifcLoader = components.get(OBC.IfcLoader);
-                            
-                            const model = await ifcLoader.load(data, true, file.name);
-                            world.scene.three.add(model.object);
-                            
-                            await classifier.byEntity(model);
-                            await classifier.byPredefinedType(model);
-                            await updateClassificationUI();
-                            
-                            const bbox = new THREE.Box3().setFromObject(model.object);
-                            const sphere = new THREE.Sphere();
-                            bbox.getBoundingSphere(sphere);
-                            world.camera.controls.fitToSphere(sphere, true);
-                            
-                            // AUTO EXPORT AND DOWNLOAD
-                            logToScreen('Exporting to .frag...');
-                            try {
-                                 // @ts-ignore
-                                 const savedData = model._save ? await model._save() : null;
-                                 if (savedData) {
-                                     const blob = new Blob([savedData as any], { type: 'application/octet-stream' });
-                                     const url = URL.createObjectURL(blob);
-                                     const a = document.createElement('a');
-                                     a.href = url;
-                                     a.download = file.name.replace(/\.ifc$/i, '') + '.frag';
-                                     document.body.appendChild(a);
-                                     a.click();
-                                     document.body.removeChild(a);
-                                     URL.revokeObjectURL(url);
-                                     logToScreen('Converted file downloaded automatically!');
-                                 }
-                            } catch (exportErr) {
-                                 logToScreen(`Export error: ${exportErr}`, true);
-                            }
-                        }
-                    } catch (e) {
-                        logToScreen(`Error loading file: ${e}`, true);
-                        alert(`Error loading file: ${e}`);
-                    } finally {
-                        if (overlay) overlay.style.display = 'none';
-                    }
-                    target.value = '';
+            if (newWidth > 200 && newWidth < 800) {
+                sidebar.style.width = `${newWidth}px`;
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('resizing');
+                document.body.style.cursor = 'default';
+            }
+        });
+    }
+    
+    // Setup file upload
+    const fileInput = document.getElementById('file-input') as HTMLInputElement;
+    if (fileInput) {
+        fileInput.addEventListener('change', async (event) => {
+            const target = event.target as HTMLInputElement;
+            if (target.files && target.files.length > 0) {
+                const overlay = document.getElementById('loading-overlay');
+                if (overlay) {
+                    overlay.style.display = 'flex';
+                    const progressDiv = document.getElementById('loading-progress');
+                    if (progressDiv) progressDiv.textContent = 'Procesando archivo...';
                 }
-            });
-        }
-    } catch (e) {
-        console.error('Error in initSidebar:', e);
+
+                const file = target.files[0];
+                const buffer = await file.arrayBuffer();
+                
+                try {
+                    if (file.name.toLowerCase().endsWith('.frag')) {
+                        logToScreen(`Loading fragments: ${file.name}...`);
+                        const model = await fragments.core.load(buffer, { modelId: file.name });
+                        model.useCamera(world.camera.three);
+                        world.scene.three.add(model.object);
+                        await fragments.core.update(true);
+                        
+                        const bbox = new THREE.Box3().setFromObject(model.object);
+                        const sphere = new THREE.Sphere();
+                        bbox.getBoundingSphere(sphere);
+                        world.camera.controls.fitToSphere(sphere, true);
+                        logToScreen(`Loaded .frag: ${file.name}`);
+                    } else {
+                        // Assume IFC
+                        logToScreen(`Loading and converting IFC: ${file.name}...`);
+                        const data = new Uint8Array(buffer);
+                        
+                        // IfcLoader is already setup globally
+                        const ifcLoader = components.get(OBC.IfcLoader);
+                        // Optional: Ensure WASM path is correct if setup failed previously
+                        // await ifcLoader.setup({ wasm: { path: `${baseUrl}wasm/`, absolute: true } });
+                        
+                        const model = await ifcLoader.load(data, true, file.name);
+                        world.scene.three.add(model.object);
+                        
+                        // Center camera
+                        const bbox = new THREE.Box3().setFromObject(model.object);
+                        const sphere = new THREE.Sphere();
+                        bbox.getBoundingSphere(sphere);
+                        world.camera.controls.fitToSphere(sphere, true);
+                        
+                        logToScreen(`Loaded IFC: ${file.name}`);
+                        
+                        // AUTO EXPORT AND DOWNLOAD
+                        logToScreen('Exporting to .frag...');
+                        try {
+                             // Try saving using internal method if public one is missing
+                             // @ts-ignore
+                             const savedData = model._save ? await model._save() : null;
+                             
+                             if (savedData) {
+                                 const blob = new Blob([savedData as any], { type: 'application/octet-stream' });
+                                 const url = URL.createObjectURL(blob);
+                                 const a = document.createElement('a');
+                                 a.href = url;
+                                 a.download = file.name.replace(/\.ifc$/i, '') + '.frag';
+                                 document.body.appendChild(a);
+                                 a.click();
+                                 document.body.removeChild(a);
+                                 URL.revokeObjectURL(url);
+                                 logToScreen('Converted file downloaded automatically!');
+                             } else {
+                                 logToScreen('Export failed: Save method not found on model', true);
+                             }
+                        } catch (exportErr) {
+                             logToScreen(`Export error: ${exportErr}`, true);
+                        }
+                    }
+                } catch (e) {
+                    logToScreen(`Error loading file: ${e}`, true);
+                    alert(`Error loading file: ${e}`);
+                } finally {
+                    if (overlay) overlay.style.display = 'none';
+                }
+                
+                // Reset input
+                target.value = '';
+            }
+        });
     }
 }
 
 function initTheme() {
-    try {
-        const themeBtn = document.getElementById('theme-toggle');
-        const icon = themeBtn?.querySelector('i');
-        const logoImg = document.getElementById('logo-img') as HTMLImageElement;
-        
-        const savedTheme = localStorage.getItem('theme');
-        const isDark = savedTheme === 'dark';
-        
-        const updateThemeUI = (dark: boolean) => {
-            if (dark) {
-                document.body.classList.add('dark-mode');
-                if(icon) icon.className = 'fa-solid fa-sun';
-                if(logoImg) logoImg.src = 'https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png';
-                if (world && world.scene && world.scene.three) {
-                     world.scene.three.background = new THREE.Color(0x1e1e1e); 
-                }
-            } else {
-                document.body.classList.remove('dark-mode');
-                if(icon) icon.className = 'fa-solid fa-moon';
-                if(logoImg) logoImg.src = 'https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png';
-                if (world && world.scene && world.scene.three) {
-                     world.scene.three.background = new THREE.Color(0xf5f5f5); 
-                }
+    const themeBtn = document.getElementById('theme-toggle');
+    const icon = themeBtn?.querySelector('i');
+    const logoImg = document.getElementById('logo-img') as HTMLImageElement;
+    
+    // Default to Light (false)
+    const savedTheme = localStorage.getItem('theme');
+    const isDark = savedTheme === 'dark';
+    
+    const updateThemeUI = (dark: boolean) => {
+        if (dark) {
+            document.body.classList.add('dark-mode');
+            if(icon) icon.className = 'fa-solid fa-sun';
+            if(logoImg) logoImg.src = 'https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png';
+            if (world && world.scene && world.scene.three) {
+                 world.scene.three.background = new THREE.Color(0x1e1e1e); 
             }
-        };
+        } else {
+            document.body.classList.remove('dark-mode');
+            if(icon) icon.className = 'fa-solid fa-moon';
+            if(logoImg) logoImg.src = 'https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png';
+            if (world && world.scene && world.scene.three) {
+                 world.scene.three.background = new THREE.Color(0xf5f5f5); 
+            }
+        }
+    };
 
-        updateThemeUI(isDark);
+    // Initial set
+    updateThemeUI(isDark);
 
-        themeBtn?.addEventListener('click', () => {
-            document.body.classList.toggle('dark-mode');
-            const currentDark = document.body.classList.contains('dark-mode');
-            localStorage.setItem('theme', currentDark ? 'dark' : 'light');
-            updateThemeUI(currentDark);
-        });
-    } catch (e) {
-        console.error('Error in initTheme:', e);
-    }
+    themeBtn?.addEventListener('click', () => {
+        document.body.classList.toggle('dark-mode');
+        // Force re-check of class because toggle returns boolean
+        // But we want to be explicit
+        const currentDark = document.body.classList.contains('dark-mode');
+        localStorage.setItem('theme', currentDark ? 'dark' : 'light');
+        updateThemeUI(currentDark);
+    });
 }
 
 function initProjectionToggle() {
-    try {
-        const btn = document.getElementById('projection-toggle');
-        if (!btn) return;
+    const btn = document.getElementById('projection-toggle');
+    if (!btn) return;
 
-        const labelSpan = btn.querySelector('span');
+    const labelSpan = btn.querySelector('span');
 
-        const updateUI = () => {
-            const current = (world.camera as any).projection?.current as string | undefined;
-            const isOrtho = current === 'Orthographic';
-            btn.classList.toggle('active', isOrtho);
-            if (labelSpan) {
-                labelSpan.textContent = isOrtho ? 'Orto' : 'Persp';
-            }
-        };
+    const updateUI = () => {
+        const current = (world.camera as any).projection?.current as string | undefined;
+        const isOrtho = current === 'Orthographic';
+        btn.classList.toggle('active', isOrtho);
+        if (labelSpan) {
+            labelSpan.textContent = isOrtho ? 'Orto' : 'Persp';
+        }
+    };
+
+    updateUI();
+
+    btn.addEventListener('click', () => {
+        const projectionApi = (world.camera as any).projection;
+        if (!projectionApi || typeof projectionApi.set !== 'function') return;
+
+        const current = projectionApi.current as string;
+        const next = current === 'Orthographic' ? 'Perspective' : 'Orthographic';
+
+        projectionApi.set(next);
+
+        const rendererAny: any = world.renderer as any;
+        if (rendererAny?.postproduction?.updateCamera) {
+            rendererAny.postproduction.updateCamera();
+        }
 
         updateUI();
-
-        btn.addEventListener('click', () => {
-            const projectionApi = (world.camera as any).projection;
-            if (!projectionApi || typeof projectionApi.set !== 'function') return;
-
-            const current = projectionApi.current as string;
-            const next = current === 'Orthographic' ? 'Perspective' : 'Orthographic';
-
-            projectionApi.set(next);
-
-            const rendererAny: any = world.renderer as any;
-            if (rendererAny?.postproduction?.updateCamera) {
-                rendererAny.postproduction.updateCamera();
-            }
-
-            updateUI();
-        });
-    } catch (e) {
-        console.error('Error in initProjectionToggle:', e);
-    }
+    });
 }
 
 function initClipperTool() {
-    try {
-        const btn = document.getElementById('clipper-toggle');
-        const controls = document.getElementById('clipper-controls');
-        const viewer = document.getElementById('viewer-container');
-        if (!btn || !viewer) return;
+    const btn = document.getElementById('clipper-toggle');
+    const controls = document.getElementById('clipper-controls');
+    const viewer = document.getElementById('viewer-container');
+    if (!btn || !viewer) return;
 
-        const updateUI = () => {
-            const active = clipper.enabled;
-            btn.classList.toggle('active', active);
-            if (controls) controls.style.display = active ? 'flex' : 'none';
-        };
+    const updateUI = () => {
+        const active = clipper.enabled;
+        btn.classList.toggle('active', active);
+        if (controls) controls.style.display = active ? 'flex' : 'none';
+    };
 
+    updateUI();
+
+    btn.addEventListener('click', () => {
+        clipper.enabled = !clipper.enabled;
         updateUI();
+    });
 
-        btn.addEventListener('click', () => {
-            clipper.enabled = !clipper.enabled;
-            updateUI();
-        });
-
-        viewer.addEventListener('dblclick', () => {
-            if (clipper.enabled) {
-                clipper.create(world);
-            }
-        });
-
-        window.addEventListener('keydown', (event) => {
-            if (event.code === 'Delete' || event.code === 'Backspace') {
-                clipper.delete(world);
-            }
-        });
-
-        const deleteAllBtn = document.getElementById('clipper-delete-all');
-        if (deleteAllBtn) {
-            deleteAllBtn.addEventListener('click', () => {
-                clipper.deleteAll();
-            });
+    viewer.addEventListener('dblclick', () => {
+        if (clipper.enabled) {
+            clipper.create(world);
         }
+    });
 
-        const planeBtns = document.querySelectorAll('.clipper-plane-btn');
-        planeBtns.forEach(pBtn => {
-            pBtn.addEventListener('click', () => {
-                if (!clipper.enabled) return;
-                
-                const axis = pBtn.getAttribute('data-axis');
-                const center = getModelCenter();
-                const normal = new THREE.Vector3();
-                
-                if (axis === 'x') normal.set(-1, 0, 0);
-                else if (axis === 'y') normal.set(0, -1, 0);
-                else if (axis === 'z') normal.set(0, 0, -1);
-                
-                clipper.createFromNormalAndCoplanarPoint(world, normal, center);
-            });
+    window.addEventListener('keydown', (event) => {
+        if (event.code === 'Delete' || event.code === 'Backspace') {
+            clipper.delete(world);
+        }
+    });
+
+    // Clipper Controls
+    const deleteAllBtn = document.getElementById('clipper-delete-all');
+    if (deleteAllBtn) {
+        deleteAllBtn.addEventListener('click', () => {
+            clipper.deleteAll();
         });
-    } catch (e) {
-        console.error('Error in initClipperTool:', e);
     }
+
+    const planeBtns = document.querySelectorAll('.clipper-plane-btn');
+    planeBtns.forEach(pBtn => {
+        pBtn.addEventListener('click', () => {
+            if (!clipper.enabled) return;
+            
+            const axis = pBtn.getAttribute('data-axis');
+            const center = getModelCenter();
+            const normal = new THREE.Vector3();
+            
+            if (axis === 'x') normal.set(-1, 0, 0);
+            else if (axis === 'y') normal.set(0, -1, 0);
+            else if (axis === 'z') normal.set(0, 0, -1);
+            
+            clipper.createFromNormalAndCoplanarPoint(world, normal, center);
+        });
+    });
 }
 
 function initGridToggle() {
@@ -698,17 +497,17 @@ function initGridToggle() {
     });
 }
 
+
+
+
 // Load models from JSON and populate sidebar
 async function loadModelList() {
     const listContainer = document.getElementById('model-list');
-    if (!listContainer) return;
+    if (!listContainer) {
+        return;
+    }
 
     try {
-        if (!fragmentsReady) {
-             // Should not happen if called from initApp
-             console.warn('loadModelList called before fragments ready');
-        }
-
         const modelsUrl = `${baseUrl}models.json?t=${Date.now()}`;
         
         const response = await fetch(modelsUrl);
@@ -717,6 +516,7 @@ async function loadModelList() {
         const models = await response.json();
         logToScreen(`Models list loaded: ${models.length} models found`);
 
+        // Group models by specialty
         const groups: Record<string, any[]> = {};
         models.forEach((m: { name: string; path: string; folder?: string }) => {
             const specialty = getSpecialtyFromIfcPath(m.path) || m.folder || 'General';
@@ -724,6 +524,7 @@ async function loadModelList() {
             groups[specialty].push(m);
         });
 
+        // Clear container
         listContainer.innerHTML = '';
 
         for (const [folder, items] of Object.entries(groups)) {
@@ -735,8 +536,9 @@ async function loadModelList() {
             header.innerHTML = `<span><i class="fa-regular fa-folder-open"></i> ${folder}</span> <i class="fa-solid fa-chevron-down"></i>`;
             
             const itemsList = document.createElement('ul');
-            itemsList.className = 'folder-items'; 
+            itemsList.className = 'folder-items'; // Open by default
             
+            // Toggle logic
             header.addEventListener('click', () => {
                 const isCollapsed = itemsList.classList.contains('collapsed');
                 if (isCollapsed) {
@@ -755,6 +557,7 @@ async function loadModelList() {
                 li.className = 'model-item';
                 li.dataset.path = m.path;
 
+                // Structure: Name + Visibility Toggle
                 li.innerHTML = `
                     <div class="model-name"><i class="fa-solid fa-cube"></i> ${m.name}</div>
                     <div class="visibility-toggle" title="Toggle Visibility">
@@ -762,7 +565,9 @@ async function loadModelList() {
                     </div>
                 `;
 
+                // Handle click on the whole item or specific toggle
                 li.addEventListener('click', async (e) => {
+                    // Prevent propagation if clicking nested elements
                     e.stopPropagation();
                     await toggleModel(m.path, baseUrl, li);
                 });
@@ -783,11 +588,25 @@ async function loadModelList() {
 async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement) {
     const toggleIcon = liElement.querySelector('.visibility-toggle i');
     
+    // Check if already loaded
     if (loadedModels.has(path)) {
         const model = loadedModels.get(path);
+        
+        // Toggle visibility
         const newVisible = !model.object.visible;
         model.object.visible = newVisible;
         
+        // Also update culler
+        if(newVisible) {
+             // culler.add(model.mesh);
+        } else {
+            // There isn't a direct remove from culler in simple API sometimes, 
+            // but hiding the mesh handles it visually. 
+            // Culler updates based on scene visibility usually.
+        }
+        // culler.needsUpdate = true;
+        
+        // Update UI
         if (newVisible) {
             liElement.classList.add('visible');
             toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
@@ -795,18 +614,23 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
             liElement.classList.remove('visible');
             toggleIcon?.classList.replace('fa-eye', 'fa-eye-slash');
         }
+        
+        logToScreen(`Toggled model visibility: ${path} -> ${newVisible}`);
         return;
     }
 
+    // Not loaded, load it
     const overlay = document.getElementById('loading-overlay');
     if (overlay) overlay.style.display = 'flex';
     
     try {
+        // Encode path parts to handle spaces
         const encodedPath = path.split('/').map(part => encodeURIComponent(part)).join('/');
         const fullPath = `${baseUrl}${encodedPath}`;
         
         await loadModel(fullPath, path);
         
+        // Update UI to loaded/visible state
         liElement.classList.add('visible');
         toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
         
@@ -817,128 +641,76 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
     }
 }
 
-// --- Tabs Logic ---
-function initTabs() {
-    try {
-        const tabs = document.querySelectorAll('.tab-btn');
-        const contents = document.querySelectorAll('.tab-content');
+logToScreen('Initializing That Open Engine...');
+initSidebar();
+initTheme();
+initProjectionToggle();
+initGridToggle();
+initClipperTool();
+initFitModelTool();
+loadModelList();
+initPropertiesPanel();
 
-        if (tabs.length === 0) {
-            console.warn('No tabs found');
-            return;
+// --- View Controls & Console Toggle ---
+
+const consoleToggle = document.getElementById('console-toggle');
+if (consoleToggle) {
+    consoleToggle.addEventListener('click', () => {
+        const consoleEl = document.getElementById('debug-console');
+        if (consoleEl) {
+            const isVisible = consoleEl.style.display !== 'none';
+            consoleEl.style.display = isVisible ? 'none' : 'block';
+            consoleToggle.classList.toggle('active', !isVisible);
         }
+    });
+}
 
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                tabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
+// Helper to get current model center using BoundingBoxer with fallback
+function getModelBox() {
+    const boxer = components.get(OBC.BoundingBoxer);
+    boxer.list.clear();
+    
+    // Use addFromModels to automatically include all fragments registered in FragmentsManager
+    boxer.addFromModels();
 
-                contents.forEach(c => c.classList.remove('active'));
-                
-                const targetId = tab.getAttribute('data-target');
-                if (targetId) {
-                    const targetContent = document.getElementById(targetId);
-                    if (targetContent) {
-                        targetContent.classList.add('active');
-                    }
-                }
-            });
+    let box = boxer.get();
+    boxer.list.clear();
+
+    // Fallback if BoundingBoxer returns empty (e.g. if models are not fragments)
+    if (box.isEmpty()) {
+        console.warn('BoundingBoxer empty, falling back to scene traversal');
+        box = new THREE.Box3();
+        let hasMeshes = false;
+        world.scene.three.traverse((child: any) => {
+             // Check if it's a mesh and part of a model (not grid/helper)
+             // Simple check: isMesh and visible
+             if (child.isMesh && child.visible) {
+                 box.expandByObject(child);
+                 hasMeshes = true;
+             }
         });
-    } catch (e) {
-        console.error('Error in initTabs:', e);
     }
+
+    return box;
 }
 
-// --- Properties Panel ---
-function initPropertiesPanel() {
-    try {
-        const propertiesPanel = document.getElementById('properties-panel');
-        const propertiesToggle = document.getElementById('properties-toggle');
-        const propertiesContent = document.getElementById('properties-content');
-        const resizer = document.getElementById('properties-resizer');
-
-        if (propertiesToggle && propertiesPanel) {
-            // Remove existing listeners to avoid duplicates if called multiple times
-            const newToggle = propertiesToggle.cloneNode(true);
-            propertiesToggle.parentNode?.replaceChild(newToggle, propertiesToggle);
-            
-            newToggle.addEventListener('click', () => {
-                const isOpen = propertiesPanel.classList.toggle('open');
-                document.body.classList.toggle('properties-open', isOpen);
-                (newToggle as HTMLElement).classList.toggle('active', isOpen);
-            });
-        }
-
-        // Resizing logic for properties panel
-        if (resizer && propertiesPanel) {
-            let isResizing = false;
-            
-            resizer.addEventListener('mousedown', (e) => {
-                isResizing = true;
-                resizer.classList.add('resizing');
-                document.body.style.cursor = 'ew-resize';
-                e.preventDefault();
-            });
-            
-            document.addEventListener('mousemove', (e) => {
-                if (!isResizing) return;
-                const windowWidth = window.innerWidth;
-                const newWidth = windowWidth - e.clientX;
-                if (newWidth > 250 && newWidth < 600) {
-                    propertiesPanel.style.width = `${newWidth}px`;
-                }
-            });
-            
-            document.addEventListener('mouseup', () => {
-                if (isResizing) {
-                    isResizing = false;
-                    resizer.classList.remove('resizing');
-                    document.body.style.cursor = 'default';
-                }
-            });
-        }
-    } catch(e) {
-        console.error('Error initPropertiesPanel', e);
-    }
+function getModelCenter(): THREE.Vector3 {
+    const box = getModelBox();
+    if (box.isEmpty()) return new THREE.Vector3(0,0,0);
+    
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    return center;
 }
 
-function initPropertiesEvents() {
-    try {
-        const propertiesPanel = document.getElementById('properties-panel');
-        const propertiesToggle = document.getElementById('properties-toggle');
-        const propertiesContent = document.getElementById('properties-content');
-
-        if (highlighter && propertiesContent) {
-             highlighter.events.select.onHighlight.add(async (fragmentMap) => {
-                propertiesContent.innerHTML = '';
-                
-                const fragmentId = Object.keys(fragmentMap)[0];
-                const expressID = [...fragmentMap[fragmentId]][0];
-                
-                propertiesContent.innerHTML = `
-                    <div style="padding:10px;">
-                        <h4>Elemento Seleccionado</h4>
-                        <p><strong>Fragment ID:</strong> ${fragmentId}</p>
-                        <p><strong>Express ID:</strong> ${expressID}</p>
-                    </div>
-                `;
-                
-                if (propertiesPanel && !propertiesPanel.classList.contains('open')) {
-                     propertiesPanel.classList.add('open');
-                     document.body.classList.add('properties-open');
-                     propertiesToggle?.classList.add('active');
-                }
-            });
-            
-            highlighter.events.select.onClear.add(() => {
-                if (propertiesContent) {
-                     propertiesContent.innerHTML = '<div class="no-selection">Selecciona un elemento para ver sus propiedades</div>';
-                }
-            });
-        }
-    } catch(e) {
-        console.error('Error initPropertiesEvents', e);
-    }
+// Helper to get model size (radius)
+function getModelRadius(): number {
+    const box = getModelBox();
+    if (box.isEmpty()) return 10;
+    
+    const sphere = new THREE.Sphere();
+    box.getBoundingSphere(sphere);
+    return sphere.radius || 10;
 }
 
 function initFitModelTool() {
@@ -946,42 +718,540 @@ function initFitModelTool() {
     if (!btn) return;
 
     btn.addEventListener('click', () => {
+        logToScreen('Fit Model clicked');
+        // alert('Fit Model Clicked'); // Uncomment for forceful debug
         const box = getModelBox();
         const sphere = new THREE.Sphere();
         box.getBoundingSphere(sphere);
         
+        logToScreen(`Fit Radius: ${sphere.radius.toFixed(2)} Center: ${sphere.center.x.toFixed(1)},${sphere.center.y.toFixed(1)},${sphere.center.z.toFixed(1)}`);
+
         if (sphere.radius > 0.1) {
              world.camera.controls.fitToSphere(sphere, true);
         } else {
+             logToScreen('Model bounds too small/empty', true);
              alert('No se pudo encontrar el modelo para ajustar. Intenta recargar.');
         }
     });
 }
 
-function getModelBox() {
-    const boxer = components.get(OBC.BoundingBoxer);
-    boxer.list.clear();
-    boxer.addFromModels();
-    let box = boxer.get();
-    boxer.list.clear();
+const viewDropdownBtn = document.getElementById('view-dropdown-btn');
+const viewDropdownMenu = document.getElementById('view-dropdown-menu');
 
-    if (box.isEmpty()) {
-        box = new THREE.Box3();
-        world.scene.three.traverse((child: any) => {
-             if (child.isMesh && child.visible) {
-                 box.expandByObject(child);
+if (viewDropdownBtn && viewDropdownMenu) {
+    // Toggle menu
+    viewDropdownBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        viewDropdownMenu.classList.toggle('show');
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', () => {
+        viewDropdownMenu.classList.remove('show');
+    });
+}
+
+const viewButtons = document.querySelectorAll('.view-btn');
+viewButtons.forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const view = btn.getAttribute('data-view');
+        
+        // Update Main Button Text to show selected view
+        if (viewDropdownBtn) {
+             const icon = btn.querySelector('i')?.cloneNode(true);
+             const text = btn.textContent?.trim();
+             const span = viewDropdownBtn.querySelector('span');
+             if (span && icon && text) {
+                 span.innerHTML = '';
+                 span.appendChild(icon);
+                 span.appendChild(document.createTextNode(' ' + text));
+             }
+        }
+
+        const center = getModelCenter();
+        const radius = getModelRadius();
+        const dist = radius * 2; // Distance factor
+        
+        // Ensure controls are enabled
+        world.camera.controls.enabled = true;
+
+        switch (view) {
+            case 'top':
+                await world.camera.controls.setLookAt(center.x, center.y + dist, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'bottom':
+                await world.camera.controls.setLookAt(center.x, center.y - dist, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'front':
+                await world.camera.controls.setLookAt(center.x, center.y, center.z + dist, center.x, center.y, center.z, true);
+                break;
+            case 'back':
+                await world.camera.controls.setLookAt(center.x, center.y, center.z - dist, center.x, center.y, center.z, true);
+                break;
+            case 'left':
+                await world.camera.controls.setLookAt(center.x - dist, center.y, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'right':
+                await world.camera.controls.setLookAt(center.x + dist, center.y, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'iso':
+                await world.camera.controls.setLookAt(center.x + dist, center.y + dist, center.z + dist, center.x, center.y, center.z, true);
+                break;
+        }
+    });
+});
+
+
+
+// Listener moved to initSidebar to handle both IFC and Frag files centrally
+
+// --- Highlighter & Properties Setup ---
+const highlighter = components.get(OBF.Highlighter);
+highlighter.setup({ world });
+highlighter.zoomToSelection = true;
+
+const [propsTable, updatePropsTable] = CUI.tables.itemsData({
+    components,
+    modelIdMap: {},
+});
+
+propsTable.preserveStructureOnFilter = true;
+
+const propertiesContent = document.getElementById('properties-content');
+if (propertiesContent) {
+    propertiesContent.innerHTML = '';
+    propertiesContent.appendChild(propsTable);
+}
+
+highlighter.events.select.onHighlight.add((modelIdMap) => {
+    updatePropsTable({ modelIdMap });
+});
+
+highlighter.events.select.onClear.add(() => {
+    updatePropsTable({ modelIdMap: {} });
+});
+
+if (container) {
+    container.addEventListener('click', () => {
+        const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
+        if (selection) {
+            updatePropsTable({ modelIdMap: selection });
+        }
+    });
+}
+
+// Helper for deep property resolution
+function resolveRemote(ref: any, model: any) {
+    if (!ref || !model || !model.properties) return ref;
+    if (typeof ref === 'number') return model.properties[ref];
+    if (ref && typeof ref.value === 'number') return model.properties[ref.value];
+    return ref;
+}
+
+async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
+    console.log('[DEBUG] renderPropertiesTable called with:', modelIdMap);
+    const content = document.getElementById('properties-content');
+    if (!content) return;
+    content.innerHTML = '';
+
+    const entries = modelIdMap instanceof Map
+        ? Array.from(modelIdMap.entries())
+        : Object.entries(modelIdMap);
+
+    if (entries.length === 0) {
+        content.innerHTML = '<div style="padding: 15px; color: #666; text-align: center;">Selecciona un elemento para ver sus propiedades</div>';
+        return;
+    }
+
+    const normalized: Record<string, number[]> = {};
+    for (const [modelID, idsSet] of entries) {
+        const ids = idsSet instanceof Set ? Array.from(idsSet) : (idsSet as any[]);
+        if (!ids || ids.length === 0) continue;
+        normalized[modelID] = ids as number[];
+    }
+
+    const modelIds = Object.keys(normalized);
+    if (modelIds.length === 0) {
+        content.innerHTML = '<div style="padding: 15px; color: #666; text-align: center;">Selecciona un elemento para ver sus propiedades</div>';
+        return;
+    }
+
+    const dataByModel = await fragments.getData(normalized as any, {
+        attributesDefault: true,
+        relations: {
+            ContainedInStructure: { attributes: true, relations: true },
+            IsDefinedBy: { attributes: true, relations: true }
+        }
+    } as any);
+
+    // --- SECOND PASS: Fetch Relations Entities (specifically IfcRelContainedInSpatialStructure) ---
+    // Identify which relation IDs we need to fetch
+    const relationsToFetch: Record<string, number[]> = {};
+    
+    for (const modelID of modelIds) {
+        const items = (dataByModel as any)[modelID] || [];
+        const modelRelations = new Set<number>();
+        
+        items.forEach((item: any) => {
+             const raw = item as any;
+             const attrs = raw.data || raw.attributes || raw;
+             const relations = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
+             const spatial = relations.ContainedInStructure || relations.containedInStructure || relations.containedInSpatialStructure || relations.ContainedInSpatialStructure;
+             if (Array.isArray(spatial)) {
+                 spatial.forEach((id: number) => modelRelations.add(id));
              }
         });
+        
+        if (modelRelations.size > 0) {
+            relationsToFetch[modelID] = Array.from(modelRelations);
+        }
     }
-    return box;
+
+    let relationsData: any = {};
+    if (Object.keys(relationsToFetch).length > 0) {
+         try {
+             relationsData = await fragments.getData(relationsToFetch as any, {
+                 attributesDefault: true,
+                 relationsDefault: { attributes: true } // We just need the RelatingStructure ID
+             } as any);
+         } catch (e) {
+             console.error('Failed to fetch relations data:', e);
+         }
+    }
+
+    // --- THIRD PASS: Fetch Structure Entities (The Levels themselves) ---
+    const structuresToFetch: Record<string, number[]> = {};
+    const relIdToStructureId: Record<string, number> = {}; // Key: "modelID-relID" -> structureID
+
+    for (const modelID of Object.keys(relationsData)) {
+        const rels = relationsData[modelID];
+        const modelStructures = new Set<number>();
+
+        rels.forEach((rel: any) => {
+             const raw = rel as any;
+             const attrs = raw.data || raw.attributes || raw;
+             // IfcRelContainedInSpatialStructure has RelatingStructure
+             const structRef = attrs.RelatingStructure || attrs.relatingStructure;
+             const structID = (structRef && typeof structRef === 'object' && 'value' in structRef) ? structRef.value : structRef;
+             
+             if (typeof structID === 'number') {
+                 modelStructures.add(structID);
+                 // Map relation to structure for lookup later
+                 // Note: relationsData returns array of objects, we need to match by Express ID if possible
+                 // But fragments.getData returns objects which usually contain expressID. 
+                 // If not, we rely on the order or check if expressID is in attrs.
+                 const expressID = raw.expressID || attrs.expressID;
+                 if (expressID) {
+                     relIdToStructureId[`${modelID}-${expressID}`] = structID;
+                 }
+             }
+        });
+
+        if (modelStructures.size > 0) {
+            structuresToFetch[modelID] = Array.from(modelStructures);
+        }
+    }
+
+    let structuresData: any = {};
+    if (Object.keys(structuresToFetch).length > 0) {
+        try {
+            structuresData = await fragments.getData(structuresToFetch as any, {
+                attributesDefault: true
+            } as any);
+        } catch (e) {
+            console.error('Failed to fetch structure data:', e);
+        }
+    }
+    
+    // Helper to find structure name
+    const getStructureName = (modelID: string, structureID: number) => {
+        const structs = structuresData[modelID];
+        if (!structs) return null;
+        const s = structs.find((x: any) => (x.expressID || x.attributes?.expressID || x.data?.expressID) === structureID);
+        if (!s) return null;
+        const attrs = s.data || s.attributes || s;
+        const n = attrs.Name || attrs.name;
+        return (n?.value ?? n);
+    };
+
+    for (const modelID of modelIds) {
+        const localIds = normalized[modelID] || [];
+        const items = (dataByModel as any)[modelID] || [];
+        
+        // Try to get the full model to access raw properties
+        const model = loadedModels.get(modelID) || fragments.groups.get(modelID);
+
+        items.forEach((item: any, index: number) => {
+            const localId = localIds[index];
+            const raw = item as any;
+            const attrs = raw.data || raw.attributes || raw;
+            let levelName: string | null = null;
+
+            // --- Base Info (Name, ID, Category, GUID) ---
+            const nameAttr = attrs.Name || attrs.name || attrs.IFCNAME || attrs.IfcName;
+            const nameValue = typeof nameAttr === 'object' && nameAttr !== null && 'value' in nameAttr
+                ? (nameAttr as any).value
+                : nameAttr || `Elemento ${localId ?? ''}`;
+
+            const category = raw.category || attrs.Category || attrs.category;
+            const guidAttr = raw.guid || attrs.GlobalId || attrs.globalId || attrs.GUID || attrs.guid;
+            const guidValue = typeof guidAttr === 'object' && guidAttr !== null && 'value' in guidAttr
+                ? (guidAttr as any).value
+                : guidAttr || '';
+
+            const container = document.createElement('div');
+            container.className = 'prop-item';
+
+            let html = `
+                <div class="prop-header-info">
+                    <strong>${nameValue}</strong>
+                    <div style="font-size: 11px; color: #666;">
+                        ID: ${localId ?? '-'} <span style="margin: 0 5px;">|</span> Modelo: ${modelID}
+                        ${category ? `<span style="margin: 0 5px;">|</span> Tipo: ${category}</span>` : ''}
+                        ${guidValue ? `<br/>GUID: ${guidValue}` : ''}
+                    </div>
+                </div>
+            `;
+
+            html += `<div class="prop-set-title">Atributos Base</div>`;
+            html += `<table class="prop-table"><tbody>`;
+
+            // Filter out internal/relation keys from base attributes
+            const ignoredKeys = new Set(['localId', 'category', 'guid', 'IsDefinedBy', 'isDefinedBy', 'relations', 'Relations', 'expressID', 'type']);
+            
+            for (const [key, attr] of Object.entries(attrs)) {
+                if (!key || ignoredKeys.has(key)) continue;
+
+                const val = (attr as any)?.value ?? attr;
+                if (val === null || val === undefined) continue;
+                if (Array.isArray(val)) continue;
+                if (typeof val === 'object') continue;
+
+                html += `<tr><th>${key}</th><td>${val}</td></tr>`;
+            }
+
+            if (levelName) {
+                html += `<tr><th>Nivel</th><td>${levelName}</td></tr>`;
+            }
+
+            html += `</tbody></table>`;
+
+            // --- Relations (Property Sets & Cantidades) ---
+            
+            let foundDeepProps = false;
+            
+            if (model && model.properties && model.properties[localId]) {
+                const entity = model.properties[localId];
+                
+                // --- Level / Spatial Structure ---
+                const containedIn = entity.ContainedInStructure || entity.containedInStructure;
+                if (containedIn && Array.isArray(containedIn)) {
+                    for (const relRef of containedIn) {
+                        const rel = resolveRemote(relRef, model);
+                        if (!rel) continue;
+
+                        const structureRef = rel.RelatingStructure || rel.relatingStructure;
+                        if (!structureRef) continue;
+
+                        const structure = resolveRemote(structureRef, model);
+                        if (!structure) continue;
+
+                        const levelNameObj = structure.Name || structure.name;
+                        const candidate = (levelNameObj?.value ?? levelNameObj) || 'Sin Nombre';
+                        if (candidate) {
+                            levelName = String(candidate);
+                            break;
+                        }
+                    }
+                }
+
+                const isDefinedBy = entity.IsDefinedBy || entity.isDefinedBy;
+                
+                if (isDefinedBy && Array.isArray(isDefinedBy)) {
+                    for (const relRef of isDefinedBy) {
+                        const rel = resolveRemote(relRef, model);
+                        if (!rel) continue;
+
+                        // Check if it is IfcRelDefinesByProperties
+                        const psetRef = rel.RelatingPropertyDefinition || rel.relatingPropertyDefinition;
+                        if (!psetRef) continue;
+
+                        const pset = resolveRemote(psetRef, model);
+                        if (!pset) continue;
+
+                        const psetNameObj = pset.Name || pset.name;
+                        const psetName = (psetNameObj?.value ?? psetNameObj) || 'Sin Nombre';
+
+                        // Case 1: IfcPropertySet -> HasProperties
+                        const props = pset.HasProperties || pset.hasProperties;
+                        if (props && Array.isArray(props)) {
+                            foundDeepProps = true;
+                            html += `<div class="prop-set-title">${psetName}</div><table class="prop-table"><tbody>`;
+                            for (const propRef of props) {
+                                const prop = resolveRemote(propRef, model);
+                                if (!prop) continue;
+
+                                const propNameObj = prop.Name || prop.name;
+                                const propName = propNameObj?.value ?? propNameObj;
+                                
+                                const propValObj = prop.NominalValue || prop.nominalValue;
+                                const propVal = propValObj?.value ?? propValObj;
+
+                                if (propName && propVal !== undefined) {
+                                    html += `<tr><th>${propName}</th><td>${propVal}</td></tr>`;
+                                }
+                            }
+                            html += `</tbody></table>`;
+                        }
+
+                        // Case 2: IfcElementQuantity -> Quantities
+                        const quantities = pset.Quantities || pset.quantities;
+                        if (quantities && Array.isArray(quantities)) {
+                            foundDeepProps = true;
+                            html += `<div class="prop-set-title">${psetName} (Cantidades)</div><table class="prop-table"><tbody>`;
+                            for (const qRef of quantities) {
+                                const q = resolveRemote(qRef, model);
+                                if (!q) continue;
+
+                                const qNameObj = q.Name || q.name;
+                                const qName = qNameObj?.value ?? qNameObj;
+                                
+                                const qVal = (q.LengthValue?.value ?? q.LengthValue) ?? 
+                                             (q.AreaValue?.value ?? q.AreaValue) ?? 
+                                             (q.VolumeValue?.value ?? q.VolumeValue) ?? 
+                                             (q.CountValue?.value ?? q.CountValue) ?? 
+                                             (q.WeightValue?.value ?? q.WeightValue) ?? 
+                                             (q.TimeValue?.value ?? q.TimeValue) ?? 
+                                             (q.nominalValue?.value ?? q.nominalValue);
+                                
+                                if (qName && qVal !== undefined) {
+                                    html += `<tr><th>${qName}</th><td>${qVal}</td></tr>`;
+                                }
+                            }
+                            html += `</tbody></table>`;
+                        }
+                    }
+                }
+            }
+
+            // --- Robust Level Lookup (Independent of Deep Props) ---
+            if (!levelName) {
+                const relations = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
+                const spatial = relations.ContainedInStructure || relations.containedInStructure || relations.containedInSpatialStructure || relations.ContainedInSpatialStructure;
+                
+                if (Array.isArray(spatial) && spatial.length > 0) {
+                     // spatial contains IDs of IFCRELCONTAINEDINSPATIALSTRUCTURE
+                     for (const relID of spatial) {
+                         // New Lookup Logic using pre-fetched data
+                         const structID = relIdToStructureId[`${modelID}-${relID}`];
+                         if (structID) {
+                             const name = getStructureName(modelID, structID);
+                             if (name) {
+                                 levelName = String(name);
+                                 break;
+                             }
+                         }
+                         
+                         // Fallback to old logic (only works if model.properties is loaded)
+                         if (!levelName) {
+                             const rel = resolveRemote(relID, model);
+                             if (rel && typeof rel === 'object') {
+                                 const structureRef = rel.RelatingStructure || rel.relatingStructure;
+                                 const structure = resolveRemote(structureRef, model);
+                                 if (structure && typeof structure === 'object') {
+                                     const levelNameObj = structure.Name || structure.name;
+                                     const candidate = (levelNameObj?.value ?? levelNameObj);
+                                     if (candidate) {
+                                         levelName = String(candidate);
+                                         break; // Found it
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                }
+            }
+
+            if (levelName && !html.includes("<th>Nivel</th>")) {
+                html = html.replace(
+                    "</tbody></table>",
+                    `<tr><th>Nivel</th><td>${levelName}</td></tr></tbody></table>`
+                );
+            }
+
+            const rels = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
+            const relKeys = Object.keys(rels);
+            const spatial = rels.ContainedInStructure || rels.containedInStructure || rels.containedInSpatialStructure || rels.ContainedInSpatialStructure;
+            
+            html += `
+                <details style="margin-top: 15px; border-top: 1px solid #ddd; padding-top: 10px;">
+                    <summary style="font-size: 11px; color: #999; cursor: pointer; user-select: none;">
+                        🛠 Diagnóstico de Datos
+                    </summary>
+                    <div style="font-size: 10px; color: #444; background: #f5f5f5; padding: 10px; margin-top: 5px; border-radius: 4px; overflow-x: auto;">
+                        <strong>ID Elemento:</strong> ${localId} (ExpressID)<br/>
+                        <strong>Relaciones Disponibles:</strong> ${relKeys.length > 0 ? relKeys.join(', ') : 'NINGUNA'}<br/>
+                        <strong>Relación Espacial (Nivel):</strong> ${spatial ? '✅ EXISTE' : '❌ FALTA'}<br/>
+                        ${spatial ? `Valores: ${JSON.stringify(spatial)}` : ''}
+                    </div>
+                </details>
+            `;
+
+            container.innerHTML = html;
+            content.appendChild(container);
+        });
+    }
 }
 
-function getModelCenter(): THREE.Vector3 {
-    const box = getModelBox();
-    if (box.isEmpty()) return new THREE.Vector3(0,0,0);
-    const center = new THREE.Vector3();
-    box.getCenter(center);
-    return center;
-}
+function initPropertiesPanel() {
+    const panel = document.getElementById('properties-panel');
+    const toggleBtn = document.getElementById('properties-toggle');
+    const resizer = document.getElementById('properties-resizer');
+    
+    if (toggleBtn && panel) {
+        toggleBtn.addEventListener('click', () => {
+            panel.classList.toggle('closed');
+        });
+    }
 
+    if (resizer && panel) {
+        let isResizing = false;
+        
+                const header = panel.querySelector('.properties-header');
+                if (header && !header.querySelector('.version-tag')) {
+                     const v = document.createElement('span');
+                     v.className = 'version-tag';
+                     v.style.fontSize = '10px';
+                     v.style.color = '#888';
+                     v.style.marginLeft = '10px';
+                     v.innerText = 'v1.7 (Custom Table)';
+                     header.appendChild(v);
+                }
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('resizing');
+            document.body.style.cursor = 'ew-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newWidth = window.innerWidth - e.clientX;
+            if (newWidth > 200 && newWidth < 800) {
+                panel.style.width = `${newWidth}px`;
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('resizing');
+                document.body.style.cursor = 'default';
+            }
+        });
+    }
+
+    renderPropertiesTable({} as any);
+}
 

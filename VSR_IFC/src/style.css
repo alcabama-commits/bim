@@ -87,50 +87,6 @@ body {
   transform: translateX(-100%);
 }
 
-/* Sidebar Tabs */
-.sidebar-tabs {
-    display: flex;
-    border-bottom: 1px solid var(--border-color);
-    background: var(--bg-white);
-}
-
-.tab-btn {
-    flex: 1;
-    padding: 12px;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-med-gray);
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-}
-
-.tab-btn:hover {
-    color: var(--primary-color);
-    background: var(--bg-light-gray);
-}
-
-.tab-btn.active {
-    color: var(--primary-color);
-    border-bottom: 2px solid var(--primary-color);
-}
-
-.tab-content {
-    display: none;
-    flex: 1;
-    overflow-y: auto;
-}
-
-.tab-content.active {
-    display: block;
-}
-
 .sidebar-header {
   padding: 15px;
   border-bottom: 1px solid var(--border-color);
@@ -676,25 +632,6 @@ body {
     color: #fff;
     border-color: var(--primary-color);
     opacity: 1;
-}
-
-.debug-console {
-    position: fixed;
-    bottom: 80px;
-    left: 20px;
-    width: 600px;
-    height: 300px;
-    background-color: rgba(30, 30, 30, 0.95);
-    border: 1px solid #444;
-    border-radius: 8px;
-    color: #e0e0e0;
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 12px;
-    z-index: 2000;
-    display: none;
-    flex-direction: column;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-    overflow: hidden;
 }
 
 /* --- BIM Table Overrides for Flat Aesthetic (SOLO ESTÉTICO) --- */
