@@ -169,8 +169,9 @@ function logToScreen(msg: string, isError = false) {
         
         classificationList.innerHTML = '';
 
-        // Check if there are any systems
+    // Check if there are any systems
     if (systemNames.length === 0) {
+        console.log('No se encontraron sistemas de clasificación.');
         classificationList.innerHTML = '<div style="padding: 10px; color: #888; font-style: italic;">No classification data available.</div>';
         return;
     }
