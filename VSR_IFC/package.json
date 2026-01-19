@@ -14,6 +14,7 @@
     "vite": "^5.0.0"
   },
   "dependencies": {
+    "@thatopen/components": "^3.2.7",
     "@thatopen/components-front": "^3.2.17",
     "@thatopen/fragments": "^3.2.13",
     "@thatopen/ui": "^3.2.4",
