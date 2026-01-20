@@ -289,20 +289,43 @@ async function loadModel(url: string, path: string) {
              logToScreen('Reconstructing missing model.data from geometry items...');
              if (!modelAny.data) modelAny.data = new Map();
              
-             if (model.items) {
-                 let count = 0;
-                 for (const fragID in model.items) {
-                     const ids = model.items[fragID];
-                     const idList = Array.isArray(ids) ? ids : Array.from(ids);
-                     for (const id of idList) {
+             // Try to find fragments in model.object (Meshes)
+             const fragmentsList: any[] = [];
+             model.object.traverse((child: any) => {
+                 if (child.isMesh) {
+                     fragmentsList.push(child);
+                 }
+             });
+             
+             if (fragmentsList.length > 0) {
+                 // We found meshes (fragments).
+                 // Problem: We have a list of all ExpressIDs (from getItemsIdsWithGeometry),
+                 // but we don't know which ID belongs to which Fragment if there are multiple.
+                 // Solution: For now, we assume a single-fragment model (common for simple .frag files)
+                 // or map all to the first fragment. This is better than nothing.
+                 
+                 const fragmentId = fragmentsList[0].uuid;
+                 logToScreen(`Found ${fragmentsList.length} fragments. Mapping all data to first fragment: ${fragmentId}`);
+                 
+                 try {
+                     const ids = await model.getItemsIdsWithGeometry();
+                     let count = 0;
+                     for (const id of ids) {
                          // Map ExpressID -> [FragmentID, ExpressID]
-                         modelAny.data.set(Number(id), [fragID, Number(id)]);
+                         modelAny.data.set(Number(id), [fragmentId, Number(id)]);
                          count++;
                      }
+                     logToScreen(`Reconstructed model.data with ${count} entries.`);
+                 } catch (e) {
+                     logToScreen(`Error getting geometry IDs: ${e}`, true);
                  }
-                 logToScreen(`Reconstructed model.data with ${count} entries.`);
              } else {
-                 logToScreen('Cannot reconstruct model.data: model.items is missing!', true);
+                 logToScreen('Cannot reconstruct model.data: No meshes found in model.object!', true);
+                 
+                 // Debug internal managers if possible
+                 if (modelAny._itemsManager) {
+                     console.log('[DEBUG] _itemsManager:', modelAny._itemsManager);
+                 }
              }
         }
 
