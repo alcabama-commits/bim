@@ -170,10 +170,11 @@ async function loadModel(url: string, path: string) {
         const model = await fragments.core.load(buffer, { modelId: path });
         (model as any).name = path.split('/').pop() || 'Model';
 
-        // Ensure model has a valid UUID
-        if (!model.uuid) {
-            model.uuid = THREE.MathUtils.generateUUID();
-            console.warn(`[DEBUG] Model had no UUID, generated: ${model.uuid}`);
+        // FORCE UUID to match the path (which is the key in fragments.list)
+        // This ensures the highlighter and classifier can find the model
+        if (model.uuid !== path) {
+             model.uuid = path;
+             console.log(`[DEBUG] Forced model UUID to match path: ${model.uuid}`);
         }
 
         model.useCamera(world.camera.three);
@@ -254,7 +255,7 @@ async function loadModel(url: string, path: string) {
         // Check if model is in fragments list
         console.log('[DEBUG] Fragments List Keys:', Array.from(fragments.list.keys()));
         const isRegistered = fragments.list.has(model.uuid);
-        console.log(`[DEBUG] Model registered in fragments.list: ${isRegistered}`);
+        console.log(`[DEBUG] Model registered in fragments.list: ${isRegistered} (UUID: ${model.uuid})`);
 
         if (!isRegistered) {
              console.log('[DEBUG] Manually registering model in fragments manager...');
