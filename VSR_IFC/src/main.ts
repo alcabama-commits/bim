@@ -170,6 +170,12 @@ async function loadModel(url: string, path: string) {
         const model = await fragments.core.load(buffer, { modelId: path });
         (model as any).name = path.split('/').pop() || 'Model';
 
+        // Ensure model has a valid UUID
+        if (!model.uuid) {
+            model.uuid = THREE.MathUtils.generateUUID();
+            console.warn(`[DEBUG] Model had no UUID, generated: ${model.uuid}`);
+        }
+
         model.useCamera(world.camera.three);
 
         world.scene.three.add(model.object);
@@ -265,7 +271,7 @@ async function loadModel(url: string, path: string) {
         if (hasProps) {
             try {
                 console.log(`[DEBUG] Running classifier.byCategory() for model ${model.uuid}`);
-                await classifier.byCategory();
+                await classifier.byCategory(model);
                 await updateClassificationUI();
                 logToScreen('Classification updated');
             } catch (e) {
@@ -546,6 +552,12 @@ function initSidebar() {
                         logToScreen(`Loading fragments: ${file.name}...`);
                         const model = await fragments.core.load(buffer, { modelId: file.name });
                         
+                        // Ensure model has a valid UUID
+                        if (!model.uuid) {
+                            model.uuid = THREE.MathUtils.generateUUID();
+                            console.warn(`[DEBUG] Model had no UUID, generated: ${model.uuid}`);
+                        }
+
                         // Ensure registration
                         if (!fragments.list.has(model.uuid)) {
                              fragments.list.set(model.uuid, model);
@@ -599,7 +611,7 @@ function initSidebar() {
                                 
                                 // Attempt classification (might be empty if types are 0, but at least properties exist)
                                 logToScreen(`Attempting classification on dummy properties...`);
-                                await classifier.byCategory();
+                                await classifier.byCategory(model);
                                 await updateClassificationUI();
                                 logToScreen(`Classification complete (fallback).`);
                                 
@@ -610,7 +622,7 @@ function initSidebar() {
                             // Classify only if properties exist
                             logToScreen(`Classifying fragments: ${file.name}...`);
                             try {
-                                await classifier.byCategory();
+                                await classifier.byCategory(model);
                                 await updateClassificationUI();
                                 logToScreen(`Classification complete for ${file.name}`);
                             } catch (err) {
