@@ -212,39 +212,8 @@ async function loadModel(url: string, path: string) {
                       logToScreen(`Properties file not found at ${jsonPath} (Status: ${response.status})`, true);
                       console.warn(`[DEBUG] Failed to fetch ${jsonPath}: ${response.statusText}`);
                       
-                      // PROMPT USER FOR LOCAL PROPERTIES FILE
-                      const confirmUpload = confirm(`No se encontró el archivo de propiedades en el servidor para este modelo.\n\n¿Tienes el archivo .json de propiedades en tu equipo y quieres cargarlo manualmente para habilitar la clasificación?`);
-                      
-                      if (confirmUpload) {
-                          await new Promise<void>((resolve) => {
-                              const propertiesInput = document.createElement('input');
-                              propertiesInput.type = 'file';
-                              propertiesInput.accept = '.json';
-                              propertiesInput.style.display = 'none';
-                              document.body.appendChild(propertiesInput);
-                              
-                              propertiesInput.onchange = async (e: any) => {
-                                  const jsonFile = e.target.files[0];
-                                  if (jsonFile) {
-                                      try {
-                                          logToScreen(`Loading properties from: ${jsonFile.name}...`);
-                                          const jsonText = await jsonFile.text();
-                                          const properties = JSON.parse(jsonText);
-                                          modelAny.properties = properties;
-                                          hasProps = true;
-                                          logToScreen(`Properties attached manually! Count: ${Object.keys(properties).length}`);
-                                      } catch (manualErr) {
-                                          logToScreen(`Error loading manual properties: ${manualErr}`, true);
-                                      }
-                                  }
-                                  document.body.removeChild(propertiesInput);
-                                  resolve();
-                              };
-                              
-                              // Handle cancel? It's hard with file input, but clicking it is enough attempt
-                              propertiesInput.click();
-                          });
-                      }
+                      // DO NOT BLOCK - Just warn and continue
+                      logToScreen('Continuing without properties. You can upload them manually later.', true);
                   }
               } catch (err) {
                   console.error('Error fetching properties JSON:', err);
@@ -581,42 +550,8 @@ function initSidebar() {
                         logToScreen(`Fragment loaded. Properties found: ${hasProps ? Object.keys(modelAny.properties).length : 0}`);
                         
                         if (!hasProps) {
-                            // If no properties, ask user to upload the JSON properties file
-                            const propertiesInput = document.createElement('input');
-                            propertiesInput.type = 'file';
-                            propertiesInput.accept = '.json';
-                            propertiesInput.style.display = 'none';
-                            document.body.appendChild(propertiesInput);
-                            
-                            propertiesInput.onchange = async (e: any) => {
-                                const jsonFile = e.target.files[0];
-                                if (jsonFile) {
-                                    logToScreen(`Loading properties from: ${jsonFile.name}...`);
-                                    const jsonText = await jsonFile.text();
-                                    const properties = JSON.parse(jsonText);
-                                    modelAny.properties = properties; // Attach properties to model
-                                    logToScreen(`Properties attached! Count: ${Object.keys(properties).length}`);
-                                    
-                                    // Retry classification
-                                    logToScreen(`Retrying classification for ${file.name}...`);
-                                    try {
-                                        await classifier.byCategory();
-                                        await updateClassificationUI();
-                                        logToScreen(`Classification complete for ${file.name}`);
-                                    } catch (err) {
-                                        logToScreen(`Classification failed: ${err}`, true);
-                                    }
-                                }
-                                document.body.removeChild(propertiesInput);
-                            };
-                            
                             logToScreen('WARNING: No properties found in .frag file.', true);
-                            const confirmLoad = confirm('El archivo .frag no tiene propiedades integradas. ¿Deseas cargar el archivo .json de propiedades asociado ahora?');
-                            if (confirmLoad) {
-                                propertiesInput.click();
-                            } else {
-                                logToScreen('Classification skipped (no properties).', true);
-                            }
+                            logToScreen('Classification skipped (no properties).', true);
                         } else {
                             // Classify only if properties exist
                             logToScreen(`Classifying fragments: ${file.name}...`);
