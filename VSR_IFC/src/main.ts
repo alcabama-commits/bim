@@ -44,6 +44,30 @@ const classifier = components.get(OBC.Classifier);
 const hider = components.get(OBC.Hider);
 const clipper = components.get(OBC.Clipper);
 
+// Initialize Highlighter
+const highlighter = components.get(OBF.Highlighter);
+highlighter.setup({
+    world, // Pass the world instance to enable raycasting
+    select: {
+        name: 'select',
+        material: new THREE.MeshBasicMaterial({ color: 0x1976d2, depthTest: false, opacity: 0.8, transparent: true })
+    },
+    hover: {
+        name: 'hover',
+        material: new THREE.MeshBasicMaterial({ color: 0xe0e0e0, depthTest: false, opacity: 0.4, transparent: true })
+    }
+});
+highlighter.enabled = true; // Ensure it's enabled explicitly
+
+// Add 3D Click Event for Selection
+if (container) {
+    container.addEventListener('click', () => {
+        // Just verify highlighter is active, though it handles its own events.
+        // If selection happened, properties table updates via event listener below.
+        console.log('[DEBUG] 3D View clicked. Checking selection...');
+    });
+}
+
 // Initialize IfcLoader once
 const ifcLoader = components.get(OBC.IfcLoader);
 // Use default WASM path
@@ -188,7 +212,13 @@ async function loadModel(url: string, path: string) {
         // Debug: Check properties structure deeply
         const modelAny = model as any;
         let hasProps = modelAny.properties && Object.keys(modelAny.properties).length > 0;
-        const hasData = modelAny.data && Object.keys(modelAny.data).length > 0;
+        
+        // Check data safely (Map or Object)
+        let hasData = false;
+        if (modelAny.data) {
+            if (modelAny.data instanceof Map) hasData = modelAny.data.size > 0;
+            else hasData = Object.keys(modelAny.data).length > 0;
+        }
         
         logToScreen(`Model loaded. Properties: ${hasProps}, Data: ${hasData}`);
         console.log('[DEBUG] Model Keys:', Object.keys(modelAny));
@@ -216,7 +246,7 @@ async function loadModel(url: string, path: string) {
                       }
                   } else {
                       // Check if it's a 404 disguised as 200 (some servers do this) or just missing
-                      logToScreen(`Properties file not found at ${jsonPath} (Status: ${response.status})`, true);
+                      logToScreen(`Properties file not found at ${jsonPath} (Status: ${response.status}). Using fallback generation.`);
                       console.warn(`[DEBUG] Failed to fetch ${jsonPath}: ${response.statusText}`);
                       
                       // DO NOT BLOCK - Just warn and continue
@@ -238,7 +268,7 @@ async function loadModel(url: string, path: string) {
                      for (const id of ids) {
                          dummyProperties[id] = {
                              expressID: id,
-                             type: 0, 
+                             type: 4065, // IFCBUILDINGELEMENTPROXY (Unknown)
                              GlobalId: { type: 1, value: `generated-${id}` },
                              Name: { type: 1, value: `Element ${id}` },
                          };
@@ -251,6 +281,30 @@ async function loadModel(url: string, path: string) {
                  }
               }
          }
+
+        // CRITICAL FIX: Reconstruct model.data if missing
+        // This links the ExpressIDs (in properties) to the Geometry (fragments)
+        // Without this, the Classifier knows the category exists but can't find the items (Count 0)
+        if (!modelAny.data || (modelAny.data instanceof Map && modelAny.data.size === 0)) {
+             logToScreen('Reconstructing missing model.data from geometry items...');
+             if (!modelAny.data) modelAny.data = new Map();
+             
+             if (model.items) {
+                 let count = 0;
+                 for (const fragID in model.items) {
+                     const ids = model.items[fragID];
+                     const idList = Array.isArray(ids) ? ids : Array.from(ids);
+                     for (const id of idList) {
+                         // Map ExpressID -> [FragmentID, ExpressID]
+                         modelAny.data.set(Number(id), [fragID, Number(id)]);
+                         count++;
+                     }
+                 }
+                 logToScreen(`Reconstructed model.data with ${count} entries.`);
+             } else {
+                 logToScreen('Cannot reconstruct model.data: model.items is missing!', true);
+             }
+        }
 
         // Check if model is in fragments list
         console.log('[DEBUG] Fragments List Keys:', Array.from(fragments.list.keys()));
@@ -275,6 +329,14 @@ async function loadModel(url: string, path: string) {
                 await classifier.byCategory(model);
                 await updateClassificationUI();
                 logToScreen('Classification updated');
+                
+                // AUTO-SWITCH to Classification Tab to show the user the categories
+                const classTabBtn = document.querySelector('.tab-btn[data-tab="classification"]') as HTMLElement;
+                if (classTabBtn) {
+                    classTabBtn.click();
+                    logToScreen('Switched to Classification tab.');
+                }
+
             } catch (e) {
                 logToScreen(`Classification error: ${e}`, true);
             }
@@ -452,6 +514,10 @@ async function updateClassificationUI() {
 
                 const highlighter = components.get(OBF.Highlighter);
                 if (count > 0) {
+                     // Check keys in map
+                     const mapKeys = Object.keys(fragmentIdMap || {});
+                     console.log(`[DEBUG] Map keys: ${mapKeys.join(', ')}`);
+                     
                      highlighter.highlightByID('select', fragmentIdMap, true, true);
                      logToScreen(`Selected ${type} (${count} items)`);
                 } else {
@@ -873,7 +939,15 @@ async function loadModelList() {
                 li.addEventListener('click', async (e) => {
                     // Prevent propagation if clicking nested elements
                     e.stopPropagation();
-                    await toggleModel(m.path, baseUrl, li);
+                    
+                    const target = e.target as HTMLElement;
+                    // If clicked explicitly on the visibility toggle icon/div
+                    if (target.closest('.visibility-toggle')) {
+                        await toggleModel(m.path, baseUrl, li);
+                    } else {
+                        // Clicked on the name/body -> Select the model
+                        await selectModel(m.path);
+                    }
                 });
 
                 itemsList.appendChild(li);
@@ -886,6 +960,37 @@ async function loadModelList() {
 
     } catch (err) {
         logToScreen(`Error loading model list: ${err}`, true);
+    }
+}
+
+async function selectModel(path: string) {
+    if (!loadedModels.has(path)) {
+        logToScreen(`Model ${path} not loaded. Click the eye icon to load it first.`, true);
+        return;
+    }
+
+    const model = loadedModels.get(path);
+    if (!model) return;
+
+    // Highlight the whole model
+    // We create a selection map where the key is the model UUID (which is the path)
+    // and the value is all expressIDs in the model
+    try {
+        const ids = await model.getItemsIdsWithGeometry();
+        const selectionMap: Record<string, number[]> = {};
+        selectionMap[path] = ids; // Use path as UUID since we forced it
+
+        logToScreen(`Selecting model: ${model.name} (${ids.length} items)`);
+        highlighter.highlightByID('select', selectionMap, true, true);
+        
+        // Also fit camera to model
+        const bbox = new THREE.Box3().setFromObject(model.object);
+        const sphere = new THREE.Sphere();
+        bbox.getBoundingSphere(sphere);
+        world.camera.controls.fitToSphere(sphere, true);
+        
+    } catch (e) {
+        logToScreen(`Error selecting model: ${e}`, true);
     }
 }
 
@@ -1111,9 +1216,7 @@ viewButtons.forEach(btn => {
 // Listener moved to initSidebar to handle both IFC and Frag files centrally
 
 // --- Highlighter & Properties Setup ---
-const highlighter = components.get(OBF.Highlighter);
-highlighter.setup({ world });
-highlighter.zoomToSelection = true;
+// Already initialized at the top
 
 const [propsTable, updatePropsTable] = CUI.tables.itemsData({
     components,
