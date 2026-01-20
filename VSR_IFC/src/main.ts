@@ -33,18 +33,21 @@ grids.create(world);
 
 // --- IFC & Fragments Setup ---
 
+const baseUrl = import.meta.env.BASE_URL || './';
 const fragments = components.get(OBC.FragmentsManager);
+
+// Initialize fragments with the worker BEFORE getting other components
+// that might depend on it (like Classifier or Hider)
+await fragments.init(`${baseUrl}fragments/fragments.mjs`);
+
 const classifier = components.get(OBC.Classifier);
 const hider = components.get(OBC.Hider);
 const clipper = components.get(OBC.Clipper);
-const baseUrl = import.meta.env.BASE_URL || './';
-
-// Initialize fragments with the worker
-fragments.init(`${baseUrl}fragments/fragments.mjs`);
 
 // Initialize IfcLoader once
 const ifcLoader = components.get(OBC.IfcLoader);
-const wasmPath = `${baseUrl}wasm/`;
+// Use default WASM path
+const wasmPath = `${baseUrl}wasm/`; 
 console.log('Setting up IfcLoader with WASM path:', wasmPath);
 
 ifcLoader.setup({
@@ -175,9 +178,112 @@ async function loadModel(url: string, path: string) {
         
         loadedModels.set(path, model);
 
+        // Debug: Check properties structure deeply
+        const modelAny = model as any;
+        let hasProps = modelAny.properties && Object.keys(modelAny.properties).length > 0;
+        const hasData = modelAny.data && Object.keys(modelAny.data).length > 0;
+        
+        logToScreen(`Model loaded. Properties: ${hasProps}, Data: ${hasData}`);
+        console.log('[DEBUG] Model Keys:', Object.keys(modelAny));
+        
+        if (!hasProps) {
+             console.warn('[DEBUG] Model has no properties attached! attempting to check data...');
+             
+             // Attempt to load associated JSON properties automatically for hosted files
+             try {
+                 // Try to guess the json path. If url ends with .frag, replace it.
+                 // If url has query params, we might need to be careful, but usually for this app it's a direct file path.
+                 const jsonPath = url.replace(/\.frag$/i, '.json');
+                  logToScreen(`Attempting to fetch properties from ${jsonPath}...`);
+                  
+                  const response = await fetch(jsonPath);
+                  if (response.ok) {
+                      try {
+                          const jsonProps = await response.json();
+                          modelAny.properties = jsonProps;
+                          hasProps = true;
+                          logToScreen(`Successfully loaded properties from JSON! Count: ${Object.keys(jsonProps).length}`);
+                      } catch (jsonErr) {
+                          console.error('Invalid JSON structure:', jsonErr);
+                          logToScreen(`Error parsing properties JSON. Check console.`, true);
+                      }
+                  } else {
+                      // Check if it's a 404 disguised as 200 (some servers do this) or just missing
+                      logToScreen(`Properties file not found at ${jsonPath} (Status: ${response.status})`, true);
+                      console.warn(`[DEBUG] Failed to fetch ${jsonPath}: ${response.statusText}`);
+                      
+                      // PROMPT USER FOR LOCAL PROPERTIES FILE
+                      const confirmUpload = confirm(`No se encontró el archivo de propiedades en el servidor para este modelo.\n\n¿Tienes el archivo .json de propiedades en tu equipo y quieres cargarlo manualmente para habilitar la clasificación?`);
+                      
+                      if (confirmUpload) {
+                          await new Promise<void>((resolve) => {
+                              const propertiesInput = document.createElement('input');
+                              propertiesInput.type = 'file';
+                              propertiesInput.accept = '.json';
+                              propertiesInput.style.display = 'none';
+                              document.body.appendChild(propertiesInput);
+                              
+                              propertiesInput.onchange = async (e: any) => {
+                                  const jsonFile = e.target.files[0];
+                                  if (jsonFile) {
+                                      try {
+                                          logToScreen(`Loading properties from: ${jsonFile.name}...`);
+                                          const jsonText = await jsonFile.text();
+                                          const properties = JSON.parse(jsonText);
+                                          modelAny.properties = properties;
+                                          hasProps = true;
+                                          logToScreen(`Properties attached manually! Count: ${Object.keys(properties).length}`);
+                                      } catch (manualErr) {
+                                          logToScreen(`Error loading manual properties: ${manualErr}`, true);
+                                      }
+                                  }
+                                  document.body.removeChild(propertiesInput);
+                                  resolve();
+                              };
+                              
+                              // Handle cancel? It's hard with file input, but clicking it is enough attempt
+                              propertiesInput.click();
+                          });
+                      }
+                  }
+              } catch (err) {
+                  console.error('Error fetching properties JSON:', err);
+                  // Don't show syntax error to user, show missing file warning
+                  logToScreen(`Could not load properties file. Classification will be disabled.`, true);
+              }
+         }
+
+        // Check if model is in fragments list
+        console.log('[DEBUG] Fragments List Keys:', Array.from(fragments.list.keys()));
+        const isRegistered = fragments.list.has(model.uuid);
+        console.log(`[DEBUG] Model registered in fragments.list: ${isRegistered}`);
+
+        if (!isRegistered) {
+             console.log('[DEBUG] Manually registering model in fragments manager...');
+             try {
+                 fragments.list.set(model.uuid, model);
+                 console.log('[DEBUG] Manual registration successful');
+             } catch (regError) {
+                 console.error('[DEBUG] Manual registration failed:', regError);
+                 logToScreen(`Warning: Failed to register model: ${regError}`, true);
+             }
+        }
+
         // Classify the model
-        classifier.byEntity(model);
-        await updateClassificationUI();
+        if (hasProps) {
+            try {
+                console.log(`[DEBUG] Running classifier.byCategory() for model ${model.uuid}`);
+                await classifier.byCategory();
+                await updateClassificationUI();
+                logToScreen('Classification updated');
+            } catch (e) {
+                logToScreen(`Classification error: ${e}`, true);
+            }
+        } else {
+             logToScreen('Skipping classification (no properties)', true);
+             const container = document.getElementById('classification-list');
+             if (container) container.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">Sin propiedades para clasificar</div>';
+        }
         
         logToScreen('Model loaded successfully as Fragments');
 
@@ -220,6 +326,7 @@ async function loadModel(url: string, path: string) {
         return model;
     } catch (error) {
         logToScreen(`Error loading model: ${error}`, true);
+        console.error(error);
         throw error;
     }
 }
@@ -229,6 +336,12 @@ async function loadModel(url: string, path: string) {
 function initSidebarTabs() {
     const tabs = document.querySelectorAll('.tab-btn');
     const contents = document.querySelectorAll('.tab-content');
+
+    if (tabs.length === 0) {
+        console.warn('No sidebar tabs found during initialization');
+    } else {
+        console.log(`Initialized ${tabs.length} sidebar tabs`);
+    }
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -255,8 +368,23 @@ async function updateClassificationUI() {
 
     container.innerHTML = '';
     
-    const entities = classifier.list.entities;
-    if (!entities || Object.keys(entities).length === 0) {
+    // Safety check for classifier list
+    if (!classifier || !classifier.list) {
+         console.warn('Classifier not ready');
+         return;
+    }
+
+    // DEBUG LOGS
+    console.log('[DEBUG] Classifier List Keys:', Array.from(classifier.list.keys()));
+    
+    // Iterate over ALL systems in the classifier
+    let hasItems = false;
+    for (const [systemName, classification] of classifier.list) {
+        if (classification.size > 0) hasItems = true;
+        console.log(`[DEBUG] Rendering system: ${systemName} with ${classification.size} groups`);
+    }
+
+    if (!hasItems) {
         container.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">No hay clasificación disponible</div>';
         return;
     }
@@ -265,43 +393,98 @@ async function updateClassificationUI() {
     list.className = 'folder-items';
     list.style.padding = '10px';
 
-    for (const [type, fragmentIdMap] of Object.entries(entities)) {
-        const li = document.createElement('li');
-        li.className = 'model-item';
-        li.style.display = 'flex';
-        li.style.justifyContent = 'space-between';
-        
-        let count = 0;
-        for (const id in fragmentIdMap) {
-            count += fragmentIdMap[id].size;
-        }
-
-        li.innerHTML = `
-            <div class="model-name"><i class="fa-solid fa-layer-group"></i> ${type} <span style="font-size: 0.8em; color: #888;">(${count})</span></div>
-            <div class="visibility-toggle" title="Toggle Visibility">
-                <i class="fa-regular fa-eye"></i>
-            </div>
-        `;
-
-        const toggleIcon = li.querySelector('.visibility-toggle i');
-        let isVisible = true;
-
-        li.addEventListener('click', () => {
-            isVisible = !isVisible;
-            hider.set(isVisible, fragmentIdMap);
+    // Second pass to render
+    for (const [systemName, classification] of classifier.list) {
+        for (const [type, groupData] of classification) {
+            const fragmentIdMap = groupData.map;
             
-            if (isVisible) {
-                li.classList.add('visible');
-                toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
-                li.style.opacity = '1';
-            } else {
-                li.classList.remove('visible');
-                toggleIcon?.classList.replace('fa-eye', 'fa-eye-slash');
-                li.style.opacity = '0.5';
+            // Detailed Debug for map structure
+            if (classification.size > 0 && !fragmentIdMap) {
+                console.error(`[DEBUG] Missing map for ${type}`, groupData);
             }
-        });
+            
+            const li = document.createElement('li');
+            li.className = 'model-item';
+            li.style.display = 'flex';
+            li.style.justifyContent = 'space-between';
+            
+            let count = 0;
+            if (fragmentIdMap) {
+                for (const id in fragmentIdMap) {
+                    const value = fragmentIdMap[id];
+                    if (value instanceof Set) {
+                        count += value.size;
+                    } else if (Array.isArray(value)) {
+                        count += value.length;
+                    }
+                }
+            }
+            
+            // Log debug info for the first item found to see structure
+            if (count === 0) {
+                 // console.warn(`[DEBUG] Category ${type} has count 0. Map keys: ${fragmentIdMap ? Object.keys(fragmentIdMap) : 'null'}`);
+                 // Only log distinct warnings if needed, to avoid spam
+            }
 
-        list.appendChild(li);
+            // Optional: Hide items with 0 count to clean up UI?
+            // For now, let's keep them but gray them out
+            const opacity = count > 0 ? '1' : '0.3';
+            const pointer = count > 0 ? 'pointer' : 'default';
+
+            li.innerHTML = `
+                <div class="model-name" style="cursor: ${pointer}; flex-grow: 1; opacity: ${opacity};"><i class="fa-solid fa-layer-group"></i> ${type} <span style="font-size: 0.8em; color: #888;">(${count})</span></div>
+                <div class="visibility-toggle" style="cursor: ${pointer}; padding: 0 10px; opacity: ${opacity};" title="Toggle Visibility">
+                    <i class="fa-regular fa-eye"></i>
+                </div>
+            `;
+
+            const nameDiv = li.querySelector('.model-name');
+            const toggleDiv = li.querySelector('.visibility-toggle');
+            const toggleIcon = toggleDiv?.querySelector('i');
+            let isVisible = true;
+
+            // SELECTION Handler (Clicking text)
+            nameDiv?.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                console.log(`[DEBUG] Selecting category: ${type} (Count: ${count})`);
+                
+                // Debug the map content
+                console.log(`[DEBUG] FragmentIdMap for ${type}:`, fragmentIdMap);
+
+                const highlighter = components.get(OBF.Highlighter);
+                if (count > 0) {
+                     highlighter.highlightByID('select', fragmentIdMap, true, true);
+                     logToScreen(`Selected ${type} (${count} items)`);
+                } else {
+                     logToScreen(`Cannot select ${type}: No items found (Count is 0)`, true);
+                }
+            });
+
+            // VISIBILITY Handler (Clicking eye)
+            toggleDiv?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                isVisible = !isVisible;
+                console.log(`[DEBUG] Toggling visibility for ${type}: ${isVisible}`);
+                
+                if (count > 0) {
+                    hider.set(isVisible, fragmentIdMap);
+                } else {
+                    console.warn(`[DEBUG] Skipping visibility toggle for ${type} - count is 0`);
+                }
+                
+                if (isVisible) {
+                    li.classList.add('visible');
+                    toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
+                    li.style.opacity = '1';
+                } else {
+                    li.classList.remove('visible');
+                    toggleIcon?.classList.replace('fa-eye', 'fa-eye-slash');
+                    li.style.opacity = '0.5';
+                }
+            });
+
+            list.appendChild(li);
+        }
     }
 
     container.appendChild(list);
@@ -370,6 +553,12 @@ function initSidebar() {
                     if (file.name.toLowerCase().endsWith('.frag')) {
                         logToScreen(`Loading fragments: ${file.name}...`);
                         const model = await fragments.core.load(buffer, { modelId: file.name });
+                        
+                        // Ensure registration
+                        if (!fragments.list.has(model.uuid)) {
+                             fragments.list.set(model.uuid, model);
+                        }
+                        
                         model.useCamera(world.camera.three);
                         world.scene.three.add(model.object);
                         await fragments.core.update(true);
@@ -378,56 +567,78 @@ function initSidebar() {
                         const sphere = new THREE.Sphere();
                         bbox.getBoundingSphere(sphere);
                         world.camera.controls.fitToSphere(sphere, true);
+
+                        // Try to load associated properties file
+                        const baseName = file.name.replace('.frag', '');
+                        logToScreen(`Attempting to find properties for ${baseName}...`);
+                        
+                        // Check if user selected multiple files (frag + json)
+                        // If only one file selected, we can't automagically find the json unless we ask for it
+                        
+                        // VERIFY PROPERTIES
+                        const modelAny = model as any;
+                        const hasProps = modelAny.properties && Object.keys(modelAny.properties).length > 0;
+                        logToScreen(`Fragment loaded. Properties found: ${hasProps ? Object.keys(modelAny.properties).length : 0}`);
+                        
+                        if (!hasProps) {
+                            // If no properties, ask user to upload the JSON properties file
+                            const propertiesInput = document.createElement('input');
+                            propertiesInput.type = 'file';
+                            propertiesInput.accept = '.json';
+                            propertiesInput.style.display = 'none';
+                            document.body.appendChild(propertiesInput);
+                            
+                            propertiesInput.onchange = async (e: any) => {
+                                const jsonFile = e.target.files[0];
+                                if (jsonFile) {
+                                    logToScreen(`Loading properties from: ${jsonFile.name}...`);
+                                    const jsonText = await jsonFile.text();
+                                    const properties = JSON.parse(jsonText);
+                                    modelAny.properties = properties; // Attach properties to model
+                                    logToScreen(`Properties attached! Count: ${Object.keys(properties).length}`);
+                                    
+                                    // Retry classification
+                                    logToScreen(`Retrying classification for ${file.name}...`);
+                                    try {
+                                        await classifier.byCategory();
+                                        await updateClassificationUI();
+                                        logToScreen(`Classification complete for ${file.name}`);
+                                    } catch (err) {
+                                        logToScreen(`Classification failed: ${err}`, true);
+                                    }
+                                }
+                                document.body.removeChild(propertiesInput);
+                            };
+                            
+                            logToScreen('WARNING: No properties found in .frag file.', true);
+                            const confirmLoad = confirm('El archivo .frag no tiene propiedades integradas. ¿Deseas cargar el archivo .json de propiedades asociado ahora?');
+                            if (confirmLoad) {
+                                propertiesInput.click();
+                            } else {
+                                logToScreen('Classification skipped (no properties).', true);
+                            }
+                        } else {
+                            // Classify only if properties exist
+                            logToScreen(`Classifying fragments: ${file.name}...`);
+                            try {
+                                await classifier.byCategory();
+                                await updateClassificationUI();
+                                logToScreen(`Classification complete for ${file.name}`);
+                            } catch (err) {
+                                logToScreen(`Classification failed: ${err}`, true);
+                            }
+                        }
+
                         logToScreen(`Loaded .frag: ${file.name}`);
                     } else {
-                        // Assume IFC
+                        // Assume IFC - SHOW ERROR/WARNING AS REQUESTED BY USER
+                        logToScreen('IFC loading is disabled. Please convert to .frag externally and load the .frag file.', true);
+                        alert('La carga directa de IFC está deshabilitada por inestabilidad. Por favor, carga archivos .frag.');
+                        
+                        /* IFC LOADING DISABLED BY USER REQUEST
                         logToScreen(`Loading and converting IFC: ${file.name}...`);
-                        const data = new Uint8Array(buffer);
-                        
-                        // IfcLoader is already setup globally
-                        const ifcLoader = components.get(OBC.IfcLoader);
-                        // Optional: Ensure WASM path is correct if setup failed previously
-                        // await ifcLoader.setup({ wasm: { path: `${baseUrl}wasm/`, absolute: true } });
-                        
-                        const model = await ifcLoader.load(data, true, file.name);
-                        world.scene.three.add(model.object);
-                        
-                        // Center camera
-                        const bbox = new THREE.Box3().setFromObject(model.object);
-                        const sphere = new THREE.Sphere();
-                        bbox.getBoundingSphere(sphere);
-                        world.camera.controls.fitToSphere(sphere, true);
-                        
-                        // Classify
-                        classifier.byEntity(model);
-                        await updateClassificationUI();
-                        
-                        logToScreen(`Loaded IFC: ${file.name}`);
-                        
-                        // AUTO EXPORT AND DOWNLOAD
-                        logToScreen('Exporting to .frag...');
-                        try {
-                             // Try saving using internal method if public one is missing
-                             // @ts-ignore
-                             const savedData = model._save ? await model._save() : null;
-                             
-                             if (savedData) {
-                                 const blob = new Blob([savedData as any], { type: 'application/octet-stream' });
-                                 const url = URL.createObjectURL(blob);
-                                 const a = document.createElement('a');
-                                 a.href = url;
-                                 a.download = file.name.replace(/\.ifc$/i, '') + '.frag';
-                                 document.body.appendChild(a);
-                                 a.click();
-                                 document.body.removeChild(a);
-                                 URL.revokeObjectURL(url);
-                                 logToScreen('Converted file downloaded automatically!');
-                             } else {
-                                 logToScreen('Export failed: Save method not found on model', true);
-                             }
-                        } catch (exportErr) {
-                             logToScreen(`Export error: ${exportErr}`, true);
-                        }
+                        ...
+                        */
                     }
                 } catch (e) {
                     logToScreen(`Error loading file: ${e}`, true);
@@ -1071,7 +1282,7 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
         const items = (dataByModel as any)[modelID] || [];
         
         // Try to get the full model to access raw properties
-        const model = loadedModels.get(modelID) || fragments.groups.get(modelID);
+        const model = loadedModels.get(modelID) || fragments.list.get(modelID);
 
         items.forEach((item: any, index: number) => {
             const localId = localIds[index];
