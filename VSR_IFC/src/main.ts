@@ -298,27 +298,71 @@ async function loadModel(url: string, path: string) {
              });
              
              if (fragmentsList.length > 0) {
-                 // We found meshes (fragments).
-                 // Problem: We have a list of all ExpressIDs (from getItemsIdsWithGeometry),
-                 // but we don't know which ID belongs to which Fragment if there are multiple.
-                 // Solution: For now, we assume a single-fragment model (common for simple .frag files)
-                 // or map all to the first fragment. This is better than nothing.
+                 logToScreen(`Found ${fragmentsList.length} fragments. Scanning for items...`);
                  
-                 const fragmentId = fragmentsList[0].uuid;
-                 logToScreen(`Found ${fragmentsList.length} fragments. Mapping all data to first fragment: ${fragmentId}`);
+                 let totalMapped = 0;
                  
-                 try {
-                     const ids = await model.getItemsIdsWithGeometry();
-                     let count = 0;
-                     for (const id of ids) {
-                         // Map ExpressID -> [FragmentID, ExpressID]
-                         modelAny.data.set(Number(id), [fragmentId, Number(id)]);
-                         count++;
+                 for (const frag of fragmentsList) {
+                     // Check for items/ids in the fragment
+                     // Fragment meshes usually have 'items' (array) or 'ids' (Set)
+                     const items = frag.items || frag.ids;
+                     
+                     if (items) {
+                         const idList = Array.isArray(items) ? items : Array.from(items);
+                         if (idList.length > 0) {
+                             // console.log(`[DEBUG] Fragment ${frag.uuid} has ${idList.length} items`);
+                             for (const id of idList) {
+                                 // Correctly map this ID to this Fragment
+                                 modelAny.data.set(Number(id), [frag.uuid, Number(id)]);
+                                 totalMapped++;
+                             }
+                         }
+                     } else {
+                         // Fallback: Check geometry attributes if items are missing
+                         // Sometimes IDs are in geometry.attributes.expressID
+                         const geom = frag.geometry;
+                         if (geom && geom.attributes && geom.attributes.expressID) {
+                             const attr = geom.attributes.expressID;
+                             const count = attr.count;
+                             const foundIds = new Set<number>();
+                             for(let i=0; i<count; i++) {
+                                 foundIds.add(attr.getX(i));
+                             }
+                             for (const id of foundIds) {
+                                 modelAny.data.set(Number(id), [frag.uuid, Number(id)]);
+                                 totalMapped++;
+                             }
+                             // console.log(`[DEBUG] Fragment ${frag.uuid} recovered ${foundIds.size} items from attributes`);
+                         }
                      }
-                     logToScreen(`Reconstructed model.data with ${count} entries.`);
-                 } catch (e) {
-                     logToScreen(`Error getting geometry IDs: ${e}`, true);
                  }
+                 
+                 logToScreen(`Reconstructed model.data with ${totalMapped} entries from ${fragmentsList.length} fragments.`);
+                 
+                 // Fallback if scanning failed (e.g. fragments have no 'items' prop accessible)
+                 // Then we use the "map all to first" strategy as a last resort, 
+                 // but using the IDs we know exist from getItemsIdsWithGeometry
+                 if (totalMapped === 0) {
+                     logToScreen('WARNING: Could not find items on fragments directly. Using fallback mapping to first fragment.', true);
+                     const fragmentId = fragmentsList[0].uuid;
+                     try {
+                         const ids = await model.getItemsIdsWithGeometry();
+                         for (const id of ids) {
+                             modelAny.data.set(Number(id), [fragmentId, Number(id)]);
+                             totalMapped++;
+                         }
+                         logToScreen(`Fallback: Mapped ${totalMapped} items to fragment ${fragmentId}`);
+                     } catch (e) {
+                         logToScreen(`Fallback failed: ${e}`, true);
+                     }
+                 }
+                 
+                 // Debug first entry
+                 if (modelAny.data.size > 0) {
+                     const firstKey = modelAny.data.keys().next().value;
+                     console.log(`[DEBUG] Sample model.data entry: Key=${firstKey} Val=`, modelAny.data.get(firstKey));
+                 }
+                 
              } else {
                  logToScreen('Cannot reconstruct model.data: No meshes found in model.object!', true);
                  
