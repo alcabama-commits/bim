@@ -344,11 +344,23 @@ async function loadModel(url: string, path: string) {
                  // but using the IDs we know exist from getItemsIdsWithGeometry
                  if (totalMapped === 0) {
                      logToScreen('WARNING: Could not find items on fragments directly. Using fallback mapping to first fragment.', true);
-                     const fragmentId = fragmentsList[0].uuid;
+                     const mainFragment = fragmentsList[0];
+                     const fragmentId = mainFragment.uuid;
+                     
+                     // Initialize fragment items/ids set if missing to ensure consistency
+                     if (!mainFragment.ids) mainFragment.ids = new Set();
+                     if (!mainFragment.items) mainFragment.items = mainFragment.ids; // Sync aliases
+
                      try {
                          const ids = await model.getItemsIdsWithGeometry();
                          for (const id of ids) {
-                             modelAny.data.set(Number(id), [fragmentId, Number(id)]);
+                             const numId = Number(id);
+                             modelAny.data.set(numId, [fragmentId, numId]);
+                             
+                             // CRITICAL: Also add to the fragment's internal set
+                             // The classifier/highlighter might verify this
+                             mainFragment.ids.add(numId);
+                             
                              totalMapped++;
                          }
                          logToScreen(`Fallback: Mapped ${totalMapped} items to fragment ${fragmentId}`);
@@ -362,6 +374,12 @@ async function loadModel(url: string, path: string) {
                      const firstKey = modelAny.data.keys().next().value;
                      console.log(`[DEBUG] Sample model.data entry: Key=${firstKey} Val=`, modelAny.data.get(firstKey));
                  }
+                 
+                 // CRITICAL FIX: Ensure model.types matches the data if we have dummy properties
+                 // If we generated dummy properties (all PROXY), but the classifier is showing Stairs/Walls,
+                 // it means model.types is present and being used.
+                 // We should ensure that model.types is valid or cleared if it's causing conflicts.
+                 // However, preserving types is better. The issue was likely model.data being empty.
                  
              } else {
                  logToScreen('Cannot reconstruct model.data: No meshes found in model.object!', true);
