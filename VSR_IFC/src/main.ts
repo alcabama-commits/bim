@@ -187,11 +187,47 @@ async function loadModel(url: string, path: string) {
         const file = await fetch(url);
         if (!file.ok) throw new Error(`Failed to fetch ${url}`);
 
-        const buffer = await file.arrayBuffer();
+        let buffer = await file.arrayBuffer();
+        let data = new Uint8Array(buffer);
 
-        logToScreen(`Loading Fragments... (Size: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+        logToScreen(`Fetched ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
 
-        const model = await fragments.core.load(buffer, { modelId: path });
+        // Check for GZIP signature
+        const isGzip = data[0] === 0x1f && data[1] === 0x8b;
+        logToScreen(`Compression: ${isGzip ? 'GZIP' : 'Uncompressed'}`);
+
+        let model;
+        try {
+            // First attempt: Load directly
+            model = await fragments.core.load(data, { modelId: path });
+        } catch (loadErr) {
+            console.warn('Direct load failed, attempting manual decompression/handling...', loadErr);
+            
+            // If it was GZIP and failed, maybe the internal decompressor failed. Try manual decompression.
+            if (isGzip && 'DecompressionStream' in window) {
+                try {
+                    logToScreen('Attempting manual decompression...');
+                    const ds = new DecompressionStream('gzip');
+                    const writer = ds.writable.getWriter();
+                    writer.write(new Uint8Array(buffer)); // Ensure Uint8Array
+                    writer.close();
+                    const response = new Response(ds.readable);
+                    const decompressedBuffer = await response.arrayBuffer();
+                    const decompressedData = new Uint8Array(decompressedBuffer);
+                    logToScreen(`Decompressed size: ${(decompressedBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
+                    
+                    // Try loading decompressed data
+                    model = await fragments.core.load(decompressedData, { modelId: path });
+                } catch (decompressErr) {
+                    throw new Error(`Manual decompression failed: ${decompressErr}`);
+                }
+            } else {
+                throw loadErr; // Re-throw if we can't handle it
+            }
+        }
+
+        if (!model) throw new Error('Model failed to load (undefined result)');
+
         (model as any).name = path.split('/').pop() || 'Model';
 
         // FORCE UUID to match the path (which is the key in fragments.list)
