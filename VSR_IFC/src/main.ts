@@ -376,10 +376,48 @@ async function loadModel(url: string, path: string) {
                  }
                  
                  // CRITICAL FIX: Ensure model.types matches the data if we have dummy properties
-                 // If we generated dummy properties (all PROXY), but the classifier is showing Stairs/Walls,
-                 // it means model.types is present and being used.
-                 // We should ensure that model.types is valid or cleared if it's causing conflicts.
-                 // However, preserving types is better. The issue was likely model.data being empty.
+                 if (modelAny.types && Object.keys(modelAny.types).length > 0) {
+                     console.log(`[DEBUG] model.types found with ${Object.keys(modelAny.types).length} types.`);
+                     
+                     // Check for ID mismatch between types and geometry
+                     const typeIds = new Set<number>();
+                     for (const key in modelAny.types) {
+                         const ids = modelAny.types[key];
+                         if (Array.isArray(ids)) ids.forEach((id: number) => typeIds.add(id));
+                     }
+                     
+                     // Get current geometry IDs from model.data
+                     const geometryIds = new Set(modelAny.data.keys());
+                     
+                     // Intersect
+                     let matchCount = 0;
+                     for (const id of typeIds) {
+                         if (geometryIds.has(id)) matchCount++;
+                     }
+                     
+                     logToScreen(`[DEBUG] Type IDs: ${typeIds.size}, Geometry IDs: ${geometryIds.size}, Match: ${matchCount}`);
+                     
+                     if (matchCount === 0 && typeIds.size > 0) {
+                         logToScreen(`WARNING: ID Mismatch detected! Syncing model.data to match Type IDs...`, true);
+                         
+                         // Force map all Type IDs to the first fragment so they show up in Classifier
+                         const mainFragment = fragmentsList[0];
+                         const fragmentId = mainFragment.uuid;
+                         
+                         if (!mainFragment.ids) mainFragment.ids = new Set();
+                         if (!mainFragment.items) mainFragment.items = mainFragment.ids;
+
+                         let forcedCount = 0;
+                         for (const id of typeIds) {
+                             if (!modelAny.data.has(id)) {
+                                 modelAny.data.set(id, [fragmentId, id]);
+                                 mainFragment.ids.add(id);
+                                 forcedCount++;
+                             }
+                         }
+                         logToScreen(`Forced ${forcedCount} missing Type IDs into model.data (mapped to first fragment)`);
+                     }
+                 }
                  
              } else {
                  logToScreen('Cannot reconstruct model.data: No meshes found in model.object!', true);
