@@ -1010,21 +1010,39 @@ async function loadModelList() {
     }
 
     try {
-        const modelsUrl = `${baseUrl}models.json?t=${Date.now()}`;
+        const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
+        logToScreen('Scanning GitHub for models...');
         
-        const response = await fetch(modelsUrl);
-        if (!response.ok) throw new Error(`Failed to load models list (${response.status})`);
+        const response = await fetch(GITHUB_API_URL);
+        if (!response.ok) throw new Error(`GitHub API Error: ${response.status}`);
         
-        const models = await response.json();
-        logToScreen(`Models list loaded: ${models.length} models found`);
+        const data = await response.json();
+        if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
+
+        const models = data
+            .filter((item: any) => item.name.toLowerCase().endsWith('.frag'))
+            .map((item: any) => ({
+                name: item.name,
+                path: `models/${item.name}`,
+                url: item.download_url
+            }));
+
+        logToScreen(`GitHub Scan: ${models.length} .frag models found`);
 
         // Group models by specialty
         const groups: Record<string, any[]> = {};
-        models.forEach((m: { name: string; path: string; folder?: string }) => {
-            const specialty = getSpecialtyFromIfcPath(m.path) || m.folder || 'General';
+        models.forEach((m: { name: string; path: string; url: string }) => {
+            const specialty = getSpecialtyFromIfcPath(m.path);
             if (!groups[specialty]) groups[specialty] = [];
             groups[specialty].push(m);
         });
+
+        // Auto-update setup
+        if (!(window as any)._autoUpdateStarted) {
+            (window as any)._autoUpdateStarted = true;
+            setInterval(loadModelList, 60000);
+            logToScreen('Auto-update enabled (60s).');
+        }
 
         // Clear container
         listContainer.innerHTML = '';
@@ -1059,11 +1077,16 @@ async function loadModelList() {
                 li.className = 'model-item';
                 li.dataset.path = m.path;
 
+                // Check if already loaded (support both path and url keys)
+                if (loadedModels.has(m.path) || (m.url && loadedModels.has(m.url))) {
+                    li.classList.add('visible');
+                }
+
                 // Structure: Name + Visibility Toggle
                 li.innerHTML = `
                     <div class="model-name"><i class="fa-solid fa-cube"></i> ${m.name}</div>
                     <div class="visibility-toggle" title="Toggle Visibility">
-                        <i class="fa-regular fa-eye-slash"></i>
+                        <i class="fa-regular ${li.classList.contains('visible') ? 'fa-eye' : 'fa-eye-slash'}"></i>
                     </div>
                 `;
 
@@ -1073,12 +1096,15 @@ async function loadModelList() {
                     e.stopPropagation();
                     
                     const target = e.target as HTMLElement;
+                    // Prefer URL for loading if available
+                    const loadKey = m.url || m.path;
+
                     // If clicked explicitly on the visibility toggle icon/div
                     if (target.closest('.visibility-toggle')) {
-                        await toggleModel(m.path, baseUrl, li);
+                        await toggleModel(loadKey, baseUrl, li);
                     } else {
                         // Clicked on the name/body -> Select the model
-                        await selectModel(m.path);
+                        await selectModel(loadKey);
                     }
                 });
 
@@ -1165,9 +1191,12 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
     if (overlay) overlay.style.display = 'flex';
     
     try {
-        // Encode path parts to handle spaces
-        const encodedPath = path.split('/').map(part => encodeURIComponent(part)).join('/');
-        const fullPath = `${baseUrl}${encodedPath}`;
+        let fullPath = path;
+        // Only prepend base URL if it's not absolute
+        if (!path.startsWith('http')) {
+             const encodedPath = path.split('/').map(part => encodeURIComponent(part)).join('/');
+             fullPath = `${baseUrl}${encodedPath}`;
+        }
         
         await loadModel(fullPath, path);
         
