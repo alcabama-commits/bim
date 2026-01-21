@@ -524,7 +524,9 @@ async function updateClassificationUI() {
     // Second pass to render
     for (const [systemName, classification] of classifier.list) {
         for (const [type, groupData] of classification) {
-            const fragmentIdMap = groupData.map;
+            // FIX: Check if groupData has .map property, otherwise use groupData itself as the map
+            // This handles different versions/structures of the classifier output
+            const fragmentIdMap = (groupData as any).map || groupData;
             
             // Detailed Debug for map structure
             if (classification.size > 0 && !fragmentIdMap) {
@@ -551,13 +553,12 @@ async function updateClassificationUI() {
             // Log debug info for the first item found to see structure
             if (count === 0) {
                  // console.warn(`[DEBUG] Category ${type} has count 0. Map keys: ${fragmentIdMap ? Object.keys(fragmentIdMap) : 'null'}`);
-                 // Only log distinct warnings if needed, to avoid spam
             }
 
             // Optional: Hide items with 0 count to clean up UI?
             // For now, let's keep them but gray them out
-            const opacity = count > 0 ? '1' : '0.3';
-            const pointer = count > 0 ? 'pointer' : 'default';
+            const opacity = count > 0 ? '1' : '0.5'; // Increased opacity for visibility
+            const pointer = 'pointer'; // Always allow pointer events to debug
 
             li.innerHTML = `
                 <div class="model-name" style="cursor: ${pointer}; flex-grow: 1; opacity: ${opacity};"><i class="fa-solid fa-layer-group"></i> ${type} <span style="font-size: 0.8em; color: #888;">(${count})</span></div>
@@ -580,15 +581,22 @@ async function updateClassificationUI() {
                 console.log(`[DEBUG] FragmentIdMap for ${type}:`, fragmentIdMap);
 
                 const highlighter = components.get(OBF.Highlighter);
-                if (count > 0) {
+                // ALLOW SELECTION even if count is 0 (to catch potential ghost items or map issues)
+                if (fragmentIdMap && Object.keys(fragmentIdMap).length > 0) {
                      // Check keys in map
                      const mapKeys = Object.keys(fragmentIdMap || {});
                      console.log(`[DEBUG] Map keys: ${mapKeys.join(', ')}`);
                      
-                     highlighter.highlightByID('select', fragmentIdMap, true, true);
-                     logToScreen(`Selected ${type} (${count} items)`);
+                     try {
+                        highlighter.highlightByID('select', fragmentIdMap, true, true);
+                        logToScreen(`Selected ${type} (${count} items)`);
+                     } catch (e) {
+                        logToScreen(`Error selecting ${type}: ${e}`, true);
+                        console.error(e);
+                     }
                 } else {
-                     logToScreen(`Cannot select ${type}: No items found (Count is 0)`, true);
+                     logToScreen(`Cannot select ${type}: No items found (Map is empty)`, true);
+                     console.warn(`[DEBUG] Map is empty for ${type}. GroupData:`, groupData);
                 }
             });
 
@@ -598,10 +606,11 @@ async function updateClassificationUI() {
                 isVisible = !isVisible;
                 console.log(`[DEBUG] Toggling visibility for ${type}: ${isVisible}`);
                 
-                if (count > 0) {
+                if (fragmentIdMap && Object.keys(fragmentIdMap).length > 0) {
                     hider.set(isVisible, fragmentIdMap);
                 } else {
-                    console.warn(`[DEBUG] Skipping visibility toggle for ${type} - count is 0`);
+                    console.warn(`[DEBUG] Skipping visibility toggle for ${type} - map is empty`);
+                    // Try to toggle anyway if logic permits, but hider needs a map
                 }
                 
                 if (isVisible) {
