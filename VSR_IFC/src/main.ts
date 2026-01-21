@@ -1205,7 +1205,9 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
         toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
         
     } catch (error) {
-        alert('Error downloading model: ' + (error as Error).message);
+        const msg = (error instanceof Error) ? error.message : String(error);
+        alert('Error downloading model: ' + msg);
+        logToScreen(`Error downloading model: ${msg}`, true);
     } finally {
         if (overlay) overlay.style.display = 'none';
     }
