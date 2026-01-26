@@ -443,7 +443,7 @@ async function loadModel(url: string, path: string) {
                                     totalMapped++;
                                 }
                             }
-                            logToScreen(`Fallback: Mapped ${totalMapped} items to fragment ${fragmentId}`);
+                            logToScreen(`Fallback applied: Mapped ${totalMapped} items to main fragment.`);
                         } catch (e) {
                              logToScreen(`Fallback failed: ${e}`, true);
                          }
@@ -452,6 +452,7 @@ async function loadModel(url: string, path: string) {
                 // Debug first entry
                 if (modelAny.data.size > 0) {
                     const firstKey = modelAny.data.keys().next().value;
+                    // Console only, too verbose for screen
                     console.log(`[DEBUG] Sample model.data entry: Key=${firstKey} Val=`, modelAny.data.get(firstKey));
                 }
                 
@@ -475,11 +476,11 @@ async function loadModel(url: string, path: string) {
                         if (geometryIds.has(id)) matchCount++;
                     }
                     
-                    logToScreen(`[DEBUG] Type IDs: ${typeIds.size}, Geometry IDs: ${geometryIds.size}, Match: ${matchCount}`);
+                    console.log(`[DEBUG] Type IDs: ${typeIds.size}, Geometry IDs: ${geometryIds.size}, Match: ${matchCount}`);
                     
                     // If match is low (< 50%), force sync to ensure classification works
                     if ((matchCount === 0 || matchCount < typeIds.size * 0.5) && typeIds.size > 0) {
-                        logToScreen(`WARNING: Low ID Match (${matchCount}/${typeIds.size}). Syncing model.data to match Type IDs...`, true);
+                        logToScreen(`Syncing ${typeIds.size - matchCount} missing items for classification...`);
                         
                         // Force map all Type IDs to the first fragment so they show up in Classifier
                         const mainFragment = fragmentsList[0];
@@ -497,7 +498,7 @@ async function loadModel(url: string, path: string) {
                                 forcedCount++;
                             }
                         }
-                        logToScreen(`Forced ${forcedCount} missing Type IDs into model.data (mapped to first fragment)`);
+                        logToScreen(`Sync complete: ${forcedCount} items added.`);
                     }
                 }
                  
