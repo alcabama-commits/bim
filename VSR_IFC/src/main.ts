@@ -345,9 +345,17 @@ async function loadModel(url: string, path: string) {
                  console.log('[DEBUG] model.items empty or missing, traversing model.object for meshes...');
                  model.object.traverse((child: any) => {
                      if (child.isMesh) {
+                         // Check if this mesh IS a fragment (has ids) or points to one
+                         // Some implementations attach data directly to mesh userData
                          fragmentsList.push(child);
                      }
                  });
+                 
+                 // Try looking in _itemsManager if available
+                 if (fragmentsList.length === 0 && modelAny._itemsManager && modelAny._itemsManager.list) {
+                     console.log('[DEBUG] Trying to recover from _itemsManager...');
+                     modelAny._itemsManager.list.forEach((frag: any) => fragmentsList.push(frag));
+                 }
              }
              
              if (fragmentsList.length > 0) {
@@ -364,6 +372,11 @@ async function loadModel(url: string, path: string) {
                      if (!items && frag.fragment) {
                          // If frag is a mesh pointing to a fragment
                          items = frag.fragment.items || frag.fragment.ids;
+                     }
+                     
+                     // Deep check: look in userData
+                     if (!items && frag.userData && frag.userData.ids) {
+                         items = frag.userData.ids;
                      }
                      
                      if (items) {
@@ -1680,9 +1693,46 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
             
             let foundDeepProps = false;
             
+            // GENERIC DUMP of all other properties
+            // This ensures we show everything in the JSON even if it's not a standard Pset
+            const standardKeys = new Set([
+                'expressID', 'type', 'GlobalId', 'Name', 'Description', 'Tag', 'ObjectType',
+                'ContainedInStructure', 'containedInStructure', 
+                'IsDefinedBy', 'isDefinedBy', 
+                'relations', 'Relations', 
+                'localId', 'category', 'guid'
+            ]);
+
+            // First, check standard relations (Psets)
             if (model && model.properties && model.properties[localId]) {
                 const entity = model.properties[localId];
                 
+                // Show any top-level properties that aren't standard keys
+                let hasCustomTopLevel = false;
+                let customTopLevelHtml = `<div class="prop-set-title">Propiedades Adicionales</div><table class="prop-table"><tbody>`;
+                
+                for (const [key, val] of Object.entries(entity)) {
+                    if (standardKeys.has(key)) continue;
+                    
+                    // Skip complex objects/arrays for now, unless simple values
+                    if (val === null || val === undefined) continue;
+                    
+                    let displayVal = val;
+                    if (typeof val === 'object' && val !== null) {
+                        if (val.type && val.value !== undefined) displayVal = val.value;
+                        else if (Array.isArray(val)) continue; // Skip arrays (relations)
+                        else continue; // Skip other objects
+                    }
+                    
+                    customTopLevelHtml += `<tr><th>${key}</th><td>${displayVal}</td></tr>`;
+                    hasCustomTopLevel = true;
+                }
+                customTopLevelHtml += `</tbody></table>`;
+                
+                if (hasCustomTopLevel) {
+                    html += customTopLevelHtml;
+                }
+
                 // --- Level / Spatial Structure ---
                 const containedIn = entity.ContainedInStructure || entity.containedInStructure;
                 if (containedIn && Array.isArray(containedIn)) {
