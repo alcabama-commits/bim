@@ -259,42 +259,47 @@ async function loadModel(url: string, path: string) {
         logToScreen(`Model loaded. Properties: ${hasProps}, Data: ${hasData}`);
         console.log('[DEBUG] Model Keys:', Object.keys(modelAny));
         
+        // Always try to load external properties JSON if available, as it overrides/supplements embedded properties
+        const jsonPath = url.replace(/\.frag$/i, '.json');
+        try {
+             logToScreen(`Checking for external properties at ${jsonPath}...`);
+             const response = await fetch(jsonPath);
+             if (response.ok) {
+                 const jsonProps = await response.json();
+                 if (jsonProps && Object.keys(jsonProps).length > 0) {
+                     modelAny.properties = jsonProps;
+                     hasProps = true;
+                     logToScreen(`Loaded external properties from JSON (${Object.keys(jsonProps).length} items). Overriding embedded properties.`);
+                 }
+             } else {
+                 if (!hasProps) logToScreen(`Properties file not found at ${jsonPath} (Status: ${response.status}).`);
+             }
+        } catch (err) {
+             console.error('Error fetching properties JSON:', err);
+             if (!hasProps) logToScreen(`Error loading external properties.`, true);
+        }
+
+        // Ensure model.types is populated from properties if missing
+        if ((!modelAny.types || Object.keys(modelAny.types).length === 0) && hasProps) {
+             logToScreen('Reconstructing model.types from properties...');
+             modelAny.types = {};
+             let typeCount = 0;
+             for (const id in modelAny.properties) {
+                 const prop = modelAny.properties[id];
+                 if (prop && prop.type) {
+                     const typeId = prop.type;
+                     if (!modelAny.types[typeId]) modelAny.types[typeId] = [];
+                     modelAny.types[typeId].push(Number(id));
+                     typeCount++;
+                 }
+             }
+             logToScreen(`Reconstructed ${Object.keys(modelAny.types).length} types covering ${typeCount} items.`);
+        }
+
         if (!hasProps) {
              console.warn('[DEBUG] Model has no properties attached! attempting to check data...');
-             
-             // Attempt to load associated JSON properties automatically for hosted files
-             try {
-                 // Try to guess the json path. If url ends with .frag, replace it.
-                 // If url has query params, we might need to be careful, but usually for this app it's a direct file path.
-                 const jsonPath = url.replace(/\.frag$/i, '.json');
-                  logToScreen(`Attempting to fetch properties from ${jsonPath}...`);
-                  
-                  const response = await fetch(jsonPath);
-                  if (response.ok) {
-                      try {
-                          const jsonProps = await response.json();
-                          modelAny.properties = jsonProps;
-                          hasProps = true;
-                          logToScreen(`Successfully loaded properties from JSON! Count: ${Object.keys(jsonProps).length}`);
-                      } catch (jsonErr) {
-                          console.error('Invalid JSON structure:', jsonErr);
-                          logToScreen(`Error parsing properties JSON. Check console.`, true);
-                      }
-                  } else {
-                      // Check if it's a 404 disguised as 200 (some servers do this) or just missing
-                      logToScreen(`Properties file not found at ${jsonPath} (Status: ${response.status}). Using fallback generation.`);
-                      console.warn(`[DEBUG] Failed to fetch ${jsonPath}: ${response.statusText}`);
-                      
-                      // DO NOT BLOCK - Just warn and continue
-                      logToScreen('Continuing with generated fallback properties.', true);
-                  }
-              } catch (err) {
-                  console.error('Error fetching properties JSON:', err);
-                  // Don't show syntax error to user, show missing file warning
-                  logToScreen(`Could not load properties file. Generating fallback properties...`, true);
-              }
 
-              // FALLBACK PROPERTIES GENERATION
+             // FALLBACK PROPERTIES GENERATION
               if (!modelAny.properties || Object.keys(modelAny.properties).length === 0) {
                  try {
                      logToScreen('Generating dummy properties for missing metadata...');
