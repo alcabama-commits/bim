@@ -330,116 +330,123 @@ async function loadModel(url: string, path: string) {
              logToScreen('Reconstructing missing model.data from geometry items...');
              if (!modelAny.data) modelAny.data = new Map();
              
+             // Try to use keyFragments map if available (most reliable for FragmentsGroup)
+             let dataReconstructed = false;
+             if (modelAny.keyFragments && modelAny.keyFragments instanceof Map && modelAny.keyFragments.size > 0) {
+                 logToScreen(`Found keyFragments map with ${modelAny.keyFragments.size} entries.`);
+                 for (const [expressID, fragID] of modelAny.keyFragments.entries()) {
+                     modelAny.data.set(Number(expressID), [fragID, Number(expressID)]);
+                 }
+                 dataReconstructed = true;
+                 logToScreen(`Reconstructed model.data from keyFragments.`);
+             }
+
              // Try to find fragments in model.items (Fragments) or model.object (Meshes)
              let fragmentsList: any[] = [];
              
-             // Check if model has direct reference to fragments
-             // @ts-ignore
-             if (model.items && Array.isArray(model.items) && model.items.length > 0) {
+             if (!dataReconstructed) {
+                 // Check if model has direct reference to fragments
                  // @ts-ignore
-                 console.log(`[DEBUG] Found ${model.items.length} fragments in model.items`);
-                 // @ts-ignore
-                 fragmentsList = model.items;
-             } else {
-                 // Fallback to mesh traversal
-                 console.log('[DEBUG] model.items empty or missing, traversing model.object for meshes...');
-                 model.object.traverse((child: any) => {
-                     if (child.isMesh) {
-                         // Check if this mesh IS a fragment (has ids) or points to one
-                         // Some implementations attach data directly to mesh userData
-                         fragmentsList.push(child);
-                     }
-                 });
-                 
-                 // Try looking in _itemsManager if available
-                 if (fragmentsList.length === 0 && modelAny._itemsManager && modelAny._itemsManager.list) {
-                     console.log('[DEBUG] Trying to recover from _itemsManager...');
-                     modelAny._itemsManager.list.forEach((frag: any) => fragmentsList.push(frag));
-                 }
-             }
-             
-             if (fragmentsList.length > 0) {
-                 logToScreen(`Found ${fragmentsList.length} fragments/meshes. Scanning for items...`);
-                 
-                 let totalMapped = 0;
-                 
-                 for (const frag of fragmentsList) {
-                     // Check for items/ids in the fragment
-                     // Fragment meshes usually have 'items' (array) or 'ids' (Set)
-                     // If frag is a Mesh, it might have a 'fragment' reference
-                     let items = frag.items || frag.ids;
-                     
-                     if (!items && frag.fragment) {
-                         // If frag is a mesh pointing to a fragment
-                         items = frag.fragment.items || frag.fragment.ids;
+                 if (model.items && Array.isArray(model.items) && model.items.length > 0) {
+                     // @ts-ignore
+                     console.log(`[DEBUG] Found ${model.items.length} fragments in model.items`);
+                     // @ts-ignore
+                     fragmentsList = model.items;
+                 } else {
+                     // Fallback to mesh traversal
+                     console.log('[DEBUG] model.items empty or missing, traversing model.object for meshes...');
+                     if (model.object) {
+                         model.object.traverse((child: any) => {
+                             if (child.isMesh) {
+                                 // Check if this mesh IS a fragment (has ids) or points to one
+                                 fragmentsList.push(child);
+                             }
+                         });
                      }
                      
-                     // Deep check: look in userData
-                     if (!items && frag.userData && frag.userData.ids) {
-                         items = frag.userData.ids;
-                     }
-                     
-                     if (items) {
-                         const idList = Array.isArray(items) ? items : Array.from(items);
-                         if (idList.length > 0) {
-                             // console.log(`[DEBUG] Fragment ${frag.uuid} has ${idList.length} items`);
-                             for (const id of idList) {
-                                 // Correctly map this ID to this Fragment
-                                 modelAny.data.set(Number(id), [frag.uuid, Number(id)]);
-                                 totalMapped++;
-                             }
-                         }
-                     } else {
-                         // Fallback: Check geometry attributes if items are missing
-                         // Sometimes IDs are in geometry.attributes.expressID
-                         const geom = frag.geometry;
-                         if (geom && geom.attributes && geom.attributes.expressID) {
-                             const attr = geom.attributes.expressID;
-                             const count = attr.count;
-                             const foundIds = new Set<number>();
-                             for(let i=0; i<count; i++) {
-                                 foundIds.add(attr.getX(i));
-                             }
-                             for (const id of foundIds) {
-                                 modelAny.data.set(Number(id), [frag.uuid, Number(id)]);
-                                 totalMapped++;
-                             }
-                             // console.log(`[DEBUG] Fragment ${frag.uuid} recovered ${foundIds.size} items from attributes`);
-                         }
+                     // Try looking in _itemsManager if available
+                     if (fragmentsList.length === 0 && modelAny._itemsManager && modelAny._itemsManager.list) {
+                         console.log('[DEBUG] Trying to recover from _itemsManager...');
+                         modelAny._itemsManager.list.forEach((frag: any) => fragmentsList.push(frag));
                      }
                  }
                  
-                 logToScreen(`Reconstructed model.data with ${totalMapped} entries from ${fragmentsList.length} fragments.`);
-                 
-                 // Fallback if scanning failed (e.g. fragments have no 'items' prop accessible)
-                 // Then we use the "map all to first" strategy as a last resort, 
-                 // but using the IDs we know exist from getItemsIdsWithGeometry
-                 if (totalMapped === 0) {
-                     logToScreen('WARNING: Could not find items on fragments directly. Using fallback mapping to first fragment.', true);
-                     const mainFragment = fragmentsList[0];
-                     const fragmentId = mainFragment.uuid;
+                 if (fragmentsList.length > 0) {
+                     logToScreen(`Found ${fragmentsList.length} fragments/meshes. Scanning for items...`);
                      
-                     // Initialize fragment items/ids set if missing to ensure consistency
-                     if (!mainFragment.ids) mainFragment.ids = new Set();
-                     if (!mainFragment.items) mainFragment.items = mainFragment.ids; // Sync aliases
-
-                     try {
-                         const ids = await model.getItemsIdsWithGeometry();
-                         for (const id of ids) {
-                             const numId = Number(id);
-                             modelAny.data.set(numId, [fragmentId, numId]);
+                     let totalMapped = 0;
+                     
+                     for (const frag of fragmentsList) {
+                         // Check for items/ids in the fragment
+                         let items = frag.items || frag.ids;
+                         
+                         if (!items && frag.fragment) {
+                             items = frag.fragment.items || frag.fragment.ids;
+                         }
+                         
+                         // Deep check: look in userData
+                         if (!items && frag.userData && frag.userData.ids) {
+                             items = frag.userData.ids;
+                         }
+                         
+                         if (items) {
+                             const idList = Array.isArray(items) ? items : Array.from(items);
+                             const fragUUID = frag.uuid || (frag.fragment ? frag.fragment.uuid : null);
                              
-                             // CRITICAL: Also add to the fragment's internal set
-                             // The classifier/highlighter might verify this
-                             mainFragment.ids.add(numId);
-                             
-                             totalMapped++;
+                             if (idList.length > 0 && fragUUID) {
+                                 for (const id of idList) {
+                                     modelAny.data.set(Number(id), [fragUUID, Number(id)]);
+                                     totalMapped++;
+                                 }
+                             }
+                         } else {
+                             // Fallback: Check geometry attributes if items are missing
+                             const geom = frag.geometry;
+                             if (geom && geom.attributes && geom.attributes.expressID) {
+                                 const attr = geom.attributes.expressID;
+                                 const count = attr.count;
+                                 const foundIds = new Set<number>();
+                                 for(let i=0; i<count; i++) {
+                                     foundIds.add(attr.getX(i));
+                                 }
+                                 
+                                 const fragUUID = frag.uuid || (frag.fragment ? frag.fragment.uuid : null);
+                                 if (fragUUID) {
+                                     for (const id of foundIds) {
+                                         modelAny.data.set(Number(id), [fragUUID, Number(id)]);
+                                         totalMapped++;
+                                     }
+                                 }
+                             }
                          }
-                         logToScreen(`Fallback: Mapped ${totalMapped} items to fragment ${fragmentId}`);
-                     } catch (e) {
-                         logToScreen(`Fallback failed: ${e}`, true);
                      }
-                 }
+                     
+                     logToScreen(`Reconstructed model.data with ${totalMapped} entries from ${fragmentsList.length} fragments.`);
+                     
+                     // Fallback if scanning failed
+                     if (totalMapped === 0) {
+                         logToScreen('WARNING: Could not find items on fragments directly. Using fallback mapping to first fragment.', true);
+                         const mainFragment = fragmentsList[0];
+                         const fragmentId = mainFragment.uuid;
+                         
+                         if (!mainFragment.ids) mainFragment.ids = new Set();
+                         if (!mainFragment.items) mainFragment.items = mainFragment.ids;
+            
+                         try {
+                             const ids = await model.getItemsIdsWithGeometry();
+                             for (const id of ids) {
+                                 const numId = Number(id);
+                                 if (!modelAny.data.has(numId)) {
+                                     modelAny.data.set(numId, [fragmentId, numId]);
+                                     mainFragment.ids.add(numId);
+                                     totalMapped++;
+                                 }
+                             }
+                             logToScreen(`Fallback: Mapped ${totalMapped} items to fragment ${fragmentId}`);
+                         } catch (e) {
+                              logToScreen(`Fallback failed: ${e}`, true);
+                          }
+                      }
                  
                  // Debug first entry
                  if (modelAny.data.size > 0) {
@@ -498,6 +505,7 @@ async function loadModel(url: string, path: string) {
                  if (modelAny._itemsManager) {
                      console.log('[DEBUG] _itemsManager:', modelAny._itemsManager);
                  }
+             }
              }
         }
 
@@ -1716,52 +1724,52 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     if (depth > 2) return '...'; // Avoid infinite recursion
                     if (v === null || v === undefined) return '';
 
+                    let valueToProcess = v;
+                    
                     // Handle Value Wrapper { type: 1, value: "foo" }
                     if (typeof v === 'object' && v !== null && v.value !== undefined) {
-                        return String(v.value);
+                        valueToProcess = v.value;
                     }
 
                     // Handle Array
-                    if (Array.isArray(v)) {
-                        if (v.length === 0) return '[]';
-                        return `[${v.map(item => formatValue(item, depth + 1)).join(', ')}]`;
+                    if (Array.isArray(valueToProcess)) {
+                        if (valueToProcess.length === 0) return '[]';
+                        return `[${valueToProcess.map((item: any) => formatValue(item, depth + 1)).join(', ')}]`;
                     }
 
                     // Handle Reference (Number) - Try to resolve it
-                    if (typeof v === 'number' && Number.isInteger(v)) {
+                    if (typeof valueToProcess === 'number' && Number.isInteger(valueToProcess)) {
                         // Check if it's a reference to another entity in the model
-                        if (model.properties[v]) {
-                            const ref = model.properties[v];
+                        if (model.properties[valueToProcess]) {
+                            const ref = model.properties[valueToProcess];
                             
                             // Try to get a meaningful name
                             const name = (ref.Name && (ref.Name.value || ref.Name)) || 
                                          (ref.NominalValue && (ref.NominalValue.value || ref.NominalValue)) ||
                                          (ref.Description && (ref.Description.value || ref.Description));
                                          
-                            const typeName = ref.type ? (model.types && model.types[ref.type] ? model.types[ref.type] : `Type ${ref.type}`) : 'Entity';
-                            
                             // If we are at depth 0 or 1, maybe show some details of the referenced object
                             let details = '';
                             if (depth < 1) {
                                 const subProps = [];
                                 for (const [sk, sv] of Object.entries(ref)) {
-                                    if (['expressID', 'type', 'GlobalId', 'OwnerHistory'].includes(sk)) continue;
+                                    if (['expressID', 'type', 'GlobalId', 'OwnerHistory', 'Owner'].includes(sk)) continue;
                                     if (typeof sv === 'object' || Array.isArray(sv)) continue; // Only simple values in summary
                                     subProps.push(`${sk}: ${sv}`);
                                 }
                                 if (subProps.length > 0) details = ` <span style="color:#666; font-size:0.85em;">{${subProps.join(', ')}}</span>`;
                             }
                             
-                            return `<span title="ExpressID: ${v}">${name ? name : ''} <i>(${v})</i>${details}</span>`;
+                            return `<span title="ExpressID: ${valueToProcess}" style="color: #0056b3; cursor: help;">${name ? name : ref.type || 'Entity'} <i>#${valueToProcess}</i>${details}</span>`;
                         }
-                        return String(v);
+                        return String(valueToProcess);
                     }
 
-                    if (typeof v === 'object') {
-                        try { return JSON.stringify(v); } catch { return '[Object]'; }
+                    if (typeof valueToProcess === 'object') {
+                        try { return JSON.stringify(valueToProcess); } catch { return '[Object]'; }
                     }
 
-                    return String(v);
+                    return String(valueToProcess);
                 };
                 
                 for (const [key, val] of Object.entries(entity)) {
@@ -1835,7 +1843,8 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                                 const propVal = propValObj?.value ?? propValObj;
 
                                 if (propName && propVal !== undefined) {
-                                    html += `<tr><th>${propName}</th><td>${propVal}</td></tr>`;
+                                    const displayVal = formatValue(propVal, 0);
+                                    html += `<tr><th>${propName}</th><td>${displayVal}</td></tr>`;
                                 }
                             }
                             html += `</tbody></table>`;
@@ -1862,7 +1871,8 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                                              (q.nominalValue?.value ?? q.nominalValue);
                                 
                                 if (qName && qVal !== undefined) {
-                                    html += `<tr><th>${qName}</th><td>${qVal}</td></tr>`;
+                                    const displayVal = formatValue(qVal, 0);
+                                    html += `<tr><th>${qName}</th><td>${displayVal}</td></tr>`;
                                 }
                             }
                             html += `</tbody></table>`;
