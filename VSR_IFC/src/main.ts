@@ -1709,21 +1709,68 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                 
                 // Show any top-level properties that aren't standard keys
                 let hasCustomTopLevel = false;
-                let customTopLevelHtml = `<div class="prop-set-title">Propiedades Adicionales</div><table class="prop-table"><tbody>`;
+                let customTopLevelHtml = `<div class="prop-set-title">Propiedades del Elemento (Completo)</div><table class="prop-table"><tbody>`;
+                
+                // Helper to format values recursively
+                const formatValue = (v: any, depth: number): string => {
+                    if (depth > 2) return '...'; // Avoid infinite recursion
+                    if (v === null || v === undefined) return '';
+
+                    // Handle Value Wrapper { type: 1, value: "foo" }
+                    if (typeof v === 'object' && v !== null && v.value !== undefined) {
+                        return String(v.value);
+                    }
+
+                    // Handle Array
+                    if (Array.isArray(v)) {
+                        if (v.length === 0) return '[]';
+                        return `[${v.map(item => formatValue(item, depth + 1)).join(', ')}]`;
+                    }
+
+                    // Handle Reference (Number) - Try to resolve it
+                    if (typeof v === 'number' && Number.isInteger(v)) {
+                        // Check if it's a reference to another entity in the model
+                        if (model.properties[v]) {
+                            const ref = model.properties[v];
+                            
+                            // Try to get a meaningful name
+                            const name = (ref.Name && (ref.Name.value || ref.Name)) || 
+                                         (ref.NominalValue && (ref.NominalValue.value || ref.NominalValue)) ||
+                                         (ref.Description && (ref.Description.value || ref.Description));
+                                         
+                            const typeName = ref.type ? (model.types && model.types[ref.type] ? model.types[ref.type] : `Type ${ref.type}`) : 'Entity';
+                            
+                            // If we are at depth 0 or 1, maybe show some details of the referenced object
+                            let details = '';
+                            if (depth < 1) {
+                                const subProps = [];
+                                for (const [sk, sv] of Object.entries(ref)) {
+                                    if (['expressID', 'type', 'GlobalId', 'OwnerHistory'].includes(sk)) continue;
+                                    if (typeof sv === 'object' || Array.isArray(sv)) continue; // Only simple values in summary
+                                    subProps.push(`${sk}: ${sv}`);
+                                }
+                                if (subProps.length > 0) details = ` <span style="color:#666; font-size:0.85em;">{${subProps.join(', ')}}</span>`;
+                            }
+                            
+                            return `<span title="ExpressID: ${v}">${name ? name : ''} <i>(${v})</i>${details}</span>`;
+                        }
+                        return String(v);
+                    }
+
+                    if (typeof v === 'object') {
+                        try { return JSON.stringify(v); } catch { return '[Object]'; }
+                    }
+
+                    return String(v);
+                };
                 
                 for (const [key, val] of Object.entries(entity)) {
                     if (standardKeys.has(key)) continue;
                     
-                    // Skip complex objects/arrays for now, unless simple values
+                    // Skip nulls
                     if (val === null || val === undefined) continue;
                     
-                    let displayVal = val;
-                    if (typeof val === 'object' && val !== null) {
-                        if (val.type && val.value !== undefined) displayVal = val.value;
-                        else if (Array.isArray(val)) continue; // Skip arrays (relations)
-                        else continue; // Skip other objects
-                    }
-                    
+                    const displayVal = formatValue(val, 0);
                     customTopLevelHtml += `<tr><th>${key}</th><td>${displayVal}</td></tr>`;
                     hasCustomTopLevel = true;
                 }
