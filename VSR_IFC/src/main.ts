@@ -437,66 +437,69 @@ async function loadModel(url: string, path: string) {
                              for (const id of ids) {
                                  const numId = Number(id);
                                  if (!modelAny.data.has(numId)) {
-                                     modelAny.data.set(numId, [fragmentId, numId]);
-                                     mainFragment.ids.add(numId);
-                                     totalMapped++;
-                                 }
-                             }
-                             logToScreen(`Fallback: Mapped ${totalMapped} items to fragment ${fragmentId}`);
-                         } catch (e) {
-                              logToScreen(`Fallback failed: ${e}`, true);
-                          }
-                      }
-                 
-                 // Debug first entry
-                 if (modelAny.data.size > 0) {
-                     const firstKey = modelAny.data.keys().next().value;
-                     console.log(`[DEBUG] Sample model.data entry: Key=${firstKey} Val=`, modelAny.data.get(firstKey));
-                 }
-                 
-                 // CRITICAL FIX: Ensure model.types matches the data if we have dummy properties
-                 if (modelAny.types && Object.keys(modelAny.types).length > 0) {
-                     console.log(`[DEBUG] model.types found with ${Object.keys(modelAny.types).length} types.`);
-                     
-                     // Check for ID mismatch between types and geometry
-                     const typeIds = new Set<number>();
-                     for (const key in modelAny.types) {
-                         const ids = modelAny.types[key];
-                         if (Array.isArray(ids)) ids.forEach((id: number) => typeIds.add(id));
-                     }
-                     
-                     // Get current geometry IDs from model.data
-                     const geometryIds = new Set(modelAny.data.keys());
-                     
-                     // Intersect
-                     let matchCount = 0;
-                     for (const id of typeIds) {
-                         if (geometryIds.has(id)) matchCount++;
-                     }
-                     
-                     logToScreen(`[DEBUG] Type IDs: ${typeIds.size}, Geometry IDs: ${geometryIds.size}, Match: ${matchCount}`);
-                     
-                     if (matchCount === 0 && typeIds.size > 0) {
-                         logToScreen(`WARNING: ID Mismatch detected! Syncing model.data to match Type IDs...`, true);
-                         
-                         // Force map all Type IDs to the first fragment so they show up in Classifier
-                         const mainFragment = fragmentsList[0];
-                         const fragmentId = mainFragment.uuid;
-                         
-                         if (!mainFragment.ids) mainFragment.ids = new Set();
-                         if (!mainFragment.items) mainFragment.items = mainFragment.ids;
-
-                         let forcedCount = 0;
-                         for (const id of typeIds) {
-                             if (!modelAny.data.has(id)) {
-                                 modelAny.data.set(id, [fragmentId, id]);
-                                 mainFragment.ids.add(id);
-                                 forcedCount++;
-                             }
+                                    modelAny.data.set(numId, [fragmentId, numId]);
+                                    mainFragment.ids.add(numId);
+                                    if (Array.isArray(mainFragment.items)) mainFragment.items.push(numId);
+                                    totalMapped++;
+                                }
+                            }
+                            logToScreen(`Fallback: Mapped ${totalMapped} items to fragment ${fragmentId}`);
+                        } catch (e) {
+                             logToScreen(`Fallback failed: ${e}`, true);
                          }
-                         logToScreen(`Forced ${forcedCount} missing Type IDs into model.data (mapped to first fragment)`);
                      }
-                 }
+                
+                // Debug first entry
+                if (modelAny.data.size > 0) {
+                    const firstKey = modelAny.data.keys().next().value;
+                    console.log(`[DEBUG] Sample model.data entry: Key=${firstKey} Val=`, modelAny.data.get(firstKey));
+                }
+                
+                // CRITICAL FIX: Ensure model.types matches the data if we have dummy properties
+                if (modelAny.types && Object.keys(modelAny.types).length > 0) {
+                    console.log(`[DEBUG] model.types found with ${Object.keys(modelAny.types).length} types.`);
+                    
+                    // Check for ID mismatch between types and geometry
+                    const typeIds = new Set<number>();
+                    for (const key in modelAny.types) {
+                        const ids = modelAny.types[key];
+                        if (Array.isArray(ids)) ids.forEach((id: number) => typeIds.add(id));
+                    }
+                    
+                    // Get current geometry IDs from model.data
+                    const geometryIds = new Set(modelAny.data.keys());
+                    
+                    // Intersect
+                    let matchCount = 0;
+                    for (const id of typeIds) {
+                        if (geometryIds.has(id)) matchCount++;
+                    }
+                    
+                    logToScreen(`[DEBUG] Type IDs: ${typeIds.size}, Geometry IDs: ${geometryIds.size}, Match: ${matchCount}`);
+                    
+                    // If match is low (< 50%), force sync to ensure classification works
+                    if ((matchCount === 0 || matchCount < typeIds.size * 0.5) && typeIds.size > 0) {
+                        logToScreen(`WARNING: Low ID Match (${matchCount}/${typeIds.size}). Syncing model.data to match Type IDs...`, true);
+                        
+                        // Force map all Type IDs to the first fragment so they show up in Classifier
+                        const mainFragment = fragmentsList[0];
+                        const fragmentId = mainFragment.uuid;
+                        
+                        if (!mainFragment.ids) mainFragment.ids = new Set();
+                        if (!mainFragment.items) mainFragment.items = mainFragment.ids;
+
+                        let forcedCount = 0;
+                        for (const id of typeIds) {
+                            if (!modelAny.data.has(id)) {
+                                modelAny.data.set(id, [fragmentId, id]);
+                                mainFragment.ids.add(id);
+                                if (Array.isArray(mainFragment.items)) mainFragment.items.push(id);
+                                forcedCount++;
+                            }
+                        }
+                        logToScreen(`Forced ${forcedCount} missing Type IDs into model.data (mapped to first fragment)`);
+                    }
+                }
                  
              } else {
                  logToScreen('Cannot reconstruct model.data: No meshes found in model.object!', true);
@@ -1788,6 +1791,65 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     html += customTopLevelHtml;
                 }
 
+                // --- INVERSE ATTRIBUTE RECONSTRUCTION (Lazy Build) ---
+                if (!model._inverseMap) {
+                    console.log('Building inverse attribute map for property discovery...');
+                    model._inverseMap = new Map();
+                    const psetMap = model._inverseMap;
+                    
+                    for (const id in model.properties) {
+                        const prop = model.properties[id];
+                        if (!prop) continue;
+                        
+                        // Check for IfcRelDefinesByProperties
+                        // Note: Type can be numeric or string depending on parser
+                        const type = String(prop.type || '').toUpperCase();
+                        
+                        if (type === 'IFCRELDEFINESBYPROPERTIES') {
+                            const related = prop.RelatedObjects || prop.relatedObjects;
+                            const relating = prop.RelatingPropertyDefinition || prop.relatingPropertyDefinition;
+                            
+                            if (related && relating) {
+                                const relatedIds = Array.isArray(related) ? related : [related];
+                                const psetId = (relating.value || relating); // Handle wrapper
+                                
+                                for (const relId of relatedIds) {
+                                    const rId = (relId.value || relId);
+                                    if (!psetMap.has(rId)) psetMap.set(rId, []);
+                                    psetMap.get(rId).push(psetId);
+                                }
+                            }
+                        }
+                    }
+                    console.log(`Inverse map built. Found relations for ${psetMap.size} items.`);
+                }
+
+                // Inject detected Psets into IsDefinedBy if missing
+                let isDefinedBy = entity.IsDefinedBy || entity.isDefinedBy || [];
+                if (!Array.isArray(isDefinedBy)) isDefinedBy = [isDefinedBy];
+                
+                // Add inverse relations
+                if (model._inverseMap && model._inverseMap.has(Number(localId))) {
+                    const extraPsets = model._inverseMap.get(Number(localId));
+                    // Construct synthetic objects to mimic direct reference
+                    // We only have the Pset ID, but that's what resolveRemote needs
+                    extraPsets.forEach((pid: any) => {
+                         // We create a fake "Rel" that points to the Pset
+                         // Because the loop below expects a Rel, then gets RelatingPropertyDefinition
+                         // But wait, the loop below iterates 'isDefinedBy' which are RELATIONS (IfcRelDefinesByProperties)
+                         // NOT Psets directly.
+                         // So we need to find the REL ID that connects them? 
+                         // No, we can just treat the Pset as if it was directly linked if we adjust the loop.
+                         // BUT, to avoid breaking existing logic, let's look at the loop.
+                         
+                         // The loop expects: rel -> RelatingPropertyDefinition -> Pset
+                         // If we just add the Pset ID to a separate list, we can process it.
+                    });
+                }
+                
+                // Better approach: Separate loop for Inverse Psets
+                const inversePsets = model._inverseMap ? (model._inverseMap.get(Number(localId)) || []) : [];
+                
                 // --- Level / Spatial Structure ---
                 const containedIn = entity.ContainedInStructure || entity.containedInStructure;
                 if (containedIn && Array.isArray(containedIn)) {
@@ -1810,10 +1872,10 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     }
                 }
 
-                const isDefinedBy = entity.IsDefinedBy || entity.isDefinedBy;
+                const directIsDefinedBy = entity.IsDefinedBy || entity.isDefinedBy;
                 
-                if (isDefinedBy && Array.isArray(isDefinedBy)) {
-                    for (const relRef of isDefinedBy) {
+                if (directIsDefinedBy && Array.isArray(directIsDefinedBy)) {
+                    for (const relRef of directIsDefinedBy) {
                         const rel = resolveRemote(relRef, model);
                         if (!rel) continue;
 
@@ -1823,7 +1885,20 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
 
                         const pset = resolveRemote(psetRef, model);
                         if (!pset) continue;
+                        
+                        renderPset(pset);
+                    }
+                }
+                
+                // Render Inverse Psets
+                if (inversePsets.length > 0) {
+                     for (const psetId of inversePsets) {
+                         const pset = resolveRemote(psetId, model);
+                         if (pset) renderPset(pset);
+                     }
+                }
 
+                function renderPset(pset: any) {
                         const psetNameObj = pset.Name || pset.name;
                         const psetName = (psetNameObj?.value ?? psetNameObj) || 'Sin Nombre';
 
@@ -1877,7 +1952,6 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                             }
                             html += `</tbody></table>`;
                         }
-                    }
                 }
             }
 
