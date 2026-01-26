@@ -1420,9 +1420,8 @@ viewButtons.forEach(btn => {
 // Listener moved to initSidebar to handle both IFC and Frag files centrally
 
 // --- Highlighter & Properties Setup ---
-// Already initialized at the top
 
-const [propsTable, updatePropsTable] = CUI.tables.itemsData({
+const [propsTable] = CUI.tables.itemsData({
     components,
     modelIdMap: {},
 });
@@ -1435,20 +1434,18 @@ if (propertiesContent) {
     propertiesContent.appendChild(propsTable);
 }
 
-highlighter.events.select.onHighlight.add((modelIdMap) => {
-    updatePropsTable({ modelIdMap });
+highlighter.events.select.onHighlight.add(async (modelIdMap) => {
+    await renderPropertiesTable(modelIdMap as any);
 });
 
-highlighter.events.select.onClear.add(() => {
-    updatePropsTable({ modelIdMap: {} });
+highlighter.events.select.onClear.add(async () => {
+    await renderPropertiesTable({} as any);
 });
 
 if (container) {
     container.addEventListener('click', () => {
         const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
-        if (selection) {
-            updatePropsTable({ modelIdMap: selection });
-        }
+        renderPropertiesTable(selection || ({} as any));
     });
 }
 
