@@ -330,23 +330,41 @@ async function loadModel(url: string, path: string) {
              logToScreen('Reconstructing missing model.data from geometry items...');
              if (!modelAny.data) modelAny.data = new Map();
              
-             // Try to find fragments in model.object (Meshes)
-             const fragmentsList: any[] = [];
-             model.object.traverse((child: any) => {
-                 if (child.isMesh) {
-                     fragmentsList.push(child);
-                 }
-             });
+             // Try to find fragments in model.items (Fragments) or model.object (Meshes)
+             let fragmentsList: any[] = [];
+             
+             // Check if model has direct reference to fragments
+             // @ts-ignore
+             if (model.items && Array.isArray(model.items) && model.items.length > 0) {
+                 // @ts-ignore
+                 console.log(`[DEBUG] Found ${model.items.length} fragments in model.items`);
+                 // @ts-ignore
+                 fragmentsList = model.items;
+             } else {
+                 // Fallback to mesh traversal
+                 console.log('[DEBUG] model.items empty or missing, traversing model.object for meshes...');
+                 model.object.traverse((child: any) => {
+                     if (child.isMesh) {
+                         fragmentsList.push(child);
+                     }
+                 });
+             }
              
              if (fragmentsList.length > 0) {
-                 logToScreen(`Found ${fragmentsList.length} fragments. Scanning for items...`);
+                 logToScreen(`Found ${fragmentsList.length} fragments/meshes. Scanning for items...`);
                  
                  let totalMapped = 0;
                  
                  for (const frag of fragmentsList) {
                      // Check for items/ids in the fragment
                      // Fragment meshes usually have 'items' (array) or 'ids' (Set)
-                     const items = frag.items || frag.ids;
+                     // If frag is a Mesh, it might have a 'fragment' reference
+                     let items = frag.items || frag.ids;
+                     
+                     if (!items && frag.fragment) {
+                         // If frag is a mesh pointing to a fragment
+                         items = frag.fragment.items || frag.fragment.ids;
+                     }
                      
                      if (items) {
                          const idList = Array.isArray(items) ? items : Array.from(items);
@@ -1043,6 +1061,9 @@ function initGridToggle() {
 
 
 
+// Add global state for folder open/close
+const folderStates: Record<string, boolean> = {};
+
 // Load models from JSON and populate sidebar
 async function loadModelList() {
     const listContainer = document.getElementById('model-list');
@@ -1106,12 +1127,21 @@ async function loadModelList() {
                     itemsList.classList.remove('collapsed');
                     header.querySelector('.fa-chevron-right')?.classList.replace('fa-chevron-right', 'fa-chevron-down');
                     header.querySelector('.fa-folder')?.classList.replace('fa-folder', 'fa-folder-open');
+                    folderStates[folder] = false;
                 } else {
                     itemsList.classList.add('collapsed');
                     header.querySelector('.fa-chevron-down')?.classList.replace('fa-chevron-down', 'fa-chevron-right');
                     header.querySelector('.fa-folder-open')?.classList.replace('fa-folder-open', 'fa-folder');
+                    folderStates[folder] = true;
                 }
             });
+
+            // Restore state
+            if (folderStates[folder]) {
+                 itemsList.classList.add('collapsed');
+                 header.querySelector('.fa-chevron-down')?.classList.replace('fa-chevron-down', 'fa-chevron-right');
+                 header.querySelector('.fa-folder-open')?.classList.replace('fa-folder-open', 'fa-folder');
+            }
 
             items.forEach((m) => {
                 const li = document.createElement('li');
@@ -1435,6 +1465,7 @@ if (propertiesContent) {
 }
 
 highlighter.events.select.onHighlight.add(async (modelIdMap) => {
+    console.log('[DEBUG] Highlight event:', modelIdMap);
     await renderPropertiesTable(modelIdMap as any);
 });
 
