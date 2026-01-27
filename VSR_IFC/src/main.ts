@@ -1784,14 +1784,25 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
 
                     // SPECIAL HANDLING: 'psets' object (User specific JSON structure)
                     if (key === 'psets') {
+                        console.log('Found psets key. Type:', typeof val);
                         let psetData = val;
                         
                         // Attempt to parse stringified JSON if needed
                         if (typeof val === 'string') {
                             try {
-                                psetData = JSON.parse(val);
+                                // Try cleaning common JSON string issues
+                                const cleaned = val.trim();
+                                psetData = JSON.parse(cleaned);
                             } catch (e) {
-                                // If parsing fails, treat as normal string
+                                console.warn('JSON.parse failed for psets, attempting relaxed parse:', e);
+                                try {
+                                    // Fallback: try relaxed parsing via Function (eval-like) to handle loose JSON
+                                    if (val.trim().startsWith('{')) {
+                                        psetData = new Function("return " + val)();
+                                    }
+                                } catch (e2) {
+                                    console.warn('Relaxed parsing failed:', e2);
+                                }
                             }
                         }
 
