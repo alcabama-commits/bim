@@ -1781,6 +1781,26 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     
                     // Skip nulls
                     if (val === null || val === undefined) continue;
+
+                    // SPECIAL HANDLING: 'psets' object (User specific JSON structure)
+                    if (key === 'psets' && typeof val === 'object') {
+                        // Iterate over the pset groups (e.g. "Otra", "Restricciones", "Cotas")
+                        for (const [psetName, psetProps] of Object.entries(val)) {
+                            if (!psetProps || typeof psetProps !== 'object') continue;
+                            
+                            // Create a new table for each pset
+                            customTopLevelHtml += `<div class="prop-set-title">${psetName}</div><table class="prop-table"><tbody>`;
+                            
+                            for (const [propName, propVal] of Object.entries(psetProps)) {
+                                const displayVal = formatValue(propVal, 0);
+                                customTopLevelHtml += `<tr><th>${propName}</th><td>${displayVal}</td></tr>`;
+                            }
+                            
+                            customTopLevelHtml += `</tbody></table>`;
+                            hasCustomTopLevel = true;
+                        }
+                        continue; // Skip default rendering for 'psets'
+                    }
                     
                     const displayVal = formatValue(val, 0);
                     customTopLevelHtml += `<tr><th>${key}</th><td>${displayVal}</td></tr>`;
