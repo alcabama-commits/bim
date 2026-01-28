@@ -1775,8 +1775,41 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
 
                     return String(valueToProcess);
                 };
+
+                const renderSection = (sectionName: string, obj: any, depth: number = 0): string => {
+                    if (!obj || typeof obj !== 'object') return '';
+                    if (depth > 2) return '';
+                    let out = `<div class="prop-set-title">${sectionName}</div><table class="prop-table"><tbody>`;
+                    for (const [sk, sv0] of Object.entries(obj)) {
+                        let sv: any = (sv0 as any)?.value ?? sv0;
+                        if (sv === null || sv === undefined) continue;
+                        if (Array.isArray(sv)) {
+                            if (sv.length === 0) continue;
+                            const first = sv[0];
+                            if (first && typeof first === 'object' && !('value' in first)) {
+                                let idx = 0;
+                                for (const item of sv) {
+                                    out += renderSection(`${sk}[${idx}]`, item, depth + 1);
+                                    idx++;
+                                }
+                            } else {
+                                const displayVal = formatValue(sv, depth);
+                                out += `<tr><th>${sk}</th><td>${displayVal}</td></tr>`;
+                            }
+                            continue;
+                        }
+                        if (typeof sv === 'object') {
+                            out += renderSection(sk, sv, depth + 1);
+                            continue;
+                        }
+                        const displayVal = formatValue(sv, depth);
+                        out += `<tr><th>${sk}</th><td>${displayVal}</td></tr>`;
+                    }
+                    out += `</tbody></table>`;
+                    return out;
+                };
                 
-                let psetsHtml = '';
+                let sectionsHtml = '';
 
                 for (const [key, val] of Object.entries(entity)) {
                     if (standardKeys.has(key)) continue;
@@ -1784,47 +1817,30 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     // Skip nulls
                     if (val === null || val === undefined) continue;
 
-                    // SPECIAL HANDLING: 'psets' object (User specific JSON structure)
-                    if (key.trim() === 'psets') {
-                        let psetData = val;
-                        
-                        // Attempt to parse stringified JSON if needed
-                        if (typeof val === 'string') {
+                    let parsedObject: any = null;
+                    if (typeof val === 'string') {
+                        const cleaned = val.trim();
+                        if (cleaned.startsWith('{') || cleaned.startsWith('[')) {
                             try {
-                                const cleaned = val.trim();
-                                if (cleaned.startsWith('{') || cleaned.startsWith('[')) {
-                                     psetData = JSON.parse(cleaned);
-                                }
-                            } catch (e) {
-                                console.warn('JSON.parse failed for psets:', e);
+                                parsedObject = JSON.parse(cleaned);
+                            } catch {
                                 try {
-                                    // Fallback: try relaxed parsing via Function (eval-like)
-                                    if (val.trim().startsWith('{')) {
-                                        psetData = new Function("return " + val)();
-                                    }
-                                } catch (e2) {}
+                                    parsedObject = new Function("return " + cleaned)();
+                                } catch { parsedObject = null; }
                             }
                         }
-
-                        if (typeof psetData === 'object' && psetData !== null) {
-                            // Iterate over the pset groups (e.g. "Otra", "Restricciones", "Cotas")
-                            for (const [psetName, psetProps] of Object.entries(psetData)) {
-                                if (!psetProps || typeof psetProps !== 'object') continue;
-                                
-                                psetsHtml += `<div class="prop-set-title">${psetName}</div><table class="prop-table"><tbody>`;
-                                
-                                for (const [propName, propVal] of Object.entries(psetProps)) {
-                                    const displayVal = formatValue(propVal, 0);
-                                    psetsHtml += `<tr><th>${propName}</th><td>${displayVal}</td></tr>`;
-                                }
-                                
-                                psetsHtml += `</tbody></table>`;
-                            }
-                        } else {
-                            // Fallback for unparseable psets to avoid rendering as a giant string in main table
-                            psetsHtml += `<div class="prop-set-title">Psets (Data)</div><div style="padding:8px; overflow-x:auto; font-family:monospace; font-size:11px; color:#444; background:#f9f9f9; border:1px solid #eee;">${formatValue(val, 0)}</div>`;
+                    }
+                    if (parsedObject && typeof parsedObject === 'object') {
+                        sectionsHtml += renderSection(key, parsedObject, 0);
+                        continue;
+                    }
+                    if (val && typeof val === 'object' && !Array.isArray(val) && !(val as any).value === undefined) {
+                        const obj = (val as any).value !== undefined ? (val as any).value : val;
+                        const keysCount = Object.keys(obj || {}).length;
+                        if (keysCount > 0) {
+                            sectionsHtml += renderSection(key, obj, 0);
+                            continue;
                         }
-                        continue; // Skip default rendering for 'psets'
                     }
                     
                     const displayVal = formatValue(val, 0);
@@ -1836,7 +1852,7 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                 if (hasCustomTopLevel) {
                     html += customTopLevelHtml;
                 }
-                html += psetsHtml;
+                html += sectionsHtml;
 
                 // --- INVERSE ATTRIBUTE RECONSTRUCTION (Lazy Build) ---
                 if (!model._inverseMap) {
