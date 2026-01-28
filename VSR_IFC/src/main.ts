@@ -58,6 +58,14 @@ const clipper = components.get(OBC.Clipper);
         }
     });
     highlighter.enabled = true; // Ensure it's enabled explicitly
+    
+    // FORCE COLOR UPDATE
+    // Sometimes the internal material isn't updated immediately if initialized lazily.
+    // We try to access the internal selection and force the material.
+    if ((highlighter as any).selection && (highlighter as any).selection.select) {
+        (highlighter as any).selection.select.material = new THREE.MeshBasicMaterial({ color: 0xd3045c, depthTest: false, opacity: 0.8, transparent: true });
+        console.log('[DEBUG] Forced highlighter material update');
+    }
 
 // Add 3D Click Event for Selection
 if (container) {
@@ -713,11 +721,13 @@ async function classifyByCustomProperties(model: any) {
 
         // If both missing, maybe use IFC Type as fallback?
         if (!category && !family) {
-             // Fallback to IFC Type if available
-             const type = propsTable.computeds.type ? propsTable.computeds.type(properties[id]) : 'Unknown';
-             // Only classify if we have something meaningful, or force "Sin Clasificar"
-             category = 'Sin Clasificar';
-             family = type || 'Elemento';
+             // Fallback to safe defaults if custom properties are missing
+             category = 'Sin Categoría';
+             
+             // Try to get a basic name/type if possible without crashing
+             const nameObj = properties[id].Name || properties[id].name;
+             const name = (nameObj && (nameObj.value || nameObj)) || 'Elemento';
+             family = String(name);
         } else {
              category = category || 'Sin Categoría';
              family = family || 'Sin Familia';
@@ -2274,7 +2284,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                     v.innerText = 'v1.9 (Custom Classification)';
+                     v.innerText = 'v1.9.1 (Custom Class + Pink Fix)';
                      header.appendChild(v);
                 }
 
