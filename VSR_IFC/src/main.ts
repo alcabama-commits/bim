@@ -532,8 +532,8 @@ async function loadModel(url: string, path: string) {
         // Classify the model
         if (hasProps) {
             try {
-                console.log(`[DEBUG] Running classifier.byCategory() for model ${model.uuid}`);
-                await classifier.byCategory(model);
+                console.log(`[DEBUG] Running Custom Classification for model ${model.uuid}`);
+                await classifyByCustomProperties(model);
                 await updateClassificationUI();
                 logToScreen('Classification updated');
                 
@@ -630,6 +630,125 @@ function initSidebarTabs() {
     });
 }
 
+async function classifyByCustomProperties(model: any) {
+    logToScreen('Starting custom classification (Categoría -> Familia)...');
+    
+    if (!model.properties) {
+        logToScreen('No properties found for classification.', true);
+        return;
+    }
+    
+    // Clear existing systems to avoid mixing with default IFC types
+    classifier.list.clear();
+
+    const properties = model.properties;
+    
+    // Helper to find property recursively
+    const findProp = (id: number, propName: string): string | null => {
+        const props = properties[id];
+        if (!props) return null;
+        
+        // 1. Check Top Level Properties
+        const lowerName = propName.toLowerCase();
+        for (const key in props) {
+            if (key.toLowerCase() === lowerName) {
+                 const val = props[key].value || props[key];
+                 // Ensure it's a string value (not an object unless it has value property)
+                 if (val && typeof val === 'object' && val.value) return val.value;
+                 if (typeof val === 'string' || typeof val === 'number') return String(val);
+            }
+        }
+        
+        // 2. Check Psets (relations or psets object)
+        if (props.psets) {
+            for (const psetName in props.psets) {
+                const pset = props.psets[psetName];
+                for (const key in pset) {
+                    if (key.toLowerCase() === lowerName) {
+                        const val = pset[key].value || pset[key];
+                        if (val && typeof val === 'object' && val.value) return val.value;
+                        if (typeof val === 'string' || typeof val === 'number') return String(val);
+                    }
+                }
+            }
+        }
+        
+        // 3. Fallback: Check relations array if structured that way
+        if (props.relations) {
+             for (const rel of props.relations) {
+                 for (const key in rel) {
+                     if (key.toLowerCase() === lowerName) {
+                         const val = rel[key].value || rel[key];
+                         return String(val);
+                     }
+                 }
+             }
+        }
+        
+        return null;
+    };
+    
+    // Iterate all items in model.data
+    if (!model.data) {
+        logToScreen('Model data missing. Classification impossible.', true);
+        return;
+    }
+
+    const systems = new Map<string, Map<string, { [fragId: string]: Set<number> }>>();
+    let classifiedCount = 0;
+
+    for (const [expressID, data] of model.data.entries()) {
+        const fragmentID = data[0];
+        const id = Number(expressID);
+        
+        // Skip if not in properties
+        if (!properties[id]) continue;
+        
+        // Find Category and Family
+        // If "Categoría" is missing, we might want to skip or put in "Sin Categoría"
+        // But let's check if the element has geometry first (it does if it's in model.data)
+        
+        let category = findProp(id, 'Categoría');
+        let family = findProp(id, 'Familia');
+
+        // If both missing, maybe use IFC Type as fallback?
+        if (!category && !family) {
+             // Fallback to IFC Type if available
+             const type = propsTable.computeds.type ? propsTable.computeds.type(properties[id]) : 'Unknown';
+             // Only classify if we have something meaningful, or force "Sin Clasificar"
+             category = 'Sin Clasificar';
+             family = type || 'Elemento';
+        } else {
+             category = category || 'Sin Categoría';
+             family = family || 'Sin Familia';
+        }
+
+        if (!systems.has(category)) {
+            systems.set(category, new Map());
+        }
+        
+        const catMap = systems.get(category)!;
+        
+        if (!catMap.has(family)) {
+            catMap.set(family, {});
+        }
+        
+        const group = catMap.get(family)!;
+        if (!group[fragmentID]) {
+            group[fragmentID] = new Set();
+        }
+        group[fragmentID].add(id);
+        classifiedCount++;
+    }
+    
+    // Update Classifier
+    for (const [cat, families] of systems) {
+        classifier.list.set(cat, families);
+    }
+    
+    logToScreen(`Custom classification complete. Classified ${classifiedCount} items into ${systems.size} categories.`);
+}
+
 async function updateClassificationUI() {
     const container = document.getElementById('classification-list');
     if (!container) return;
@@ -657,26 +776,44 @@ async function updateClassificationUI() {
         return;
     }
 
-    const list = document.createElement('ul');
-    list.className = 'folder-items';
-    list.style.padding = '10px';
-
-    // Second pass to render
+    // Render Systems as Folders (Categoría)
     for (const [systemName, classification] of classifier.list) {
+        if (classification.size === 0) continue;
+
+        // Create Folder for the System (Category)
+        const folderGroup = document.createElement('div');
+        folderGroup.className = 'folder-group';
+        
+        const folderHeader = document.createElement('div');
+        folderHeader.className = 'folder-header';
+        folderHeader.innerHTML = `<i class="fa-regular fa-folder"></i> ${systemName} <span style="font-size: 0.8em; color: #888; margin-left: auto;">(${classification.size})</span>`;
+        
+        const folderItems = document.createElement('ul');
+        folderItems.className = 'folder-items';
+        folderItems.style.display = 'none'; // Collapsed by default
+
+        // Toggle folder
+        folderHeader.addEventListener('click', () => {
+            const isHidden = folderItems.style.display === 'none';
+            folderItems.style.display = isHidden ? 'block' : 'none';
+            const icon = folderHeader.querySelector('i');
+            if (icon) icon.className = isHidden ? 'fa-regular fa-folder-open' : 'fa-regular fa-folder';
+        });
+
+        folderGroup.appendChild(folderHeader);
+        folderGroup.appendChild(folderItems);
+        container.appendChild(folderGroup);
+
+        // Render Groups (Familia)
         for (const [type, groupData] of classification) {
             // FIX: Check if groupData has .map property, otherwise use groupData itself as the map
-            // This handles different versions/structures of the classifier output
             const fragmentIdMap = (groupData as any).map || groupData;
-            
-            // Detailed Debug for map structure
-            if (classification.size > 0 && !fragmentIdMap) {
-                console.error(`[DEBUG] Missing map for ${type}`, groupData);
-            }
             
             const li = document.createElement('li');
             li.className = 'model-item';
             li.style.display = 'flex';
             li.style.justifyContent = 'space-between';
+            li.style.paddingLeft = '20px'; // Indent for hierarchy
             
             let count = 0;
             if (fragmentIdMap) {
@@ -690,18 +827,11 @@ async function updateClassificationUI() {
                 }
             }
             
-            // Log debug info for the first item found to see structure
-            if (count === 0) {
-                 // console.warn(`[DEBUG] Category ${type} has count 0. Map keys: ${fragmentIdMap ? Object.keys(fragmentIdMap) : 'null'}`);
-            }
-
-            // Optional: Hide items with 0 count to clean up UI?
-            // For now, let's keep them but gray them out
-            const opacity = count > 0 ? '1' : '0.5'; // Increased opacity for visibility
-            const pointer = 'pointer'; // Always allow pointer events to debug
+            const opacity = count > 0 ? '1' : '0.5';
+            const pointer = 'pointer';
 
             li.innerHTML = `
-                <div class="model-name" style="cursor: ${pointer}; flex-grow: 1; opacity: ${opacity};"><i class="fa-solid fa-layer-group"></i> ${type} <span style="font-size: 0.8em; color: #888;">(${count})</span></div>
+                <div class="model-name" style="cursor: ${pointer}; flex-grow: 1; opacity: ${opacity};"><i class="fa-solid fa-tag"></i> ${type} <span style="font-size: 0.8em; color: #888;">(${count})</span></div>
                 <div class="visibility-toggle" style="cursor: ${pointer}; padding: 0 10px; opacity: ${opacity};" title="Toggle Visibility">
                     <i class="fa-regular fa-eye"></i>
                 </div>
@@ -712,45 +842,26 @@ async function updateClassificationUI() {
             const toggleIcon = toggleDiv?.querySelector('i');
             let isVisible = true;
 
-            // SELECTION Handler (Clicking text)
+            // SELECTION Handler
             nameDiv?.addEventListener('click', async (e) => {
                 e.stopPropagation();
-                console.log(`[DEBUG] Selecting category: ${type} (Count: ${count})`);
-                
-                // Debug the map content
-                console.log(`[DEBUG] FragmentIdMap for ${type}:`, fragmentIdMap);
-
                 const highlighter = components.get(OBF.Highlighter);
-                // ALLOW SELECTION even if count is 0 (to catch potential ghost items or map issues)
                 if (fragmentIdMap && Object.keys(fragmentIdMap).length > 0) {
-                     // Check keys in map
-                     const mapKeys = Object.keys(fragmentIdMap || {});
-                     console.log(`[DEBUG] Map keys: ${mapKeys.join(', ')}`);
-                     
                      try {
                         highlighter.highlightByID('select', fragmentIdMap, true, true);
                         logToScreen(`Selected ${type} (${count} items)`);
                      } catch (e) {
-                        logToScreen(`Error selecting ${type}: ${e}`, true);
                         console.error(e);
                      }
-                } else {
-                     logToScreen(`Cannot select ${type}: No items found (Map is empty)`, true);
-                     console.warn(`[DEBUG] Map is empty for ${type}. GroupData:`, groupData);
                 }
             });
 
-            // VISIBILITY Handler (Clicking eye)
+            // VISIBILITY Handler
             toggleDiv?.addEventListener('click', (e) => {
                 e.stopPropagation();
                 isVisible = !isVisible;
-                console.log(`[DEBUG] Toggling visibility for ${type}: ${isVisible}`);
-                
                 if (fragmentIdMap && Object.keys(fragmentIdMap).length > 0) {
                     hider.set(isVisible, fragmentIdMap);
-                } else {
-                    console.warn(`[DEBUG] Skipping visibility toggle for ${type} - map is empty`);
-                    // Try to toggle anyway if logic permits, but hider needs a map
                 }
                 
                 if (isVisible) {
@@ -764,11 +875,9 @@ async function updateClassificationUI() {
                 }
             });
 
-            list.appendChild(li);
+            folderItems.appendChild(li);
         }
     }
-
-    container.appendChild(list);
 }
 
 function initSidebar() {
@@ -894,7 +1003,7 @@ function initSidebar() {
                                 
                                 // Attempt classification (might be empty if types are 0, but at least properties exist)
                                 logToScreen(`Attempting classification on dummy properties...`);
-                                await classifier.byCategory(model);
+                                await classifyByCustomProperties(model);
                                 await updateClassificationUI();
                                 logToScreen(`Classification complete (fallback).`);
                                 
@@ -905,7 +1014,7 @@ function initSidebar() {
                             // Classify only if properties exist
                             logToScreen(`Classifying fragments: ${file.name}...`);
                             try {
-                                await classifier.byCategory(model);
+                                await classifyByCustomProperties(model);
                                 await updateClassificationUI();
                                 logToScreen(`Classification complete for ${file.name}`);
                             } catch (err) {
@@ -2165,7 +2274,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                     v.innerText = 'v1.8 (Pink Selection)';
+                     v.innerText = 'v1.9 (Custom Classification)';
                      header.appendChild(v);
                 }
 
