@@ -1491,6 +1491,13 @@ if (propertiesContent) {
 
 highlighter.events.select.onHighlight.add(async (modelIdMap) => {
     console.log('[DEBUG] Highlight event:', modelIdMap);
+    
+    // Verify color again during event
+    const selectMat = (highlighter as any).setupData?.select?.material;
+    if (selectMat) {
+        console.log('[DEBUG] Current Select Material Color:', selectMat.color.getHex().toString(16));
+    }
+    
     await renderPropertiesTable(modelIdMap as any);
 });
 
