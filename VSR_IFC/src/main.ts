@@ -1824,14 +1824,17 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     let isComplex = false;
 
                     // 1. Try to parse if it's a string
-                    if (typeof val === 'string') {
+                     if (typeof val === 'string') {
                         const cleaned = val.trim();
                         // Heuristic: starts with { or [ looks like JSON
                         if (cleaned.startsWith('{') || cleaned.startsWith('[')) {
+                            console.log(`[DEBUG] Attempting to parse complex string for key '${key}'`, cleaned.substring(0, 50) + '...');
                             try {
                                 processedObject = JSON.parse(cleaned);
                                 isComplex = (typeof processedObject === 'object' && processedObject !== null);
+                                console.log(`[DEBUG] Parsing success for '${key}'`, isComplex);
                             } catch (e) {
+                                console.warn(`[DEBUG] JSON.parse failed for '${key}':`, e);
                                 // Fallback: relaxed parsing
                                 try {
                                     if (cleaned.startsWith('{')) {
@@ -2155,7 +2158,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                     v.innerText = 'v1.7 (Custom Table)';
+                     v.innerText = 'v1.8 (Pink Selection)';
                      header.appendChild(v);
                 }
 
