@@ -45,19 +45,19 @@ const hider = components.get(OBC.Hider);
 const clipper = components.get(OBC.Clipper);
 
 // Initialize Highlighter
-const highlighter = components.get(OBF.Highlighter);
-highlighter.setup({
-    world, // Pass the world instance to enable raycasting
-    select: {
-        name: 'select',
-        material: new THREE.MeshBasicMaterial({ color: 0x1976d2, depthTest: false, opacity: 0.8, transparent: true })
-    },
-    hover: {
-        name: 'hover',
-        material: new THREE.MeshBasicMaterial({ color: 0xe0e0e0, depthTest: false, opacity: 0.4, transparent: true })
-    }
-});
-highlighter.enabled = true; // Ensure it's enabled explicitly
+    const highlighter = components.get(OBF.Highlighter);
+    highlighter.setup({
+        world, // Pass the world instance to enable raycasting
+        select: {
+            name: 'select',
+            material: new THREE.MeshBasicMaterial({ color: 0xd3045c, depthTest: false, opacity: 0.8, transparent: true })
+        },
+        hover: {
+            name: 'hover',
+            material: new THREE.MeshBasicMaterial({ color: 0xe0e0e0, depthTest: false, opacity: 0.4, transparent: true })
+        }
+    });
+    highlighter.enabled = true; // Ensure it's enabled explicitly
 
 // Add 3D Click Event for Selection
 if (container) {
@@ -1809,6 +1809,9 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     return out;
                 };
                 
+                // --- Robust recursive rendering for ANY object/JSON structure ---
+                // This replaces the specific 'psets' check to handle 'pstes', 'properties', 'data', etc.
+                
                 let sectionsHtml = '';
 
                 for (const [key, val] of Object.entries(entity)) {
@@ -1817,32 +1820,76 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     // Skip nulls
                     if (val === null || val === undefined) continue;
 
-                    let parsedObject: any = null;
+                    let processedObject: any = null;
+                    let isComplex = false;
+
+                    // 1. Try to parse if it's a string
                     if (typeof val === 'string') {
                         const cleaned = val.trim();
+                        // Heuristic: starts with { or [ looks like JSON
                         if (cleaned.startsWith('{') || cleaned.startsWith('[')) {
                             try {
-                                parsedObject = JSON.parse(cleaned);
-                            } catch {
+                                processedObject = JSON.parse(cleaned);
+                                isComplex = (typeof processedObject === 'object' && processedObject !== null);
+                            } catch (e) {
+                                // Fallback: relaxed parsing
                                 try {
-                                    parsedObject = new Function("return " + cleaned)();
-                                } catch { parsedObject = null; }
+                                    if (cleaned.startsWith('{')) {
+                                        processedObject = new Function("return " + cleaned)();
+                                        isComplex = (typeof processedObject === 'object' && processedObject !== null);
+                                    }
+                                } catch (e2) {}
+                            }
+                        }
+                    } 
+                    // 2. Already an object
+                    else if (typeof val === 'object') {
+                        // Exclude simple value wrappers { type: 1, value: "foo" } unless they contain nested objects
+                        const isWrapper = (val as any).value !== undefined && Object.keys(val).length <= 2;
+                        
+                        if (!isWrapper && !Array.isArray(val)) {
+                            processedObject = val;
+                            isComplex = true;
+                        } else if (Array.isArray(val)) {
+                            // Check if array contains objects
+                            if (val.length > 0 && typeof val[0] === 'object') {
+                                processedObject = val;
+                                isComplex = true;
                             }
                         }
                     }
-                    if (parsedObject && typeof parsedObject === 'object') {
-                        sectionsHtml += renderSection(key, parsedObject, 0);
-                        continue;
-                    }
-                    if (val && typeof val === 'object' && !Array.isArray(val) && !(val as any).value === undefined) {
-                        const obj = (val as any).value !== undefined ? (val as any).value : val;
-                        const keysCount = Object.keys(obj || {}).length;
-                        if (keysCount > 0) {
-                            sectionsHtml += renderSection(key, obj, 0);
-                            continue;
+
+                    if (isComplex && processedObject) {
+                        // Render as a separate section
+                        // If it's the 'psets' (or typo 'pstes') style object, keys are Pset names
+                        if (!Array.isArray(processedObject)) {
+                            // Check if the values are themselves objects (Pset style)
+                            // e.g. { "Pset_WallCommon": { "LoadBearing": true }, "Pset_X": ... }
+                            let isPsetCollection = true;
+                            for (const subVal of Object.values(processedObject)) {
+                                if (typeof subVal !== 'object' || subVal === null) {
+                                    isPsetCollection = false;
+                                    break;
+                                }
+                            }
+
+                            if (isPsetCollection) {
+                                // Render each key as a separate table
+                                for (const [psetName, psetProps] of Object.entries(processedObject)) {
+                                    sectionsHtml += renderSection(psetName, psetProps, 0);
+                                }
+                            } else {
+                                // Just a single complex object
+                                sectionsHtml += renderSection(key, processedObject, 0);
+                            }
+                        } else {
+                             // Array of objects
+                             sectionsHtml += renderSection(key, processedObject, 0);
                         }
+                        continue; 
                     }
                     
+                    // Standard Value Rendering
                     const displayVal = formatValue(val, 0);
                     customTopLevelHtml += `<tr><th>${key}</th><td>${displayVal}</td></tr>`;
                     hasCustomTopLevel = true;
