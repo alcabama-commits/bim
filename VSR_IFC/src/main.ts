@@ -539,6 +539,7 @@ async function loadModel(url: string, path: string) {
             try {
                 console.log(`[DEBUG] Running classifyByFamily() for model ${model.uuid}`);
                 await classifyByFamily(model);
+                updateClipper(model);
                 await updateClassificationUI();
                 logToScreen('Classification updated');
                 
@@ -2163,7 +2164,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                     v.innerText = 'v1.9.1 (Capping Enabled)';
+                     v.innerText = 'v1.9.2 (Capping Styles)';
                      header.appendChild(v);
                 }
 
@@ -2254,5 +2255,45 @@ async function classifyByFamily(model: any) {
     classifier.list.clear();
     classifier.list.set('Familia', familyMap);
     logToScreen(`Clasificado en ${familyMap.size} familias.`);
+}
+
+function updateClipper(model: any) {
+    try {
+        const clipperAny = clipper as any;
+        // Check if styles component is available (standard in @thatopen/components)
+        if (clipperAny.styles) {
+            const allMeshes: THREE.Mesh[] = [];
+            
+            // Gather meshes from all loaded models to ensure consistent capping
+            for (const [_, m] of fragments.list) {
+                if (m.object) {
+                    m.object.traverse((child: any) => {
+                        if (child.isMesh) allMeshes.push(child);
+                    });
+                }
+            }
+
+            if (allMeshes.length === 0) return;
+
+            const styleName = 'default-cap-style';
+            
+            // Cleanup existing style if needed (though create usually handles it)
+            if (clipperAny.styles.list && clipperAny.styles.list.has(styleName)) {
+                // Some versions might need explicit delete
+                // clipperAny.styles.delete(styleName); 
+            }
+
+            const capMaterial = new THREE.MeshBasicMaterial({
+                color: 0xCFD8DC,
+                side: THREE.DoubleSide
+            });
+
+            // Create/Update the style
+            clipperAny.styles.create(styleName, allMeshes, capMaterial);
+            console.log(`[DEBUG] Updated Clipper style '${styleName}' with ${allMeshes.length} meshes.`);
+        }
+    } catch (e) {
+        console.error('[DEBUG] Error updating clipper styles:', e);
+    }
 }
 
