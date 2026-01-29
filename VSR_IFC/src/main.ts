@@ -43,6 +43,11 @@ await fragments.init(`${baseUrl}fragments/fragments.mjs`);
 const classifier = components.get(OBC.Classifier);
 const hider = components.get(OBC.Hider);
 const clipper = components.get(OBC.Clipper);
+clipper.material = new THREE.MeshBasicMaterial({
+    color: 0xCFD8DC, // Light gray-blue typical of BIM software
+    side: THREE.DoubleSide,
+    shadowSide: THREE.DoubleSide
+});
 
 // Initialize Highlighter
     const highlighter = components.get(OBF.Highlighter);
@@ -2158,7 +2163,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                     v.innerText = 'v1.9 (Clasificación Familia)';
+                     v.innerText = 'v1.9.1 (Capping Enabled)';
                      header.appendChild(v);
                 }
 
