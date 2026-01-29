@@ -2380,17 +2380,31 @@ function setupSelectionMenu() {
     // listen to the highlighter events which should be sufficient.
     // If it fails, we can add a global event listener for 'click' and check highlighter.selection
     
-    container.addEventListener('click', () => {
+    // Also listen to 'mouseup' which is often more reliable for interaction completion
+    container.addEventListener('mouseup', () => {
         setTimeout(() => {
              const selection = highlighter.selection.select;
-             console.log('[DEBUG] Click event check. Selection:', selection);
+             console.log('[DEBUG] MouseUp event check. Selection:', selection);
              if (selection && Object.keys(selection).length > 0) {
                  updateMenuVisibility(selection);
              } else {
                  updateMenuVisibility({});
              }
-        }, 100);
+        }, 150);
     });
+
+    // Also update on properties panel updates which implies selection changed
+    const originalRender = renderPropertiesTable;
+    (window as any).renderPropertiesTable = function(props: any) {
+         originalRender(props);
+         // If properties are being rendered, it means something is selected (usually)
+         // But we should double check the highlighter source of truth
+         const selection = highlighter.selection.select;
+         console.log('[DEBUG] Properties rendered. Checking selection:', selection);
+         if (selection && Object.keys(selection).length > 0) {
+             updateMenuVisibility(selection);
+         }
+    };
 }
 
 
