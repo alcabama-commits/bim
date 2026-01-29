@@ -101,6 +101,7 @@ clipper.onAfterDelete.add((plane) => {
         }
     });
     highlighter.enabled = true; // Ensure it's enabled explicitly
+    setupSelectionMenu();
 
 // Add 3D Click Event for Selection
 if (container) {
@@ -2201,7 +2202,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                     v.innerText = 'v1.9.3 (Fill Styles)';
+                     v.innerText = 'v1.9.4 (Selection Menu)';
                      header.appendChild(v);
                 }
 
@@ -2293,4 +2294,84 @@ async function classifyByFamily(model: any) {
     classifier.list.set('Familia', familyMap);
     logToScreen(`Clasificado en ${familyMap.size} familias.`);
 }
+
+function setupSelectionMenu() {
+    const menu = document.createElement('div');
+    menu.id = 'selection-menu';
+    Object.assign(menu.style, {
+        position: 'absolute',
+        bottom: '20px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        backgroundColor: 'rgba(32, 32, 32, 0.9)',
+        padding: '10px',
+        borderRadius: '8px',
+        display: 'none',
+        zIndex: '1000',
+        boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+        gap: '10px',
+        flexDirection: 'row'
+    });
+    
+    const createBtn = (text: string, onClick: () => void) => {
+        const btn = document.createElement('button');
+        btn.textContent = text;
+        Object.assign(btn.style, {
+            backgroundColor: '#444',
+            color: 'white',
+            border: 'none',
+            padding: '8px 16px',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontFamily: 'sans-serif'
+        });
+        btn.onmouseover = () => btn.style.backgroundColor = '#555';
+        btn.onmouseout = () => btn.style.backgroundColor = '#444';
+        btn.onclick = onClick;
+        return btn;
+    };
+
+    let currentSelection: any = {};
+
+    const updateMenuVisibility = (selection: any) => {
+        currentSelection = selection;
+        const hasSelection = Object.keys(selection).length > 0;
+        menu.style.display = hasSelection ? 'flex' : 'none';
+    };
+
+    const hideBtn = createBtn('Apagar', async () => {
+        if (Object.keys(currentSelection).length > 0) {
+            await hider.set(false, currentSelection);
+            highlighter.clear('select');
+        }
+    });
+
+    const isolateBtn = createBtn('Aislar', async () => {
+        if (Object.keys(currentSelection).length > 0) {
+            await hider.isolate(currentSelection);
+            highlighter.clear('select');
+        }
+    });
+    
+    // Add "Show All" button to easily reset
+    const showAllBtn = createBtn('Mostrar Todo', async () => {
+        await hider.set(true);
+        highlighter.clear('select');
+    });
+
+    menu.appendChild(hideBtn);
+    menu.appendChild(isolateBtn);
+    menu.appendChild(showAllBtn);
+    document.body.appendChild(menu);
+
+    highlighter.events.select.onHighlight.add((selection) => {
+        updateMenuVisibility(selection);
+    });
+
+    highlighter.events.select.onClear.add(() => {
+        updateMenuVisibility({});
+    });
+}
+
 
