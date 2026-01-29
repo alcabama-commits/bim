@@ -2212,7 +2212,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                    v.innerText = 'v1.9.6 (Clasificación Tipo/Nivel)';
+                    v.innerText = 'v1.9.7 (Nivel + Referencia)';
                     header.appendChild(v);
                 }
 
@@ -2297,7 +2297,7 @@ async function classifyModel(model: any) {
                      }
 
                      // Check for "Nivel" -> Level
-                     if (name === 'Nivel') {
+                     if (name === 'Nivel' || name === 'Nivel de referencia') {
                          const valObj = prop.NominalValue || prop.nominalValue;
                          const value = valObj?.value ?? valObj;
                          if (value) {
@@ -2305,7 +2305,20 @@ async function classifyModel(model: any) {
                              const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
                              for (const relIdObj of relatedList) {
                                  const relId = relIdObj.value || relIdObj;
-                                 if (idsSet.has(relId)) elementLevel.set(relId, levelName);
+                                 if (idsSet.has(relId)) {
+                                     // Priority: 'Nivel' > 'Nivel de referencia'
+                                     const current = elementLevel.get(relId);
+                                     
+                                     if (name === 'Nivel') {
+                                         // Always overwrite if it's explicitly 'Nivel'
+                                         elementLevel.set(relId, levelName);
+                                     } else if (name === 'Nivel de referencia') {
+                                         // Only set if currently 'Sin Nivel' (don't overwrite 'Nivel')
+                                         if (current === 'Sin Nivel') {
+                                             elementLevel.set(relId, levelName);
+                                         }
+                                     }
+                                 }
                              }
                          }
                      }
