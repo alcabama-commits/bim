@@ -577,7 +577,7 @@ async function loadModel(url: string, path: string) {
         if (hasProps) {
             try {
                 console.log(`[DEBUG] Running classifyByFamily() for model ${model.uuid}`);
-                await classifyByFamily(model);
+                await classifyModel(model);
                 await updateClassificationUI();
                 logToScreen('Classification updated');
                 
@@ -701,12 +701,23 @@ async function updateClassificationUI() {
         return;
     }
 
-    const list = document.createElement('ul');
-    list.className = 'folder-items';
-    list.style.padding = '10px';
-
     // Second pass to render
     for (const [systemName, classification] of classifier.list) {
+        // Add Header
+        const header = document.createElement('div');
+        header.className = 'classification-header';
+        header.style.padding = '10px 10px 5px 10px';
+        header.style.fontWeight = 'bold';
+        header.style.color = '#e91e63'; // Main pink color
+        header.style.borderBottom = '1px solid #eee';
+        header.style.marginTop = '10px';
+        header.innerHTML = `<i class="fa-solid fa-tags"></i> ${systemName}`;
+        container.appendChild(header);
+
+        const list = document.createElement('ul');
+        list.className = 'folder-items';
+        list.style.padding = '10px';
+
         for (const [type, groupData] of classification) {
             // FIX: Check if groupData has .map property, otherwise use groupData itself as the map
             // This handles different versions/structures of the classifier output
@@ -810,9 +821,8 @@ async function updateClassificationUI() {
 
             list.appendChild(li);
         }
+        container.appendChild(list);
     }
-
-    container.appendChild(list);
 }
 
 function initSidebar() {
@@ -938,7 +948,7 @@ function initSidebar() {
                                 
                                 // Attempt classification (might be empty if types are 0, but at least properties exist)
                                 logToScreen(`Attempting classification on dummy properties...`);
-                                await classifyByFamily(model);
+                                await classifyModel(model);
                                 await updateClassificationUI();
                                 logToScreen(`Classification complete (fallback).`);
                                 
@@ -949,7 +959,7 @@ function initSidebar() {
                             // Classify only if properties exist
                             logToScreen(`Classifying fragments: ${file.name}...`);
                             try {
-                                await classifyByFamily(model);
+                                await classifyModel(model);
                                 await updateClassificationUI();
                                 logToScreen(`Classification complete for ${file.name}`);
                             } catch (err) {
@@ -2202,7 +2212,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                    v.innerText = 'v1.9.5 (Toolbar Visibility)';
+                    v.innerText = 'v1.9.6 (Clasificación Tipo/Nivel)';
                     header.appendChild(v);
                 }
 
@@ -2233,19 +2243,24 @@ function initPropertiesPanel() {
     renderPropertiesTable({} as any);
 }
 
-async function classifyByFamily(model: any) {
+async function classifyModel(model: any) {
     if (!model.properties) return;
     
-    logToScreen('Clasificando por Familia...');
-    const familyMap = new Map<string, Record<string, Set<number>>>();
+    logToScreen('Clasificando modelo por Tipo y Nivel...');
+    const typeMap = new Map<string, Record<string, Set<number>>>();
+    const levelMap = new Map<string, Record<string, Set<number>>>();
     const modelUUID = model.uuid;
     
     const idsWithGeometry = await model.getItemsIdsWithGeometry();
     const idsSet = new Set(idsWithGeometry);
     
-    const elementFamily = new Map<number, string>();
+    const elementType = new Map<number, string>();
+    const elementLevel = new Map<number, string>();
+
+    // Initialize with default
     for (const id of idsWithGeometry) {
-        elementFamily.set(id, 'Sin Familia');
+        elementType.set(id, 'Sin Tipo');
+        elementLevel.set(id, 'Sin Nivel');
     }
     
     for (const id in model.properties) {
@@ -2266,15 +2281,31 @@ async function classifyByFamily(model: any) {
                      if (!prop) continue;
                      const nameObj = prop.Name || prop.name;
                      const name = nameObj?.value ?? nameObj;
+                     
+                     // Check for "Familia" or "Family" -> Type
                      if (name === 'Familia' || name === 'Family') {
                          const valObj = prop.NominalValue || prop.nominalValue;
                          const value = valObj?.value ?? valObj;
                          if (value) {
-                             const familyName = String(value).trim();
+                             const typeName = String(value).trim();
                              const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
                              for (const relIdObj of relatedList) {
                                  const relId = relIdObj.value || relIdObj;
-                                 if (idsSet.has(relId)) elementFamily.set(relId, familyName);
+                                 if (idsSet.has(relId)) elementType.set(relId, typeName);
+                             }
+                         }
+                     }
+
+                     // Check for "Nivel" -> Level
+                     if (name === 'Nivel') {
+                         const valObj = prop.NominalValue || prop.nominalValue;
+                         const value = valObj?.value ?? valObj;
+                         if (value) {
+                             const levelName = String(value).trim();
+                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
+                             for (const relIdObj of relatedList) {
+                                 const relId = relIdObj.value || relIdObj;
+                                 if (idsSet.has(relId)) elementLevel.set(relId, levelName);
                              }
                          }
                      }
@@ -2283,16 +2314,26 @@ async function classifyByFamily(model: any) {
         }
     }
     
-    for (const [id, family] of elementFamily.entries()) {
-        if (!familyMap.has(family)) familyMap.set(family, { [modelUUID]: new Set() });
-        const group = familyMap.get(family)!;
+    // Populate Type Map
+    for (const [id, type] of elementType.entries()) {
+        if (!typeMap.has(type)) typeMap.set(type, { [modelUUID]: new Set() });
+        const group = typeMap.get(type)!;
+        if (!group[modelUUID]) group[modelUUID] = new Set();
+        group[modelUUID].add(id);
+    }
+
+    // Populate Level Map
+    for (const [id, level] of elementLevel.entries()) {
+        if (!levelMap.has(level)) levelMap.set(level, { [modelUUID]: new Set() });
+        const group = levelMap.get(level)!;
         if (!group[modelUUID]) group[modelUUID] = new Set();
         group[modelUUID].add(id);
     }
     
     classifier.list.clear();
-    classifier.list.set('Familia', familyMap);
-    logToScreen(`Clasificado en ${familyMap.size} familias.`);
+    classifier.list.set('Clasificación por tipo', typeMap);
+    classifier.list.set('Clasificación por nivel', levelMap);
+    logToScreen(`Clasificado en ${typeMap.size} tipos y ${levelMap.size} niveles.`);
 }
 
 function setupVisibilityToolbar() {
