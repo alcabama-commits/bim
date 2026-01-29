@@ -46,7 +46,45 @@ const clipper = components.get(OBC.Clipper);
 clipper.material = new THREE.MeshBasicMaterial({
     color: 0xCFD8DC, // Light gray-blue typical of BIM software
     side: THREE.DoubleSide,
-    shadowSide: THREE.DoubleSide
+    shadowSide: THREE.DoubleSide,
+    opacity: 0.2,
+    transparent: true
+});
+
+// --- ClipStyler Setup ---
+const clipStyler = components.get(OBF.ClipStyler);
+clipStyler.enabled = true;
+
+const fillMaterial = new THREE.MeshBasicMaterial({
+    color: 0xCFD8DC,
+    side: THREE.DoubleSide
+});
+
+clipStyler.styles.set('filled', {
+    fillsMaterial: fillMaterial
+});
+
+clipper.onAfterCreate.add((plane) => {
+    let planeId = '';
+    for(const [id, p] of clipper.list) {
+        if(p === plane) {
+            planeId = id;
+            break;
+        }
+    }
+    
+    if (planeId) {
+         clipStyler.createFromClipping(planeId, {
+             items: {
+                 all: { style: 'filled' }
+             }
+         });
+    }
+});
+
+clipper.onAfterDelete.add((plane) => {
+    // ClipStyler should handle disposal if linked, but we can double check or just let it be.
+    // The 'link' property in createFromClipping defaults to true.
 });
 
 // Initialize Highlighter
@@ -539,7 +577,6 @@ async function loadModel(url: string, path: string) {
             try {
                 console.log(`[DEBUG] Running classifyByFamily() for model ${model.uuid}`);
                 await classifyByFamily(model);
-                updateClipper(model);
                 await updateClassificationUI();
                 logToScreen('Classification updated');
                 
@@ -2164,7 +2201,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                     v.innerText = 'v1.9.2 (Capping Styles)';
+                     v.innerText = 'v1.9.3 (Fill Styles)';
                      header.appendChild(v);
                 }
 
@@ -2255,45 +2292,5 @@ async function classifyByFamily(model: any) {
     classifier.list.clear();
     classifier.list.set('Familia', familyMap);
     logToScreen(`Clasificado en ${familyMap.size} familias.`);
-}
-
-function updateClipper(model: any) {
-    try {
-        const clipperAny = clipper as any;
-        // Check if styles component is available (standard in @thatopen/components)
-        if (clipperAny.styles) {
-            const allMeshes: THREE.Mesh[] = [];
-            
-            // Gather meshes from all loaded models to ensure consistent capping
-            for (const [_, m] of fragments.list) {
-                if (m.object) {
-                    m.object.traverse((child: any) => {
-                        if (child.isMesh) allMeshes.push(child);
-                    });
-                }
-            }
-
-            if (allMeshes.length === 0) return;
-
-            const styleName = 'default-cap-style';
-            
-            // Cleanup existing style if needed (though create usually handles it)
-            if (clipperAny.styles.list && clipperAny.styles.list.has(styleName)) {
-                // Some versions might need explicit delete
-                // clipperAny.styles.delete(styleName); 
-            }
-
-            const capMaterial = new THREE.MeshBasicMaterial({
-                color: 0xCFD8DC,
-                side: THREE.DoubleSide
-            });
-
-            // Create/Update the style
-            clipperAny.styles.create(styleName, allMeshes, capMaterial);
-            console.log(`[DEBUG] Updated Clipper style '${styleName}' with ${allMeshes.length} meshes.`);
-        }
-    } catch (e) {
-        console.error('[DEBUG] Error updating clipper styles:', e);
-    }
 }
 
