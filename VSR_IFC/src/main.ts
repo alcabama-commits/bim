@@ -101,7 +101,7 @@ clipper.onAfterDelete.add((plane) => {
         }
     });
     highlighter.enabled = true; // Ensure it's enabled explicitly
-    setupSelectionMenu();
+    setupVisibilityToolbar();
 
 // Add 3D Click Event for Selection
 if (container) {
@@ -2202,8 +2202,8 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                     v.innerText = 'v1.9.4 (Selection Menu)';
-                     header.appendChild(v);
+                    v.innerText = 'v1.9.5 (Toolbar Visibility)';
+                    header.appendChild(v);
                 }
 
         resizer.addEventListener('mousedown', (e) => {
@@ -2295,116 +2295,38 @@ async function classifyByFamily(model: any) {
     logToScreen(`Clasificado en ${familyMap.size} familias.`);
 }
 
-function setupSelectionMenu() {
-    const menu = document.createElement('div');
-    menu.id = 'selection-menu';
-    Object.assign(menu.style, {
-        position: 'absolute',
-        bottom: '20px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        backgroundColor: 'rgba(32, 32, 32, 0.9)',
-        padding: '10px',
-        borderRadius: '8px',
-        display: 'none',
-        zIndex: '1000',
-        boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-        gap: '10px',
-        flexDirection: 'row'
-    });
-    
-    const createBtn = (text: string, onClick: () => void) => {
-        const btn = document.createElement('button');
-        btn.textContent = text;
-        Object.assign(btn.style, {
-            backgroundColor: '#444',
-            color: 'white',
-            border: 'none',
-            padding: '8px 16px',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '12px',
-            fontFamily: 'sans-serif'
-        });
-        btn.onmouseover = () => btn.style.backgroundColor = '#555';
-        btn.onmouseout = () => btn.style.backgroundColor = '#444';
-        btn.onclick = onClick;
-        return btn;
-    };
+function setupVisibilityToolbar() {
+    const hideBtn = document.getElementById('btn-hide');
+    const isolateBtn = document.getElementById('btn-isolate');
+    const showAllBtn = document.getElementById('btn-show-all');
 
-    let currentSelection: any = {};
-
-    const updateMenuVisibility = (selection: any) => {
-        currentSelection = selection;
-        const hasSelection = Object.keys(selection).length > 0;
-        menu.style.display = hasSelection ? 'flex' : 'none';
-    };
-
-    const hideBtn = createBtn('Apagar', async () => {
-        if (Object.keys(currentSelection).length > 0) {
-            await hider.set(false, currentSelection);
-            highlighter.clear('select');
-        }
-    });
-
-    const isolateBtn = createBtn('Aislar', async () => {
-        if (Object.keys(currentSelection).length > 0) {
-            await hider.isolate(currentSelection);
-            highlighter.clear('select');
-        }
-    });
-    
-    // Add "Show All" button to easily reset
-    const showAllBtn = createBtn('Mostrar Todo', async () => {
-        await hider.set(true);
-        highlighter.clear('select');
-    });
-
-    menu.appendChild(hideBtn);
-    menu.appendChild(isolateBtn);
-    menu.appendChild(showAllBtn);
-    document.body.appendChild(menu);
-
-    highlighter.events.select.onHighlight.add((selection) => {
-        updateMenuVisibility(selection);
-        console.log('[DEBUG] Selection menu updated via onHighlight', selection);
-    });
-
-    highlighter.events.select.onClear.add(() => {
-        updateMenuVisibility({});
-        console.log('[DEBUG] Selection menu cleared via onClear');
-    });
-
-    // Sync with properties panel updates
-    // We can hook into the click event on the container as a fallback or 
-    // listen to the highlighter events which should be sufficient.
-    // If it fails, we can add a global event listener for 'click' and check highlighter.selection
-    
-    // Also listen to 'mouseup' which is often more reliable for interaction completion
-    container.addEventListener('mouseup', () => {
-        setTimeout(() => {
+    if (hideBtn) {
+        hideBtn.addEventListener('click', async () => {
              const selection = highlighter.selection.select;
-             console.log('[DEBUG] MouseUp event check. Selection:', selection);
              if (selection && Object.keys(selection).length > 0) {
-                 updateMenuVisibility(selection);
-             } else {
-                 updateMenuVisibility({});
+                 await hider.set(false, selection);
+                 highlighter.clear('select');
              }
-        }, 150);
-    });
+        });
+    }
 
-    // Also update on properties panel updates which implies selection changed
-    const originalRender = renderPropertiesTable;
-    (window as any).renderPropertiesTable = function(props: any) {
-         originalRender(props);
-         // If properties are being rendered, it means something is selected (usually)
-         // But we should double check the highlighter source of truth
-         const selection = highlighter.selection.select;
-         console.log('[DEBUG] Properties rendered. Checking selection:', selection);
-         if (selection && Object.keys(selection).length > 0) {
-             updateMenuVisibility(selection);
-         }
-    };
+    if (isolateBtn) {
+        isolateBtn.addEventListener('click', async () => {
+             const selection = highlighter.selection.select;
+             if (selection && Object.keys(selection).length > 0) {
+                 await hider.isolate(selection);
+                 highlighter.clear('select');
+             }
+        });
+    }
+
+    if (showAllBtn) {
+        showAllBtn.addEventListener('click', async () => {
+             await hider.set(true);
+             highlighter.clear('select');
+        });
+    }
 }
+
 
 
