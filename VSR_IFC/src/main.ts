@@ -2212,7 +2212,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                    v.innerText = 'v1.9.7 (Nivel + Referencia)';
+                    v.innerText = 'v1.9.8 (Prioridad Niveles)';
                     header.appendChild(v);
                 }
 
@@ -2256,11 +2256,13 @@ async function classifyModel(model: any) {
     
     const elementType = new Map<number, string>();
     const elementLevel = new Map<number, string>();
+    const levelPriority = new Map<number, number>(); // 0: None, 1: Restricción, 2: Referencia, 3: Nivel
 
     // Initialize with default
     for (const id of idsWithGeometry) {
         elementType.set(id, 'Sin Tipo');
         elementLevel.set(id, 'Sin Nivel');
+        levelPriority.set(id, 0);
     }
     
     for (const id in model.properties) {
@@ -2297,26 +2299,26 @@ async function classifyModel(model: any) {
                      }
 
                      // Check for "Nivel" -> Level
-                     if (name === 'Nivel' || name === 'Nivel de referencia') {
+                     if (name === 'Nivel' || name === 'Nivel de referencia' || name === 'Restricción de base') {
                          const valObj = prop.NominalValue || prop.nominalValue;
                          const value = valObj?.value ?? valObj;
                          if (value) {
                              const levelName = String(value).trim();
                              const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
+                             
+                             let priority = 0;
+                             if (name === 'Nivel') priority = 3;
+                             else if (name === 'Nivel de referencia') priority = 2;
+                             else if (name === 'Restricción de base') priority = 1;
+
                              for (const relIdObj of relatedList) {
                                  const relId = relIdObj.value || relIdObj;
                                  if (idsSet.has(relId)) {
-                                     // Priority: 'Nivel' > 'Nivel de referencia'
-                                     const current = elementLevel.get(relId);
-                                     
-                                     if (name === 'Nivel') {
-                                         // Always overwrite if it's explicitly 'Nivel'
+                                     const currentPriority = levelPriority.get(relId) || 0;
+                                     // Overwrite only if new priority is higher
+                                     if (priority > currentPriority) {
                                          elementLevel.set(relId, levelName);
-                                     } else if (name === 'Nivel de referencia') {
-                                         // Only set if currently 'Sin Nivel' (don't overwrite 'Nivel')
-                                         if (current === 'Sin Nivel') {
-                                             elementLevel.set(relId, levelName);
-                                         }
+                                         levelPriority.set(relId, priority);
                                      }
                                  }
                              }
