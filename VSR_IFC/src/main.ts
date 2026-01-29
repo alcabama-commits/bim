@@ -2367,10 +2367,29 @@ function setupSelectionMenu() {
 
     highlighter.events.select.onHighlight.add((selection) => {
         updateMenuVisibility(selection);
+        console.log('[DEBUG] Selection menu updated via onHighlight', selection);
     });
 
     highlighter.events.select.onClear.add(() => {
         updateMenuVisibility({});
+        console.log('[DEBUG] Selection menu cleared via onClear');
+    });
+
+    // Sync with properties panel updates
+    // We can hook into the click event on the container as a fallback or 
+    // listen to the highlighter events which should be sufficient.
+    // If it fails, we can add a global event listener for 'click' and check highlighter.selection
+    
+    container.addEventListener('click', () => {
+        setTimeout(() => {
+             const selection = highlighter.selection.select;
+             console.log('[DEBUG] Click event check. Selection:', selection);
+             if (selection && Object.keys(selection).length > 0) {
+                 updateMenuVisibility(selection);
+             } else {
+                 updateMenuVisibility({});
+             }
+        }, 100);
     });
 }
 
