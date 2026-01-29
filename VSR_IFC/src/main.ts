@@ -532,8 +532,8 @@ async function loadModel(url: string, path: string) {
         // Classify the model
         if (hasProps) {
             try {
-                console.log(`[DEBUG] Running classifier.byCategory() for model ${model.uuid}`);
-                await classifier.byCategory(model);
+                console.log(`[DEBUG] Running classifyByFamily() for model ${model.uuid}`);
+                await classifyByFamily(model);
                 await updateClassificationUI();
                 logToScreen('Classification updated');
                 
@@ -894,7 +894,7 @@ function initSidebar() {
                                 
                                 // Attempt classification (might be empty if types are 0, but at least properties exist)
                                 logToScreen(`Attempting classification on dummy properties...`);
-                                await classifier.byCategory(model);
+                                await classifyByFamily(model);
                                 await updateClassificationUI();
                                 logToScreen(`Classification complete (fallback).`);
                                 
@@ -905,7 +905,7 @@ function initSidebar() {
                             // Classify only if properties exist
                             logToScreen(`Classifying fragments: ${file.name}...`);
                             try {
-                                await classifier.byCategory(model);
+                                await classifyByFamily(model);
                                 await updateClassificationUI();
                                 logToScreen(`Classification complete for ${file.name}`);
                             } catch (err) {
@@ -2158,7 +2158,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                     v.innerText = 'v1.8 (Pink Selection)';
+                     v.innerText = 'v1.9 (Clasificación Familia)';
                      header.appendChild(v);
                 }
 
@@ -2187,5 +2187,67 @@ function initPropertiesPanel() {
     }
 
     renderPropertiesTable({} as any);
+}
+
+async function classifyByFamily(model: any) {
+    if (!model.properties) return;
+    
+    logToScreen('Clasificando por Familia...');
+    const familyMap = new Map<string, Record<string, Set<number>>>();
+    const modelUUID = model.uuid;
+    
+    const idsWithGeometry = await model.getItemsIdsWithGeometry();
+    const idsSet = new Set(idsWithGeometry);
+    
+    const elementFamily = new Map<number, string>();
+    for (const id of idsWithGeometry) {
+        elementFamily.set(id, 'Sin Familia');
+    }
+    
+    for (const id in model.properties) {
+        const entity = model.properties[id];
+        if (!entity) continue;
+        if (entity.RelatedObjects && entity.RelatingPropertyDefinition) {
+             const relatedIds = entity.RelatedObjects;
+             const psetRef = entity.RelatingPropertyDefinition;
+             if (!relatedIds || !psetRef) continue;
+             const psetId = psetRef.value || psetRef;
+             const pset = model.properties[psetId];
+             if (pset && (pset.HasProperties || pset.hasProperties)) {
+                 const propsRefs = pset.HasProperties || pset.hasProperties;
+                 if (!Array.isArray(propsRefs)) continue;
+                 for (const propRef of propsRefs) {
+                     const propId = propRef.value || propRef;
+                     const prop = model.properties[propId];
+                     if (!prop) continue;
+                     const nameObj = prop.Name || prop.name;
+                     const name = nameObj?.value ?? nameObj;
+                     if (name === 'Familia' || name === 'Family') {
+                         const valObj = prop.NominalValue || prop.nominalValue;
+                         const value = valObj?.value ?? valObj;
+                         if (value) {
+                             const familyName = String(value).trim();
+                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
+                             for (const relIdObj of relatedList) {
+                                 const relId = relIdObj.value || relIdObj;
+                                 if (idsSet.has(relId)) elementFamily.set(relId, familyName);
+                             }
+                         }
+                     }
+                 }
+             }
+        }
+    }
+    
+    for (const [id, family] of elementFamily.entries()) {
+        if (!familyMap.has(family)) familyMap.set(family, { [modelUUID]: new Set() });
+        const group = familyMap.get(family)!;
+        if (!group[modelUUID]) group[modelUUID] = new Set();
+        group[modelUUID].add(id);
+    }
+    
+    classifier.list.clear();
+    classifier.list.set('Familia', familyMap);
+    logToScreen(`Clasificado en ${familyMap.size} familias.`);
 }
 
