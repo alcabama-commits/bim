@@ -42,6 +42,62 @@ await fragments.init(`${baseUrl}fragments/fragments.mjs`);
 
 const classifier = components.get(OBC.Classifier);
 const hider = components.get(OBC.Hider);
+
+// Monkey-patch Hider to sync hiddenItems globally
+const originalSet = hider.set.bind(hider);
+hider.set = async (visible: boolean, items?: any) => {
+    await originalSet(visible, items);
+    
+    if (items && Object.keys(items).length > 0) {
+        updateHiddenItems(items, visible);
+    } else if (visible) {
+        // Show All case
+        for (const key in hiddenItems) {
+            delete hiddenItems[key];
+        }
+    }
+};
+
+const originalIsolate = hider.isolate.bind(hider);
+hider.isolate = async (selection: any) => {
+    await originalIsolate(selection);
+    
+    // Sync hiddenItems for Isolate
+    try {
+         for (const [uuid, model] of fragments.list) {
+             const allIds = await model.getItemsIdsWithGeometry();
+             
+             // Collect visible IDs for this model
+             const visibleIDsForThisModel = new Set<number>();
+             
+             for (const [fragID, idSet] of Object.entries(selection)) {
+                 let belongs = (fragID === uuid);
+                 if (!belongs) {
+                     belongs = model.items.some((f: any) => f.id === fragID);
+                 }
+                 
+                 if (belongs) {
+                     const items = idSet instanceof Set ? idSet : (Array.isArray(idSet) ? idSet : []);
+                     for(const id of (items as any)) visibleIDsForThisModel.add(id);
+                 }
+             }
+             
+             if (!hiddenItems[uuid]) hiddenItems[uuid] = new Set();
+             const hiddenSet = hiddenItems[uuid];
+             
+             for (const id of allIds) {
+                 if (visibleIDsForThisModel.has(id)) {
+                     hiddenSet.delete(id);
+                 } else {
+                     hiddenSet.add(id);
+                 }
+             }
+         }
+    } catch (e) {
+         console.error("Error updating hidden items during global isolate:", e);
+    }
+};
+
 const clipper = components.get(OBC.Clipper);
 clipper.material = new THREE.MeshBasicMaterial({
     color: 0xCFD8DC, // Light gray-blue typical of BIM software
@@ -2436,9 +2492,6 @@ function setupVisibilityToolbar() {
              if (selection && Object.keys(selection).length > 0) {
                  await hider.set(false, selection);
                  highlighter.clear('select');
-                 
-                 // Update manual tracking
-                 updateHiddenItems(selection, false);
              }
         });
     }
@@ -2449,51 +2502,6 @@ function setupVisibilityToolbar() {
              if (selection && Object.keys(selection).length > 0) {
                  await hider.isolate(selection);
                  highlighter.clear('select');
-                 
-                 // Update hiddenItems for Isolate: 
-                 // Everything NOT in selection becomes hidden.
-                 // Everything IN selection becomes visible.
-                 try {
-                     logToScreen("Actualizando visibilidad de elementos...");
-                     for (const [uuid, model] of fragments.list) {
-                         // This might be heavy for large models but necessary for consistency
-                         const allIds = await model.getItemsIdsWithGeometry();
-                         
-                         // Collect all selected IDs for this model from the selection map
-                         // selection keys are Fragment IDs, not necessarily Model UUIDs
-                         const visibleIDsForThisModel = new Set<number>();
-                         
-                         for (const [fragID, idSet] of Object.entries(selection)) {
-                             // Check if this fragment belongs to the current model
-                             // Optimization: check if fragID == uuid first
-                             let belongs = (fragID === uuid);
-                             if (!belongs) {
-                                 belongs = model.items.some(f => f.id === fragID);
-                             }
-                             
-                             if (belongs) {
-                                 const items = idSet instanceof Set ? idSet : (Array.isArray(idSet) ? idSet : []);
-                                 for(const id of items) visibleIDsForThisModel.add(id);
-                             }
-                         }
-                         
-                         if (!hiddenItems[uuid]) hiddenItems[uuid] = new Set();
-                         const hiddenSet = hiddenItems[uuid];
-                         
-                         for (const id of allIds) {
-                             if (visibleIDsForThisModel.has(id)) {
-                                 // Visible
-                                 hiddenSet.delete(id);
-                             } else {
-                                 // Hidden
-                                 hiddenSet.add(id);
-                             }
-                         }
-                     }
-                     logToScreen("Aislamiento completado. Filtros actualizados.");
-                 } catch (e) {
-                     console.error("Error updating hidden items during isolate:", e);
-                 }
              }
         });
     }
@@ -2502,11 +2510,6 @@ function setupVisibilityToolbar() {
         showAllBtn.addEventListener('click', async () => {
              await hider.set(true);
              highlighter.clear('select');
-             
-             // Clear all hidden items
-             for (const key in hiddenItems) {
-                 delete hiddenItems[key];
-             }
         });
     }
 }
