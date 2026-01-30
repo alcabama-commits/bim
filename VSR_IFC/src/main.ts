@@ -64,7 +64,9 @@ hider.isolate = async (selection: any) => {
     
     // Sync hiddenItems for Isolate
     try {
-         console.log("[DEBUG] Global Isolate Triggered. Syncing hiddenItems...");
+         console.warn("[DEBUG] Global Isolate Triggered. Syncing hiddenItems...");
+         console.log("[DEBUG] Selection keys:", Object.keys(selection));
+
          for (const [uuid, model] of fragments.list) {
              const allIds = await model.getItemsIdsWithGeometry();
              
@@ -74,15 +76,22 @@ hider.isolate = async (selection: any) => {
              // Selection is Record<FragmentID, Iterable<ExpressID>>
              for (const [fragID, idSet] of Object.entries(selection)) {
                  // Check if this fragment belongs to the current model
-                 // 1. Check if fragID IS the model UUID (rare but possible)
+                 // 1. Check if fragID IS the model UUID
                  let belongs = (fragID === uuid);
                  
                  // 2. Check if fragID is one of the fragments in the model
-                 if (!belongs && model.items) {
-                     belongs = model.items.some((f: any) => f.id === fragID);
+                 if (!belongs) {
+                     if (model.items && model.items.length > 0) {
+                         belongs = model.items.some((f: any) => f.id === fragID);
+                     } else if (model.children && model.children.length > 0) {
+                         // Fallback: check Three.js children (Meshes/Fragments)
+                         // Fragment objects usually have 'id' matching the fragment ID
+                         belongs = model.children.some((child: any) => child.uuid === fragID);
+                     }
                  }
                  
                  if (belongs) {
+                     console.log(`[DEBUG] Fragment ${fragID} belongs to model ${uuid}`);
                      const items = idSet instanceof Set ? idSet : (Array.isArray(idSet) ? idSet : []);
                      for(const id of (items as any)) visibleIDsForThisModel.add(id);
                  }
@@ -90,17 +99,18 @@ hider.isolate = async (selection: any) => {
              
              if (!hiddenItems[uuid]) hiddenItems[uuid] = new Set();
              const hiddenSet = hiddenItems[uuid];
+             hiddenSet.clear(); // Reset before repopulating based on Isolate logic
              
              let hiddenCount = 0;
              for (const id of allIds) {
                  if (visibleIDsForThisModel.has(id)) {
-                     hiddenSet.delete(id);
+                     // It's visible
                  } else {
                      hiddenSet.add(id);
                      hiddenCount++;
                  }
              }
-             console.log(`[DEBUG] Model ${uuid}: ${visibleIDsForThisModel.size} visible, ${hiddenCount} hidden.`);
+             console.log(`[DEBUG] Model ${uuid}: Total ${allIds.size}, Visible ${visibleIDsForThisModel.size}, Hidden ${hiddenCount}`);
          }
     } catch (e) {
          console.error("Error updating hidden items during global isolate:", e);
@@ -904,7 +914,8 @@ async function updateClassificationUI() {
                             if (hiddenSet) {
                                 console.log(`[DEBUG] Model ${id} has ${hiddenSet.size} hidden items tracked.`);
                             } else {
-                                console.log(`[DEBUG] Model ${id} has NO hidden items tracked.`);
+                                console.warn(`[DEBUG] Model ${id} has NO hidden items tracked in hiddenItems map.`);
+                                console.log(`[DEBUG] hiddenItems keys:`, Object.keys(hiddenItems));
                             }
 
                             const iterable = items instanceof Set ? items : (Array.isArray(items) ? items : []);
