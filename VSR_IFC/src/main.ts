@@ -64,15 +64,21 @@ hider.isolate = async (selection: any) => {
     
     // Sync hiddenItems for Isolate
     try {
+         console.log("[DEBUG] Global Isolate Triggered. Syncing hiddenItems...");
          for (const [uuid, model] of fragments.list) {
              const allIds = await model.getItemsIdsWithGeometry();
              
              // Collect visible IDs for this model
              const visibleIDsForThisModel = new Set<number>();
              
+             // Selection is Record<FragmentID, Iterable<ExpressID>>
              for (const [fragID, idSet] of Object.entries(selection)) {
+                 // Check if this fragment belongs to the current model
+                 // 1. Check if fragID IS the model UUID (rare but possible)
                  let belongs = (fragID === uuid);
-                 if (!belongs) {
+                 
+                 // 2. Check if fragID is one of the fragments in the model
+                 if (!belongs && model.items) {
                      belongs = model.items.some((f: any) => f.id === fragID);
                  }
                  
@@ -85,13 +91,16 @@ hider.isolate = async (selection: any) => {
              if (!hiddenItems[uuid]) hiddenItems[uuid] = new Set();
              const hiddenSet = hiddenItems[uuid];
              
+             let hiddenCount = 0;
              for (const id of allIds) {
                  if (visibleIDsForThisModel.has(id)) {
                      hiddenSet.delete(id);
                  } else {
                      hiddenSet.add(id);
+                     hiddenCount++;
                  }
              }
+             console.log(`[DEBUG] Model ${uuid}: ${visibleIDsForThisModel.size} visible, ${hiddenCount} hidden.`);
          }
     } catch (e) {
          console.error("Error updating hidden items during global isolate:", e);
@@ -878,10 +887,10 @@ async function updateClassificationUI() {
                         const filteredMap: Record<string, Set<number>> = {};
                         let hasVisibleItems = false;
                         
+                        console.log(`[DEBUG] Filtering selection for ${type}. Checking hidden items...`);
+
                         for (const id in fragmentIdMap) {
                             // Check Model Visibility first (id is modelUUID in this context)
-                            // We need to check if the model itself is hidden via toggleModel
-                            // FragmentsManager stores models by UUID
                             const model = fragments.list.get(id);
                             if (model && !model.object.visible) {
                                 console.log(`[DEBUG] Skipping hidden model: ${id}`);
@@ -891,6 +900,12 @@ async function updateClassificationUI() {
                             const items = fragmentIdMap[id];
                             const visibleSet = new Set<number>();
                             const hiddenSet = hiddenItems[id]; // The set of hidden items for this model
+                            
+                            if (hiddenSet) {
+                                console.log(`[DEBUG] Model ${id} has ${hiddenSet.size} hidden items tracked.`);
+                            } else {
+                                console.log(`[DEBUG] Model ${id} has NO hidden items tracked.`);
+                            }
 
                             const iterable = items instanceof Set ? items : (Array.isArray(items) ? items : []);
 
