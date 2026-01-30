@@ -783,11 +783,12 @@ async function updateClassificationUI() {
                      console.log(`[DEBUG] Map keys: ${mapKeys.join(', ')}`);
                      
                      try {
-                        highlighter.highlightByID('select', fragmentIdMap, true, true);
+                        const removePrevious = !e.ctrlKey && !e.metaKey;
+                        highlighter.highlightByID('select', fragmentIdMap, removePrevious, true);
                         logToScreen(`Selected ${type} (${count} items)`);
-                     } catch (e) {
-                        logToScreen(`Error selecting ${type}: ${e}`, true);
-                        console.error(e);
+                     } catch (err) {
+                        logToScreen(`Error selecting ${type}: ${err}`, true);
+                        console.error(err);
                      }
                 } else {
                      logToScreen(`Cannot select ${type}: No items found (Map is empty)`, true);
@@ -2212,7 +2213,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                    v.innerText = 'v1.9.8 (Prioridad Niveles)';
+                    v.innerText = 'v1.9.9 (Multi-selección Ctrl)';
                     header.appendChild(v);
                 }
 
