@@ -679,8 +679,21 @@ const hiddenItems: Record<string, Set<number>> = {};
 
 function updateHiddenItems(map: Record<string, any>, visible: boolean) {
     for (const id in map) {
-        if (!hiddenItems[id]) hiddenItems[id] = new Set();
-        const currentSet = hiddenItems[id];
+        // Resolve Model UUID (id could be FragmentID or ModelUUID)
+        let modelUUID = id;
+        
+        // If id is NOT a direct Model UUID, try to find which model it belongs to
+        if (!fragments.list.has(id)) {
+             for (const [uuid, model] of fragments.list) {
+                 if (model.items.some(f => f.id === id)) {
+                     modelUUID = uuid;
+                     break;
+                 }
+             }
+        }
+        
+        if (!hiddenItems[modelUUID]) hiddenItems[modelUUID] = new Set();
+        const currentSet = hiddenItems[modelUUID];
         const targetSet = map[id];
         
         // Iterate over Set or Array
@@ -2445,13 +2458,30 @@ function setupVisibilityToolbar() {
                      for (const [uuid, model] of fragments.list) {
                          // This might be heavy for large models but necessary for consistency
                          const allIds = await model.getItemsIdsWithGeometry();
-                         const modelSelection = selection[uuid]; // Set or undefined
+                         
+                         // Collect all selected IDs for this model from the selection map
+                         // selection keys are Fragment IDs, not necessarily Model UUIDs
+                         const visibleIDsForThisModel = new Set<number>();
+                         
+                         for (const [fragID, idSet] of Object.entries(selection)) {
+                             // Check if this fragment belongs to the current model
+                             // Optimization: check if fragID == uuid first
+                             let belongs = (fragID === uuid);
+                             if (!belongs) {
+                                 belongs = model.items.some(f => f.id === fragID);
+                             }
+                             
+                             if (belongs) {
+                                 const items = idSet instanceof Set ? idSet : (Array.isArray(idSet) ? idSet : []);
+                                 for(const id of items) visibleIDsForThisModel.add(id);
+                             }
+                         }
                          
                          if (!hiddenItems[uuid]) hiddenItems[uuid] = new Set();
                          const hiddenSet = hiddenItems[uuid];
                          
                          for (const id of allIds) {
-                             if (modelSelection && modelSelection.has(id)) {
+                             if (visibleIDsForThisModel.has(id)) {
                                  // Visible
                                  hiddenSet.delete(id);
                              } else {
