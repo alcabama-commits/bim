@@ -674,6 +674,26 @@ function initSidebarTabs() {
     });
 }
 
+// Global tracking for hidden items (Fragments/Items hidden via Hider)
+const hiddenItems: Record<string, Set<number>> = {};
+
+function updateHiddenItems(map: Record<string, any>, visible: boolean) {
+    for (const id in map) {
+        if (!hiddenItems[id]) hiddenItems[id] = new Set();
+        const currentSet = hiddenItems[id];
+        const targetSet = map[id];
+        
+        // Iterate over Set or Array
+        const items = targetSet instanceof Set ? targetSet : (Array.isArray(targetSet) ? targetSet : []);
+        
+        if (!visible) {
+            for (const item of items) currentSet.add(item);
+        } else {
+            for (const item of items) currentSet.delete(item);
+        }
+    }
+}
+
 async function updateClassificationUI() {
     const container = document.getElementById('classification-list');
     if (!container) return;
@@ -784,8 +804,46 @@ async function updateClassificationUI() {
                      
                      try {
                         const removePrevious = !e.ctrlKey && !e.metaKey;
-                        highlighter.highlightByID('select', fragmentIdMap, removePrevious, true);
-                        logToScreen(`Selected ${type} (${count} items)`);
+                        
+                        // FILTER HIDDEN ITEMS
+                        const filteredMap: Record<string, Set<number>> = {};
+                        let hasVisibleItems = false;
+                        
+                        for (const id in fragmentIdMap) {
+                            // Check Model Visibility first (id is modelUUID in this context)
+                            // We need to check if the model itself is hidden via toggleModel
+                            // FragmentsManager stores models by UUID
+                            const model = fragments.list.get(id);
+                            if (model && !model.object.visible) {
+                                console.log(`[DEBUG] Skipping hidden model: ${id}`);
+                                continue; 
+                            }
+                            
+                            const items = fragmentIdMap[id];
+                            const visibleSet = new Set<number>();
+                            const hiddenSet = hiddenItems[id]; // The set of hidden items for this model
+
+                            const iterable = items instanceof Set ? items : (Array.isArray(items) ? items : []);
+
+                            for (const item of iterable) {
+                                if (!hiddenSet || !hiddenSet.has(item)) {
+                                    visibleSet.add(item);
+                                }
+                            }
+
+                            if (visibleSet.size > 0) {
+                                filteredMap[id] = visibleSet;
+                                hasVisibleItems = true;
+                            }
+                        }
+
+                        if (hasVisibleItems) {
+                            highlighter.highlightByID('select', filteredMap, removePrevious, true);
+                            logToScreen(`Selected ${type} (${count} total, visible selected)`);
+                        } else {
+                            logToScreen(`No visible items to select in ${type}`);
+                        }
+
                      } catch (err) {
                         logToScreen(`Error selecting ${type}: ${err}`, true);
                         console.error(err);
@@ -804,6 +862,8 @@ async function updateClassificationUI() {
                 
                 if (fragmentIdMap && Object.keys(fragmentIdMap).length > 0) {
                     hider.set(isVisible, fragmentIdMap);
+                    // Update manual tracking
+                    updateHiddenItems(fragmentIdMap, isVisible);
                 } else {
                     console.warn(`[DEBUG] Skipping visibility toggle for ${type} - map is empty`);
                     // Try to toggle anyway if logic permits, but hider needs a map
@@ -2363,6 +2423,9 @@ function setupVisibilityToolbar() {
              if (selection && Object.keys(selection).length > 0) {
                  await hider.set(false, selection);
                  highlighter.clear('select');
+                 
+                 // Update manual tracking
+                 updateHiddenItems(selection, false);
              }
         });
     }
@@ -2373,6 +2436,32 @@ function setupVisibilityToolbar() {
              if (selection && Object.keys(selection).length > 0) {
                  await hider.isolate(selection);
                  highlighter.clear('select');
+                 
+                 // Update hiddenItems for Isolate: 
+                 // Everything NOT in selection becomes hidden.
+                 // Everything IN selection becomes visible.
+                 try {
+                     for (const [uuid, model] of fragments.list) {
+                         // This might be heavy for large models but necessary for consistency
+                         const allIds = await model.getItemsIdsWithGeometry();
+                         const modelSelection = selection[uuid]; // Set or undefined
+                         
+                         if (!hiddenItems[uuid]) hiddenItems[uuid] = new Set();
+                         const hiddenSet = hiddenItems[uuid];
+                         
+                         for (const id of allIds) {
+                             if (modelSelection && modelSelection.has(id)) {
+                                 // Visible
+                                 hiddenSet.delete(id);
+                             } else {
+                                 // Hidden
+                                 hiddenSet.add(id);
+                             }
+                         }
+                     }
+                 } catch (e) {
+                     console.error("Error updating hidden items during isolate:", e);
+                 }
              }
         });
     }
@@ -2381,6 +2470,11 @@ function setupVisibilityToolbar() {
         showAllBtn.addEventListener('click', async () => {
              await hider.set(true);
              highlighter.clear('select');
+             
+             // Clear all hidden items
+             for (const key in hiddenItems) {
+                 delete hiddenItems[key];
+             }
         });
     }
 }
