@@ -839,13 +839,13 @@ async function updateClassificationUI() {
 
                         if (hasVisibleItems) {
                             highlighter.highlightByID('select', filteredMap, removePrevious, true);
-                            logToScreen(`Selected ${type} (${count} total, visible selected)`);
+                            logToScreen(`Seleccionado ${type} (${count} total, selección filtrada por visibilidad)`);
                         } else {
-                            logToScreen(`No visible items to select in ${type}`);
+                            logToScreen(`No hay elementos visibles para seleccionar en ${type}`);
                         }
 
                      } catch (err) {
-                        logToScreen(`Error selecting ${type}: ${err}`, true);
+                        logToScreen(`Error seleccionando ${type}: ${err}`, true);
                         console.error(err);
                      }
                 } else {
@@ -2441,6 +2441,7 @@ function setupVisibilityToolbar() {
                  // Everything NOT in selection becomes hidden.
                  // Everything IN selection becomes visible.
                  try {
+                     logToScreen("Actualizando visibilidad de elementos...");
                      for (const [uuid, model] of fragments.list) {
                          // This might be heavy for large models but necessary for consistency
                          const allIds = await model.getItemsIdsWithGeometry();
@@ -2459,6 +2460,7 @@ function setupVisibilityToolbar() {
                              }
                          }
                      }
+                     logToScreen("Aislamiento completado. Filtros actualizados.");
                  } catch (e) {
                      console.error("Error updating hidden items during isolate:", e);
                  }
