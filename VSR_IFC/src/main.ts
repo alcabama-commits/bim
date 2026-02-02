@@ -2611,28 +2611,38 @@ function setupMeasurementTools() {
         
         raycaster.setFromCamera(mouse, world.camera.three);
         
-        // Collect model meshes only to avoid hitting helpers/grid/lines/bad geometry
-        const models: THREE.Object3D[] = [];
+        // Collect ALL meshes from models safely
+        const meshes: THREE.Mesh[] = [];
         if (fragments && fragments.list) {
              for (const [, group] of fragments.list) {
-                 // Flatten to meshes to avoid issues with Groups or non-mesh children
-                 if (group.children) {
-                     for (const child of group.children) {
-                         if ((child as any).isMesh) {
-                             models.push(child);
-                         }
+                 group.traverse((child) => {
+                     if ((child as any).isMesh) {
+                         // Optional: Filter out helper meshes if they have specific names/types
+                         if (child.visible) meshes.push(child as THREE.Mesh);
                      }
-                 }
+                 });
              }
         }
         
+        // Debug: Log if no meshes found
+        if (meshes.length === 0) {
+            console.warn("[DEBUG] No model meshes found for raycasting.");
+        }
+
         try {
-            // Intersect only the models (recursive=false since we collected meshes)
-            const intersects = raycaster.intersectObjects(models, false);
+            // Intersect only the collected meshes (recursive=false)
+            const intersects = raycaster.intersectObjects(meshes, false);
             const valid = intersects.find(hit => hit.object.visible);
+            
+            if (valid) {
+                console.log(`[DEBUG] Hit found at ${valid.point.x.toFixed(2)}, ${valid.point.y.toFixed(2)}, ${valid.point.z.toFixed(2)}`);
+            } else {
+                console.log("[DEBUG] No intersection hit.");
+            }
+            
             return valid;
         } catch (e) {
-            console.warn("Raycast error:", e);
+            console.error("Raycast error:", e);
             return null;
         }
     };
@@ -2641,7 +2651,9 @@ function setupMeasurementTools() {
     const pointHandler = (event: MouseEvent) => {
         if (activeTool !== 'point') return;
         event.stopImmediatePropagation();
+        event.preventDefault(); // Add this
         
+        console.log("[DEBUG] Point tool click detected");
         const hit = getIntersection(event);
         if (hit) {
             const p = hit.point;
@@ -2696,7 +2708,9 @@ function setupMeasurementTools() {
     const slopeHandler = (event: MouseEvent) => {
         if (activeTool !== 'slope') return;
         event.stopImmediatePropagation();
-        
+        event.preventDefault();
+
+        console.log("[DEBUG] Slope tool click detected");
         const hit = getIntersection(event);
         if (hit) {
             const p = hit.point;
@@ -2779,6 +2793,9 @@ function setupMeasurementTools() {
     const angleHandler = (event: MouseEvent) => {
         if (activeTool !== 'angle') return;
         event.stopImmediatePropagation();
+        event.preventDefault();
+
+        console.log("[DEBUG] Angle tool click detected");
         const hit = getIntersection(event);
         if (hit) {
             const p = hit.point;
