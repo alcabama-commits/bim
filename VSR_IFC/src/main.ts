@@ -2615,18 +2615,33 @@ function setupMeasurementTools() {
         const meshes: THREE.Mesh[] = [];
         if (fragments && fragments.list) {
              for (const [, group] of fragments.list) {
-                 group.traverse((child) => {
-                     if ((child as any).isMesh) {
-                         // Optional: Filter out helper meshes if they have specific names/types
-                         if (child.visible) meshes.push(child as THREE.Mesh);
+                 // FragmentsGroup might store the actual Three.js object in .object or be the object itself
+                 // In some versions, 'group' is a wrapper and 'group.mesh' or 'group.object' is the Object3D
+                 const root = (group as any).object || (group as any).mesh || group;
+                 
+                 if (root.traverse) {
+                     root.traverse((child: any) => {
+                         if (child.isMesh && child.visible) {
+                             meshes.push(child as THREE.Mesh);
+                         }
+                     });
+                 } else if (root.children && Array.isArray(root.children)) {
+                     // Fallback: Manual DFS if .traverse() is missing
+                     const stack = [...root.children];
+                     while (stack.length > 0) {
+                         const child = stack.pop();
+                         if (child) {
+                             if ((child as any).isMesh && child.visible) meshes.push(child as THREE.Mesh);
+                             if (child.children && child.children.length > 0) stack.push(...child.children);
+                         }
                      }
-                 });
+                 }
              }
         }
         
         // Debug: Log if no meshes found
         if (meshes.length === 0) {
-            console.warn("[DEBUG] No model meshes found for raycasting.");
+            console.warn("[DEBUG] No model meshes found for raycasting. Checked fragments.list size:", fragments.list.size);
         }
 
         try {
