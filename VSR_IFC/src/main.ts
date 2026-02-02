@@ -2634,7 +2634,6 @@ function setupMeasurementTools() {
                                mesh.geometry && 
                                mesh.geometry.attributes && 
                                mesh.geometry.attributes.position && 
-                               mesh.geometry.attributes.position.array && 
                                mesh.geometry.attributes.position.count > 0;
                     };
 
@@ -3028,16 +3027,8 @@ function setupMeasurementTools() {
     
     if (deleteBtn) {
         deleteBtn.addEventListener('click', () => {
-            try {
-                if (length.list) length.list.clear();
-                else if (typeof length.deleteAll === 'function') length.deleteAll();
-                
-                if (area.list) area.list.clear();
-                else if (typeof area.deleteAll === 'function') area.deleteAll();
-            } catch (e) {
-                console.error("Error clearing measurements:", e);
-            }
-
+            length.deleteAll();
+            area.deleteAll();
             // angle.deleteAll();
             // Clear custom measurements
             customLabels.forEach(label => label.removeFromParent());
