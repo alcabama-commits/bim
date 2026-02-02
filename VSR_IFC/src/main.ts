@@ -3028,8 +3028,16 @@ function setupMeasurementTools() {
     
     if (deleteBtn) {
         deleteBtn.addEventListener('click', () => {
-            length.deleteAll();
-            area.deleteAll();
+            try {
+                if (length.list) length.list.clear();
+                else if (typeof length.deleteAll === 'function') length.deleteAll();
+                
+                if (area.list) area.list.clear();
+                else if (typeof area.deleteAll === 'function') area.deleteAll();
+            } catch (e) {
+                console.error("Error clearing measurements:", e);
+            }
+
             // angle.deleteAll();
             // Clear custom measurements
             customLabels.forEach(label => label.removeFromParent());
