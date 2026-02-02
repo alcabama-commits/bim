@@ -2610,16 +2610,30 @@ function setupMeasurementTools() {
         mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
         
         raycaster.setFromCamera(mouse, world.camera.three);
-        const intersects = raycaster.intersectObjects(world.scene.three.children, true);
         
-        // Filter out grid and helpers
-        const valid = intersects.find(hit => hit.object.visible && (hit.object as any).isMesh && hit.object.name !== 'grid');
-        return valid;
+        // Collect model meshes only to avoid hitting helpers/grid/lines/bad geometry
+        const models: THREE.Object3D[] = [];
+        if (fragments && fragments.list) {
+             for (const [, group] of fragments.list) {
+                 models.push(group);
+             }
+        }
+        
+        try {
+            // Intersect only the models
+            const intersects = raycaster.intersectObjects(models, true);
+            const valid = intersects.find(hit => hit.object.visible);
+            return valid;
+        } catch (e) {
+            console.warn("Raycast error:", e);
+            return null;
+        }
     };
 
     // --- POINT TOOL HANDLER ---
     const pointHandler = (event: MouseEvent) => {
         if (activeTool !== 'point') return;
+        event.stopImmediatePropagation();
         
         const hit = getIntersection(event);
         if (hit) {
@@ -2674,6 +2688,7 @@ function setupMeasurementTools() {
     // --- SLOPE TOOL HANDLER ---
     const slopeHandler = (event: MouseEvent) => {
         if (activeTool !== 'slope') return;
+        event.stopImmediatePropagation();
         
         const hit = getIntersection(event);
         if (hit) {
@@ -2756,6 +2771,7 @@ function setupMeasurementTools() {
     // --- ANGLE TOOL HANDLER ---
     const angleHandler = (event: MouseEvent) => {
         if (activeTool !== 'angle') return;
+        event.stopImmediatePropagation();
         const hit = getIntersection(event);
         if (hit) {
             const p = hit.point;
