@@ -2600,6 +2600,13 @@ function setupMeasurementTools() {
     let slopePoints: THREE.Vector3[] = [];
     let anglePoints: THREE.Vector3[] = [];
 
+    // Snap Cursor
+    const cursorGeom = new THREE.SphereGeometry(0.2, 16, 16);
+    const cursorMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.6, depthTest: false });
+    const cursorMesh = new THREE.Mesh(cursorGeom, cursorMat);
+    world.scene.three.add(cursorMesh);
+    cursorMesh.visible = false;
+
     // Simple Raycaster Helper
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -2619,29 +2626,32 @@ function setupMeasurementTools() {
                  // In some versions, 'group' is a wrapper and 'group.mesh' or 'group.object' is the Object3D
                  const root = (group as any).object || (group as any).mesh || group;
                  
-                 if (root.traverse) {
-                     root.traverse((child: any) => {
-                         if (child.isMesh && child.visible) {
-                             meshes.push(child as THREE.Mesh);
-                         }
-                     });
-                 } else if (root.children && Array.isArray(root.children)) {
-                     // Fallback: Manual DFS if .traverse() is missing
-                     const stack = [...root.children];
-                     while (stack.length > 0) {
-                         const child = stack.pop();
-                         if (child) {
-                             if ((child as any).isMesh && child.visible) meshes.push(child as THREE.Mesh);
-                             if (child.children && child.children.length > 0) stack.push(...child.children);
-                         }
-                     }
+                 // Safe traversal
+                 if (root) {
+                    if (typeof root.traverse === 'function') {
+                        root.traverse((child: any) => {
+                            if (child.isMesh && child.visible) {
+                                meshes.push(child as THREE.Mesh);
+                            }
+                        });
+                    } else if (root.children && Array.isArray(root.children)) {
+                        // Fallback: Manual DFS if .traverse() is missing
+                        const stack = [...root.children];
+                        while (stack.length > 0) {
+                            const child = stack.pop();
+                            if (child) {
+                                if ((child as any).isMesh && child.visible) meshes.push(child as THREE.Mesh);
+                                if (child.children && child.children.length > 0) stack.push(...child.children);
+                            }
+                        }
+                    }
                  }
              }
         }
         
         // Debug: Log if no meshes found
         if (meshes.length === 0) {
-            console.warn("[DEBUG] No model meshes found for raycasting. Checked fragments.list size:", fragments.list.size);
+            // console.warn("[DEBUG] No model meshes found for raycasting.");
         }
 
         try {
@@ -2650,9 +2660,43 @@ function setupMeasurementTools() {
             const valid = intersects.find(hit => hit.object.visible);
             
             if (valid) {
-                console.log(`[DEBUG] Hit found at ${valid.point.x.toFixed(2)}, ${valid.point.y.toFixed(2)}, ${valid.point.z.toFixed(2)}`);
-            } else {
-                console.log("[DEBUG] No intersection hit.");
+                // SNAP LOGIC
+                const hitPoint = valid.point;
+                let snapPoint = hitPoint.clone();
+                let minDist = 0.4; // Snap radius in meters
+
+                if (valid.face && valid.object instanceof THREE.Mesh) {
+                    const geom = valid.object.geometry;
+                    const pos = geom.attributes.position;
+                    
+                    // Get vertices of the face
+                    const vA = new THREE.Vector3();
+                    const vB = new THREE.Vector3();
+                    const vC = new THREE.Vector3();
+
+                    vA.fromBufferAttribute(pos, valid.face.a);
+                    vB.fromBufferAttribute(pos, valid.face.b);
+                    vC.fromBufferAttribute(pos, valid.face.c);
+
+                    // Transform to world space
+                    valid.object.updateMatrixWorld(); // Ensure matrix is up to date
+                    vA.applyMatrix4(valid.object.matrixWorld);
+                    vB.applyMatrix4(valid.object.matrixWorld);
+                    vC.applyMatrix4(valid.object.matrixWorld);
+
+                    // Check distances
+                    const dA = hitPoint.distanceTo(vA);
+                    const dB = hitPoint.distanceTo(vB);
+                    const dC = hitPoint.distanceTo(vC);
+
+                    if (dA < minDist) snapPoint = vA;
+                    else if (dB < minDist) snapPoint = vB;
+                    else if (dC < minDist) snapPoint = vC;
+                }
+                
+                // Override point with snapped point
+                valid.point.copy(snapPoint);
+                return valid;
             }
             
             return valid;
@@ -2661,6 +2705,26 @@ function setupMeasurementTools() {
             return null;
         }
     };
+
+    // --- CURSOR MOVEMENT ---
+    container.addEventListener('mousemove', (event) => {
+        if (activeTool === 'none') {
+            cursorMesh.visible = false;
+            return;
+        }
+        // Only update cursor for custom tools or if we want to show snap for all
+        if (['angle', 'slope', 'point'].includes(activeTool)) {
+            const hit = getIntersection(event);
+            if (hit) {
+                cursorMesh.visible = true;
+                cursorMesh.position.copy(hit.point);
+            } else {
+                cursorMesh.visible = false;
+            }
+        } else {
+             cursorMesh.visible = false;
+        }
+    });
 
     // --- POINT TOOL HANDLER ---
     const pointHandler = (event: MouseEvent) => {
@@ -2898,6 +2962,9 @@ function setupMeasurementTools() {
         [lengthBtn, areaBtn, angleBtn, slopeBtn, pointBtn].forEach(btn => {
             if (btn) btn.classList.remove('active');
         });
+
+        // Hide Snap Cursor
+        cursorMesh.visible = false;
 
         // Disable Highlighter selection while measuring to avoid conflicts
         const highlighter = components.get(OBF.Highlighter);
