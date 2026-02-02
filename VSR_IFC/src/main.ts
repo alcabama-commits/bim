@@ -2615,13 +2615,20 @@ function setupMeasurementTools() {
         const models: THREE.Object3D[] = [];
         if (fragments && fragments.list) {
              for (const [, group] of fragments.list) {
-                 models.push(group);
+                 // Flatten to meshes to avoid issues with Groups or non-mesh children
+                 if (group.children) {
+                     for (const child of group.children) {
+                         if ((child as any).isMesh) {
+                             models.push(child);
+                         }
+                     }
+                 }
              }
         }
         
         try {
-            // Intersect only the models
-            const intersects = raycaster.intersectObjects(models, true);
+            // Intersect only the models (recursive=false since we collected meshes)
+            const intersects = raycaster.intersectObjects(models, false);
             const valid = intersects.find(hit => hit.object.visible);
             return valid;
         } catch (e) {
