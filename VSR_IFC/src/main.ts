@@ -177,6 +177,7 @@ clipper.onAfterDelete.add((plane) => {
     });
     highlighter.enabled = true; // Ensure it's enabled explicitly
     setupVisibilityToolbar();
+    setupMeasurementTools();
 
 // Add 3D Click Event for Selection
 if (container) {
@@ -2536,6 +2537,259 @@ function setupVisibilityToolbar() {
         showAllBtn.addEventListener('click', async () => {
              await hider.set(true);
              highlighter.clear('select');
+        });
+    }
+}
+
+function setupMeasurementTools() {
+    const lengthBtn = document.getElementById('btn-measure-length');
+    const areaBtn = document.getElementById('btn-measure-area');
+    const angleBtn = document.getElementById('btn-measure-angle');
+    const slopeBtn = document.getElementById('btn-measure-slope');
+    const pointBtn = document.getElementById('btn-measure-point');
+    const deleteBtn = document.getElementById('btn-measure-delete');
+
+    // Initialize Components
+    const length = components.get(OBF.LengthMeasurement);
+    const area = components.get(OBF.AreaMeasurement);
+    const angle = components.get(OBF.AngleMeasurement);
+    
+    length.world = world;
+    area.world = world;
+    angle.world = world;
+    
+    // Configure precision (if supported directly, otherwise defaults)
+    // length.precision = 2; // Hypothetical API
+
+    // Custom Tools State
+    let activeTool: 'none' | 'length' | 'area' | 'angle' | 'slope' | 'point' = 'none';
+    let customLabels: any[] = []; // Store CSS2DObjects or HTML overlays
+    let customMeshes: THREE.Mesh[] = [];
+    let slopePoints: THREE.Vector3[] = [];
+
+    // Simple Raycaster Helper
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    const getIntersection = (event: MouseEvent) => {
+        const rect = container.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        
+        raycaster.setFromCamera(mouse, world.camera.three);
+        const intersects = raycaster.intersectObjects(world.scene.three.children, true);
+        
+        // Filter out grid and helpers
+        const valid = intersects.find(hit => hit.object.visible && (hit.object as any).isMesh && hit.object.name !== 'grid');
+        return valid;
+    };
+
+    // --- POINT TOOL HANDLER ---
+    const pointHandler = (event: MouseEvent) => {
+        if (activeTool !== 'point') return;
+        
+        const hit = getIntersection(event);
+        if (hit) {
+            const p = hit.point;
+            
+            // Create Marker (Sphere)
+            const geom = new THREE.SphereGeometry(0.2, 16, 16);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.copy(p);
+            world.scene.three.add(mesh);
+            customMeshes.push(mesh);
+            
+            // Create Label
+            const div = document.createElement('div');
+            div.className = 'floating-label';
+            div.style.position = 'absolute';
+            div.style.background = 'rgba(0, 0, 0, 0.7)';
+            div.style.color = 'white';
+            div.style.padding = '5px 10px';
+            div.style.borderRadius = '4px';
+            div.style.pointerEvents = 'none';
+            div.style.transform = 'translate(-50%, -100%)';
+            div.style.marginTop = '-10px';
+            div.style.fontSize = '12px';
+            div.innerHTML = `X: ${p.x.toFixed(2)}<br>Y: ${p.y.toFixed(2)}<br>Z: ${p.z.toFixed(2)}`;
+            
+            // Simple CSS2D emulation
+            const updateLabel = () => {
+                if (!mesh.parent) {
+                    div.remove();
+                    world.camera.controls.removeEventListener('update', updateLabel);
+                    return;
+                }
+                const v = p.clone().project(world.camera.three);
+                const x = (v.x * .5 + .5) * container.clientWidth;
+                const y = (v.y * -.5 + .5) * container.clientHeight;
+                div.style.left = `${x}px`;
+                div.style.top = `${y}px`;
+                
+                // Hide if behind camera
+                div.style.display = v.z > 1 ? 'none' : 'block';
+            };
+            
+            container.appendChild(div);
+            customLabels.push({ removeFromParent: () => div.remove() });
+            world.camera.controls.addEventListener('update', updateLabel);
+            updateLabel(); // Initial pos
+        }
+    };
+
+    // --- SLOPE TOOL HANDLER ---
+    const slopeHandler = (event: MouseEvent) => {
+        if (activeTool !== 'slope') return;
+        
+        const hit = getIntersection(event);
+        if (hit) {
+            const p = hit.point;
+            slopePoints.push(p);
+            
+            // Marker for click
+            const geom = new THREE.SphereGeometry(0.1, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xffff00, depthTest: false });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.copy(p);
+            world.scene.three.add(mesh);
+            customMeshes.push(mesh);
+
+            if (slopePoints.length === 2) {
+                const p1 = slopePoints[0];
+                const p2 = slopePoints[1];
+                
+                // Calculate Slope
+                const dy = Math.abs(p2.y - p1.y);
+                const dx = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.z - p1.z, 2));
+                
+                let slopePct = 0;
+                let slopeDeg = 0;
+                
+                if (dx > 0.001) {
+                    slopePct = (dy / dx) * 100;
+                    slopeDeg = Math.atan(dy / dx) * (180 / Math.PI);
+                } else {
+                    slopePct = 9999; // Vertical
+                    slopeDeg = 90;
+                }
+
+                // Draw Line
+                const lineGeom = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+                const lineMat = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false });
+                const line = new THREE.Line(lineGeom, lineMat);
+                world.scene.three.add(line);
+                customMeshes.push(line);
+
+                // Label
+                const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+                const div = document.createElement('div');
+                div.className = 'floating-label';
+                div.style.position = 'absolute';
+                div.style.background = 'rgba(0, 0, 0, 0.7)';
+                div.style.color = '#ffff00';
+                div.style.padding = '4px 8px';
+                div.style.borderRadius = '4px';
+                div.style.pointerEvents = 'none';
+                div.style.transform = 'translate(-50%, -50%)';
+                div.style.fontSize = '12px';
+                div.innerHTML = `Pendiente:<br>${slopePct.toFixed(2)}%<br>${slopeDeg.toFixed(2)}°`;
+                
+                const updateLabel = () => {
+                    if (!line.parent) {
+                        div.remove();
+                        world.camera.controls.removeEventListener('update', updateLabel);
+                        return;
+                    }
+                    const v = mid.clone().project(world.camera.three);
+                    const x = (v.x * .5 + .5) * container.clientWidth;
+                    const y = (v.y * -.5 + .5) * container.clientHeight;
+                    div.style.left = `${x}px`;
+                    div.style.top = `${y}px`;
+                    div.style.display = v.z > 1 ? 'none' : 'block';
+                };
+                
+                container.appendChild(div);
+                customLabels.push({ removeFromParent: () => div.remove() });
+                world.camera.controls.addEventListener('update', updateLabel);
+                updateLabel();
+
+                // Reset
+                slopePoints = [];
+            }
+        }
+    };
+    
+    // Helper to reset all tools
+    const disableAll = () => {
+        length.enabled = false;
+        area.enabled = false;
+        angle.enabled = false;
+        
+        // Reset buttons
+        [lengthBtn, areaBtn, angleBtn, slopeBtn, pointBtn].forEach(btn => {
+            if (btn) btn.classList.remove('active');
+        });
+
+        // Disable Highlighter selection while measuring to avoid conflicts
+        const highlighter = components.get(OBF.Highlighter);
+        highlighter.enabled = true; // Re-enable selection when tools are off
+        
+        activeTool = 'none';
+        
+        // Remove custom event listeners
+        container.removeEventListener('click', slopeHandler);
+        container.removeEventListener('click', pointHandler);
+    };
+
+    const activateTool = (tool: string, btn: HTMLElement | null) => {
+        if (activeTool === tool) {
+            disableAll();
+            return;
+        }
+        
+        disableAll();
+        activeTool = tool as any;
+        if (btn) btn.classList.add('active');
+        
+        // Disable selection to prevent picking objects while measuring
+        const highlighter = components.get(OBF.Highlighter);
+        highlighter.enabled = false;
+
+        if (tool === 'length') length.enabled = true;
+        if (tool === 'area') area.enabled = true;
+        if (tool === 'angle') angle.enabled = true;
+        if (tool === 'slope') {
+            container.addEventListener('click', slopeHandler);
+            logToScreen('Herramienta Pendiente: Selecciona 2 puntos');
+        }
+        if (tool === 'point') {
+            container.addEventListener('click', pointHandler);
+            logToScreen('Herramienta Punto: Haz clic para obtener coordenadas');
+        }
+    };
+
+    // --- BUTTON LISTENERS ---
+    if (lengthBtn) lengthBtn.addEventListener('click', () => activateTool('length', lengthBtn));
+    if (areaBtn) areaBtn.addEventListener('click', () => activateTool('area', areaBtn));
+    if (angleBtn) angleBtn.addEventListener('click', () => activateTool('angle', angleBtn));
+    if (slopeBtn) slopeBtn.addEventListener('click', () => activateTool('slope', slopeBtn));
+    if (pointBtn) pointBtn.addEventListener('click', () => activateTool('point', pointBtn));
+    
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', () => {
+            length.deleteAll();
+            area.deleteAll();
+            angle.deleteAll();
+            // Clear custom measurements
+            customLabels.forEach(label => label.removeFromParent());
+            customLabels = [];
+            customMeshes.forEach(mesh => {
+                mesh.removeFromParent();
+                if (mesh.geometry) mesh.geometry.dispose();
+                if (mesh.material) (mesh.material as any).dispose();
+            });
+            customMeshes = [];
         });
     }
 }
