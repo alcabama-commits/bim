@@ -5,6 +5,25 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
+// --- Global Error Handler (Added for debugging "Destruiste el visor") ---
+window.addEventListener('error', (event) => {
+    const box = document.createElement('div');
+    box.style.position = 'fixed';
+    box.style.top = '10px';
+    box.style.left = '10px';
+    box.style.background = 'rgba(255, 0, 0, 0.9)';
+    box.style.color = 'white';
+    box.style.padding = '15px';
+    box.style.zIndex = '10000';
+    box.style.borderRadius = '5px';
+    box.style.fontFamily = 'monospace';
+    box.style.maxWidth = '80%';
+    box.style.wordBreak = 'break-all';
+    box.innerHTML = `<strong>Error Critical:</strong><br>${event.message}<br><small>${event.filename}:${event.lineno}</small>`;
+    document.body.appendChild(box);
+    console.error("Global Error Caught:", event.error);
+});
+
 // --- Initialization of That Open Engine ---
 
 const components = new OBC.Components();
@@ -38,7 +57,12 @@ const fragments = components.get(OBC.FragmentsManager);
 
 // Initialize fragments with the worker BEFORE getting other components
 // that might depend on it (like Classifier or Hider)
-await fragments.init(`${baseUrl}fragments/fragments.mjs`);
+try {
+    await fragments.init(`${baseUrl}fragments/fragments.mjs`);
+} catch (error) {
+    console.error("Critical Error: Fragments init failed", error);
+    throw new Error(`Fragments init failed: ${error}`);
+}
 
 const classifier = components.get(OBC.Classifier);
 const hider = components.get(OBC.Hider);
@@ -176,8 +200,20 @@ clipper.onAfterDelete.add((plane) => {
         }
     });
     highlighter.enabled = true; // Ensure it's enabled explicitly
-    setupVisibilityToolbar();
-    setupMeasurementTools();
+    
+    try {
+        setupVisibilityToolbar();
+    } catch (e) {
+        console.error("Error setting up visibility toolbar:", e);
+    }
+    
+    try {
+        setupMeasurementTools();
+    } catch (e) {
+        console.error("Error setting up measurement tools:", e);
+        // Alert user non-intrusively
+        console.warn("Measurement tools failed to initialize");
+    }
 
 // Add 3D Click Event for Selection
 if (container) {
@@ -2552,20 +2588,17 @@ function setupMeasurementTools() {
     // Initialize Components
     const length = components.get(OBF.LengthMeasurement);
     const area = components.get(OBF.AreaMeasurement);
-    const angle = components.get(OBF.AngleMeasurement);
+    // AngleMeasurement is not available in current version, implemented manually below
     
     length.world = world;
     area.world = world;
-    angle.world = world;
     
-    // Configure precision (if supported directly, otherwise defaults)
-    // length.precision = 2; // Hypothetical API
-
     // Custom Tools State
     let activeTool: 'none' | 'length' | 'area' | 'angle' | 'slope' | 'point' = 'none';
     let customLabels: any[] = []; // Store CSS2DObjects or HTML overlays
     let customMeshes: THREE.Mesh[] = [];
     let slopePoints: THREE.Vector3[] = [];
+    let anglePoints: THREE.Vector3[] = [];
 
     // Simple Raycaster Helper
     const raycaster = new THREE.Raycaster();
@@ -2719,12 +2752,92 @@ function setupMeasurementTools() {
             }
         }
     };
+
+    // --- ANGLE TOOL HANDLER ---
+    const angleHandler = (event: MouseEvent) => {
+        if (activeTool !== 'angle') return;
+        const hit = getIntersection(event);
+        if (hit) {
+            const p = hit.point;
+            anglePoints.push(p);
+            
+            // Marker
+            const geom = new THREE.SphereGeometry(0.1, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: 0x00ffff, depthTest: false });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.copy(p);
+            world.scene.three.add(mesh);
+            customMeshes.push(mesh);
+            
+            if (anglePoints.length === 3) {
+                const p1 = anglePoints[0]; // Vertex? Usually User clicks Vertex 2nd? 
+                // Let's assume User clicks: Vertex, Point A, Point B.
+                // Or Point A, Vertex, Point B.
+                // Standard convention: Click Vertex, then Direction 1, then Direction 2.
+                // Let's use: Point A, Vertex, Point B -> Angle at Vertex.
+                // So click 2 is the vertex.
+                
+                // Wait, easier for user: Click Vertex, then two points defining legs.
+                // Let's assume p1 is Vertex.
+                const vertex = anglePoints[0];
+                const leg1 = anglePoints[1];
+                const leg2 = anglePoints[2];
+                
+                const v1 = new THREE.Vector3().subVectors(leg1, vertex).normalize();
+                const v2 = new THREE.Vector3().subVectors(leg2, vertex).normalize();
+                
+                const angleRad = v1.angleTo(v2);
+                const angleDeg = angleRad * (180 / Math.PI);
+                
+                // Draw Lines
+                const lineGeom = new THREE.BufferGeometry().setFromPoints([leg1, vertex, leg2]);
+                const lineMat = new THREE.LineBasicMaterial({ color: 0x00ffff, depthTest: false });
+                const line = new THREE.Line(lineGeom, lineMat);
+                world.scene.three.add(line);
+                customMeshes.push(line);
+                
+                // Label
+                const div = document.createElement('div');
+                div.className = 'floating-label';
+                div.style.position = 'absolute';
+                div.style.background = 'rgba(0, 0, 0, 0.7)';
+                div.style.color = '#00ffff';
+                div.style.padding = '4px 8px';
+                div.style.borderRadius = '4px';
+                div.style.pointerEvents = 'none';
+                div.style.transform = 'translate(-50%, -100%)';
+                div.style.fontSize = '12px';
+                div.innerHTML = `Ángulo: ${angleDeg.toFixed(2)}°`;
+                
+                const updateLabel = () => {
+                    if (!line.parent) {
+                        div.remove();
+                        world.camera.controls.removeEventListener('update', updateLabel);
+                        return;
+                    }
+                    const v = vertex.clone().project(world.camera.three);
+                    const x = (v.x * .5 + .5) * container.clientWidth;
+                    const y = (v.y * -.5 + .5) * container.clientHeight;
+                    div.style.left = `${x}px`;
+                    div.style.top = `${y}px`;
+                    div.style.display = v.z > 1 ? 'none' : 'block';
+                };
+                
+                container.appendChild(div);
+                customLabels.push({ removeFromParent: () => div.remove() });
+                world.camera.controls.addEventListener('update', updateLabel);
+                updateLabel();
+                
+                anglePoints = [];
+            }
+        }
+    };
     
     // Helper to reset all tools
     const disableAll = () => {
         length.enabled = false;
         area.enabled = false;
-        angle.enabled = false;
+        // angle.enabled = false;
         
         // Reset buttons
         [lengthBtn, areaBtn, angleBtn, slopeBtn, pointBtn].forEach(btn => {
@@ -2740,6 +2853,7 @@ function setupMeasurementTools() {
         // Remove custom event listeners
         container.removeEventListener('click', slopeHandler);
         container.removeEventListener('click', pointHandler);
+        container.removeEventListener('click', angleHandler);
     };
 
     const activateTool = (tool: string, btn: HTMLElement | null) => {
@@ -2758,7 +2872,11 @@ function setupMeasurementTools() {
 
         if (tool === 'length') length.enabled = true;
         if (tool === 'area') area.enabled = true;
-        if (tool === 'angle') angle.enabled = true;
+        // if (tool === 'angle') angle.enabled = true;
+        if (tool === 'angle') {
+            container.addEventListener('click', angleHandler);
+            logToScreen('Herramienta Ángulo: Clic Vértice -> Puntos Extremos');
+        }
         if (tool === 'slope') {
             container.addEventListener('click', slopeHandler);
             logToScreen('Herramienta Pendiente: Selecciona 2 puntos');
@@ -2780,7 +2898,7 @@ function setupMeasurementTools() {
         deleteBtn.addEventListener('click', () => {
             length.deleteAll();
             area.deleteAll();
-            angle.deleteAll();
+            // angle.deleteAll();
             // Clear custom measurements
             customLabels.forEach(label => label.removeFromParent());
             customLabels = [];
