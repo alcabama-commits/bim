@@ -5,7 +5,7 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
-console.log('VSR_IFC Version: 2026-02-03-Sync-Fix-v4-Verified');
+console.log('VSR_IFC Version: 2026-02-03-Sync-Fix-v5-Restored');
 
 // --- Visual Version Indicator ---
 const versionDiv = document.createElement('div');
@@ -19,7 +19,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-03-Fix-v4';
+versionDiv.textContent = 'v2026-02-03-Fix-v5';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
