@@ -265,6 +265,15 @@ ifcLoader.setup({
         world.scene.three.add(model.object);
         logToScreen('Added converted model to scene');
         
+        // CRITICAL FIX: Add to world.meshes
+        if (world.meshes) {
+            model.object.traverse((child: any) => {
+                if (child.isMesh || child.isInstancedMesh) {
+                    world.meshes.add(child);
+                }
+            });
+        }
+        
         // Center camera on it
         const bbox = new THREE.Box3().setFromObject(model.object);
         const sphere = new THREE.Sphere();
@@ -398,6 +407,16 @@ async function loadModel(url: string, path: string) {
         model.useCamera(world.camera.three);
 
         world.scene.three.add(model.object);
+        
+        // CRITICAL FIX: Add meshes to world.meshes for measurement tools to work
+        if (world.meshes) {
+            model.object.traverse((child: any) => {
+                if (child.isMesh || child.isInstancedMesh) {
+                    world.meshes.add(child);
+                }
+            });
+            console.log(`[DEBUG] Added model meshes to world.meshes for snapping`);
+        }
 
         await fragments.core.update(true);
         
@@ -1097,6 +1116,16 @@ function initSidebar() {
                         
                         model.useCamera(world.camera.three);
                         world.scene.three.add(model.object);
+                        
+                        // CRITICAL FIX: Add to world.meshes
+                        if (world.meshes) {
+                            model.object.traverse((child: any) => {
+                                if (child.isMesh || child.isInstancedMesh) {
+                                    world.meshes.add(child);
+                                }
+                            });
+                        }
+
                         await fragments.core.update(true);
                         
                         const bbox = new THREE.Box3().setFromObject(model.object);
@@ -2594,6 +2623,14 @@ function setupMeasurementTools() {
     
     length.world = world;
     area.world = world;
+
+    // Configuration for Snapping (Based on That Open Docs)
+    if ('snapDistance' in length) {
+        (length as any).snapDistance = 1; 
+    }
+    if ('snapDistance' in area) {
+        (area as any).snapDistance = 1;
+    }
 
     // Ensure they are enabled/configured if needed
     length.enabled = false;
