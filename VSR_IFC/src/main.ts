@@ -2621,6 +2621,23 @@ function setupMeasurementTools() {
 
     const mouse = new THREE.Vector2();
 
+    // Helper to validate meshes before raycasting to prevent crashes
+    const validateMesh = (mesh: any) => {
+        // Basic check
+        if (!mesh.isMesh && !mesh.isInstancedMesh) return false;
+        if (!mesh.visible) return false;
+        if (!mesh.geometry) return false;
+        
+        // Geometry attributes check
+        if (!mesh.geometry.attributes || !mesh.geometry.attributes.position) return false;
+        
+        // Array buffer check
+        const pos = mesh.geometry.attributes.position;
+        if (!pos.array || pos.count === 0) return false;
+        
+        return true;
+    };
+
     const getIntersection = (event: MouseEvent) => {
         const rect = container.getBoundingClientRect();
         mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -2630,20 +2647,24 @@ function setupMeasurementTools() {
         
         let valid = null;
         try {
-            // Use standard intersectObjects on the whole scene to ensure we catch everything
-            // This handles InstancedMesh and recursion automatically
-            const hits = raycaster.intersectObjects(world.scene.three.children, true);
+            // 1. Collect Valid Meshes Manually to avoid crashes
+            const candidates: THREE.Object3D[] = [];
             
-            // Filter out invisible, non-mesh, or our own helper meshes
-            const filteredHits = hits.filter(hit => {
-                return hit.object.visible && 
-                       hit.object instanceof THREE.Mesh && 
-                       hit.object !== cursorMesh && 
-                       !customMeshes.includes(hit.object as THREE.Mesh);
+            world.scene.three.traverse((obj: any) => {
+                // Skip our own helpers
+                if (obj === cursorMesh || customMeshes.includes(obj)) return;
+                
+                // Validate Geometry
+                if (validateMesh(obj)) {
+                    candidates.push(obj);
+                }
             });
 
-            if (filteredHits.length > 0) {
-                valid = filteredHits[0]; // First hit
+            // 2. Intersect only valid candidates
+            const hits = raycaster.intersectObjects(candidates, false); // recursive=false as we already traversed
+
+            if (hits.length > 0) {
+                valid = hits[0]; // First hit
             }
             
             if (valid) {
