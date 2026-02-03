@@ -2611,6 +2611,10 @@ function setupMeasurementTools() {
 
     // Simple Raycaster Helper
     const raycaster = new THREE.Raycaster();
+    // Increase threshold for points/lines based on user feedback
+    raycaster.params.Points.threshold = 0.2; 
+    raycaster.params.Line.threshold = 0.2;
+
     const mouse = new THREE.Vector2();
 
     const getIntersection = (event: MouseEvent) => {
@@ -2631,7 +2635,9 @@ function setupMeasurementTools() {
                  // Safe traversal
                  if (root) {
                     const validateMesh = (mesh: any) => {
-                        return mesh.isMesh && 
+                        // Allow Points and Lines as well for snapping
+                        const isValidType = mesh.isMesh || mesh.isInstancedMesh || mesh.isPoints || mesh.isLine;
+                        return isValidType && 
                                mesh.visible && 
                                mesh.geometry && 
                                mesh.geometry.attributes && 
