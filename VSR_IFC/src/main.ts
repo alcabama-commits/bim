@@ -2628,18 +2628,9 @@ function setupMeasurementTools() {
                  
                  // Safe traversal
                  if (root) {
-                    const validateMesh = (mesh: any) => {
-                        return mesh.isMesh && 
-                               mesh.visible && 
-                               mesh.geometry && 
-                               mesh.geometry.attributes && 
-                               mesh.geometry.attributes.position && 
-                               mesh.geometry.attributes.position.count > 0;
-                    };
-
                     if (typeof root.traverse === 'function') {
                         root.traverse((child: any) => {
-                            if (validateMesh(child)) {
+                            if (child.isMesh && child.visible) {
                                 meshes.push(child as THREE.Mesh);
                             }
                         });
@@ -2649,7 +2640,7 @@ function setupMeasurementTools() {
                         while (stack.length > 0) {
                             const child = stack.pop();
                             if (child) {
-                                if (validateMesh(child)) meshes.push(child as THREE.Mesh);
+                                if ((child as any).isMesh && child.visible) meshes.push(child as THREE.Mesh);
                                 if (child.children && child.children.length > 0) stack.push(...child.children);
                             }
                         }
