@@ -231,13 +231,16 @@ clipper.onAfterDelete.add((plane) => {
     }
 
 // Add 3D Click Event for Selection
+// Listener removed to prevent conflict logs with measurement tools
+/*
 if (container) {
     container.addEventListener('click', () => {
         // Just verify highlighter is active, though it handles its own events.
         // If selection happened, properties table updates via event listener below.
-        console.log('[DEBUG] 3D View clicked. Checking selection...');
+        // console.log('[DEBUG] 3D View clicked. Checking selection...');
     });
 }
+*/
 
 // Initialize IfcLoader once
 const ifcLoader = components.get(OBC.IfcLoader);
@@ -2817,6 +2820,13 @@ function setupMeasurementTools() {
     // --- POINT TOOL HANDLER ---
     const pointHandler = (event: MouseEvent) => {
         if (activeTool !== 'point') return;
+        
+        // Force disable highlighter and clear selection to prevent conflicts
+        const highlighter = components.get(OBF.Highlighter);
+        highlighter.enabled = false;
+        highlighter.clear('select');
+        highlighter.clear('hover');
+
         event.stopImmediatePropagation();
         event.preventDefault(); // Add this
         
@@ -2874,6 +2884,12 @@ function setupMeasurementTools() {
     // --- SLOPE TOOL HANDLER ---
     const slopeHandler = (event: MouseEvent) => {
         if (activeTool !== 'slope') return;
+
+        // Force disable highlighter
+        const highlighter = components.get(OBF.Highlighter);
+        highlighter.enabled = false;
+        highlighter.clear('select');
+
         event.stopImmediatePropagation();
         event.preventDefault();
 
@@ -2959,6 +2975,12 @@ function setupMeasurementTools() {
     // --- ANGLE TOOL HANDLER ---
     const angleHandler = (event: MouseEvent) => {
         if (activeTool !== 'angle') return;
+
+        // Force disable highlighter
+        const highlighter = components.get(OBF.Highlighter);
+        highlighter.enabled = false;
+        highlighter.clear('select');
+
         event.stopImmediatePropagation();
         event.preventDefault();
 
@@ -3079,6 +3101,8 @@ function setupMeasurementTools() {
         // Disable selection to prevent picking objects while measuring
         const highlighter = components.get(OBF.Highlighter);
         highlighter.enabled = false;
+        highlighter.clear('select');
+        highlighter.clear('hover');
 
         // CRITICAL: Populate world.meshes for standard tools (Length/Area) to enable their internal snapping
         if (tool === 'length' || tool === 'area') {
