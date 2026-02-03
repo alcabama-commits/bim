@@ -5,7 +5,7 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
-console.log('VSR_IFC Version: 2026-02-03-Sync-Fix-v10-WebIfc75');
+console.log('VSR_IFC Version: 2026-02-03-Fix-v11-MeasurementReady');
 const versionDiv = document.createElement('div');
 versionDiv.style.position = 'fixed';
 versionDiv.style.bottom = '10px';
@@ -17,7 +17,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-03-Fix-v10-WebIfc75';
+versionDiv.textContent = 'v2026-02-03-Fix-v11-MeasurementReady';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -1194,13 +1194,34 @@ function initSidebar() {
                         logToScreen(`Loading IFC: ${file.name}...`);
                         const data = new Uint8Array(buffer);
                         const model = await ifcLoader.load(data, true, file.name);
-                        logToScreen(`IFC Loaded: ${file.name}`);
                         
+                        // CRITICAL: Register model in fragments list for tools to work
+                        if (!fragments.list.has(model.uuid)) {
+                             fragments.list.set(model.uuid, model);
+                        }
+                        
+                        // Ensure it's in the scene
+                        if (!model.object.parent) {
+                            world.scene.three.add(model.object);
+                        }
+                        
+                        // Classify and update UI
+                        logToScreen(`IFC Loaded: ${file.name}. Classifying...`);
+                        try {
+                            // Ensure properties are available (IfcLoader usually loads them)
+                            await classifyModel(model);
+                            await updateClassificationUI();
+                        } catch (e) {
+                            logToScreen(`Classification warning: ${e}`, true);
+                        }
+
                         // Fit camera
                         const bbox = new THREE.Box3().setFromObject(model.object);
                         const sphere = new THREE.Sphere();
                         bbox.getBoundingSphere(sphere);
                         world.camera.controls.fitToSphere(sphere, true);
+                        
+                        logToScreen('Ready for Measurement.');
                     }
                 } catch (e) {
                     logToScreen(`Error loading file: ${e}`, true);
