@@ -5,7 +5,7 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
-console.log('VSR_IFC Version: 2026-02-03-Sync-Fix-v6-UNPKG');
+console.log('VSR_IFC Version: 2026-02-03-Sync-Fix-v7-SingleThreaded');
 
 // --- Visual Version Indicator ---
 const versionDiv = document.createElement('div');
@@ -19,7 +19,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-03-Fix-v6-UNPKG';
+versionDiv.textContent = 'v2026-02-03-Fix-v7-ST';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -246,15 +246,15 @@ const ifcLoader = components.get(OBC.IfcLoader);
 
 // Construct absolute path dynamically based on current page URL
 // This handles both local dev (base=/) and GitHub Pages (base=/bim/VSR_IFC/)
-/* 
 const url = new URL(window.location.href);
 // Remove index.html or anything after last slash to get directory
 const pathDir = url.pathname.substring(0, url.pathname.lastIndexOf('/') + 1);
 const wasmPath = `${url.origin}${pathDir}wasm/`;
-*/
 
+/*
 // USE UNPKG to avoid local path/serving issues with GitHub Pages
 const wasmPath = "https://unpkg.com/web-ifc@0.0.72/";
+*/
 
 console.log('[DEBUG] Computed WASM Path:', wasmPath);
 console.log('[DEBUG] Cross-Origin Isolated:', window.crossOriginIsolated ? 'Yes' : 'No (SharedArrayBuffer restricted)');
