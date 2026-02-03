@@ -3061,9 +3061,9 @@ function setupMeasurementTools() {
         activeTool = 'none';
         
         // Remove custom event listeners
-        container.removeEventListener('click', slopeHandler);
-        container.removeEventListener('click', pointHandler);
-        container.removeEventListener('click', angleHandler);
+        container.removeEventListener('click', slopeHandler, { capture: true });
+        container.removeEventListener('click', pointHandler, { capture: true });
+        container.removeEventListener('click', angleHandler, { capture: true });
     };
 
     const activateTool = (tool: string, btn: HTMLElement | null) => {
@@ -3117,15 +3117,15 @@ function setupMeasurementTools() {
         if (tool === 'area') area.enabled = true;
         // if (tool === 'angle') angle.enabled = true;
         if (tool === 'angle') {
-            container.addEventListener('click', angleHandler);
+            container.addEventListener('click', angleHandler, { capture: true });
             logToScreen('Herramienta Ángulo: Clic Vértice -> Puntos Extremos');
         }
         if (tool === 'slope') {
-            container.addEventListener('click', slopeHandler);
+            container.addEventListener('click', slopeHandler, { capture: true });
             logToScreen('Herramienta Pendiente: Selecciona 2 puntos');
         }
         if (tool === 'point') {
-            container.addEventListener('click', pointHandler);
+            container.addEventListener('click', pointHandler, { capture: true });
             logToScreen('Herramienta Punto: Haz clic para obtener coordenadas');
         }
     };
