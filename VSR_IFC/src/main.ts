@@ -2663,10 +2663,23 @@ function setupMeasurementTools() {
             // console.warn("[DEBUG] No model meshes found for raycasting.");
         }
 
+        let valid = null;
         try {
-            // Intersect only the collected meshes (recursive=false)
-            const intersects = raycaster.intersectObjects(meshes, false);
-            const valid = intersects.find(hit => hit.object.visible);
+            // Manual intersection loop to isolate broken meshes
+            const allIntersects: THREE.Intersection[] = [];
+            for (const mesh of meshes) {
+                try {
+                    const hits = raycaster.intersectObject(mesh, false);
+                    if (hits.length > 0) allIntersects.push(...hits);
+                } catch (e) {
+                    // Skip broken meshes
+                }
+            }
+            
+            // Sort by distance
+            allIntersects.sort((a, b) => a.distance - b.distance);
+            
+            valid = allIntersects.find(hit => hit.object.visible);
             
             if (valid) {
                 // SNAP LOGIC
