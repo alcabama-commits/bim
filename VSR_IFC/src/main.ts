@@ -5,7 +5,7 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
-console.log('VSR_IFC Version: 2026-02-03-Fix-v11-MeasurementReady');
+console.log('VSR_IFC Version: 2026-02-03-Fix-v12-FragMeasurement');
 const versionDiv = document.createElement('div');
 versionDiv.style.position = 'fixed';
 versionDiv.style.bottom = '10px';
@@ -17,7 +17,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-03-Fix-v11-MeasurementReady';
+versionDiv.textContent = 'v2026-02-03-Fix-v12-FragMeasurement';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -1190,6 +1190,7 @@ function initSidebar() {
                         }
 
                         logToScreen(`Loaded .frag: ${file.name}`);
+                        logToScreen('Ready for Measurement.');
                     } else {
                         logToScreen(`Loading IFC: ${file.name}...`);
                         const data = new Uint8Array(buffer);
