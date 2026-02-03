@@ -3,6 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="version" content="1.8.0-pink-selection" />
+    <script>
+      // COI Service Worker Registration for SharedArrayBuffer support
+      if (!window.crossOriginIsolated && "serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./coi-serviceworker.js")
+          .then((registration) => {
+            console.log("COI Service Worker registered");
+            // Reload if not already controlled to ensure headers are applied
+            registration.addEventListener("updatefound", () => {
+                window.location.reload();
+            });
+            if (registration.active && !navigator.serviceWorker.controller) {
+                window.location.reload();
+            }
+          })
+          .catch((err) => console.error("COI Registration Failed:", err));
+      }
+    </script>
     <link rel="icon" type="image/svg+xml" href="vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VSR IFC Viewer v1.8</title>
