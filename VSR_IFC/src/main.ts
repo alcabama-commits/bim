@@ -2594,6 +2594,10 @@ function setupMeasurementTools() {
     
     length.world = world;
     area.world = world;
+
+    // Ensure they are enabled/configured if needed
+    length.enabled = false;
+    area.enabled = false;
     
     // Custom Tools State
     let activeTool: 'none' | 'length' | 'area' | 'angle' | 'slope' | 'point' = 'none';
@@ -2611,6 +2615,10 @@ function setupMeasurementTools() {
 
     // Simple Raycaster Helper
     const raycaster = new THREE.Raycaster();
+    // Increase threshold for points/lines
+    raycaster.params.Points.threshold = 0.2;
+    raycaster.params.Line.threshold = 0.2;
+
     const mouse = new THREE.Vector2();
 
     const getIntersection = (event: MouseEvent) => {
@@ -2620,119 +2628,73 @@ function setupMeasurementTools() {
         
         raycaster.setFromCamera(mouse, world.camera.three);
         
-        // Collect ALL meshes from models safely
-        const meshes: THREE.Mesh[] = [];
-        if (fragments && fragments.list) {
-             for (const [, group] of fragments.list) {
-                 // FragmentsGroup might store the actual Three.js object in .object or be the object itself
-                 // In some versions, 'group' is a wrapper and 'group.mesh' or 'group.object' is the Object3D
-                 const root = (group as any).object || (group as any).mesh || group;
-                 
-                 // Safe traversal
-                 if (root) {
-                    const validateMesh = (mesh: any) => {
-                        return mesh.isMesh && 
-                               mesh.visible && 
-                               mesh.geometry && 
-                               mesh.geometry.attributes && 
-                               mesh.geometry.attributes.position && 
-                               mesh.geometry.attributes.position.count > 0;
-                    };
-
-                    if (typeof root.traverse === 'function') {
-                        root.traverse((child: any) => {
-                            if (validateMesh(child)) {
-                                meshes.push(child as THREE.Mesh);
-                            }
-                        });
-                    } else if (root.children && Array.isArray(root.children)) {
-                        // Fallback: Manual DFS if .traverse() is missing
-                        const stack = [...root.children];
-                        while (stack.length > 0) {
-                            const child = stack.pop();
-                            if (child) {
-                                if (validateMesh(child)) meshes.push(child as THREE.Mesh);
-                                if (child.children && child.children.length > 0) stack.push(...child.children);
-                            }
-                        }
-                    }
-                 }
-             }
-        }
-        
-        // Debug: Log if no meshes found
-        if (meshes.length === 0) {
-            // console.warn("[DEBUG] No model meshes found for raycasting.");
-        }
-
         let valid = null;
         try {
-            // Manual intersection loop to isolate broken meshes
-            const allIntersects: THREE.Intersection[] = [];
-            for (const mesh of meshes) {
-                try {
-                    const hits = raycaster.intersectObject(mesh, false);
-                    if (hits.length > 0) allIntersects.push(...hits);
-                } catch (e) {
-                    // Skip broken meshes
-                }
+            // Use standard intersectObjects on the whole scene to ensure we catch everything
+            // This handles InstancedMesh and recursion automatically
+            const hits = raycaster.intersectObjects(world.scene.three.children, true);
+            
+            // Filter out invisible, non-mesh, or our own helper meshes
+            const filteredHits = hits.filter(hit => {
+                return hit.object.visible && 
+                       hit.object instanceof THREE.Mesh && 
+                       hit.object !== cursorMesh && 
+                       !customMeshes.includes(hit.object as THREE.Mesh);
+            });
+
+            if (filteredHits.length > 0) {
+                valid = filteredHits[0]; // First hit
             }
-            
-            // Sort by distance
-            allIntersects.sort((a, b) => a.distance - b.distance);
-            
-            valid = allIntersects.find(hit => hit.object.visible);
             
             if (valid) {
                 // SNAP LOGIC
                 const hitPoint = valid.point;
                 let snapPoint = hitPoint.clone();
-                let minDist = 0.4; // Snap radius in meters
+                let minDist = 0.5; // Increased snap radius (0.5m)
 
                 if (valid.face && valid.object instanceof THREE.Mesh) {
                     const geom = valid.object.geometry;
                     const pos = geom.attributes.position;
                     
-                    // Get vertices of the face
-                    const vA = new THREE.Vector3();
-                    const vB = new THREE.Vector3();
-                    const vC = new THREE.Vector3();
+                    if (pos) {
+                        // Get vertices of the face
+                        const vA = new THREE.Vector3();
+                        const vB = new THREE.Vector3();
+                        const vC = new THREE.Vector3();
 
-                    vA.fromBufferAttribute(pos, valid.face.a);
-                    vB.fromBufferAttribute(pos, valid.face.b);
-                    vC.fromBufferAttribute(pos, valid.face.c);
+                        vA.fromBufferAttribute(pos, valid.face.a);
+                        vB.fromBufferAttribute(pos, valid.face.b);
+                        vC.fromBufferAttribute(pos, valid.face.c);
 
-                    // Transform to world space
-                    // IMPORTANT: Handle InstancedMesh transformation
-                    if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
-                         const instanceMatrix = new THREE.Matrix4();
-                         valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
-                         
-                         // Apply instance matrix first, then world matrix? 
-                         // InstancedMesh world matrix usually includes the group transform.
-                         // But for InstancedMesh, the vertices are local -> instance transform -> world.
-                         
-                         const matrixWorld = valid.object.matrixWorld;
-                         
-                         vA.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                         vB.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                         vC.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                    } else {
-                        // Standard Mesh
-                        valid.object.updateMatrixWorld(); // Ensure matrix is up to date
-                        vA.applyMatrix4(valid.object.matrixWorld);
-                        vB.applyMatrix4(valid.object.matrixWorld);
-                        vC.applyMatrix4(valid.object.matrixWorld);
+                        // Transform to world space
+                        if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
+                             const instanceMatrix = new THREE.Matrix4();
+                             valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
+                             
+                             const matrixWorld = valid.object.matrixWorld;
+                             
+                             vA.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                             vB.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                             vC.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                        } else {
+                            // Standard Mesh
+                            valid.object.updateMatrixWorld(); // Ensure matrix is up to date
+                            vA.applyMatrix4(valid.object.matrixWorld);
+                            vB.applyMatrix4(valid.object.matrixWorld);
+                            vC.applyMatrix4(valid.object.matrixWorld);
+                        }
+
+                        // Check distances
+                        const dA = hitPoint.distanceTo(vA);
+                        const dB = hitPoint.distanceTo(vB);
+                        const dC = hitPoint.distanceTo(vC);
+                        
+                        // console.log(`[DEBUG] Snap Distances: A=${dA.toFixed(3)}, B=${dB.toFixed(3)}, C=${dC.toFixed(3)}`);
+
+                        if (dA < minDist) snapPoint = vA;
+                        else if (dB < minDist) snapPoint = vB;
+                        else if (dC < minDist) snapPoint = vC;
                     }
-
-                    // Check distances
-                    const dA = hitPoint.distanceTo(vA);
-                    const dB = hitPoint.distanceTo(vB);
-                    const dC = hitPoint.distanceTo(vC);
-
-                    if (dA < minDist) snapPoint = vA;
-                    else if (dB < minDist) snapPoint = vB;
-                    else if (dC < minDist) snapPoint = vC;
                 }
                 
                 // Override point with snapped point
