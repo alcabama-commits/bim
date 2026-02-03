@@ -2734,59 +2734,101 @@ function setupMeasurementTools() {
             valid = allIntersects.find(hit => hit.object.visible);
             
             if (valid) {
-                // SNAP LOGIC
+                // --- ENHANCED SNAP LOGIC (Screen Space) ---
                 const hitPoint = valid.point;
                 let snapPoint = hitPoint.clone();
-                let minDist = 0.5; // Snap radius in meters
                 let isSnapped = false;
+                
+                // Snap Threshold in Pixels (consistent regardless of zoom)
+                const SNAP_THRESHOLD_PX = 15; 
+                
+                try {
+                    if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
+                        const geom = valid.object.geometry;
+                        const pos = geom.attributes.position;
+                        
+                        const vA = new THREE.Vector3();
+                        const vB = new THREE.Vector3();
+                        const vC = new THREE.Vector3();
 
-                if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
-                    const geom = valid.object.geometry;
-                    const pos = geom.attributes.position;
-                    
-                    const vA = new THREE.Vector3();
-                    const vB = new THREE.Vector3();
-                    const vC = new THREE.Vector3();
+                        vA.fromBufferAttribute(pos, valid.face.a);
+                        vB.fromBufferAttribute(pos, valid.face.b);
+                        vC.fromBufferAttribute(pos, valid.face.c);
 
-                    vA.fromBufferAttribute(pos, valid.face.a);
-                    vB.fromBufferAttribute(pos, valid.face.b);
-                    vC.fromBufferAttribute(pos, valid.face.c);
+                        // Transform to world space
+                        if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
+                             const instanceMatrix = new THREE.Matrix4();
+                             valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
+                             const matrixWorld = valid.object.matrixWorld;
+                             vA.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                             vB.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                             vC.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                        } else {
+                            // Ensure world matrix is up to date
+                            valid.object.updateMatrixWorld(); 
+                            vA.applyMatrix4(valid.object.matrixWorld);
+                            vB.applyMatrix4(valid.object.matrixWorld);
+                            vC.applyMatrix4(valid.object.matrixWorld);
+                        }
 
-                    // Transform to world space
-                    if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
-                         const instanceMatrix = new THREE.Matrix4();
-                         valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
-                         const matrixWorld = valid.object.matrixWorld;
-                         vA.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                         vB.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                         vC.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                    } else {
-                        valid.object.updateMatrixWorld();
-                        vA.applyMatrix4(valid.object.matrixWorld);
-                        vB.applyMatrix4(valid.object.matrixWorld);
-                        vC.applyMatrix4(valid.object.matrixWorld);
+                        // Project to Screen Space for "Visual" Snapping
+                        const toScreen = (v: THREE.Vector3) => {
+                            const p = v.clone().project(world.camera.three);
+                            const rect = container.getBoundingClientRect();
+                            return {
+                                x: (p.x * 0.5 + 0.5) * rect.width + rect.left,
+                                y: (-(p.y * 0.5) + 0.5) * rect.height + rect.top,
+                                z: p.z // Depth
+                            };
+                        };
+
+                        const mouseScreen = { x: event.clientX, y: event.clientY };
+                        
+                        // Candidates: Vertices + Midpoints
+                        const candidates = [
+                            vA, vB, vC,
+                            new THREE.Vector3().addVectors(vA, vB).multiplyScalar(0.5), // Mid AB
+                            new THREE.Vector3().addVectors(vB, vC).multiplyScalar(0.5), // Mid BC
+                            new THREE.Vector3().addVectors(vC, vA).multiplyScalar(0.5)  // Mid CA
+                        ];
+
+                        let bestDist = SNAP_THRESHOLD_PX;
+                        let bestPoint = null;
+
+                        for (const p of candidates) {
+                            const s = toScreen(p);
+                            // Ignore if behind camera
+                            if (s.z > 1) continue; 
+
+                            const dx = s.x - mouseScreen.x;
+                            const dy = s.y - mouseScreen.y;
+                            const dist = Math.sqrt(dx*dx + dy*dy);
+
+                            if (dist < bestDist) {
+                                bestDist = dist;
+                                bestPoint = p;
+                            }
+                        }
+
+                        if (bestPoint) {
+                            snapPoint = bestPoint;
+                            isSnapped = true;
+                        }
                     }
-
-                    // Check distances
-                    const dA = hitPoint.distanceTo(vA);
-                    const dB = hitPoint.distanceTo(vB);
-                    const dC = hitPoint.distanceTo(vC);
-
-                    if (dA < minDist) { snapPoint = vA; isSnapped = true; }
-                    else if (dB < minDist) { snapPoint = vB; isSnapped = true; }
-                    else if (dC < minDist) { snapPoint = vC; isSnapped = true; }
+                } catch (err) {
+                    console.warn("Snap calculation error:", err);
                 }
                 
                 // Visual Feedback for Snap
                 if (isSnapped) {
                     cursorMat.color.setHex(0x00ff00); // Green
                     cursorMesh.scale.set(1.5, 1.5, 1.5);
+                    valid.point.copy(snapPoint); // CRITICAL: Update the hit point
                 } else {
                     cursorMat.color.setHex(0xff00ff); // Magenta
                     cursorMesh.scale.set(1.0, 1.0, 1.0);
                 }
                 
-                valid.point.copy(snapPoint);
                 return valid;
             }
             
