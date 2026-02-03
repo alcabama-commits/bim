@@ -5,7 +5,7 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
-console.log('VSR_IFC Version: 2026-02-03-Sync-Fix-v2');
+console.log('VSR_IFC Version: 2026-02-03-Sync-Fix-v3-SingleThreaded');
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
 window.addEventListener('error', (event) => {
