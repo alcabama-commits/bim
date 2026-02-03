@@ -2690,6 +2690,10 @@ function setupMeasurementTools() {
         // Geometry attributes check
         if (!mesh.geometry.attributes || !mesh.geometry.attributes.position) return false;
         
+        // Robust check for position attribute to prevent Raycast crashes
+        const pos = mesh.geometry.attributes.position;
+        if (!pos.array || pos.count === 0 || pos.itemSize < 3) return false;
+        
         return true;
     };
 
@@ -2724,57 +2728,59 @@ function setupMeasurementTools() {
             
             if (valid) {
                 // SNAP LOGIC
-                const hitPoint = valid.point;
-                let snapPoint = hitPoint.clone();
-                let minDist = 0.5; // Increased snap radius (0.5m)
+                try {
+                    const hitPoint = valid.point;
+                    let snapPoint = hitPoint.clone();
+                    let minDist = 0.5; // Increased snap radius (0.5m)
 
-                if (valid.face && valid.object instanceof THREE.Mesh) {
-                    const geom = valid.object.geometry;
-                    const pos = geom.attributes.position;
-                    
-                    if (pos) {
-                        // Get vertices of the face
-                        const vA = new THREE.Vector3();
-                        const vB = new THREE.Vector3();
-                        const vC = new THREE.Vector3();
-
-                        vA.fromBufferAttribute(pos, valid.face.a);
-                        vB.fromBufferAttribute(pos, valid.face.b);
-                        vC.fromBufferAttribute(pos, valid.face.c);
-
-                        // Transform to world space
-                        if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
-                             const instanceMatrix = new THREE.Matrix4();
-                             valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
-                             
-                             const matrixWorld = valid.object.matrixWorld;
-                             
-                             vA.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                             vB.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                             vC.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                        } else {
-                            // Standard Mesh
-                            valid.object.updateMatrixWorld(); // Ensure matrix is up to date
-                            vA.applyMatrix4(valid.object.matrixWorld);
-                            vB.applyMatrix4(valid.object.matrixWorld);
-                            vC.applyMatrix4(valid.object.matrixWorld);
-                        }
-
-                        // Check distances
-                        const dA = hitPoint.distanceTo(vA);
-                        const dB = hitPoint.distanceTo(vB);
-                        const dC = hitPoint.distanceTo(vC);
+                    if (valid.face && valid.object instanceof THREE.Mesh) {
+                        const geom = valid.object.geometry;
+                        const pos = geom.attributes.position;
                         
-                        // console.log(`[DEBUG] Snap Distances: A=${dA.toFixed(3)}, B=${dB.toFixed(3)}, C=${dC.toFixed(3)}`);
+                        if (pos && pos.array && pos.count > 0) {
+                            // Get vertices of the face
+                            const vA = new THREE.Vector3();
+                            const vB = new THREE.Vector3();
+                            const vC = new THREE.Vector3();
 
-                        if (dA < minDist) snapPoint = vA;
-                        else if (dB < minDist) snapPoint = vB;
-                        else if (dC < minDist) snapPoint = vC;
+                            vA.fromBufferAttribute(pos, valid.face.a);
+                            vB.fromBufferAttribute(pos, valid.face.b);
+                            vC.fromBufferAttribute(pos, valid.face.c);
+
+                            // Transform to world space
+                            if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
+                                 const instanceMatrix = new THREE.Matrix4();
+                                 valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
+                                 
+                                 const matrixWorld = valid.object.matrixWorld;
+                                 
+                                 vA.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                                 vB.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                                 vC.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                            } else {
+                                // Standard Mesh
+                                valid.object.updateMatrixWorld(); // Ensure matrix is up to date
+                                vA.applyMatrix4(valid.object.matrixWorld);
+                                vB.applyMatrix4(valid.object.matrixWorld);
+                                vC.applyMatrix4(valid.object.matrixWorld);
+                            }
+
+                            // Check distances
+                            const dA = hitPoint.distanceTo(vA);
+                            const dB = hitPoint.distanceTo(vB);
+                            const dC = hitPoint.distanceTo(vC);
+                            
+                            if (dA < minDist) snapPoint = vA;
+                            else if (dB < minDist) snapPoint = vB;
+                            else if (dC < minDist) snapPoint = vC;
+                        }
                     }
+                    
+                    // Override point with snapped point
+                    valid.point.copy(snapPoint);
+                } catch (snapError) {
+                    console.warn("Snap failed, using original point:", snapError);
                 }
-                
-                // Override point with snapped point
-                valid.point.copy(snapPoint);
                 return valid;
             }
             
