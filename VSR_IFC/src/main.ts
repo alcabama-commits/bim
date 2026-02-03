@@ -235,7 +235,7 @@ console.log('Setting up IfcLoader with WASM path:', wasmPath);
 ifcLoader.setup({
     wasm: {
         path: wasmPath,
-        absolute: true
+        absolute: false
     }
 });
 
