@@ -228,14 +228,21 @@ if (container) {
 
 // Initialize IfcLoader once
 const ifcLoader = components.get(OBC.IfcLoader);
-// Use default WASM path
-const wasmPath = `${baseUrl}wasm/`; 
-console.log('Setting up IfcLoader with WASM path:', wasmPath);
+
+// Construct absolute path dynamically based on current page URL
+// This handles both local dev (base=/) and GitHub Pages (base=/bim/VSR_IFC/)
+const url = new URL(window.location.href);
+// Remove index.html or anything after last slash to get directory
+const pathDir = url.pathname.substring(0, url.pathname.lastIndexOf('/') + 1);
+const wasmPath = `${url.origin}${pathDir}wasm/`;
+
+console.log('[DEBUG] Computed WASM Path:', wasmPath);
+console.log('[DEBUG] Cross-Origin Isolated:', window.crossOriginIsolated ? 'Yes' : 'No (SharedArrayBuffer restricted)');
 
 ifcLoader.setup({
     wasm: {
         path: wasmPath,
-        absolute: false
+        absolute: true
     }
 });
 
