@@ -2632,6 +2632,24 @@ function setupMeasurementTools() {
         (area as any).snapDistance = 1;
     }
 
+    // CRITICAL: Populate world.meshes for standard tools immediately
+    // This handles cases where models are already loaded or world.meshes wasn't updated
+    if (world.meshes) {
+        world.meshes.clear();
+        world.scene.three.traverse((obj: any) => {
+             if ((obj.isMesh || obj.isInstancedMesh) && obj.visible) {
+                 // Exclude our helpers
+                 if (obj === cursorMesh || customMeshes.includes(obj)) return;
+                 // Exclude highlighter
+                 if (obj.name === 'select' || obj.name === 'hover') return;
+                 if (obj.material && (obj.material.name === 'select' || obj.material.name === 'hover')) return;
+                 
+                 world.meshes.add(obj);
+             }
+        });
+        console.log(`[DEBUG] Initialized world.meshes with ${world.meshes.size} items for standard tools.`);
+    }
+
     // Ensure they are enabled/configured if needed
     length.enabled = false;
     area.enabled = false;
@@ -2664,13 +2682,13 @@ function setupMeasurementTools() {
         if (!mesh.isMesh && !mesh.isInstancedMesh) return false;
         if (!mesh.visible) return false;
         if (!mesh.geometry) return false;
+
+        // Exclude highlighter/selection meshes
+        if (mesh.name === 'select' || mesh.name === 'hover') return false;
+        if (mesh.material && (mesh.material.name === 'select' || mesh.material.name === 'hover')) return false;
         
         // Geometry attributes check
         if (!mesh.geometry.attributes || !mesh.geometry.attributes.position) return false;
-        
-        // Array buffer check
-        const pos = mesh.geometry.attributes.position;
-        if (!pos.array || pos.count === 0) return false;
         
         return true;
     };
@@ -3052,6 +3070,25 @@ function setupMeasurementTools() {
         // Disable selection to prevent picking objects while measuring
         const highlighter = components.get(OBF.Highlighter);
         highlighter.enabled = false;
+
+        // Populate world.meshes for standard tools to ensure they have targets
+        if (tool === 'length' || tool === 'area') {
+             if (world.meshes) {
+                world.meshes.clear();
+                world.scene.three.traverse((obj: any) => {
+                     if ((obj.isMesh || obj.isInstancedMesh) && obj.visible) {
+                         // Exclude our helpers
+                         if (obj === cursorMesh || customMeshes.includes(obj)) return;
+                         // Exclude highlighter
+                         if (obj.name === 'select' || obj.name === 'hover') return;
+                         if (obj.material && (obj.material.name === 'select' || obj.material.name === 'hover')) return;
+                         
+                         world.meshes.add(obj);
+                     }
+                });
+                console.log(`[DEBUG] Updated world.meshes with ${world.meshes.size} items for ${tool} tool.`);
+            }
+        }
 
         if (tool === 'length') length.enabled = true;
         if (tool === 'area') area.enabled = true;
