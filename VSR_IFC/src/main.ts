@@ -1164,14 +1164,16 @@ function initSidebar() {
 
                         logToScreen(`Loaded .frag: ${file.name}`);
                     } else {
-                        // Assume IFC - SHOW ERROR/WARNING AS REQUESTED BY USER
-                        logToScreen('IFC loading is disabled. Please convert to .frag externally and load the .frag file.', true);
-                        alert('La carga directa de IFC está deshabilitada por inestabilidad. Por favor, carga archivos .frag.');
+                        logToScreen(`Loading IFC: ${file.name}...`);
+                        const data = new Uint8Array(buffer);
+                        const model = await ifcLoader.load(data, true, file.name);
+                        logToScreen(`IFC Loaded: ${file.name}`);
                         
-                        /* IFC LOADING DISABLED BY USER REQUEST
-                        logToScreen(`Loading and converting IFC: ${file.name}...`);
-                        ...
-                        */
+                        // Fit camera
+                        const bbox = new THREE.Box3().setFromObject(model.object);
+                        const sphere = new THREE.Sphere();
+                        bbox.getBoundingSphere(sphere);
+                        world.camera.controls.fitToSphere(sphere, true);
                     }
                 } catch (e) {
                     logToScreen(`Error loading file: ${e}`, true);
