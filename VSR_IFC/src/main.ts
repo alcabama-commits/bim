@@ -2701,10 +2701,27 @@ function setupMeasurementTools() {
                     vC.fromBufferAttribute(pos, valid.face.c);
 
                     // Transform to world space
-                    valid.object.updateMatrixWorld(); // Ensure matrix is up to date
-                    vA.applyMatrix4(valid.object.matrixWorld);
-                    vB.applyMatrix4(valid.object.matrixWorld);
-                    vC.applyMatrix4(valid.object.matrixWorld);
+                    // IMPORTANT: Handle InstancedMesh transformation
+                    if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
+                         const instanceMatrix = new THREE.Matrix4();
+                         valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
+                         
+                         // Apply instance matrix first, then world matrix? 
+                         // InstancedMesh world matrix usually includes the group transform.
+                         // But for InstancedMesh, the vertices are local -> instance transform -> world.
+                         
+                         const matrixWorld = valid.object.matrixWorld;
+                         
+                         vA.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                         vB.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                         vC.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                    } else {
+                        // Standard Mesh
+                        valid.object.updateMatrixWorld(); // Ensure matrix is up to date
+                        vA.applyMatrix4(valid.object.matrixWorld);
+                        vB.applyMatrix4(valid.object.matrixWorld);
+                        vC.applyMatrix4(valid.object.matrixWorld);
+                    }
 
                     // Check distances
                     const dA = hitPoint.distanceTo(vA);
@@ -3040,9 +3057,16 @@ function setupMeasurementTools() {
     
     if (deleteBtn) {
         deleteBtn.addEventListener('click', () => {
-            length.deleteAll();
-            area.deleteAll();
-            // angle.deleteAll();
+            try {
+                if (length.list) length.list.clear();
+                else if (typeof length.deleteAll === 'function') length.deleteAll();
+                
+                if (area.list) area.list.clear();
+                else if (typeof area.deleteAll === 'function') area.deleteAll();
+            } catch (e) {
+                console.error("Error clearing measurements:", e);
+            }
+
             // Clear custom measurements
             customLabels.forEach(label => label.removeFromParent());
             customLabels = [];
