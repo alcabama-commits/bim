@@ -2670,6 +2670,10 @@ function setupMeasurementTools() {
             // Manual intersection loop to isolate broken meshes
             const allIntersects: THREE.Intersection[] = [];
             for (const mesh of meshes) {
+                // Exclude highlighter/selection meshes
+                if (mesh.name === 'select' || mesh.name === 'hover') continue;
+                if (mesh.material && (mesh.material.name === 'select' || mesh.material.name === 'hover')) continue;
+
                 try {
                     const hits = raycaster.intersectObject(mesh, false);
                     if (hits.length > 0) allIntersects.push(...hits);
@@ -3032,6 +3036,39 @@ function setupMeasurementTools() {
         // Disable selection to prevent picking objects while measuring
         const highlighter = components.get(OBF.Highlighter);
         highlighter.enabled = false;
+
+        // CRITICAL: Populate world.meshes for standard tools (Length/Area) to enable their internal snapping
+        if (tool === 'length' || tool === 'area') {
+             if (world.meshes) {
+                world.meshes.clear();
+                // Collect meshes from scene or fragments
+                // We reuse the logic from getIntersection but specifically for world.meshes
+                if (fragments && fragments.list) {
+                    for (const [, group] of fragments.list) {
+                         const root = (group as any).object || (group as any).mesh || group;
+                         if (root) {
+                             const addMesh = (obj: any) => {
+                                 if (obj.isMesh && obj.visible) {
+                                     // Exclude helpers and highlighter
+                                     if (obj === cursorMesh || customMeshes.includes(obj)) return;
+                                     if (obj.name === 'select' || obj.name === 'hover') return;
+                                     if (obj.material && (obj.material.name === 'select' || obj.material.name === 'hover')) return;
+                                     
+                                     world.meshes.add(obj);
+                                 }
+                             };
+                             
+                             if (typeof root.traverse === 'function') {
+                                 root.traverse(addMesh);
+                             } else if (root.children) {
+                                 root.children.forEach((child: any) => addMesh(child));
+                             }
+                         }
+                    }
+                }
+                console.log(`[DEBUG] Updated world.meshes with ${world.meshes.size} items for ${tool} tool.`);
+            }
+        }
 
         if (tool === 'length') length.enabled = true;
         if (tool === 'area') area.enabled = true;
