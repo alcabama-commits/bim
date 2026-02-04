@@ -448,6 +448,32 @@ async function loadModel(url: string, path: string) {
 
         await fragments.core.update(true);
 
+        // --- MODEL VERIFICATION (User Request) ---
+        let hasNormals = false;
+        let hasPosition = false;
+        let checkedMeshes = 0;
+        
+        model.object.traverse((child: any) => {
+            if (child.isMesh && child.geometry) {
+                checkedMeshes++;
+                if (child.geometry.attributes.normal) hasNormals = true;
+                if (child.geometry.attributes.position) hasPosition = true;
+            }
+        });
+
+        console.log(`%c[VERIFICATION] Model Analysis for ${path}`, 'color: cyan; font-weight: bold; font-size: 14px;');
+        console.log(`[VERIFICATION] Meshes checked: ${checkedMeshes}`);
+        console.log(`[VERIFICATION] Position (Geometry): ${hasPosition ? 'YES' : 'NO'}`);
+        console.log(`[VERIFICATION] Normals: ${hasNormals ? 'YES' : 'NO'}`);
+        
+        if (hasNormals) {
+             console.log('%c[VERIFICATION] Contours/Edges capability: YES (Normals found)', 'color: lime;');
+             logToScreen('Model verification: Normals found. Snapping fully enabled.');
+        } else {
+             console.warn('[VERIFICATION] Normals MISSING. Snapping may be limited.');
+             logToScreen('Model verification: Normals MISSING. Snapping limited.', true);
+        }
+
         // Generate Edges (Snaps) for the model
         // This requires normals which are now present in the new .frag files
         /*
