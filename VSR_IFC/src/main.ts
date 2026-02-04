@@ -2753,6 +2753,15 @@ function setupMeasurementTools() {
                  }
              }
         }
+
+        // Fallback: If no meshes found in fragments, scan scene
+        if (meshes.length === 0) {
+             world.scene.three.traverse((child: any) => {
+                 if (child.isMesh && child.visible && !child.name.toLowerCase().includes('helper') && !child.name.toLowerCase().includes('grid')) {
+                      meshes.push(child);
+                 }
+             });
+        }
         
         let valid = null;
         try {
@@ -2781,6 +2790,20 @@ function setupMeasurementTools() {
             
             // Find first valid hit
             valid = allIntersects.find(hit => hit.object.visible);
+
+            // DEBUG LOGGING ON CLICK
+            if (event.type === 'click' && activeTool === 'point') {
+                console.log(`[DEBUG] Raycast: Meshes: ${meshes.length}, Hits: ${allIntersects.length}, Valid: ${!!valid}`);
+                if (valid) {
+                    console.log(`[DEBUG] Valid Hit:`, {
+                        objectType: valid.object.type,
+                        hasFace: !!valid.face,
+                        faceIndex: valid.faceIndex,
+                        instanceId: valid.instanceId,
+                        point: valid.point
+                    });
+                }
+            }
             
             if (valid) {
                 // --- ENHANCED SNAP LOGIC (Screen Space) ---
@@ -2789,7 +2812,7 @@ function setupMeasurementTools() {
                 let isSnapped = false;
                 
                 // Snap Threshold in Pixels (consistent regardless of zoom)
-                const SNAP_THRESHOLD_PX = 15; 
+                const SNAP_THRESHOLD_PX = 25; // Increased from 15 to 25
                 
                 try {
                     if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
@@ -2857,6 +2880,10 @@ function setupMeasurementTools() {
                                 bestDist = dist;
                                 bestPoint = p;
                             }
+                        }
+                        
+                        if (event.type === 'click' && activeTool === 'point') {
+                             console.log(`[DEBUG] Snap Candidates: ${candidates.length}, Best Dist: ${bestDist.toFixed(2)}px (Threshold: ${SNAP_THRESHOLD_PX})`);
                         }
 
                         if (bestPoint) {
