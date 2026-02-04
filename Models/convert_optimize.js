@@ -12,7 +12,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const modelsDir = __dirname;
-const outputDir = path.join(modelsDir, 'FRAG');
+// const outputDir = path.join(modelsDir, 'FRAG');
+const outputDir = path.resolve(__dirname, '../docs/VSR_IFC/models');
 
 // Ensure output directory exists
 if (!fs.existsSync(outputDir)) {
