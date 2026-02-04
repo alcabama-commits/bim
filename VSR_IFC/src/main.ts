@@ -5,7 +5,24 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
-console.log('VSR_IFC Version: 2026-02-03-Fix-v12-FragMeasurement');
+// ------------------------------------------------------------------------------------------------------------------
+// --- Polyfills / Monkey-patching if needed (Snapper / Edges)
+// ------------------------------------------------------------------------------------------------------------------
+// It seems OBC.Edges and OBC.Snapper are not exported in the current version of @thatopen/components.
+// We'll stub them or check if they exist on the instance to avoid build errors,
+// or use alternative logic if they were removed/renamed.
+
+// NOTE: Based on inspection of index.d.ts:
+// - OBC.Edges is NOT exported.
+// - OBC.Snapper is NOT exported.
+// - OBF.Snap exists in types, but likely not what we want for "Snapper".
+
+// We will comment out the failing lines or wrap them in try-catch with `any` casting to bypass TS check for now
+// while preserving the intent if they are available at runtime (which is unlikely if not in d.ts).
+// But for "Edges", we can try to find if there is an alternative.
+// Since we are fixing the build, we will remove the calls to missing components for now.
+
+console.log('VSR_IFC Version: 2026-02-03-Fix-v13-BuildFix');
 const versionDiv = document.createElement('div');
 versionDiv.style.position = 'fixed';
 versionDiv.style.bottom = '10px';
@@ -433,13 +450,19 @@ async function loadModel(url: string, path: string) {
 
         // Generate Edges (Snaps) for the model
         // This requires normals which are now present in the new .frag files
+        /*
         try {
-            const edges = components.get(OBC.Edges);
-            edges.generate(model);
-            logToScreen('Edges generated for snapping.');
+            // @ts-ignore
+            if (OBC.Edges) {
+                 // @ts-ignore
+                const edges = components.get(OBC.Edges);
+                edges.generate(model);
+                logToScreen('Edges generated for snapping.');
+            }
         } catch (err) {
             console.warn('Could not generate edges:', err);
         }
+        */
         
         loadedModels.set(path, model);
 
@@ -2656,13 +2679,19 @@ function setupMeasurementTools() {
     const area = components.get(OBF.AreaMeasurement);
     
     // Initialize Snapper (Native)
+    /*
     try {
-        const snapper = components.get(OBC.Snapper);
-        snapper.enabled = true;
-        snapper.snapDistance = 15;
+        // @ts-ignore
+        if (OBC.Snapper) {
+            // @ts-ignore
+            const snapper = components.get(OBC.Snapper);
+            snapper.enabled = true;
+            snapper.snapDistance = 15;
+        }
     } catch (e) {
         console.warn('Snapper component not available:', e);
     }
+    */
 
     // AngleMeasurement is not available in current version, implemented manually below
     
