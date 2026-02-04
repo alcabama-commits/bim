@@ -430,6 +430,16 @@ async function loadModel(url: string, path: string) {
         world.scene.three.add(model.object);
 
         await fragments.core.update(true);
+
+        // Generate Edges (Snaps) for the model
+        // This requires normals which are now present in the new .frag files
+        try {
+            const edges = components.get(OBC.Edges);
+            edges.generate(model);
+            logToScreen('Edges generated for snapping.');
+        } catch (err) {
+            console.warn('Could not generate edges:', err);
+        }
         
         loadedModels.set(path, model);
 
@@ -2644,6 +2654,16 @@ function setupMeasurementTools() {
     // Initialize Components
     const length = components.get(OBF.LengthMeasurement);
     const area = components.get(OBF.AreaMeasurement);
+    
+    // Initialize Snapper (Native)
+    try {
+        const snapper = components.get(OBC.Snapper);
+        snapper.enabled = true;
+        snapper.snapDistance = 15;
+    } catch (e) {
+        console.warn('Snapper component not available:', e);
+    }
+
     // AngleMeasurement is not available in current version, implemented manually below
     
     length.world = world;
