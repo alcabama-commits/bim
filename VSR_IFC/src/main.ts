@@ -2753,41 +2753,24 @@ function setupMeasurementTools() {
         
         raycaster.setFromCamera(mouse, world.camera.three);
         
-        // Collect ALL meshes from models safely
-        const meshes: THREE.Mesh[] = [];
-        if (fragments && fragments.list) {
-             for (const [, group] of fragments.list) {
-                 const root = (group as any).object || (group as any).mesh || group;
-                 
-                 if (root) {
-                    if (typeof root.traverse === 'function') {
-                        root.traverse((child: any) => {
-                            // Filter valid meshes for intersection
-                            const isValid = (child.isMesh || child.isInstancedMesh) && 
-                                            child.visible && 
-                                            // Exclude common helpers/overlays
-                                            !child.name.toLowerCase().includes('helper') &&
-                                            !child.name.toLowerCase().includes('grid') &&
-                                            // Exclude highly transparent objects (ghost planes)
-                                            !(child.material && child.material.opacity < 0.1 && child.material.transparent);
-
-                            if (isValid) {
-                                meshes.push(child as THREE.Mesh);
-                            }
-                        });
-                    }
-                 }
-             }
-        }
-
-        // Fallback: If no meshes found in fragments, scan scene
-        if (meshes.length === 0) {
-             world.scene.three.traverse((child: any) => {
-                 if (child.isMesh && child.visible && !child.name.toLowerCase().includes('helper') && !child.name.toLowerCase().includes('grid')) {
-                      meshes.push(child);
-                 }
-             });
-        }
+        // Collect ALL meshes from scene directly for robustness
+        const meshes: THREE.Object3D[] = [];
+        world.scene.three.traverse((child: any) => {
+            // Filter valid meshes/lines for intersection
+            if (!child.visible) return;
+            
+            const isMesh = child.isMesh || child.isInstancedMesh;
+            const isLine = child.isLine || child.isLineSegments;
+            
+            if ((isMesh || isLine) && 
+                !child.name.toLowerCase().includes('helper') &&
+                !child.name.toLowerCase().includes('grid') &&
+                !child.name.toLowerCase().includes('cursor') && 
+                !(child.material && child.material.opacity < 0.1 && child.material.transparent)) {
+                
+                meshes.push(child);
+            }
+        });
         
         // DEBUG: Log if no meshes found
         if (event.type === 'click' && activeTool === 'point' && meshes.length === 0) {
@@ -2798,22 +2781,11 @@ function setupMeasurementTools() {
         try {
             // Intersect collected meshes
             const allIntersects: THREE.Intersection[] = [];
-            for (const mesh of meshes) {
-                // Double check exclusion
-                if (mesh.name === 'select' || mesh.name === 'hover') continue;
-                
-                try {
-                    // Force double-sided check for better hit detection
-                    const prevSide = mesh.material ? mesh.material.side : undefined;
-                    if (mesh.material) mesh.material.side = THREE.DoubleSide;
-                    
-                    const hits = raycaster.intersectObject(mesh, false);
-                    
-                    // Restore side (optional, but good for perf)
-                    if (mesh.material && prevSide !== undefined) mesh.material.side = prevSide;
-
-                    if (hits.length > 0) allIntersects.push(...hits);
-                } catch (e) { }
+            
+            // Batch intersection for performance
+            const hits = raycaster.intersectObjects(meshes, false);
+            if (hits.length > 0) {
+                 allIntersects.push(...hits);
             }
             
             // Sort by distance
@@ -2842,12 +2814,15 @@ function setupMeasurementTools() {
                 let snapPoint = hitPoint.clone();
                 let isSnapped = false;
                 
-                // Snap Threshold in Pixels (consistent regardless of zoom)
-                const SNAP_THRESHOLD_PX = 30; // Increased from 25 to 30 for easier snapping
+                // Snap Threshold in Pixels
+                const SNAP_THRESHOLD_PX = 40;
                 
                 try {
+                    const geom = (valid.object as any).geometry;
+                    const candidates: THREE.Vector3[] = [];
+
+                    // Handle Meshes
                     if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
-                        const geom = valid.object.geometry;
                         const pos = geom.attributes.position;
                         
                         const vA = new THREE.Vector3();
@@ -2867,13 +2842,55 @@ function setupMeasurementTools() {
                              vB.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
                              vC.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
                         } else {
-                            // Ensure world matrix is up to date
                             valid.object.updateMatrixWorld(); 
                             vA.applyMatrix4(valid.object.matrixWorld);
                             vB.applyMatrix4(valid.object.matrixWorld);
                             vC.applyMatrix4(valid.object.matrixWorld);
                         }
 
+                        candidates.push(
+                            vA, vB, vC,
+                            new THREE.Vector3().addVectors(vA, vB).multiplyScalar(0.5),
+                            new THREE.Vector3().addVectors(vB, vC).multiplyScalar(0.5),
+                            new THREE.Vector3().addVectors(vC, vA).multiplyScalar(0.5)
+                        );
+                    }
+                    // Handle Lines
+                    else if ((valid.object instanceof THREE.Line || valid.object instanceof THREE.LineSegments) && valid.index !== undefined) {
+                         const pos = geom.attributes.position;
+                         const vA = new THREE.Vector3();
+                         const vB = new THREE.Vector3();
+                         
+                         let idx1, idx2;
+                         if (valid.object instanceof THREE.LineSegments) {
+                             idx1 = valid.index;
+                             idx2 = valid.index + 1;
+                             if (geom.index) {
+                                 idx1 = geom.index.getX(valid.index);
+                                 idx2 = geom.index.getX(valid.index + 1);
+                             }
+                         } else {
+                             idx1 = valid.index;
+                             idx2 = valid.index + 1;
+                             if (geom.index) {
+                                 idx1 = geom.index.getX(valid.index);
+                                 idx2 = geom.index.getX(valid.index + 1);
+                             }
+                         }
+
+                         if (idx1 !== undefined && idx2 !== undefined) {
+                             vA.fromBufferAttribute(pos, idx1);
+                             vB.fromBufferAttribute(pos, idx2);
+                             
+                             valid.object.updateMatrixWorld();
+                             vA.applyMatrix4(valid.object.matrixWorld);
+                             vB.applyMatrix4(valid.object.matrixWorld);
+                             
+                             candidates.push(vA, vB, new THREE.Vector3().addVectors(vA, vB).multiplyScalar(0.5));
+                         }
+                    }
+
+                    if (candidates.length > 0) {
                         // Project to Screen Space for "Visual" Snapping
                         const toScreen = (v: THREE.Vector3) => {
                             const p = v.clone().project(world.camera.three);
@@ -2881,26 +2898,17 @@ function setupMeasurementTools() {
                             return {
                                 x: (p.x * 0.5 + 0.5) * rect.width + rect.left,
                                 y: (-(p.y * 0.5) + 0.5) * rect.height + rect.top,
-                                z: p.z // Depth
+                                z: p.z 
                             };
                         };
 
                         const mouseScreen = { x: event.clientX, y: event.clientY };
                         
-                        // Candidates: Vertices + Midpoints
-                        const candidates = [
-                            vA, vB, vC,
-                            new THREE.Vector3().addVectors(vA, vB).multiplyScalar(0.5), // Mid AB
-                            new THREE.Vector3().addVectors(vB, vC).multiplyScalar(0.5), // Mid BC
-                            new THREE.Vector3().addVectors(vC, vA).multiplyScalar(0.5)  // Mid CA
-                        ];
-
                         let bestDist = SNAP_THRESHOLD_PX;
                         let bestPoint = null;
 
                         for (const p of candidates) {
                             const s = toScreen(p);
-                            // Ignore if behind camera (z > 1 means outside frustum in NDC)
                             if (Math.abs(s.z) > 1) continue; 
 
                             const dx = s.x - mouseScreen.x;
@@ -2913,18 +2921,10 @@ function setupMeasurementTools() {
                             }
                         }
                         
-                        if (event.type === 'click' && activeTool === 'point') {
-                             console.log(`[DEBUG] Snap Candidates: ${candidates.length}, Best Dist: ${bestDist.toFixed(2)}px (Threshold: ${SNAP_THRESHOLD_PX})`);
-                        }
-
                         if (bestPoint) {
                             snapPoint = bestPoint;
                             isSnapped = true;
                         }
-                    } else {
-                         if (event.type === 'click' && activeTool === 'point') {
-                             console.warn("[DEBUG] Valid hit but no face or not a mesh/instancedMesh");
-                         }
                     }
                 } catch (err) {
                     console.warn("Snap calculation error:", err);
