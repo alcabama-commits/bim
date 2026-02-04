@@ -2789,6 +2789,11 @@ function setupMeasurementTools() {
              });
         }
         
+        // DEBUG: Log if no meshes found
+        if (event.type === 'click' && activeTool === 'point' && meshes.length === 0) {
+            console.warn("[DEBUG] No meshes found for intersection!");
+        }
+        
         let valid = null;
         try {
             // Intersect collected meshes
@@ -2838,7 +2843,7 @@ function setupMeasurementTools() {
                 let isSnapped = false;
                 
                 // Snap Threshold in Pixels (consistent regardless of zoom)
-                const SNAP_THRESHOLD_PX = 25; // Increased from 15 to 25
+                const SNAP_THRESHOLD_PX = 30; // Increased from 25 to 30 for easier snapping
                 
                 try {
                     if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
@@ -2895,8 +2900,8 @@ function setupMeasurementTools() {
 
                         for (const p of candidates) {
                             const s = toScreen(p);
-                            // Ignore if behind camera
-                            if (s.z > 1) continue; 
+                            // Ignore if behind camera (z > 1 means outside frustum in NDC)
+                            if (Math.abs(s.z) > 1) continue; 
 
                             const dx = s.x - mouseScreen.x;
                             const dy = s.y - mouseScreen.y;
@@ -2916,6 +2921,10 @@ function setupMeasurementTools() {
                             snapPoint = bestPoint;
                             isSnapped = true;
                         }
+                    } else {
+                         if (event.type === 'click' && activeTool === 'point') {
+                             console.warn("[DEBUG] Valid hit but no face or not a mesh/instancedMesh");
+                         }
                     }
                 } catch (err) {
                     console.warn("Snap calculation error:", err);
