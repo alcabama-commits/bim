@@ -13,7 +13,8 @@ const __dirname = path.dirname(__filename);
 
 const modelsDir = __dirname;
 // const outputDir = path.join(modelsDir, 'FRAG');
-const outputDir = path.resolve(__dirname, '../docs/VSR_IFC/models');
+// Guardar en la nueva carpeta FRAG_UBI
+const outputDir = path.resolve(__dirname, 'FRAG_UBI');
 
 // Ensure output directory exists
 if (!fs.existsSync(outputDir)) {
@@ -48,6 +49,14 @@ async function convertAndOptimize() {
     const importer = new IfcImporter();
     const wasmPath = path.resolve(__dirname, '../VSR_IFC/node_modules/web-ifc/');
     importer.wasm = { path: wasmPath + '/', absolute: true };
+
+    // Configurar ajustes de importación para geometría precisa
+    if (importer.settings) {
+        importer.settings.webIfc = {
+            COORDINATE_TO_ORIGIN: true, // CRUCIAL para snapping (evita jitter en coordenadas grandes)
+            USE_FAST_BOOLS: false // Desactivar para mayor precisión geométrica
+        };
+    }
     
     // Default settings (match original script)
     // importer.settings = ...
@@ -76,7 +85,7 @@ async function convertAndOptimize() {
             console.log(`  -> Generating Optimized JSON...`);
             let modelID;
             try {
-                modelID = ifcApi.OpenModel(data);
+                modelID = ifcApi.OpenModel(data, { COORDINATE_TO_ORIGIN: true });
             } catch (e) {
                 console.error("WebIFC OpenModel failed:", e);
                 throw e;

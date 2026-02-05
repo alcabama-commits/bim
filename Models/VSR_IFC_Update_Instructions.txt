@@ -1,0 +1,63 @@
+INSTRUCCIONES PARA ACTUALIZAR EL VISOR (VSR_IFC)
+================================================
+
+Debido a restricciones de permisos, no puedo editar directamente tu carpeta VSR_IFC.
+Por favor, realiza este cambio manualmente para habilitar la visualización de bordes (snapping visual).
+
+ARCHIVO: VSR_IFC/src/main.ts
+----------------------------
+
+1. Abre el archivo `src/main.ts` en tu editor.
+
+2. Copia y pega esta función ANTES de la función `loadModel`:
+
+// --- INICIO CÓDIGO A PEGAR ---
+/**
+ * Genera geometría de bordes en memoria para permitir Snapping si el archivo original no los tiene.
+ */
+export function ensureModelEdges(model: any) {
+    if (!model || !model.items) return;
+    
+    console.log(`[DEBUG] Verificando/Generando geometría de bordes para el modelo ${model.uuid}...`);
+    
+    // Material para los bordes (semi-transparente para no interferir visualmente demasiado)
+    const lineMaterial = new THREE.LineBasicMaterial({ 
+        color: 0x333333, 
+        transparent: true, 
+        opacity: 0.5,
+        depthTest: false
+    });
+
+    for (const fragment of model.items) {
+        if (!fragment.geometry) continue;
+        if (fragment.userData.hasEdges) continue;
+        
+        try {
+            const edgesGeo = new THREE.EdgesGeometry(fragment.geometry);
+            const edgesMesh = new THREE.InstancedMesh(edgesGeo, lineMaterial, fragment.count);
+            
+            if (fragment.instanceMatrix) edgesMesh.instanceMatrix = fragment.instanceMatrix;
+            
+            edgesMesh.userData.originalFragment = fragment;
+            edgesMesh.userData.isEdge = true;
+            
+            model.object.add(edgesMesh);
+            fragment.userData.hasEdges = true;
+        } catch (e) {
+            console.error(`Error generando bordes para el fragmento ${fragment.id}:`, e);
+        }
+    }
+    console.log(`[DEBUG] Generación de bordes completada para ${model.uuid}`);
+}
+// --- FIN CÓDIGO A PEGAR ---
+
+3. Busca la función `loadModel` y añade esta línea justo antes de `loadedModels.set(path, model);`:
+
+    // Generar bordes para snapping
+    ensureModelEdges(model);
+
+------------------------------------------------
+NOTA IMPORTANTE:
+He actualizado el "Convertidor" (IFC_Converter_Portable.zip) para que genere modelos con
+geometría centrada en el origen (COORDINATE_TO_ORIGIN). Esto es CRÍTICO para que el snapping
+funcione correctamente. Asegúrate de volver a convertir tus modelos usando la nueva versión.
