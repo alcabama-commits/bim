@@ -283,7 +283,11 @@ ifcLoader.setup({
         absolute: true,
         logLevel: 2 // Debug level
     },
-    autoSetWasm: false
+    autoSetWasm: false,
+    webIfc: {
+        COORDINATE_TO_ORIGIN: true,
+        USE_FAST_BOOLS: false
+    }
 });
 
 // Expose IFC conversion test for debugging
