@@ -5,16 +5,16 @@ import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const WebIFC = require('../VSR_IFC/node_modules/web-ifc');
-const { IfcImporter } = require('../VSR_IFC/node_modules/@thatopen/fragments');
+const WebIFC = require('./LocalViewer/node_modules/web-ifc');
+const { IfcImporter } = require('./LocalViewer/node_modules/@thatopen/fragments');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const modelsDir = __dirname;
 // const outputDir = path.join(modelsDir, 'FRAG');
-// Guardar en la nueva carpeta FRAG_UBI
-const outputDir = path.resolve(__dirname, 'FRAG_UBI');
+// Guardar automáticamente en el nuevo LocalViewer
+const outputDir = path.resolve(__dirname, 'LocalViewer/public/models');
 
 // Ensure output directory exists
 if (!fs.existsSync(outputDir)) {
@@ -29,6 +29,9 @@ const EXCLUDE_TYPES_PATTERN = /POINT|DIRECTION|PLACEMENT|SHAPE|SOLID|FACE|LOOP|V
 const KEEP_TYPES_PATTERN = /PROJECT|SITE|BUILDING|STOREY|SPACE|WALL|SLAB|WINDOW|DOOR|BEAM|COLUMN|MEMBER|PLATE|ROOF|STAIR|RAMP|RAILING|CURTAIN|COVERING|FURNISHING|ELEMENT|FLOW|DISTRIBUTION|PROXY|REL|PROPERTY|QUANTITY|MATERIAL|GROUP|SYSTEM|ZONE|TYPE/;
 
 async function convertAndOptimize() {
+    console.log(`\n==================================================`);
+    console.log(`STARTING IFC CONVERSION - ${new Date().toLocaleString()}`);
+    console.log(`==================================================\n`);
     console.log(`Found ${files.length} IFC models to process.`);
     
     // Initialize WebIFC
@@ -47,7 +50,7 @@ async function convertAndOptimize() {
 
     // Initialize Importer ONCE
     const importer = new IfcImporter();
-    const wasmPath = path.resolve(__dirname, '../VSR_IFC/node_modules/web-ifc/');
+    const wasmPath = path.resolve(__dirname, 'LocalViewer/node_modules/web-ifc/');
     importer.wasm = { path: wasmPath + '/', absolute: true };
 
     // Configurar ajustes de importación para geometría precisa

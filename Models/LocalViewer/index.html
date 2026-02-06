@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="version" content="1.8.0-pink-selection" />
+    <!--
+    <script>
+      // COI Service Worker Registration for SharedArrayBuffer support
+      if (!window.crossOriginIsolated && "serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./coi-serviceworker.js")
+          .then((registration) => {
+            console.log("COI Service Worker registered");
+            // Reload if not already controlled to ensure headers are applied
+            registration.addEventListener("updatefound", () => {
+                window.location.reload();
+            });
+            if (registration.active && !navigator.serviceWorker.controller) {
+                window.location.reload();
+            }
+          })
+          .catch((err) => console.error("COI Registration Failed:", err));
+      }
+    </script>
+    -->
+    <link rel="icon" type="image/svg+xml" href="vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VSR IFC Viewer v1.9-SnapFix</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <div id="app">
+      <!-- Sidebar (Left - Models) -->
+      <div id="sidebar" class="sidebar">
+        
+        <div class="sidebar-tabs">
+            <button class="tab-btn active" data-tab="models" title="Modelos">
+                <i class="fa-solid fa-cubes"></i>
+            </button>
+            <button class="tab-btn" data-tab="classification" title="Clasificación">
+                <i class="fa-solid fa-tags"></i>
+            </button>
+        </div>
+
+        <div id="tab-models" class="tab-content active">
+            <div class="sidebar-header">
+                <h3><i class="fa-solid fa-cubes"></i> Modelos IFC</h3>
+            </div>
+            
+            <div class="sidebar-content" id="model-list">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <div id="tab-classification" class="tab-content" style="display: none;">
+            <div class="sidebar-header">
+                <h3><i class="fa-solid fa-tags"></i> Clasificación</h3>
+            </div>
+            
+            <div class="sidebar-content" id="classification-list">
+                <div style="padding: 20px; text-align: center; color: #888;">
+                    Carga un modelo para ver la clasificación
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-footer">
+           <input type="file" id="file-input" accept=".ifc,.frag" style="display: none;">
+           <label for="file-input" class="upload-btn">
+             <i class="fa-solid fa-upload"></i> Cargar Local
+           </label>
+        </div>
+        <div class="resizer" id="sidebar-resizer"></div>
+      </div>
+
+      <!-- Properties Panel (Right) -->
+      <div id="properties-panel" class="properties-panel">
+        <div class="resizer-left" id="properties-resizer"></div>
+        <div class="properties-header">
+            <h3><i class="fa-solid fa-circle-info"></i> Propiedades</h3>
+        </div>
+        <div class="properties-content" id="properties-content">
+            <div class="no-selection">Selecciona un elemento para ver sus propiedades</div>
+        </div>
+      </div>
+
+      <div id="loading-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000;">
+        <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
+            <div style="margin-bottom: 10px; font-weight: bold; color: #333;">Loading Model...</div>
+            <div id="loading-progress" style="color: #333;">0%</div>
+        </div>
+      </div>
+      <div id="debug-console" style="position: fixed; bottom: 0; right: 0; width: 400px; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace; font-size: 12px; padding: 10px; pointer-events: none; z-index: 999; display: none;"></div>
+      <div id="viewer-container"></div>
+
+      <!-- Top Bar -->
+      <header class="top-bar">
+          <div class="logo-container">
+              <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar modelos">
+                  <i class="fa-solid fa-bars"></i>
+              </button>
+              <img id="logo-img" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png" alt="Alcabama" class="logo-img" style="height: 40px;">
+          </div>
+
+          <div class="top-controls" style="display: flex; align-items: center; gap: 15px;">
+           <button id="theme-toggle" class="theme-btn" title="Cambiar Tema" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-dark-gray);">
+               <i class="fa-solid fa-moon"></i>
+           </button>
+ 
+           <div class="view-dropdown-container">
+               <button id="view-dropdown-btn" class="view-dropdown-btn">
+                   <span><i class="fa-solid fa-cube"></i> Vista axonométrica</span>
+                   <i class="fa-solid fa-chevron-down"></i>
+               </button>
+               <div id="view-dropdown-menu" class="view-dropdown-menu">
+                   <button class="view-dropdown-item view-btn" data-view="iso">
+                       <i class="fa-solid fa-cube"></i> Vista axonométrica
+                   </button>
+                   <button class="view-dropdown-item view-btn" data-view="top">
+                       <i class="fa-solid fa-cube"></i> Vista superior
+                   </button>
+                   <button class="view-dropdown-item view-btn" data-view="front">
+                       <i class="fa-solid fa-cube"></i> Vista frontal
+                   </button>
+                   <button class="view-dropdown-item view-btn" data-view="left">
+                       <i class="fa-solid fa-cube"></i> Vista izquierda
+                   </button>
+                   <button class="view-dropdown-item view-btn" data-view="back">
+                       <i class="fa-solid fa-cube"></i> Vista posterior
+                   </button>
+                   <button class="view-dropdown-item view-btn" data-view="right">
+                       <i class="fa-solid fa-cube"></i> Vista derecha
+                   </button>
+                   <button class="view-dropdown-item view-btn" data-view="bottom">
+                       <i class="fa-solid fa-cube"></i> Vista inferior
+                   </button>
+               </div>
+           </div>
+ 
+           <button id="projection-toggle" class="projection-toggle-btn" title="Cambiar proyección (Perspectiva/Ortogonal)">
+              <i class="fa-solid fa-cubes"></i>
+              <span>Persp</span>
+          </button>
+
+          <button id="fit-model-btn" class="fit-model-btn" title="Ajustar modelo a pantalla" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-dark-gray);">
+              <i class="fa-solid fa-compress-arrows-alt"></i>
+          </button>
+
+          <!-- Visibility Controls -->
+          <div style="display: flex; gap: 5px; margin: 0 10px; border-left: 1px solid #ccc; border-right: 1px solid #ccc; padding: 0 10px;">
+              <button id="btn-hide" class="projection-toggle-btn" title="Ocultar selección">
+                  <i class="fa-solid fa-eye-slash"></i>
+                  <span>Apagar</span>
+              </button>
+              <button id="btn-isolate" class="projection-toggle-btn" title="Aislar selección">
+                  <i class="fa-solid fa-filter"></i>
+                  <span>Aislar</span>
+              </button>
+              <button id="btn-show-all" class="projection-toggle-btn" title="Mostrar todo">
+                  <i class="fa-solid fa-eye"></i>
+                  <span>Todo</span>
+              </button>
+          </div>
+
+          <div style="display: flex; gap: 5px; margin: 0 10px; border-left: 1px solid #ccc; border-right: 1px solid #ccc; padding: 0 10px;">
+              <button id="btn-measure-length" class="projection-toggle-btn" title="Medir Longitud">
+                  <i class="fa-solid fa-ruler"></i>
+              </button>
+              <button id="btn-measure-area" class="projection-toggle-btn" title="Medir Área">
+                  <i class="fa-solid fa-vector-square"></i>
+              </button>
+              <button id="btn-measure-angle" class="projection-toggle-btn" title="Medir Ángulo">
+                  <i class="fa-solid fa-bezier-curve"></i>
+              </button>
+              <button id="btn-measure-slope" class="projection-toggle-btn" title="Medir Pendiente">
+                  <i class="fa-solid fa-chart-line"></i>
+              </button>
+              <button id="btn-measure-point" class="projection-toggle-btn" title="Coordenada Punto">
+                  <i class="fa-solid fa-location-crosshairs"></i>
+              </button>
+              <button id="btn-measure-delete" class="projection-toggle-btn" title="Borrar Medidas" style="color: #e91e63;">
+                  <i class="fa-solid fa-trash"></i>
+              </button>
+          </div>
+
+          <button id="grid-toggle" class="projection-toggle-btn active" title="Mostrar/Ocultar Rejilla">
+              <i class="fa-solid fa-border-all"></i>
+              <span>Rejilla</span>
+          </button>
+
+          <button id="clipper-toggle" class="projection-toggle-btn" title="Herramienta de recorte (doble clic para crear plano)">
+              <i class="fa-solid fa-scissors"></i>
+              <span>Recorte</span>
+          </button>
+
+          <div id="clipper-controls" class="clipper-controls" style="display: none; gap: 5px; align-items: center; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 4px; margin-left: 10px;">
+              <button id="clipper-delete-all" class="projection-toggle-btn" title="Borrar todos los planos" style="padding: 5px 8px;">
+                  <i class="fa-solid fa-trash"></i>
+              </button>
+              <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
+              <button class="projection-toggle-btn clipper-plane-btn" data-axis="x" title="Cortar en X" style="padding: 5px 8px;">X</button>
+              <button class="projection-toggle-btn clipper-plane-btn" data-axis="y" title="Cortar en Y" style="padding: 5px 8px;">Y</button>
+              <button class="projection-toggle-btn clipper-plane-btn" data-axis="z" title="Cortar en Z" style="padding: 5px 8px;">Z</button>
+          </div>
+ 
+           <button id="properties-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar propiedades">
+               <i class="fa-solid fa-circle-info"></i>
+           </button>
+      </div>
+      </header>
+
+      <!-- Console Toggle (Moved to bottom left standalone) -->
+      <div class="console-toggle-container">
+          <button id="console-toggle" class="console-btn" title="Toggle Console">
+              <i class="fa-solid fa-terminal"></i>
+          </button>
+      </div>
+
+    </div>
+  </body>
+</html>

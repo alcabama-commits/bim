@@ -1,0 +1,35 @@
+INSTRUCCIONES DEL ENTORNO UNIFICADO
+===================================
+
+Has creado un entorno totalmente local que combina el Convertidor y el Visor.
+Esto elimina problemas de permisos, rutas externas y desincronización.
+
+PASO 1: PREPARACIÓN
+-------------------
+1. Asegúrate de estar en la carpeta "Models".
+2. Si es la primera vez, instala las dependencias (ya copiamos muchas, pero por seguridad):
+   cd LocalViewer
+   npm install
+
+PASO 2: CONVERTIR MODELOS
+-------------------------
+1. Coloca tus archivos .IFC en la carpeta "Models".
+2. Ejecuta el convertidor desde "Models":
+   node convert_optimize.js
+
+   -> Esto generará los archivos .frag y .json optimizados (con coordenadas al origen)
+      directamente en "Models/LocalViewer/public/models".
+
+PASO 3: INICIAR EL VISOR
+------------------------
+1. Entra a la carpeta LocalViewer:
+   cd LocalViewer
+2. Inicia el servidor de desarrollo:
+   npm run dev
+
+3. Abre el link que aparece (usualmente http://localhost:5173).
+
+VENTAJAS DE ESTE MÉTODO:
+- Snapping: El visor local tiene el parche "ensureModelEdges" aplicado.
+- Geometría: El convertidor centra los modelos (0,0,0) automáticamente.
+- Sincronización: Los archivos van directo a donde el visor los busca.
