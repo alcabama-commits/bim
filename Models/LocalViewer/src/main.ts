@@ -1,4 +1,4 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as BUI from '@thatopen/ui';
@@ -23,6 +23,26 @@ THREE.BufferAttribute.prototype.getX = function(index) {
     if (!this.array || this.array.length === 0) return 0;
     try {
         return originalGetX.call(this, index);
+    } catch (e) {
+        return 0;
+    }
+};
+
+const originalGetY = THREE.BufferAttribute.prototype.getY;
+THREE.BufferAttribute.prototype.getY = function(index) {
+    if (!this.array || this.array.length === 0) return 0;
+    try {
+        return originalGetY.call(this, index);
+    } catch (e) {
+        return 0;
+    }
+};
+
+const originalGetZ = THREE.BufferAttribute.prototype.getZ;
+THREE.BufferAttribute.prototype.getZ = function(index) {
+    if (!this.array || this.array.length === 0) return 0;
+    try {
+        return originalGetZ.call(this, index);
     } catch (e) {
         return 0;
     }
@@ -150,7 +170,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-03-Fix-v12-FragMeasurement';
+versionDiv.textContent = 'v2026-02-09-Fix-v13-BufferSafe';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
