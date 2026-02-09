@@ -71,6 +71,22 @@ THREE.InterleavedBufferAttribute.prototype.getZ = function(index) {
     }
 };
 
+// --- NEW CRITICAL FIX: Patch Vector3.fromBufferAttribute ---
+// This catches the specific crash seen in the stack trace (Se.fromBufferAttribute -> Os.getY)
+const originalFromBufferAttribute = THREE.Vector3.prototype.fromBufferAttribute;
+THREE.Vector3.prototype.fromBufferAttribute = function(attribute, index) {
+    try {
+        // Safety check: ensure attribute is valid
+        if (!attribute) {
+            return this.set(0, 0, 0);
+        }
+        return originalFromBufferAttribute.call(this, attribute, index);
+    } catch (e) {
+        // Silently recover from geometry errors to prevent viewer crash
+        return this.set(0, 0, 0);
+    }
+};
+
 const originalRaycast = THREE.Mesh.prototype.raycast;
 THREE.Mesh.prototype.raycast = function(raycaster, intersects) {
     try {
@@ -96,6 +112,33 @@ THREE.LineSegments.prototype.raycast = function(raycaster, intersects) {
         originalLineSegmentsRaycast.call(this, raycaster, intersects);
     } catch (e) {
     }
+};
+
+// Helper to secure mesh attributes against crashes (for mixed THREE versions)
+const secureMeshAttributes = (mesh: any) => {
+    if (!mesh.geometry || !mesh.geometry.attributes) return;
+    
+    ['position', 'normal', 'uv'].forEach(attrName => {
+        const attr = mesh.geometry.attributes[attrName];
+        if (attr && !attr._isPatched) {
+            // Patch getX
+            const origGetX = attr.getX;
+            attr.getX = function(index: number) {
+                try { return origGetX.call(this, index); } catch(e) { return 0; }
+            };
+            // Patch getY
+            const origGetY = attr.getY;
+            attr.getY = function(index: number) {
+                try { return origGetY.call(this, index); } catch(e) { return 0; }
+            };
+            // Patch getZ
+            const origGetZ = attr.getZ;
+            attr.getZ = function(index: number) {
+                try { return origGetZ.call(this, index); } catch(e) { return 0; }
+            };
+            attr._isPatched = true;
+        }
+    });
 };
 
 // Patch acceleratedRaycast if it exists (three-mesh-bvh)
@@ -641,6 +684,7 @@ async function loadModel(url: string, path: string) {
         model.object.traverse((child: any) => {
             if (child.isMesh) {
                 world.meshes.add(child);      // Correct fix for SimpleRaycaster
+                secureMeshAttributes(child);  // Prevent geometry crashes
             }
         });
 
@@ -1389,6 +1433,7 @@ function initSidebar() {
                         model.object.traverse((child: any) => {
                             if (child.isMesh) {
                                 world.meshes.add(child);
+                                secureMeshAttributes(child);
                             }
                         });
 
@@ -1478,6 +1523,7 @@ function initSidebar() {
                         model.object.traverse((child: any) => {
                             if (child.isMesh) {
                                 world.meshes.add(child);
+                                secureMeshAttributes(child);
                             }
                         });
                         
