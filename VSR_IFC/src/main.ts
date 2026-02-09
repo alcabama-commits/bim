@@ -21,6 +21,26 @@ THREE.BufferAttribute.prototype.getX = function(index) {
     }
 };
 
+const originalGetY = THREE.BufferAttribute.prototype.getY;
+THREE.BufferAttribute.prototype.getY = function(index) {
+    if (!this.array || this.array.length === 0) return 0;
+    try {
+        return originalGetY.call(this, index);
+    } catch (e) {
+        return 0;
+    }
+};
+
+const originalGetZ = THREE.BufferAttribute.prototype.getZ;
+THREE.BufferAttribute.prototype.getZ = function(index) {
+    if (!this.array || this.array.length === 0) return 0;
+    try {
+        return originalGetZ.call(this, index);
+    } catch (e) {
+        return 0;
+    }
+};
+
 const originalInterleavedGetX = THREE.InterleavedBufferAttribute.prototype.getX;
 THREE.InterleavedBufferAttribute.prototype.getX = function(index) {
     try {
@@ -77,6 +97,35 @@ THREE.LineSegments.prototype.raycast = function(raycaster, intersects) {
     } catch (e) {
     }
 };
+
+// Patch acceleratedRaycast if it exists (three-mesh-bvh)
+// We wrap it in a getter/setter or just check periodically, 
+// but since it's likely already loaded by imports, we check now.
+const patchAcceleratedRaycast = () => {
+    const proto = THREE.Mesh.prototype as any;
+    if (proto.acceleratedRaycast && !proto._patchedAcceleratedRaycast) {
+        const originalAccelerated = proto.acceleratedRaycast;
+        proto.acceleratedRaycast = function(raycaster: any, intersects: any) {
+            try {
+                if (!this.geometry || !this.geometry.attributes.position) return;
+                
+                // Ensure bounding sphere exists to prevent culling issues
+                if (!this.geometry.boundingSphere) {
+                    this.geometry.computeBoundingSphere();
+                }
+                
+                originalAccelerated.call(this, raycaster, intersects);
+            } catch (e) {
+                // console.warn('Prevented acceleratedRaycast crash', e);
+            }
+        };
+        proto._patchedAcceleratedRaycast = true;
+        console.log('[Fix] Patched acceleratedRaycast successfully');
+    }
+};
+// Try patching immediately and also after a small delay in case it loads async
+patchAcceleratedRaycast();
+setTimeout(patchAcceleratedRaycast, 1000);
 
 console.log('VSR_IFC Version: 2026-02-03-Fix-v13-BuildFix');
 const versionDiv = document.createElement('div');
@@ -138,6 +187,12 @@ BUI.Manager.init();
 const grids = components.get(OBC.Grids);
 grids.create(world);
 
+// CRITICAL: Keep Fragments engine in sync with camera for culling/LOD
+// This prevents models from disappearing or flickering during movement/rest
+world.camera.controls.addEventListener('rest', () => {
+    fragments.core.update(true);
+});
+
 // --- IFC & Fragments Setup ---
 
 const baseUrl = import.meta.env.BASE_URL || './';
@@ -154,6 +209,80 @@ try {
 
 const classifier = components.get(OBC.Classifier);
 const hider = components.get(OBC.Hider);
+
+// Monkey-patch Hider to sync hiddenItems globally
+const originalSet = hider.set.bind(hider);
+hider.set = async (visible: boolean, items?: any) => {
+    await originalSet(visible, items);
+    
+    if (items && Object.keys(items).length > 0) {
+        updateHiddenItems(items, visible);
+    } else if (visible) {
+        // Show All case
+        for (const key in hiddenItems) {
+            delete hiddenItems[key];
+        }
+    }
+};
+
+const originalIsolate = hider.isolate.bind(hider);
+hider.isolate = async (selection: any) => {
+    await originalIsolate(selection);
+    
+    // Sync hiddenItems for Isolate
+    try {
+         console.warn("[DEBUG] Global Isolate Triggered. Syncing hiddenItems...");
+         console.log("[DEBUG] Selection keys:", Object.keys(selection));
+
+         for (const [uuid, model] of fragments.list) {
+             const allIds = await model.getItemsIdsWithGeometry();
+             
+             // Collect visible IDs for this model
+             const visibleIDsForThisModel = new Set<number>();
+             
+             // Selection is Record<FragmentID, Iterable<ExpressID>>
+             for (const [fragID, idSet] of Object.entries(selection)) {
+                 // Check if this fragment belongs to the current model
+                 // 1. Check if fragID IS the model UUID
+                 let belongs = (fragID === uuid);
+                 
+                 // 2. Check if fragID is one of the fragments in the model
+                 if (!belongs) {
+                     if (model.items && model.items.length > 0) {
+                         belongs = model.items.some((f: any) => f.id === fragID);
+                     } else if (model.children && model.children.length > 0) {
+                         // Fallback: check Three.js children (Meshes/Fragments)
+                         // Fragment objects usually have 'id' matching the fragment ID
+                         belongs = model.children.some((child: any) => child.uuid === fragID);
+                     }
+                 }
+                 
+                 if (belongs) {
+                     console.log(`[DEBUG] Fragment ${fragID} belongs to model ${uuid}`);
+                     const items = idSet instanceof Set ? idSet : (Array.isArray(idSet) ? idSet : []);
+                     for(const id of (items as any)) visibleIDsForThisModel.add(id);
+                 }
+             }
+             
+             if (!hiddenItems[uuid]) hiddenItems[uuid] = new Set();
+             const hiddenSet = hiddenItems[uuid];
+             hiddenSet.clear(); // Reset before repopulating based on Isolate logic
+             
+             let hiddenCount = 0;
+             for (const id of allIds) {
+                 if (visibleIDsForThisModel.has(id)) {
+                     // It's visible
+                 } else {
+                     hiddenSet.add(id);
+                     hiddenCount++;
+                 }
+             }
+             console.log(`[DEBUG] Model ${uuid}: Total ${allIds.size}, Visible ${visibleIDsForThisModel.size}, Hidden ${hiddenCount}`);
+         }
+    } catch (e) {
+         console.error("Error updating hidden items during global isolate:", e);
+    }
+};
 
 // Monkey-patch Hider to sync hiddenItems globally
 const originalSet = hider.set.bind(hider);
@@ -505,6 +634,15 @@ async function loadModel(url: string, path: string) {
         model.useCamera(world.camera.three);
 
         world.scene.three.add(model.object);
+
+        // CRITICAL: Register meshes for OBC.Raycasters (Official Tool Support)
+        // The official tools (Length, Area) query world.meshes (SimpleRaycaster).
+        // We must populate it manually since we are loading raw fragments/models.
+        model.object.traverse((child: any) => {
+            if (child.isMesh) {
+                world.meshes.add(child);      // Correct fix for SimpleRaycaster
+            }
+        });
 
         await fragments.core.update(true);
 
@@ -1246,6 +1384,14 @@ function initSidebar() {
                         
                         model.useCamera(world.camera.three);
                         world.scene.three.add(model.object);
+                        
+                        // CRITICAL: Register meshes for OBC.Raycasters (Official Tool Support)
+                        model.object.traverse((child: any) => {
+                            if (child.isMesh) {
+                                world.meshes.add(child);
+                            }
+                        });
+
                         await fragments.core.update(true);
                         
                         const bbox = new THREE.Box3().setFromObject(model.object);
@@ -1327,6 +1473,13 @@ function initSidebar() {
                         if (!model.object.parent) {
                             world.scene.three.add(model.object);
                         }
+
+                        // CRITICAL: Register meshes for OBC.Raycasters (Official Tool Support)
+                        model.object.traverse((child: any) => {
+                            if (child.isMesh) {
+                                world.meshes.add(child);
+                            }
+                        });
                         
                         // Classify and update UI
                         logToScreen(`IFC Loaded: ${file.name}. Classifying...`);
