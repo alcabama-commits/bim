@@ -1,9 +1,18 @@
-import * as THREE from 'three';
+﻿import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
+
+// --- Measurement State (Hoisted to top to avoid ReferenceError) ---
+let measurementMode: 'length' | 'point' | null = null;
+let measurementPoints: THREE.Vector3[] = [];
+let tempMeasurementLine: THREE.Line | null = null;
+const measurementLabels: HTMLElement[] = [];
+const measurementMarkers: THREE.Mesh[] = [];
+let snappingCursor: THREE.Mesh | null = null;
+
 
 // --- CRITICAL FIX: Monkey-patch THREE.BufferAttribute.prototype.getX to prevent crashes ---
 // The measurement tool's raycaster crashes when hitting geometry with undefined attributes.
@@ -12,18 +21,40 @@ const originalGetX = THREE.BufferAttribute.prototype.getX;
 THREE.BufferAttribute.prototype.getX = function(index) {
     // Safety check: if array is missing or index is out of bounds
     if (!this.array || this.array.length === 0) return 0;
-    // itemSize is typically 3 for position, but can vary. 
-    // We just want to ensure we don't read undefined.
-    // Note: TypedArrays don't throw on out-of-bounds access (they return undefined), 
-    // but the error "Cannot read properties of undefined (reading '0')" suggests 
-    // that 'this.array' itself might be undefined or something is trying to access it via an index operator 
-    // and failing before getX logic. 
-    // Actually, standard getX is: return this.array[ index * this.itemSize ];
-    // If this.array is undefined, it throws.
     try {
         return originalGetX.call(this, index);
     } catch (e) {
-        // console.warn('Prevented BufferAttribute.getX crash', e);
+        return 0;
+    }
+};
+
+// Patch InterleavedBufferAttribute as well (Crucial for IFC models)
+const originalInterleavedGetX = THREE.InterleavedBufferAttribute.prototype.getX;
+THREE.InterleavedBufferAttribute.prototype.getX = function(index) {
+    try {
+        if (!this.data || !this.data.array) return 0;
+        return originalInterleavedGetX.call(this, index);
+    } catch (e) {
+        return 0;
+    }
+};
+
+const originalInterleavedGetY = THREE.InterleavedBufferAttribute.prototype.getY;
+THREE.InterleavedBufferAttribute.prototype.getY = function(index) {
+    try {
+        if (!this.data || !this.data.array) return 0;
+        return originalInterleavedGetY.call(this, index);
+    } catch (e) {
+        return 0;
+    }
+};
+
+const originalInterleavedGetZ = THREE.InterleavedBufferAttribute.prototype.getZ;
+THREE.InterleavedBufferAttribute.prototype.getZ = function(index) {
+    try {
+        if (!this.data || !this.data.array) return 0;
+        return originalInterleavedGetZ.call(this, index);
+    } catch (e) {
         return 0;
     }
 };
@@ -37,6 +68,27 @@ THREE.Mesh.prototype.raycast = function(raycaster, intersects) {
         originalRaycast.call(this, raycaster, intersects);
     } catch (e) {
         // console.warn('Prevented Mesh.raycast crash', e);
+    }
+};
+
+// Patch Line and LineSegments raycast as well
+const originalLineRaycast = THREE.Line.prototype.raycast;
+THREE.Line.prototype.raycast = function(raycaster, intersects) {
+    try {
+        if (!this.geometry) return;
+        originalLineRaycast.call(this, raycaster, intersects);
+    } catch (e) {
+        // console.warn('Prevented Line.raycast crash', e);
+    }
+};
+
+const originalLineSegmentsRaycast = THREE.LineSegments.prototype.raycast;
+THREE.LineSegments.prototype.raycast = function(raycaster, intersects) {
+    try {
+        if (!this.geometry) return;
+        originalLineSegmentsRaycast.call(this, raycaster, intersects);
+    } catch (e) {
+        // console.warn('Prevented LineSegments.raycast crash', e);
     }
 };
 
@@ -162,6 +214,105 @@ try {
 
 const classifier = components.get(OBC.Classifier);
 const hider = components.get(OBC.Hider);
+
+// --- GLOBAL RAYCASTER PATCH FOR SNAPPING (Official Tools Support) ---
+// This ensures that ALL tools using OBC.Raycasters (like Length, Area) benefit from snapping logic
+// even if they don't explicitly use a VertexPicker or if Snapper is missing.
+const raycasters = components.get(OBC.Raycasters);
+const simpleRaycaster = raycasters.get(world);
+
+const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRaycaster);
+
+// Helper to perform Vertex/Edge snapping on a raw intersection
+const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
+    if (!valid) return null;
+
+    try {
+        // Threshold in units (meters)
+        const SNAP_THRESHOLD = 0.4;
+
+        if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
+             const geom = (valid.object as any).geometry;
+             if (!geom || !geom.attributes.position) return valid;
+             
+             const pos = geom.attributes.position;
+             const indices = [valid.face.a, valid.face.b, valid.face.c];
+             
+             // Helpers to get world coordinates
+             const getVertexWorld = (idx: number) => {
+                 const tempV = new THREE.Vector3();
+                 if (idx >= 0 && idx < pos.count) {
+                     tempV.fromBufferAttribute(pos, idx);
+                     if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
+                          const instanceMatrix = new THREE.Matrix4();
+                          valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
+                          tempV.applyMatrix4(instanceMatrix);
+                     }
+                     tempV.applyMatrix4(valid.object.matrixWorld);
+                 }
+                 return tempV;
+             };
+
+             const vA = getVertexWorld(indices[0]);
+             const vB = getVertexWorld(indices[1]);
+             const vC = getVertexWorld(indices[2]);
+
+             // Candidates: Vertices
+             const candidates = [vA, vB, vC];
+
+             // Candidates: Midpoints
+             candidates.push(vA.clone().add(vB).multiplyScalar(0.5));
+             candidates.push(vB.clone().add(vC).multiplyScalar(0.5));
+             candidates.push(vC.clone().add(vA).multiplyScalar(0.5));
+
+             let closestPoint = new THREE.Vector3();
+             let minDist = Infinity;
+             let found = false;
+
+             for (const p of candidates) {
+                 const dist = p.distanceTo(valid.point);
+                 if (dist < minDist) {
+                     minDist = dist;
+                     closestPoint.copy(p);
+                     found = true;
+                 }
+             }
+             
+             if (found && minDist < SNAP_THRESHOLD) {
+                 valid.point.copy(closestPoint);
+             }
+        }
+    } catch (e) {
+        console.warn("Snapping failed:", e);
+        // Fallback: return valid without snapping
+    }
+    return valid;
+};
+
+// Override castRayToObjects
+simpleRaycaster.castRayToObjects = (items?: THREE.Object3D[], position?: THREE.Vector2) => {
+    // If items is undefined, it uses components.meshes (which we populated)
+    const result = originalCastRayToObjects(items, position);
+    return applySnappingToIntersection(result);
+};
+
+// Also override castRay if it exists and is different
+// @ts-ignore
+if (simpleRaycaster.castRay) {
+    // @ts-ignore
+    const originalCastRay = simpleRaycaster.castRay.bind(simpleRaycaster);
+    // @ts-ignore
+    simpleRaycaster.castRay = (items) => { // args vary
+         // @ts-ignore
+         const result = originalCastRay(items);
+         // If result is promise?
+         if (result && typeof result.then === 'function') {
+             return result.then((res: any) => applySnappingToIntersection(res));
+         }
+         return applySnappingToIntersection(result);
+    };
+}
+
 
 // Monkey-patch Hider to sync hiddenItems globally
 const originalSet = hider.set.bind(hider);
@@ -527,6 +678,16 @@ async function loadModel(url: string, path: string) {
         model.useCamera(world.camera.three);
 
         world.scene.three.add(model.object);
+
+        // CRITICAL: Register meshes for OBC.Raycasters (Official Tool Support)
+        // The official tools (Length, Area) query world.meshes (SimpleRaycaster).
+        // We must populate it manually since we are loading raw fragments/models.
+        model.object.traverse((child: any) => {
+            if (child.isMesh) {
+                // components.meshes.push(child); // Legacy fix, ineffective
+                world.meshes.add(child);      // Correct fix for SimpleRaycaster
+            }
+        });
 
         await fragments.core.update(true);
 
@@ -2777,7 +2938,7 @@ function setupVisibilityToolbar() {
     }
 }
 
-function setupMeasurementTools() {
+function setupMeasurementTools_Deprecated() {
     const lengthBtn = document.getElementById('btn-measure-length');
     const areaBtn = document.getElementById('btn-measure-area');
     const angleBtn = document.getElementById('btn-measure-angle');
@@ -2831,86 +2992,57 @@ function setupMeasurementTools() {
 
     const mouse = new THREE.Vector2();
 
+    // --- DEBUG PANEL ---
+    const debugPanel = document.createElement('div');
+    debugPanel.style.position = 'fixed';
+    debugPanel.style.bottom = '40px';
+    debugPanel.style.right = '10px';
+    debugPanel.style.background = 'rgba(0, 0, 0, 0.8)';
+    debugPanel.style.color = '#00ff00';
+    debugPanel.style.padding = '8px';
+    debugPanel.style.borderRadius = '4px';
+    debugPanel.style.fontFamily = 'monospace';
+    debugPanel.style.fontSize = '12px';
+    debugPanel.style.pointerEvents = 'none';
+    debugPanel.style.zIndex = '10000';
+    debugPanel.style.whiteSpace = 'pre-wrap';
+    debugPanel.textContent = 'Ready';
+    document.body.appendChild(debugPanel);
+
+    const logToScreen = (msg: string) => {
+        debugPanel.textContent = msg;
+        console.log('[UI]', msg);
+    };
+
     const getIntersection = (event: MouseEvent) => {
         const rect = container.getBoundingClientRect();
         mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
         mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
         
-        raycaster.setFromCamera(mouse, world.camera.three);
+        // --- USE OFFICIAL RAYCASTER COMPONENT ---
+        const raycasters = components.get(OBC.Raycasters);
+        const caster = raycasters.get(world);
         
-        // Collect ALL meshes from scene directly for robustness
-        const meshes: THREE.Object3D[] = [];
-        world.scene.three.traverse((child: any) => {
-            // Filter valid meshes/lines for intersection
-            if (!child.visible) return;
-            
-            const isMesh = child.isMesh || child.isInstancedMesh;
-            const isLine = child.isLine || child.isLineSegments;
-            
-            if ((isMesh || isLine) && 
-                !child.name.toLowerCase().includes('helper') &&
-                !child.name.toLowerCase().includes('grid') &&
-                !child.name.toLowerCase().includes('cursor') && 
-                !(child.material && child.material.opacity < 0.1 && child.material.transparent)) {
-                
-                // Extra safety: Check if geometry and position attribute exist
-                if (child.geometry && child.geometry.attributes && child.geometry.attributes.position) {
-                    // Check if position has array
-                    const pos = child.geometry.attributes.position;
-                    if (pos.array && pos.array.length > 0) {
-                        
-                        // Force DoubleSide to ensure we hit backfaces (common issue in IFC)
-                        if (child.material) {
-                            child.material.side = THREE.DoubleSide;
-                        }
-                        
-                        // Ensure world matrix is up to date
-                        child.updateMatrixWorld(true);
-                        
-                        // Ensure bounding sphere is computed
-                        if (!child.geometry.boundingSphere) {
-                            child.geometry.computeBoundingSphere();
-                        }
-                        
-                        meshes.push(child);
-                    }
-                }
-            }
-        });
-        
-        // DEBUG: Log if no meshes found
-        if (event.type === 'click' && activeTool === 'point' && meshes.length === 0) {
-            console.warn("[DEBUG] No meshes found for intersection!");
-        }
+        const mouseVec = new THREE.Vector2(mouse.x, mouse.y);
         
         let valid = null;
         try {
-            // Intersect collected meshes
-            const allIntersects: THREE.Intersection[] = [];
-            
-            // Batch intersection for performance
-            const hits = raycaster.intersectObjects(meshes, false);
-            if (hits.length > 0) {
-                 allIntersects.push(...hits);
-            }
-            
-            // Sort by distance
-            allIntersects.sort((a, b) => a.distance - b.distance);
-            
-            // Find first valid hit
-            valid = allIntersects.find(hit => hit.object.visible);
+             // Official component handles the raycasting
+             // Now using components.meshes which we populated in loadModel
+             valid = caster.castRayToObjects(components.meshes, mouseVec);
+        } catch (e) {
+            console.error("OBC Raycaster failed:", e);
+        }
 
-            // DEBUG LOGGING ON CLICK
-            if (event.type === 'click' && activeTool === 'point') {
-                console.log(`[DEBUG] Raycast: Meshes: ${meshes.length}, Hits: ${allIntersects.length}, Valid: ${!!valid}`);
+            if (event.type === 'click' || event.type === 'pointerdown') {
                 if (valid) {
-                    console.log(`[DEBUG] Valid Hit:`, {
-                        objectType: valid.object.type,
-                        hasFace: !!valid.face,
-                        faceIndex: valid.faceIndex,
-                        instanceId: valid.instanceId,
-                        point: valid.point
-                    });
+                     logToScreen(`Hit (OBC): ${valid.object.type} @ ${valid.point.x.toFixed(2)},${valid.point.y.toFixed(2)}`);
+                } else {
+                    if (components.meshes) {
+                        logToScreen(`No Hit (OBC). Searched ${components.meshes.length} meshes.`);
+                    } else {
+                        logToScreen(`No Hit (OBC). No meshes registered.`);
+                    }
                 }
             }
             
@@ -3182,10 +3314,7 @@ function setupMeasurementTools() {
             }
             
             return valid;
-        } catch (e) {
-            console.error("Raycast error:", e);
-            return null;
-        }
+
     };
 
     // --- CURSOR MOVEMENT ---
@@ -3664,11 +3793,11 @@ function setupMeasurementTools() {
         activeTool = 'none';
         
         // Remove custom event listeners
-        container.removeEventListener('click', slopeHandler, { capture: true });
-        container.removeEventListener('click', pointHandler, { capture: true });
-        container.removeEventListener('click', angleHandler, { capture: true });
-        container.removeEventListener('click', lengthHandler, { capture: true });
-        container.removeEventListener('click', areaHandler, { capture: true });
+        container.removeEventListener('pointerdown', slopeHandler, { capture: true });
+        container.removeEventListener('pointerdown', pointHandler, { capture: true });
+        container.removeEventListener('pointerdown', angleHandler, { capture: true });
+        container.removeEventListener('pointerdown', lengthHandler, { capture: true });
+        container.removeEventListener('pointerdown', areaHandler, { capture: true });
         
         // Reset points
         lengthPoints = [];
@@ -3694,30 +3823,82 @@ function setupMeasurementTools() {
         highlighter.clear('hover');
 
         if (tool === 'length') {
-            container.addEventListener('click', lengthHandler, { capture: true });
+            container.addEventListener('pointerdown', lengthHandler, { capture: true });
             logToScreen('Herramienta Longitud: Selecciona 2 puntos');
         }
         if (tool === 'area') {
-            container.addEventListener('click', areaHandler, { capture: true });
+            container.addEventListener('pointerdown', areaHandler, { capture: true });
             logToScreen('Herramienta Área: Selecciona puntos. Clic en inicio para cerrar.');
         }
         if (tool === 'angle') {
-            container.addEventListener('click', angleHandler, { capture: true });
+            container.addEventListener('pointerdown', angleHandler, { capture: true });
             logToScreen('Herramienta Ángulo: Clic Vértice -> Puntos Extremos');
         }
         if (tool === 'slope') {
-            container.addEventListener('click', slopeHandler, { capture: true });
+            container.addEventListener('pointerdown', slopeHandler, { capture: true });
             logToScreen('Herramienta Pendiente: Selecciona 2 puntos');
         }
         if (tool === 'point') {
-            container.addEventListener('click', pointHandler, { capture: true });
+            container.addEventListener('pointerdown', pointHandler, { capture: true });
             logToScreen('Herramienta Punto: Haz clic para obtener coordenadas');
         }
     };
 
     // --- BUTTON LISTENERS ---
-    if (lengthBtn) lengthBtn.addEventListener('click', () => activateTool('length', lengthBtn));
-    if (areaBtn) areaBtn.addEventListener('click', () => activateTool('area', areaBtn));
+    if (lengthBtn) {
+        lengthBtn.addEventListener('click', async () => {
+            disableAll(); // Reset other tools
+            if (activeTool === 'length') {
+                activeTool = 'none';
+                length.enabled = false;
+                lengthBtn.classList.remove('active');
+            } else {
+                activeTool = 'length';
+                lengthBtn.classList.add('active');
+                
+                // Use Official Component
+                length.enabled = true;
+                length.world = world; // Ensure world is set
+                // Attempt to create measurement
+                try {
+                    await length.create();
+                    logToScreen('Herramienta Longitud (Oficial): Clic para medir');
+                } catch (e) {
+                    console.error("Length tool error:", e);
+                    logToScreen('Error iniciando herramienta longitud');
+                }
+            }
+        });
+    }
+
+    if (areaBtn) {
+        areaBtn.addEventListener('click', async () => {
+            disableAll(); // Reset other tools
+            if (activeTool === 'area') {
+                activeTool = 'none';
+                area.enabled = false;
+                areaBtn.classList.remove('active');
+            } else {
+                activeTool = 'area';
+                areaBtn.classList.add('active');
+                
+                // Use Official Component
+                area.enabled = true;
+                area.world = world;
+                try {
+                    await area.create();
+                    logToScreen('Herramienta Área (Oficial): Clic para medir');
+                } catch (e) {
+                     console.error("Area tool error:", e);
+                     logToScreen('Error iniciando herramienta área');
+                }
+            }
+        });
+    }
+
+    // Keep Custom Handlers for tools NOT supported by library or if we prefer custom logic
+    // Angle and Slope are not standard in the basic components version we have?
+    // Let's keep custom for now unless we find them.
     if (angleBtn) angleBtn.addEventListener('click', () => activateTool('angle', angleBtn));
     if (slopeBtn) slopeBtn.addEventListener('click', () => activateTool('slope', slopeBtn));
     if (pointBtn) pointBtn.addEventListener('click', () => activateTool('point', pointBtn));
@@ -3725,11 +3906,13 @@ function setupMeasurementTools() {
     if (deleteBtn) {
         deleteBtn.addEventListener('click', () => {
             try {
-                if (length.list) length.list.clear();
-                else if (typeof length.deleteAll === 'function') length.deleteAll();
+                // Clear Official
+                length.enabled = false;
+                length.deleteAll();
                 
-                if (area.list) area.list.clear();
-                else if (typeof area.deleteAll === 'function') area.deleteAll();
+                area.enabled = false;
+                area.deleteAll();
+
             } catch (e) {
                 console.error("Error clearing measurements:", e);
             }
@@ -3746,6 +3929,241 @@ function setupMeasurementTools() {
         });
     }
 }
+
+
+
+
+// --- Measurement Tools Implementation (Custom Snapping) ---
+
+
+
+function setupMeasurementTools() {
+    console.log('[DEBUG] Setting up measurement tools...');
+
+    // Initialize Snapping Cursor
+    if (!snappingCursor) {
+        const cursorGeom = new THREE.SphereGeometry(0.15, 16, 16);
+        const cursorMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.8, depthTest: false });
+        snappingCursor = new THREE.Mesh(cursorGeom, cursorMat);
+        snappingCursor.renderOrder = 2000;
+        world.scene.three.add(snappingCursor);
+        snappingCursor.visible = false;
+    }
+    
+    const btnLength = document.getElementById('btn-measure-length');
+    const btnPoint = document.getElementById('btn-measure-point');
+    const btnDelete = document.getElementById('btn-measure-delete');
+    
+    if (btnLength) {
+        btnLength.addEventListener('click', () => {
+            toggleMeasurementMode('length');
+            setActiveButton(btnLength);
+        });
+    }
+    
+    if (btnPoint) {
+        btnPoint.addEventListener('click', () => {
+            toggleMeasurementMode('point');
+            setActiveButton(btnPoint);
+        });
+    }
+    
+    if (btnDelete) {
+        btnDelete.addEventListener('click', () => {
+            clearMeasurements();
+        });
+    }
+    
+    // Mouse interaction for measurement
+    const container = document.getElementById('viewer-container');
+    if (container) {
+        container.addEventListener('mousemove', onMeasureMouseMove);
+        container.addEventListener('click', onMeasureClick);
+        
+        // Add right-click to cancel current measurement
+        container.addEventListener('contextmenu', (e) => {
+            if (measurementMode) {
+                e.preventDefault();
+                resetCurrentMeasurement();
+            }
+        });
+    }
+}
+
+function setActiveButton(activeBtn: HTMLElement | null) {
+    // Reset all measure buttons
+    ['btn-measure-length', 'btn-measure-point'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.classList.remove('active');
+    });
+    if (activeBtn) activeBtn.classList.add('active');
+}
+
+function toggleMeasurementMode(mode: 'length' | 'point') {
+    if (measurementMode === mode) {
+        // Toggle off
+        measurementMode = null;
+        resetCurrentMeasurement();
+        logToScreen('Measurement mode disabled');
+        setActiveButton(null);
+        if (snappingCursor) snappingCursor.visible = false;
+    } else {
+        measurementMode = mode;
+        resetCurrentMeasurement();
+        logToScreen(`Measurement mode: ${mode === 'length' ? 'Distance' : 'Point Coordinate'} (Click to start)`);
+    }
+}
+
+function resetCurrentMeasurement() {
+    measurementPoints = [];
+    if (tempMeasurementLine) {
+        world.scene.three.remove(tempMeasurementLine);
+        tempMeasurementLine = null;
+    }
+}
+
+function clearMeasurements() {
+    // Remove all markers and labels
+    measurementMarkers.forEach(marker => world.scene.three.remove(marker));
+    measurementMarkers.length = 0;
+    
+    measurementLabels.forEach(label => label.remove());
+    measurementLabels.length = 0;
+    
+    resetCurrentMeasurement();
+    logToScreen('Measurements cleared');
+}
+
+// Marker helper
+function createMarker(position: THREE.Vector3, color = 0xff0000) {
+    const geometry = new THREE.SphereGeometry(0.1, 16, 16); // Small sphere
+    const material = new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.8 });
+    const marker = new THREE.Mesh(geometry, material);
+    marker.position.copy(position);
+    marker.renderOrder = 1000; // On top
+    world.scene.three.add(marker);
+    measurementMarkers.push(marker);
+    return marker;
+}
+
+function createLine(start: THREE.Vector3, end: THREE.Vector3) {
+    const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+    const material = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false, linewidth: 2 });
+    const line = new THREE.Line(geometry, material);
+    line.renderOrder = 999;
+    world.scene.three.add(line);
+    measurementMarkers.push(line as any); 
+    return line;
+}
+
+function createLabel(text: string, position: THREE.Vector3) {
+    const div = document.createElement('div');
+    div.className = 'measurement-label';
+    div.textContent = text;
+    div.style.position = 'absolute';
+    div.style.background = 'rgba(0, 0, 0, 0.7)';
+    div.style.color = 'white';
+    div.style.padding = '4px 8px';
+    div.style.borderRadius = '4px';
+    div.style.pointerEvents = 'none';
+    div.style.fontSize = '12px';
+    div.style.zIndex = '1000';
+    document.body.appendChild(div);
+    measurementLabels.push(div);
+    
+    const update = () => {
+        if (!div.isConnected) return;
+        const screenPos = position.clone().project(world.camera.three);
+        const x = (screenPos.x * .5 + .5) * window.innerWidth;
+        const y = (-(screenPos.y * .5) + .5) * window.innerHeight;
+        div.style.left = `${x}px`;
+        div.style.top = `${y}px`;
+        requestAnimationFrame(update);
+    };
+    update();
+}
+
+async function onMeasureMouseMove(event: MouseEvent) {
+    if (!measurementMode) {
+        if (snappingCursor) snappingCursor.visible = false;
+        return;
+    }
+    
+    // Use the simpleRaycaster which we monkey-patched to have snapping!
+    const result = await simpleRaycaster.castRay();
+    
+    if (result && result.point) {
+        if (snappingCursor) {
+            snappingCursor.position.copy(result.point);
+            snappingCursor.visible = true;
+        }
+
+        // If we have a start point, draw a temp line to current cursor
+        if (measurementMode === 'length' && measurementPoints.length === 1) {
+            const start = measurementPoints[0];
+            const end = result.point;
+            
+            if (!tempMeasurementLine) {
+                const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+                const material = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false, opacity: 0.5, transparent: true });
+                tempMeasurementLine = new THREE.Line(geometry, material);
+                world.scene.three.add(tempMeasurementLine);
+            } else {
+                const positions = tempMeasurementLine.geometry.attributes.position;
+                positions.setXYZ(0, start.x, start.y, start.z);
+                positions.setXYZ(1, end.x, end.y, end.z);
+                positions.needsUpdate = true;
+            }
+        }
+    } else {
+        if (snappingCursor) snappingCursor.visible = false;
+    }
+}
+
+async function onMeasureClick(event: MouseEvent) {
+    if (!measurementMode) return;
+    
+    // Don't trigger if clicking on UI
+    if ((event.target as HTMLElement).closest('button') || (event.target as HTMLElement).closest('.sidebar')) return;
+
+    const result = await simpleRaycaster.castRay();
+    if (!result || !result.point) return;
+    
+    const point = result.point;
+    
+    if (measurementMode === 'point') {
+        createMarker(point, 0x00ff00);
+        const text = `X:${point.x.toFixed(2)} Y:${point.y.toFixed(2)} Z:${point.z.toFixed(2)}`;
+        createLabel(text, point);
+        logToScreen(`Point: ${text}`);
+    } else if (measurementMode === 'length') {
+        measurementPoints.push(point);
+        createMarker(point, 0xffff00);
+        
+        if (measurementPoints.length === 2) {
+            // Finish measurement
+            const p1 = measurementPoints[0];
+            const p2 = measurementPoints[1];
+            createLine(p1, p2);
+            
+            const dist = p1.distanceTo(p2);
+            const mid = p1.clone().add(p2).multiplyScalar(0.5);
+            createLabel(`${dist.toFixed(3)}m`, mid);
+            
+            logToScreen(`Distance: ${dist.toFixed(3)}m`);
+            
+            // Reset for next measurement
+            measurementPoints = [];
+            if (tempMeasurementLine) {
+                world.scene.three.remove(tempMeasurementLine);
+                tempMeasurementLine = null;
+            }
+        }
+    }
+}
+
+
+
 
 
 
