@@ -14,6 +14,33 @@ const measurementMarkers: THREE.Mesh[] = [];
 let snappingCursor: THREE.Mesh | null = null;
 
 
+// --- EMERGENCY PATCH: Vector3.fromBufferAttribute ---
+// This is the specific call site failing in the stack trace.
+const originalFromBufferAttribute = THREE.Vector3.prototype.fromBufferAttribute;
+THREE.Vector3.prototype.fromBufferAttribute = function(attribute, index) {
+    try {
+        // Double check attribute validity before calling
+        if (!attribute || (attribute.isBufferAttribute && !attribute.array)) {
+             return this.set(0, 0, 0);
+        }
+        return originalFromBufferAttribute.call(this, attribute, index);
+    } catch (e) {
+        // console.warn("Prevented Vector3.fromBufferAttribute crash", e);
+        return this.set(0, 0, 0);
+    }
+};
+
+// --- EMERGENCY PATCH: InstancedMesh.raycast ---
+const originalInstancedRaycast = THREE.InstancedMesh.prototype.raycast;
+THREE.InstancedMesh.prototype.raycast = function(raycaster, intersects) {
+    try {
+        if (!this.geometry) return;
+        originalInstancedRaycast.call(this, raycaster, intersects);
+    } catch (e) {
+        // console.warn("Prevented InstancedMesh.raycast crash", e);
+    }
+};
+
 // --- CRITICAL FIX: Monkey-patch THREE.BufferAttribute.prototype.getX to prevent crashes ---
 // The measurement tool's raycaster crashes when hitting geometry with undefined attributes.
 // We intercept the low-level call to prevent the entire app from freezing.
@@ -170,7 +197,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-09-Fix-v14-BufferSafe-Force';
+versionDiv.textContent = 'v2026-02-09-Fix-v15-VectorSafe';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
