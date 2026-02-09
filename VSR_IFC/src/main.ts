@@ -1519,24 +1519,28 @@ async function loadModelList() {
     }
 
     try {
-        const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
-        logToScreen('Scanning GitHub for models...');
+        logToScreen('Loading model list from models.json...');
         
-        const response = await fetch(GITHUB_API_URL);
-        if (!response.ok) throw new Error(`GitHub API Error: ${response.status}`);
+        // Use local/generated models.json instead of GitHub API
+        // This ensures local dev works and production uses the build artifact
+        const response = await fetch('models.json');
+        
+        if (!response.ok) {
+             throw new Error(`Failed to load models.json: ${response.status}`);
+        }
         
         const data = await response.json();
-        if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
+        
+        if (!Array.isArray(data)) throw new Error('Invalid models.json format');
 
-        const models = data
-            .filter((item: any) => item.name.toLowerCase().endsWith('.frag'))
-            .map((item: any) => ({
-                name: item.name,
-                path: `models/${item.name}`,
-                url: item.download_url
-            }));
+        // Map standard models.json format to expected structure
+        const models = data.map((item: any) => ({
+            name: item.name,
+            path: item.path,
+            url: item.path // In local/static serve, path is the URL
+        }));
 
-        logToScreen(`GitHub Scan: ${models.length} .frag models found`);
+        logToScreen(`Loaded ${models.length} models from models.json`);
 
         // Group models by specialty
         const groups: Record<string, any[]> = {};
@@ -2828,15 +2832,27 @@ function setupMeasurementTools() {
         
         // Use Official Raycaster Component from LocalViewer logic
         const raycasters = components.get(OBC.Raycasters);
-        const caster = raycasters.get(world);
+        const caster = raycasters ? raycasters.get(world) : null;
         const mouseVec = new THREE.Vector2(mouse.x, mouse.y);
         
         let valid = null;
-        try {
-             // Official component handles the raycasting
-             valid = caster.castRayToObjects(meshes, mouseVec);
-        } catch (e) {
-            console.error("OBC Raycaster failed:", e);
+        
+        // Try OBC Raycaster first (Optimized)
+        if (caster) {
+            try {
+                valid = caster.castRayToObjects(meshes, mouseVec);
+            } catch (e) {
+                console.warn("OBC Raycaster failed, falling back to standard:", e);
+            }
+        }
+
+        // Fallback to Standard Three.js Raycaster
+        if (!valid) {
+            raycaster.setFromCamera(mouse, world.camera.three);
+            const intersects = raycaster.intersectObjects(meshes, false);
+            if (intersects.length > 0) {
+                valid = intersects[0];
+            }
         }
         
         if (valid) {
