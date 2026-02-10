@@ -248,6 +248,30 @@ grids.create(world);
 // --- IFC & Fragments Setup ---
 
 const baseUrl = import.meta.env.BASE_URL || './';
+
+// --- DEBUG VISUALIZATION ---
+const debugSphereGeom = new THREE.SphereGeometry(0.3, 16, 16);
+const debugSphereMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
+const debugSphere = new THREE.Mesh(debugSphereGeom, debugSphereMat);
+debugSphere.renderOrder = 999;
+debugSphere.visible = false;
+scene.add(debugSphere);
+
+const debugConsole = document.getElementById('debug-console');
+if (debugConsole) {
+    debugConsole.style.display = 'block'; // Force visible
+    const log = (msg) => {
+        const line = document.createElement('div');
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        debugConsole.appendChild(line);
+        debugConsole.scrollTop = debugConsole.scrollHeight;
+        if (debugConsole.children.length > 20) debugConsole.removeChild(debugConsole.firstChild);
+    };
+    window.debugLog = log;
+} else {
+    window.debugLog = console.log;
+}
+
 const fragments = components.get(OBC.FragmentsManager);
 
 // Initialize fragments with the worker BEFORE getting other components
@@ -272,11 +296,14 @@ const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRay
 
 // Helper to perform Vertex/Edge snapping on a raw intersection
 const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
-    if (!valid) return null;
+    if (!valid) {
+        if (debugSphere) debugSphere.visible = false;
+        return null;
+    }
 
     try {
-        // Threshold in units (meters)
-        const SNAP_THRESHOLD = 0.5;
+        // Threshold in units (meters) - Large for testing
+        const SNAP_THRESHOLD = 0.8;
 
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
@@ -320,26 +347,50 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              let closestPoint = new THREE.Vector3();
              let minDist = Infinity;
              let found = false;
+             let type = '';
 
-             // Check all candidates
-             const allCandidates = [...vertices, ...midpoints, centroid];
-
-             for (const p of allCandidates) {
+             // Check Vertices
+             for (const p of vertices) {
                  const dist = p.distanceTo(valid.point);
                  if (dist < minDist) {
                      minDist = dist;
                      closestPoint.copy(p);
                      found = true;
+                     type = 'VERTEX';
+                 }
+             }
+
+             // Check Midpoints
+             for (const p of midpoints) {
+                 const dist = p.distanceTo(valid.point);
+                 if (dist < minDist) {
+                     minDist = dist;
+                     closestPoint.copy(p);
+                     found = true;
+                     type = 'MIDPOINT';
                  }
              }
              
              if (found && minDist < SNAP_THRESHOLD) {
                  valid.point.copy(closestPoint);
+                 
+                 // Visual Debug
+                 if (typeof debugSphere !== 'undefined') {
+                     debugSphere.position.copy(closestPoint);
+                     debugSphere.visible = true;
+                     // Color coding
+                     if (type === 'VERTEX') debugSphere.material.color.setHex(0xff0000); // Red
+                     else debugSphere.material.color.setHex(0x00ff00); // Green
+                 }
+                 
+                 if (window.debugLog) window.debugLog(`Snapped to ${type} (Dist: ${minDist.toFixed(3)})`);
+             } else {
+                 if (typeof debugSphere !== 'undefined') debugSphere.visible = false;
              }
         }
     } catch (e) {
         console.warn("Snapping failed:", e);
-        // Fallback: return valid without snapping
+        if (window.debugLog) window.debugLog(`Error: ${e.message}`);
     }
     return valid;
 };

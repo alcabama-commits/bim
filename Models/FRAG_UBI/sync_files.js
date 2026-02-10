@@ -41,10 +41,10 @@ filesToCopy.forEach(file => {
 // Update index.html version tag to v17-RootFix
 const indexHtmlPath = path.join(destBase, 'index.html');
 if (fs.existsSync(indexHtmlPath)) {
-    let content = fs.readFileSync(indexHtmlPath, 'utf8');
-    // Update version tag
-    content = content.replace(/content="v[^"]*"/, 'content="v18-VertexSnap"');
-    content = content.replace(/<title>.*<\/title>/, '<title>VSR IFC Viewer v18-VertexSnap</title>');
-    fs.writeFileSync(indexHtmlPath, content);
-    console.log('Updated index.html version tag to v18-VertexSnap');
-}
+        let content = fs.readFileSync(indexHtmlPath, 'utf8');
+        // Update version tag
+        content = content.replace(/content=\"v[^\"]*\"/, 'content=\"v19-DebugSnap\"');
+        content = content.replace(/<title>.*<\/title>/, '<title>VSR IFC Viewer v19-DebugSnap</title>');
+        fs.writeFileSync(indexHtmlPath, content);
+        console.log('Updated index.html version tag to v19-DebugSnap');
+    }
