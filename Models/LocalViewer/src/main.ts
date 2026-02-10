@@ -222,6 +222,9 @@ window.addEventListener('error', (event) => {
 // --- Initialization of That Open Engine ---
 
 const components = new OBC.Components();
+// Ensure components.meshes exists for Raycasters that might rely on it
+if (!(components as any).meshes) (components as any).meshes = [];
+
 const worlds = components.get(OBC.Worlds);
 
 const world = worlds.create<
@@ -298,22 +301,15 @@ const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRay
 
 // Helper to perform Vertex/Edge snapping on a raw intersection
 const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
-    if (!valid) {
-        // if (window.debugLog && Math.random() < 0.05) window.debugLog("No intersection to snap");
+    if (!valid || !valid.point) {
         if (debugSphere) debugSphere.visible = false;
-        return null;
-    }
-    // Force log every few frames to confirm function is called
-    if (Math.random() < 0.01 && window.debugLog) window.debugLog("Snap checking...");
-
-    if (!valid) {
-        if (debugSphere) debugSphere.visible = false;
-        return null;
+        return valid;
     }
 
     try {
-        // Threshold in units (meters) - Large for testing
-        const SNAP_THRESHOLD = 1.2; // Increased for v21
+        // STRICT VERTEX SNAPPING LOGIC (Based on User Request: "Puntos Finales")
+        // We only look at the vertices of the hit face (Triangulation).
+        const SNAP_THRESHOLD = 0.4; // 40cm Radius (Generous but precise)
 
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
@@ -322,7 +318,7 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              const pos = geom.attributes.position;
              const indices = [valid.face.a, valid.face.b, valid.face.c];
              
-             // Helpers to get world coordinates
+             // Helper to get world coordinates
              const getVertexWorld = (idx: number) => {
                  const tempV = new THREE.Vector3();
                  if (idx >= 0 && idx < pos.count) {
@@ -332,80 +328,45 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
                           valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
                           tempV.applyMatrix4(instanceMatrix);
                      }
+                     // Ensure World Matrix is up to date
+                     valid.object.updateMatrixWorld();
                      tempV.applyMatrix4(valid.object.matrixWorld);
                  }
                  return tempV;
              };
 
-             const vA = getVertexWorld(indices[0]);
-             const vB = getVertexWorld(indices[1]);
-             const vC = getVertexWorld(indices[2]);
+             let closestVertex: THREE.Vector3 | null = null;
+             let minDist = SNAP_THRESHOLD;
 
-             // Candidates: Vertices (Endpoints)
-             const vertices = [vA, vB, vC];
-             
-             // Candidates: Midpoints
-             const midpoints = [
-                 vA.clone().add(vB).multiplyScalar(0.5),
-                 vB.clone().add(vC).multiplyScalar(0.5),
-                 vC.clone().add(vA).multiplyScalar(0.5)
-             ];
-
-             // Candidate: Face Center (Centroid)
-             const centroid = vA.clone().add(vB).add(vC).multiplyScalar(1/3);
-
-             let closestPoint = new THREE.Vector3();
-             let minDist = Infinity;
-             let found = false;
-             let type = '';
-
-             // Check Vertices
-             for (const p of vertices) {
-                 const dist = p.distanceTo(valid.point);
-                 // v21 Debug
-                 if (dist < 2.0 && window.debugLog && Math.random() < 0.01) {
-                     window.debugLog(`Vertex nearby: ${dist.toFixed(2)}`);
-                 }
-
+             // Check only the 3 vertices of the hit triangle
+             for (const idx of indices) {
+                 const vertex = getVertexWorld(idx);
+                 const dist = vertex.distanceTo(valid.point); // 3D Distance
+                 
                  if (dist < minDist) {
                      minDist = dist;
-                     closestPoint.copy(p);
-                     found = true;
-                     type = 'VERTEX';
-                 }
-             }
-
-             // Check Midpoints
-             for (const p of midpoints) {
-                 const dist = p.distanceTo(valid.point);
-                 if (dist < minDist) {
-                     minDist = dist;
-                     closestPoint.copy(p);
-                     found = true;
-                     type = 'MIDPOINT';
+                     closestVertex = vertex;
                  }
              }
              
-             if (found && minDist < SNAP_THRESHOLD) {
-                 valid.point.copy(closestPoint);
+             if (closestVertex) {
+                 valid.point.copy(closestVertex);
                  
                  // Visual Debug
                  if (typeof debugSphere !== 'undefined') {
-                     debugSphere.position.copy(closestPoint);
+                     debugSphere.position.copy(closestVertex);
                      debugSphere.visible = true;
-                     // Color coding
-                     if (type === 'VERTEX') debugSphere.material.color.setHex(0xff0000); // Red
-                     else debugSphere.material.color.setHex(0x00ff00); // Green
+                     debugSphere.material.color.setHex(0x00ff00); // Green for Snap
+                     debugSphere.scale.set(0.5, 0.5, 0.5); // Smaller, precise
                  }
                  
-                 if (window.debugLog) window.debugLog(`Snapped to ${type} (Dist: ${minDist.toFixed(3)})`);
+                 if (window.debugLog) window.debugLog(`SNAP! Vertex (Dist: ${minDist.toFixed(3)})`);
              } else {
                  if (typeof debugSphere !== 'undefined') debugSphere.visible = false;
              }
         }
     } catch (e) {
         console.warn("Snapping failed:", e);
-        if (window.debugLog) window.debugLog(`Error: ${e.message}`);
     }
     return valid;
 };
@@ -431,6 +392,17 @@ if (simpleRaycaster.castRay) {
              return result.then((res: any) => applySnappingToIntersection(res));
          }
          return applySnappingToIntersection(result);
+    };
+}
+
+// @ts-ignore
+if (simpleRaycaster.castRayFromVector) {
+    // @ts-ignore
+    const originalCastRayFromVector = simpleRaycaster.castRayFromVector.bind(simpleRaycaster);
+    // @ts-ignore
+    simpleRaycaster.castRayFromVector = (origin, direction, items) => {
+        const result = originalCastRayFromVector(origin, direction, items);
+        return applySnappingToIntersection(result);
     };
 }
 
@@ -802,11 +774,13 @@ async function loadModel(url: string, path: string) {
 
         // CRITICAL: Register meshes for OBC.Raycasters (Official Tool Support)
         // The official tools (Length, Area) query world.meshes (SimpleRaycaster).
-        // We must populate it manually since we are loading raw fragments/models.
+        // We populate BOTH world.meshes and components.meshes to be safe.
         model.object.traverse((child: any) => {
             if (child.isMesh) {
-                // components.meshes.push(child); // Legacy fix, ineffective
-                world.meshes.add(child);      // Correct fix for SimpleRaycaster
+                world.meshes.add(child);
+                if (components.meshes && Array.isArray(components.meshes)) {
+                    components.meshes.push(child);
+                }
             }
         });
 
