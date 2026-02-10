@@ -306,7 +306,7 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
 
     try {
         // Screen-Space Snapping Settings
-        const SNAP_PIXEL_THRESHOLD = 60; // Increased to 60px for easier selection
+        const SNAP_PIXEL_THRESHOLD = 120; // Increased to 120px for "magnetic" feel
         
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
