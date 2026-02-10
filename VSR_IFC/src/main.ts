@@ -307,10 +307,10 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              // Candidates: Vertices
              const candidates = [vA, vB, vC];
 
-             // Candidates: Midpoints
-             candidates.push(vA.clone().add(vB).multiplyScalar(0.5));
-             candidates.push(vB.clone().add(vC).multiplyScalar(0.5));
-             candidates.push(vC.clone().add(vA).multiplyScalar(0.5));
+             // Candidates: Midpoints - DISABLED per user request (focus on endpoints)
+             // candidates.push(vA.clone().add(vB).multiplyScalar(0.5));
+             // candidates.push(vB.clone().add(vC).multiplyScalar(0.5));
+             // candidates.push(vC.clone().add(vA).multiplyScalar(0.5));
 
              let closestPoint = new THREE.Vector3();
              let minDist = Infinity;
@@ -327,6 +327,7 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              
              if (found && minDist < SNAP_THRESHOLD) {
                  valid.point.copy(closestPoint);
+                 (valid as any).isSnapped = true; // Mark as snapped for visual feedback
              }
         }
     } catch (e) {
@@ -4054,6 +4055,7 @@ function toggleMeasurementMode(mode: 'length' | 'point') {
         logToScreen('Measurement mode disabled');
         setActiveButton(null);
         if (snappingCursor) snappingCursor.visible = false;
+        document.body.style.cursor = 'default';
     } else {
         measurementMode = mode;
         resetCurrentMeasurement();
@@ -4143,6 +4145,18 @@ async function onMeasureMouseMove(event: MouseEvent) {
         if (snappingCursor) {
             snappingCursor.position.copy(result.point);
             snappingCursor.visible = true;
+
+            // Visual feedback for snapping
+            const mat = snappingCursor.material as THREE.MeshBasicMaterial;
+            if ((result as any).isSnapped) {
+                mat.color.setHex(0xFFD700); // Gold/Yellow for snap
+                snappingCursor.scale.set(1.5, 1.5, 1.5); // Make it larger
+                document.body.style.cursor = 'crosshair'; // Change mouse cursor
+            } else {
+                mat.color.setHex(0xFF00FF); // Magenta default
+                snappingCursor.scale.set(1, 1, 1);
+                document.body.style.cursor = 'default';
+            }
         }
 
         // If we have a start point, draw a temp line to current cursor
