@@ -1753,24 +1753,26 @@ async function loadModelList() {
     }
 
     try {
-        const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
-        logToScreen('Scanning GitHub for models...');
+        // CHANGED: Load from local models.json instead of GitHub API
+        // FILTER: Only load 2442602.frag as requested
+        logToScreen('Loading local models list...');
         
-        const response = await fetch(GITHUB_API_URL);
-        if (!response.ok) throw new Error(`GitHub API Error: ${response.status}`);
+        const response = await fetch('models.json');
+        if (!response.ok) throw new Error(`Failed to load models.json: ${response.status}`);
         
         const data = await response.json();
-        if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
+        if (!Array.isArray(data)) throw new Error('Invalid models.json format');
 
         const models = data
-            .filter((item: any) => item.name.toLowerCase().endsWith('.frag'))
+            .filter((item: any) => item.path.endsWith('.frag'))
+            .filter((item: any) => item.path.includes('2442602')) // DEBUG: Focus on single model
             .map((item: any) => ({
                 name: item.name,
-                path: `models/${item.name}`,
-                url: item.download_url
+                path: item.path,
+                url: item.path // Use path as URL for local loading
             }));
 
-        logToScreen(`GitHub Scan: ${models.length} .frag models found`);
+        logToScreen(`Local Scan: ${models.length} models found (Filtered for 2442602)`);
 
         // Group models by specialty
         const groups: Record<string, any[]> = {};
