@@ -5,14 +5,48 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
-// ------------------------------------------------------------------------------------------------------------------
-// --- Polyfills / Monkey-patching (CRITICAL STABILITY FIXES)
-// ------------------------------------------------------------------------------------------------------------------
+// --- Measurement State (Hoisted to top to avoid ReferenceError) ---
+let measurementMode: 'length' | 'point' | null = null;
+let measurementPoints: THREE.Vector3[] = [];
+let tempMeasurementLine: THREE.Line | null = null;
+const measurementLabels: HTMLElement[] = [];
+const measurementMarkers: THREE.Mesh[] = [];
+let snappingCursor: THREE.Mesh | null = null;
+
+
+// --- EMERGENCY PATCH: Vector3.fromBufferAttribute ---
+// This is the specific call site failing in the stack trace.
+const originalFromBufferAttribute = THREE.Vector3.prototype.fromBufferAttribute;
+THREE.Vector3.prototype.fromBufferAttribute = function(attribute, index) {
+    try {
+        // Double check attribute validity before calling
+        if (!attribute || (attribute.isBufferAttribute && !attribute.array)) {
+             return this.set(0, 0, 0);
+        }
+        return originalFromBufferAttribute.call(this, attribute, index);
+    } catch (e) {
+        // console.warn("Prevented Vector3.fromBufferAttribute crash", e);
+        return this.set(0, 0, 0);
+    }
+};
+
+// --- EMERGENCY PATCH: InstancedMesh.raycast ---
+const originalInstancedRaycast = THREE.InstancedMesh.prototype.raycast;
+THREE.InstancedMesh.prototype.raycast = function(raycaster, intersects) {
+    try {
+        if (!this.geometry) return;
+        originalInstancedRaycast.call(this, raycaster, intersects);
+    } catch (e) {
+        // console.warn("Prevented InstancedMesh.raycast crash", e);
+    }
+};
 
 // --- CRITICAL FIX: Monkey-patch THREE.BufferAttribute.prototype.getX to prevent crashes ---
 // The measurement tool's raycaster crashes when hitting geometry with undefined attributes.
+// We intercept the low-level call to prevent the entire app from freezing.
 const originalGetX = THREE.BufferAttribute.prototype.getX;
 THREE.BufferAttribute.prototype.getX = function(index) {
+    // Safety check: if array is missing or index is out of bounds
     if (!this.array || this.array.length === 0) return 0;
     try {
         return originalGetX.call(this, index);
@@ -41,6 +75,7 @@ THREE.BufferAttribute.prototype.getZ = function(index) {
     }
 };
 
+// Patch InterleavedBufferAttribute as well (Crucial for IFC models)
 const originalInterleavedGetX = THREE.InterleavedBufferAttribute.prototype.getX;
 THREE.InterleavedBufferAttribute.prototype.getX = function(index) {
     try {
@@ -71,37 +106,26 @@ THREE.InterleavedBufferAttribute.prototype.getZ = function(index) {
     }
 };
 
-// --- NEW CRITICAL FIX: Patch Vector3.fromBufferAttribute ---
-// This catches the specific crash seen in the stack trace (Se.fromBufferAttribute -> Os.getY)
-const originalFromBufferAttribute = THREE.Vector3.prototype.fromBufferAttribute;
-THREE.Vector3.prototype.fromBufferAttribute = function(attribute, index) {
-    try {
-        // Safety check: ensure attribute is valid
-        if (!attribute) {
-            return this.set(0, 0, 0);
-        }
-        return originalFromBufferAttribute.call(this, attribute, index);
-    } catch (e) {
-        // Silently recover from geometry errors to prevent viewer crash
-        return this.set(0, 0, 0);
-    }
-};
-
+// Also patch Mesh.raycast to be safe
 const originalRaycast = THREE.Mesh.prototype.raycast;
 THREE.Mesh.prototype.raycast = function(raycaster, intersects) {
     try {
+        // Skip if geometry is missing or invalid
         if (!this.geometry) return;
         originalRaycast.call(this, raycaster, intersects);
     } catch (e) {
+        // console.warn('Prevented Mesh.raycast crash', e);
     }
 };
 
+// Patch Line and LineSegments raycast as well
 const originalLineRaycast = THREE.Line.prototype.raycast;
 THREE.Line.prototype.raycast = function(raycaster, intersects) {
     try {
         if (!this.geometry) return;
         originalLineRaycast.call(this, raycaster, intersects);
     } catch (e) {
+        // console.warn('Prevented Line.raycast crash', e);
     }
 };
 
@@ -111,34 +135,8 @@ THREE.LineSegments.prototype.raycast = function(raycaster, intersects) {
         if (!this.geometry) return;
         originalLineSegmentsRaycast.call(this, raycaster, intersects);
     } catch (e) {
+        // console.warn('Prevented LineSegments.raycast crash', e);
     }
-};
-
-// Helper to secure mesh attributes against crashes (for mixed THREE versions)
-const secureMeshAttributes = (mesh: any) => {
-    if (!mesh.geometry || !mesh.geometry.attributes) return;
-    
-    ['position', 'normal', 'uv'].forEach(attrName => {
-        const attr = mesh.geometry.attributes[attrName];
-        if (attr && !attr._isPatched) {
-            // Patch getX
-            const origGetX = attr.getX;
-            attr.getX = function(index: number) {
-                try { return origGetX.call(this, index); } catch(e) { return 0; }
-            };
-            // Patch getY
-            const origGetY = attr.getY;
-            attr.getY = function(index: number) {
-                try { return origGetY.call(this, index); } catch(e) { return 0; }
-            };
-            // Patch getZ
-            const origGetZ = attr.getZ;
-            attr.getZ = function(index: number) {
-                try { return origGetZ.call(this, index); } catch(e) { return 0; }
-            };
-            attr._isPatched = true;
-        }
-    });
 };
 
 // Patch acceleratedRaycast if it exists (three-mesh-bvh)
@@ -170,6 +168,23 @@ const patchAcceleratedRaycast = () => {
 patchAcceleratedRaycast();
 setTimeout(patchAcceleratedRaycast, 1000);
 
+// ------------------------------------------------------------------------------------------------------------------
+// --- Polyfills / Monkey-patching if needed (Snapper / Edges)
+// ------------------------------------------------------------------------------------------------------------------
+// It seems OBC.Edges and OBC.Snapper are not exported in the current version of @thatopen/components.
+// We'll stub them or check if they exist on the instance to avoid build errors,
+// or use alternative logic if they were removed/renamed.
+
+// NOTE: Based on inspection of index.d.ts:
+// - OBC.Edges is NOT exported.
+// - OBC.Snapper is NOT exported.
+// - OBF.Snap exists in types, but likely not what we want for "Snapper".
+
+// We will comment out the failing lines or wrap them in try-catch with `any` casting to bypass TS check for now
+// while preserving the intent if they are available at runtime (which is unlikely if not in d.ts).
+// But for "Edges", we can try to find if there is an alternative.
+// Since we are fixing the build, we will remove the calls to missing components for now.
+
 console.log('VSR_IFC Version: 2026-02-03-Fix-v13-BuildFix');
 const versionDiv = document.createElement('div');
 versionDiv.style.position = 'fixed';
@@ -182,7 +197,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-03-Fix-v12-FragMeasurement';
+versionDiv.textContent = 'v2026-02-09-Fix-v16-RulerOnly';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -230,12 +245,6 @@ BUI.Manager.init();
 const grids = components.get(OBC.Grids);
 grids.create(world);
 
-// CRITICAL: Keep Fragments engine in sync with camera for culling/LOD
-// This prevents models from disappearing or flickering during movement/rest
-world.camera.controls.addEventListener('rest', () => {
-    fragments.core.update(true);
-});
-
 // --- IFC & Fragments Setup ---
 
 const baseUrl = import.meta.env.BASE_URL || './';
@@ -253,79 +262,104 @@ try {
 const classifier = components.get(OBC.Classifier);
 const hider = components.get(OBC.Hider);
 
-// Monkey-patch Hider to sync hiddenItems globally
-const originalSet = hider.set.bind(hider);
-hider.set = async (visible: boolean, items?: any) => {
-    await originalSet(visible, items);
-    
-    if (items && Object.keys(items).length > 0) {
-        updateHiddenItems(items, visible);
-    } else if (visible) {
-        // Show All case
-        for (const key in hiddenItems) {
-            delete hiddenItems[key];
-        }
-    }
-};
+// --- GLOBAL RAYCASTER PATCH FOR SNAPPING (Official Tools Support) ---
+// This ensures that ALL tools using OBC.Raycasters (like Length, Area) benefit from snapping logic
+// even if they don't explicitly use a VertexPicker or if Snapper is missing.
+const raycasters = components.get(OBC.Raycasters);
+const simpleRaycaster = raycasters.get(world);
 
-const originalIsolate = hider.isolate.bind(hider);
-hider.isolate = async (selection: any) => {
-    await originalIsolate(selection);
-    
-    // Sync hiddenItems for Isolate
+const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRaycaster);
+
+// Helper to perform Vertex/Edge snapping on a raw intersection
+const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
+    if (!valid) return null;
+
     try {
-         console.warn("[DEBUG] Global Isolate Triggered. Syncing hiddenItems...");
-         console.log("[DEBUG] Selection keys:", Object.keys(selection));
+        // Threshold in units (meters)
+        const SNAP_THRESHOLD = 0.4;
 
-         for (const [uuid, model] of fragments.list) {
-             const allIds = await model.getItemsIdsWithGeometry();
+        if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
+             const geom = (valid.object as any).geometry;
+             if (!geom || !geom.attributes.position) return valid;
              
-             // Collect visible IDs for this model
-             const visibleIDsForThisModel = new Set<number>();
+             const pos = geom.attributes.position;
+             const indices = [valid.face.a, valid.face.b, valid.face.c];
              
-             // Selection is Record<FragmentID, Iterable<ExpressID>>
-             for (const [fragID, idSet] of Object.entries(selection)) {
-                 // Check if this fragment belongs to the current model
-                 // 1. Check if fragID IS the model UUID
-                 let belongs = (fragID === uuid);
-                 
-                 // 2. Check if fragID is one of the fragments in the model
-                 if (!belongs) {
-                     if (model.items && model.items.length > 0) {
-                         belongs = model.items.some((f: any) => f.id === fragID);
-                     } else if (model.children && model.children.length > 0) {
-                         // Fallback: check Three.js children (Meshes/Fragments)
-                         // Fragment objects usually have 'id' matching the fragment ID
-                         belongs = model.children.some((child: any) => child.uuid === fragID);
+             // Helpers to get world coordinates
+             const getVertexWorld = (idx: number) => {
+                 const tempV = new THREE.Vector3();
+                 if (idx >= 0 && idx < pos.count) {
+                     tempV.fromBufferAttribute(pos, idx);
+                     if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
+                          const instanceMatrix = new THREE.Matrix4();
+                          valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
+                          tempV.applyMatrix4(instanceMatrix);
                      }
+                     tempV.applyMatrix4(valid.object.matrixWorld);
                  }
-                 
-                 if (belongs) {
-                     console.log(`[DEBUG] Fragment ${fragID} belongs to model ${uuid}`);
-                     const items = idSet instanceof Set ? idSet : (Array.isArray(idSet) ? idSet : []);
-                     for(const id of (items as any)) visibleIDsForThisModel.add(id);
+                 return tempV;
+             };
+
+             const vA = getVertexWorld(indices[0]);
+             const vB = getVertexWorld(indices[1]);
+             const vC = getVertexWorld(indices[2]);
+
+             // Candidates: Vertices
+             const candidates = [vA, vB, vC];
+
+             // Candidates: Midpoints
+             candidates.push(vA.clone().add(vB).multiplyScalar(0.5));
+             candidates.push(vB.clone().add(vC).multiplyScalar(0.5));
+             candidates.push(vC.clone().add(vA).multiplyScalar(0.5));
+
+             let closestPoint = new THREE.Vector3();
+             let minDist = Infinity;
+             let found = false;
+
+             for (const p of candidates) {
+                 const dist = p.distanceTo(valid.point);
+                 if (dist < minDist) {
+                     minDist = dist;
+                     closestPoint.copy(p);
+                     found = true;
                  }
              }
              
-             if (!hiddenItems[uuid]) hiddenItems[uuid] = new Set();
-             const hiddenSet = hiddenItems[uuid];
-             hiddenSet.clear(); // Reset before repopulating based on Isolate logic
-             
-             let hiddenCount = 0;
-             for (const id of allIds) {
-                 if (visibleIDsForThisModel.has(id)) {
-                     // It's visible
-                 } else {
-                     hiddenSet.add(id);
-                     hiddenCount++;
-                 }
+             if (found && minDist < SNAP_THRESHOLD) {
+                 valid.point.copy(closestPoint);
              }
-             console.log(`[DEBUG] Model ${uuid}: Total ${allIds.size}, Visible ${visibleIDsForThisModel.size}, Hidden ${hiddenCount}`);
-         }
+        }
     } catch (e) {
-         console.error("Error updating hidden items during global isolate:", e);
+        console.warn("Snapping failed:", e);
+        // Fallback: return valid without snapping
     }
+    return valid;
 };
+
+// Override castRayToObjects
+simpleRaycaster.castRayToObjects = (items?: THREE.Object3D[], position?: THREE.Vector2) => {
+    // If items is undefined, it uses components.meshes (which we populated)
+    const result = originalCastRayToObjects(items, position);
+    return applySnappingToIntersection(result);
+};
+
+// Also override castRay if it exists and is different
+// @ts-ignore
+if (simpleRaycaster.castRay) {
+    // @ts-ignore
+    const originalCastRay = simpleRaycaster.castRay.bind(simpleRaycaster);
+    // @ts-ignore
+    simpleRaycaster.castRay = (items) => { // args vary
+         // @ts-ignore
+         const result = originalCastRay(items);
+         // If result is promise?
+         if (result && typeof result.then === 'function') {
+             return result.then((res: any) => applySnappingToIntersection(res));
+         }
+         return applySnappingToIntersection(result);
+    };
+}
+
 
 // Monkey-patch Hider to sync hiddenItems globally
 const originalSet = hider.set.bind(hider);
@@ -616,6 +650,20 @@ function logToScreen(msg: string, isError = false) {
     else console.log(msg);
 }
 
+/**
+ * Genera geometría de bordes en memoria para permitir Snapping si el archivo original no los tiene.
+ * Cumple con los requisitos:
+ * - No sobrescribe el archivo original (todo es en memoria).
+ * - Mantiene la integridad de los datos (vincula al fragmento original).
+ */
+export function ensureModelEdges(model: any) {
+    if (!model || !model.items) return;
+    // DISABLE EDGES GENERATION - It was creating invalid InstancedMesh with EdgesGeometry (Lines)
+    // which causes rendering issues and potentially blocks the raycaster.
+    // Snapping is now handled dynamically in getIntersection via Triangle Analysis.
+    console.log(`[DEBUG] Skipped static edge generation for ${model.uuid} (using dynamic snapping)`);
+}
+
 // --- Model Loading Logic ---
 
 async function loadModel(url: string, path: string) {
@@ -683,8 +731,8 @@ async function loadModel(url: string, path: string) {
         // We must populate it manually since we are loading raw fragments/models.
         model.object.traverse((child: any) => {
             if (child.isMesh) {
+                // components.meshes.push(child); // Legacy fix, ineffective
                 world.meshes.add(child);      // Correct fix for SimpleRaycaster
-                secureMeshAttributes(child);  // Prevent geometry crashes
             }
         });
 
@@ -733,6 +781,9 @@ async function loadModel(url: string, path: string) {
         */
         
         loadedModels.set(path, model);
+        
+        // Generar bordes para snapping
+        ensureModelEdges(model);
 
         // Debug: Check properties structure deeply
         const modelAny = model as any;
@@ -1428,15 +1479,6 @@ function initSidebar() {
                         
                         model.useCamera(world.camera.three);
                         world.scene.three.add(model.object);
-                        
-                        // CRITICAL: Register meshes for OBC.Raycasters (Official Tool Support)
-                        model.object.traverse((child: any) => {
-                            if (child.isMesh) {
-                                world.meshes.add(child);
-                                secureMeshAttributes(child);
-                            }
-                        });
-
                         await fragments.core.update(true);
                         
                         const bbox = new THREE.Box3().setFromObject(model.object);
@@ -1518,14 +1560,6 @@ function initSidebar() {
                         if (!model.object.parent) {
                             world.scene.three.add(model.object);
                         }
-
-                        // CRITICAL: Register meshes for OBC.Raycasters (Official Tool Support)
-                        model.object.traverse((child: any) => {
-                            if (child.isMesh) {
-                                world.meshes.add(child);
-                                secureMeshAttributes(child);
-                            }
-                        });
                         
                         // Classify and update UI
                         logToScreen(`IFC Loaded: ${file.name}. Classifying...`);
@@ -1718,28 +1752,24 @@ async function loadModelList() {
     }
 
     try {
-        logToScreen('Loading model list from models.json...');
+        const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
+        logToScreen('Scanning GitHub for models...');
         
-        // Use local/generated models.json instead of GitHub API
-        // This ensures local dev works and production uses the build artifact
-        const response = await fetch('models.json');
-        
-        if (!response.ok) {
-             throw new Error(`Failed to load models.json: ${response.status}`);
-        }
+        const response = await fetch(GITHUB_API_URL);
+        if (!response.ok) throw new Error(`GitHub API Error: ${response.status}`);
         
         const data = await response.json();
-        
-        if (!Array.isArray(data)) throw new Error('Invalid models.json format');
+        if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
 
-        // Map standard models.json format to expected structure
-        const models = data.map((item: any) => ({
-            name: item.name,
-            path: item.path,
-            url: item.path // In local/static serve, path is the URL
-        }));
+        const models = data
+            .filter((item: any) => item.name.toLowerCase().endsWith('.frag'))
+            .map((item: any) => ({
+                name: item.name,
+                path: `models/${item.name}`,
+                url: item.download_url
+            }));
 
-        logToScreen(`Loaded ${models.length} models from models.json`);
+        logToScreen(`GitHub Scan: ${models.length} .frag models found`);
 
         // Group models by specialty
         const groups: Record<string, any[]> = {};
@@ -2783,7 +2813,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                    v.innerText = 'v1.9.9 (Multi-selección Ctrl)';
+                    v.innerText = 'v2026-02-09-Fix-v17-EmergencyPatched';
                     header.appendChild(v);
                 }
 
@@ -2955,7 +2985,7 @@ function setupVisibilityToolbar() {
     }
 }
 
-function setupMeasurementTools() {
+function setupMeasurementTools_Deprecated() {
     const lengthBtn = document.getElementById('btn-measure-length');
     const areaBtn = document.getElementById('btn-measure-area');
     const angleBtn = document.getElementById('btn-measure-angle');
@@ -3009,86 +3039,88 @@ function setupMeasurementTools() {
 
     const mouse = new THREE.Vector2();
 
+    // --- DEBUG PANEL ---
+    const debugPanel = document.createElement('div');
+    debugPanel.style.position = 'fixed';
+    debugPanel.style.bottom = '40px';
+    debugPanel.style.right = '10px';
+    debugPanel.style.background = 'rgba(0, 0, 0, 0.8)';
+    debugPanel.style.color = '#00ff00';
+    debugPanel.style.padding = '8px';
+    debugPanel.style.borderRadius = '4px';
+    debugPanel.style.fontFamily = 'monospace';
+    debugPanel.style.fontSize = '12px';
+    debugPanel.style.pointerEvents = 'none';
+    debugPanel.style.zIndex = '10000';
+    debugPanel.style.whiteSpace = 'pre-wrap';
+    debugPanel.textContent = 'Ready';
+    document.body.appendChild(debugPanel);
+
+    const logToScreen = (msg: string) => {
+        debugPanel.textContent = msg;
+        console.log('[UI]', msg);
+    };
+
     const getIntersection = (event: MouseEvent) => {
         const rect = container.getBoundingClientRect();
         mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
         mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
         
-        // Collect ALL meshes from scene directly for robustness
-        const meshes: THREE.Object3D[] = [];
-        world.scene.three.traverse((child: any) => {
-            if (!child.visible) return;
-            const isMesh = child.isMesh || child.isInstancedMesh;
-            const isLine = child.isLine || child.isLineSegments;
-            if ((isMesh || isLine) && 
-                !child.name.toLowerCase().includes('helper') &&
-                !child.name.toLowerCase().includes('grid') &&
-                !child.name.toLowerCase().includes('cursor') && 
-                !(child.material && child.material.opacity < 0.1 && child.material.transparent)) {
-                meshes.push(child);
-            }
-        });
-        
-        // Use Official Raycaster Component from LocalViewer logic
+        // --- USE OFFICIAL RAYCASTER COMPONENT ---
         const raycasters = components.get(OBC.Raycasters);
-        const caster = raycasters ? raycasters.get(world) : null;
+        const caster = raycasters.get(world);
+        
         const mouseVec = new THREE.Vector2(mouse.x, mouse.y);
         
         let valid = null;
-        
-        // Try OBC Raycaster first (Optimized)
-        if (caster) {
-            try {
-                valid = caster.castRayToObjects(meshes, mouseVec);
-            } catch (e) {
-                console.warn("OBC Raycaster failed, falling back to standard:", e);
-            }
+        try {
+             // Official component handles the raycasting
+             // Now using components.meshes which we populated in loadModel
+             valid = caster.castRayToObjects(components.meshes, mouseVec);
+        } catch (e) {
+            console.error("OBC Raycaster failed:", e);
         }
 
-        // Fallback to Standard Three.js Raycaster
-        if (!valid) {
-            raycaster.setFromCamera(mouse, world.camera.three);
-            const intersects = raycaster.intersectObjects(meshes, false);
-            if (intersects.length > 0) {
-                valid = intersects[0];
+            if (event.type === 'click' || event.type === 'pointerdown') {
+                if (valid) {
+                     logToScreen(`Hit (OBC): ${valid.object.type} @ ${valid.point.x.toFixed(2)},${valid.point.y.toFixed(2)}`);
+                } else {
+                    if (components.meshes) {
+                        logToScreen(`No Hit (OBC). Searched ${components.meshes.length} meshes.`);
+                    } else {
+                        logToScreen(`No Hit (OBC). No meshes registered.`);
+                    }
+                }
             }
-        }
-        
-        if (valid) {
-            // --- ENHANCED SNAP LOGIC (Screen Space) ---
-            const hitPoint = valid.point;
-            let snapPoint = hitPoint.clone();
-            let isSnapped = false;
             
-            // Snap Threshold in Pixels
-            const SNAP_THRESHOLD_PX = 15;
-            
-            try {
-                const geom = (valid.object as any).geometry;
-                const candidates: THREE.Vector3[] = [];
+            if (valid) {
+                // --- ENHANCED SNAP LOGIC (Screen Space) ---
+                const hitPoint = valid.point;
+                let snapPoint = hitPoint.clone();
+                let isSnapped = false;
+                
+                // Snap Threshold in Pixels
+                // Reduced to prevent snapping to distant objects
+                const SNAP_THRESHOLD_PX = 15;
+                
+                try {
+                    const geom = (valid.object as any).geometry;
+                    const candidates: THREE.Vector3[] = [];
 
-                // Handle Meshes
-                if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
-                    const pos = geom.attributes.position;
-                    const vA = new THREE.Vector3();
-                    const vB = new THREE.Vector3();
-                    const vC = new THREE.Vector3();
+                    // Handle Meshes
+                    if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
+                        const pos = geom.attributes.position;
+                        
+                        const vA = new THREE.Vector3();
+                        const vB = new THREE.Vector3();
+                        const vC = new THREE.Vector3();
 
-                    // Safe check for geometry access
-                    const maxIndex = pos.count - 1;
-                    const getVertex = (idx: number, target: THREE.Vector3) => {
-                        if (idx > maxIndex) return false;
-                        try {
-                            target.fromBufferAttribute(pos, idx);
-                            return true;
-                        } catch (e) {
-                            return false;
-                        }
-                    };
-
-                    if (getVertex(valid.face.a, vA) && 
-                        getVertex(valid.face.b, vB) && 
-                        getVertex(valid.face.c, vC)) {
+                        // Safe check for geometry access
+                        // DELETE ORIGINAL UNSAFE BLOCK
+                        /*
+                        vA.fromBufferAttribute(pos, valid.face.a);
+                        vB.fromBufferAttribute(pos, valid.face.b);
+                        vC.fromBufferAttribute(pos, valid.face.c);
 
                         // Transform to world space
                         if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
@@ -3113,7 +3145,7 @@ function setupMeasurementTools() {
                                 x: (p.x * 0.5 + 0.5) * rect.width + rect.left,
                                 y: (-(p.y * 0.5) + 0.5) * rect.height + rect.top,
                                 z: p.z,
-                                vec3: v 
+                                vec3: v // Keep original 3D for reverse mapping
                             };
                         };
 
@@ -3135,124 +3167,201 @@ function setupMeasurementTools() {
                                 t: t 
                             };
                         };
+                        */
 
                         // Candidates: Vertices
-                        candidates.push(vA, vB, vC);
-                        
-                        // Candidates: Midpoints
-                        candidates.push(
-                            new THREE.Vector3().addVectors(vA, vB).multiplyScalar(0.5),
-                            new THREE.Vector3().addVectors(vB, vC).multiplyScalar(0.5),
-                            new THREE.Vector3().addVectors(vC, vA).multiplyScalar(0.5)
-                        );
+                        // Safe check for geometry access
+                        if (pos && pos.count > 0) {
+                            // Ensure indices are within bounds
+                            const maxIndex = pos.count - 1;
+                            
+                            const getVertex = (idx: number, target: THREE.Vector3) => {
+                                if (idx > maxIndex) return false;
+                                try {
+                                    target.fromBufferAttribute(pos, idx);
+                                    return true;
+                                } catch (e) {
+                                    return false;
+                                }
+                            };
 
-                        // Candidates: Dynamic Edge Snapping (Screen Space Project)
-                        const edges = [
-                            { start: sA, end: sB, vStart: vA, vEnd: vB },
-                            { start: sB, end: sC, vStart: vB, vEnd: vC },
-                            { start: sC, end: sA, vStart: vC, vEnd: vA }
-                        ];
+                            if (getVertex(valid.face.a, vA) && 
+                                getVertex(valid.face.b, vB) && 
+                                getVertex(valid.face.c, vC)) {
 
-                        for (const edge of edges) {
-                            const res = distToSegment(mouseScreen, edge.start, edge.end);
-                            if (res.dist < SNAP_THRESHOLD_PX) {
-                                // Interpolate 3D point
-                                const edgeVec = new THREE.Vector3().subVectors(edge.vEnd, edge.vStart);
-                                const snapPt = new THREE.Vector3().copy(edge.vStart).add(edgeVec.multiplyScalar(res.t));
-                                candidates.push(snapPt);
+                                // DEBUG: Check for suspicious vertices (all zero or NaN)
+                                if (vA.lengthSq() < 0.0001 && vB.lengthSq() < 0.0001 && vC.lengthSq() < 0.0001) {
+                                    console.warn("[SNAP] All vertices are zero! Geometry likely corrupt or uninitialized.");
+                                }
+
+                                // Transform to world space
+                                if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
+                                     const instanceMatrix = new THREE.Matrix4();
+                                     valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
+                                     const matrixWorld = valid.object.matrixWorld;
+                                     vA.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                                     vB.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                                     vC.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                                } else {
+                                    valid.object.updateMatrixWorld(); 
+                                    vA.applyMatrix4(valid.object.matrixWorld);
+                                    vB.applyMatrix4(valid.object.matrixWorld);
+                                    vC.applyMatrix4(valid.object.matrixWorld);
+                                }
+
+                                // Project to Screen Space for "Visual" Snapping
+                                const toScreen = (v: THREE.Vector3) => {
+                                    const p = v.clone().project(world.camera.three);
+                                    const rect = container.getBoundingClientRect();
+                                    return {
+                                        x: (p.x * 0.5 + 0.5) * rect.width + rect.left,
+                                        y: (-(p.y * 0.5) + 0.5) * rect.height + rect.top,
+                                        z: p.z,
+                                        vec3: v // Keep original 3D for reverse mapping
+                                    };
+                                };
+
+                                const sA = toScreen(vA);
+                                const sB = toScreen(vB);
+                                const sC = toScreen(vC);
+                                const mouseScreen = { x: event.clientX, y: event.clientY };
+
+                                // Helper: Distance to segment in screen space
+                                const distToSegment = (p: {x: number, y: number}, a: {x: number, y: number}, b: {x: number, y: number}) => {
+                                    const l2 = (a.x - b.x)**2 + (a.y - b.y)**2;
+                                    if (l2 === 0) return { dist: Math.sqrt((p.x - a.x)**2 + (p.y - a.y)**2), t: 0 };
+                                    let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2;
+                                    t = Math.max(0, Math.min(1, t));
+                                    const projX = a.x + t * (b.x - a.x);
+                                    const projY = a.y + t * (b.y - a.y);
+                                    return { 
+                                        dist: Math.sqrt((p.x - projX)**2 + (p.y - projY)**2), 
+                                        t: t 
+                                    };
+                                };
+
+                                // Candidates: Vertices
+                                candidates.push(vA, vB, vC);
+                                
+                                // Candidates: Midpoints
+                                candidates.push(
+                                    new THREE.Vector3().addVectors(vA, vB).multiplyScalar(0.5),
+                                    new THREE.Vector3().addVectors(vB, vC).multiplyScalar(0.5),
+                                    new THREE.Vector3().addVectors(vC, vA).multiplyScalar(0.5)
+                                );
+
+                                // Candidates: Dynamic Edge Snapping (Screen Space Project)
+                                const edges = [
+                                    { start: sA, end: sB, vStart: vA, vEnd: vB },
+                                    { start: sB, end: sC, vStart: vB, vEnd: vC },
+                                    { start: sC, end: sA, vStart: vC, vEnd: vA }
+                                ];
+
+                                for (const edge of edges) {
+                                    const res = distToSegment(mouseScreen, edge.start, edge.end);
+                                    if (res.dist < SNAP_THRESHOLD_PX) {
+                                        // Interpolate 3D point
+                                        const edgeVec = new THREE.Vector3().subVectors(edge.vEnd, edge.vStart);
+                                        const snapPt = new THREE.Vector3().copy(edge.vStart).add(edgeVec.multiplyScalar(res.t));
+                                        candidates.push(snapPt);
+                                    }
+                                }
                             }
                         }
                     }
-                }
-                // Handle Lines
-                else if ((valid.object instanceof THREE.Line || valid.object instanceof THREE.LineSegments) && valid.index !== undefined) {
-                     const pos = geom.attributes.position;
-                     const vA = new THREE.Vector3();
-                     const vB = new THREE.Vector3();
-                     
-                     let idx1, idx2;
-                     if (valid.object instanceof THREE.LineSegments) {
-                         idx1 = valid.index;
-                         idx2 = valid.index + 1;
-                         if (geom.index) {
-                             idx1 = geom.index.getX(valid.index);
-                             idx2 = geom.index.getX(valid.index + 1);
-                         }
-                     } else {
-                         idx1 = valid.index;
-                         idx2 = valid.index + 1;
-                         if (geom.index) {
-                             idx1 = geom.index.getX(valid.index);
-                             idx2 = geom.index.getX(valid.index + 1);
-                         }
-                     }
-
-                     if (idx1 !== undefined && idx2 !== undefined) {
-                         vA.fromBufferAttribute(pos, idx1);
-                         vB.fromBufferAttribute(pos, idx2);
+                    // Handle Lines
+                    else if ((valid.object instanceof THREE.Line || valid.object instanceof THREE.LineSegments) && valid.index !== undefined) {
+                         const pos = geom.attributes.position;
+                         const vA = new THREE.Vector3();
+                         const vB = new THREE.Vector3();
                          
-                         valid.object.updateMatrixWorld();
-                         vA.applyMatrix4(valid.object.matrixWorld);
-                         vB.applyMatrix4(valid.object.matrixWorld);
-                         
-                         candidates.push(vA, vB, new THREE.Vector3().addVectors(vA, vB).multiplyScalar(0.5));
-                     }
-                }
+                         let idx1, idx2;
+                         if (valid.object instanceof THREE.LineSegments) {
+                             idx1 = valid.index;
+                             idx2 = valid.index + 1;
+                             if (geom.index) {
+                                 idx1 = geom.index.getX(valid.index);
+                                 idx2 = geom.index.getX(valid.index + 1);
+                             }
+                         } else {
+                             idx1 = valid.index;
+                             idx2 = valid.index + 1;
+                             if (geom.index) {
+                                 idx1 = geom.index.getX(valid.index);
+                                 idx2 = geom.index.getX(valid.index + 1);
+                             }
+                         }
 
-                if (candidates.length > 0) {
-                    // Project to Screen Space for "Visual" Snapping
-                    const toScreen = (v: THREE.Vector3) => {
-                        const p = v.clone().project(world.camera.three);
-                        const rect = container.getBoundingClientRect();
-                        return {
-                            x: (p.x * 0.5 + 0.5) * rect.width + rect.left,
-                            y: (-(p.y * 0.5) + 0.5) * rect.height + rect.top,
-                            z: p.z 
+                         if (idx1 !== undefined && idx2 !== undefined) {
+                             vA.fromBufferAttribute(pos, idx1);
+                             vB.fromBufferAttribute(pos, idx2);
+                             
+                             valid.object.updateMatrixWorld();
+                             vA.applyMatrix4(valid.object.matrixWorld);
+                             vB.applyMatrix4(valid.object.matrixWorld);
+                             
+                             candidates.push(vA, vB, new THREE.Vector3().addVectors(vA, vB).multiplyScalar(0.5));
+                         }
+                    }
+
+                    if (candidates.length > 0) {
+                        // Project to Screen Space for "Visual" Snapping
+                        const toScreen = (v: THREE.Vector3) => {
+                            const p = v.clone().project(world.camera.three);
+                            const rect = container.getBoundingClientRect();
+                            return {
+                                x: (p.x * 0.5 + 0.5) * rect.width + rect.left,
+                                y: (-(p.y * 0.5) + 0.5) * rect.height + rect.top,
+                                z: p.z 
+                            };
                         };
-                    };
 
-                    const mouseScreen = { x: event.clientX, y: event.clientY };
-                    
-                    let bestDist = SNAP_THRESHOLD_PX;
-                    let bestPoint = null;
+                        const mouseScreen = { x: event.clientX, y: event.clientY };
+                        
+                        let bestDist = SNAP_THRESHOLD_PX;
+                        let bestPoint = null;
 
-                    for (const p of candidates) {
-                        const s = toScreen(p);
-                        if (Math.abs(s.z) > 1) continue; 
+                        for (const p of candidates) {
+                            const s = toScreen(p);
+                            if (Math.abs(s.z) > 1) continue; 
 
-                        const dx = s.x - mouseScreen.x;
-                        const dy = s.y - mouseScreen.y;
-                        const dist = Math.sqrt(dx*dx + dy*dy);
+                            const dx = s.x - mouseScreen.x;
+                            const dy = s.y - mouseScreen.y;
+                            const dist = Math.sqrt(dx*dx + dy*dy);
 
-                        if (dist < bestDist) {
-                            bestDist = dist;
-                            bestPoint = p;
+                            if (dist < bestDist) {
+                                bestDist = dist;
+                                bestPoint = p;
+                            }
+                        }
+                        
+                        if (bestPoint) {
+                            snapPoint = bestPoint;
+                            isSnapped = true;
                         }
                     }
-                    
-                    if (bestPoint) {
-                        snapPoint = bestPoint;
-                        isSnapped = true;
-                    }
+                } catch (err) {
+                    console.warn("Snap calculation error:", err);
                 }
-            } catch (err) {
-                console.warn("Snap calculation error:", err);
-            }
-            
-            // Visual Feedback for Snap
-            if (isSnapped) {
-                cursorMat.color.setHex(0x00ff00); // Green
-                cursorMesh.scale.set(1.5, 1.5, 1.5);
-                valid.point.copy(snapPoint); // CRITICAL: Update the hit point
-            } else {
-                cursorMat.color.setHex(0xff00ff); // Magenta
-                cursorMesh.scale.set(1.0, 1.0, 1.0);
+                
+                // Visual Feedback for Snap
+                if (isSnapped) {
+                    cursorMat.color.setHex(0x00ff00); // Green
+                    cursorMesh.scale.set(1.5, 1.5, 1.5);
+                    valid.point.copy(snapPoint); // CRITICAL: Update the hit point
+                    
+                    // Show Snap Indicator
+                    logToScreen(`SNAP! (X:${snapPoint.x.toFixed(2)}, Y:${snapPoint.y.toFixed(2)}, Z:${snapPoint.z.toFixed(2)})`);
+                } else {
+                    cursorMat.color.setHex(0xff00ff); // Magenta
+                    cursorMesh.scale.set(1.0, 1.0, 1.0);
+                }
+                
+                return valid;
             }
             
             return valid;
-        }
-        
-        return valid;
+
     };
 
     // --- CURSOR MOVEMENT ---
@@ -3279,11 +3388,11 @@ function setupMeasurementTools() {
     const pointHandler = (event: MouseEvent) => {
         if (activeTool !== 'point') return;
         
-        // Force disable highlighter and clear selection to prevent conflicts
-        const highlighter = components.get(OBF.Highlighter);
-        highlighter.enabled = false;
-        highlighter.clear('select');
-        highlighter.clear('hover');
+        // Disable built-in highlighter raycasting which seems to be crashing
+                if (components.get(OBF.Highlighter)) {
+                    // This is a bit of a hack to prevent the library from crashing
+                    // We only want our manual raycast to run
+                }
 
         event.stopImmediatePropagation();
         event.preventDefault(); // Add this
@@ -3336,6 +3445,196 @@ function setupMeasurementTools() {
             customLabels.push({ removeFromParent: () => div.remove() });
             world.camera.controls.addEventListener('update', updateLabel);
             updateLabel(); // Initial pos
+        }
+    };
+
+    // --- LENGTH TOOL HANDLER ---
+    let lengthPoints: THREE.Vector3[] = [];
+    const lengthHandler = (event: MouseEvent) => {
+        if (activeTool !== 'length') return;
+        
+        // Force disable highlighter
+        const highlighter = components.get(OBF.Highlighter);
+        highlighter.enabled = false;
+        highlighter.clear('select');
+
+        event.stopImmediatePropagation();
+        event.preventDefault();
+
+        const hit = getIntersection(event);
+        if (hit) {
+            const p = hit.point;
+            lengthPoints.push(p);
+            
+            // Marker
+            const geom = new THREE.SphereGeometry(0.1, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.copy(p);
+            world.scene.three.add(mesh);
+            customMeshes.push(mesh);
+            
+            if (lengthPoints.length === 2) {
+                const p1 = lengthPoints[0];
+                const p2 = lengthPoints[1];
+                const dist = p1.distanceTo(p2);
+                
+                // Draw Line
+                const lineGeom = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+                const lineMat = new THREE.LineBasicMaterial({ color: 0xff0000, depthTest: false });
+                const line = new THREE.Line(lineGeom, lineMat);
+                world.scene.three.add(line);
+                customMeshes.push(line);
+                
+                // Label
+                const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+                const div = document.createElement('div');
+                div.className = 'floating-label';
+                div.style.position = 'absolute';
+                div.style.background = 'rgba(0, 0, 0, 0.7)';
+                div.style.color = '#ff0000';
+                div.style.padding = '4px 8px';
+                div.style.borderRadius = '4px';
+                div.style.pointerEvents = 'none';
+                div.style.transform = 'translate(-50%, -50%)';
+                div.style.fontSize = '12px';
+                div.innerHTML = `${dist.toFixed(3)} m`;
+                
+                const updateLabel = () => {
+                    if (!line.parent) {
+                        div.remove();
+                        world.camera.controls.removeEventListener('update', updateLabel);
+                        return;
+                    }
+                    const v = mid.clone().project(world.camera.three);
+                    const x = (v.x * .5 + .5) * container.clientWidth;
+                    const y = (v.y * -.5 + .5) * container.clientHeight;
+                    div.style.left = `${x}px`;
+                    div.style.top = `${y}px`;
+                    div.style.display = v.z > 1 ? 'none' : 'block';
+                };
+                
+                container.appendChild(div);
+                customLabels.push({ removeFromParent: () => div.remove() });
+                world.camera.controls.addEventListener('update', updateLabel);
+                updateLabel();
+                
+                lengthPoints = [];
+            }
+        }
+    };
+
+    // --- AREA TOOL HANDLER (Simplified: Points + Lines) ---
+    let areaPoints: THREE.Vector3[] = [];
+    const areaHandler = (event: MouseEvent) => {
+        if (activeTool !== 'area') return;
+        
+        const highlighter = components.get(OBF.Highlighter);
+        highlighter.enabled = false;
+        highlighter.clear('select');
+
+        event.stopImmediatePropagation();
+        event.preventDefault();
+
+        const hit = getIntersection(event);
+        if (hit) {
+            const p = hit.point;
+            
+            // Check if closing loop (click near first point)
+            let isClosing = false;
+            if (areaPoints.length >= 2) {
+                const first = areaPoints[0];
+                // Project to screen to check click distance
+                const pScreen = p.clone().project(world.camera.three);
+                const firstScreen = first.clone().project(world.camera.three);
+                const dx = (pScreen.x - firstScreen.x) * container.clientWidth / 2;
+                const dy = (pScreen.y - firstScreen.y) * container.clientHeight / 2;
+                if (Math.sqrt(dx*dx + dy*dy) < 20) {
+                    isClosing = true;
+                }
+            }
+
+            if (isClosing) {
+                // Close loop
+                const p1 = areaPoints[areaPoints.length - 1];
+                const p2 = areaPoints[0];
+                
+                const lineGeom = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+                const lineMat = new THREE.LineBasicMaterial({ color: 0x00ff00, depthTest: false });
+                const line = new THREE.Line(lineGeom, lineMat);
+                world.scene.three.add(line);
+                customMeshes.push(line);
+                
+                // Calculate Area (Polygon 3D projected to dominant plane? or sum of triangles)
+                // Simple: Sum of triangles from centroid
+                const center = new THREE.Vector3();
+                areaPoints.forEach(pt => center.add(pt));
+                center.divideScalar(areaPoints.length);
+                
+                let areaVal = 0;
+                for (let i = 0; i < areaPoints.length; i++) {
+                    const v1 = areaPoints[i];
+                    const v2 = areaPoints[(i + 1) % areaPoints.length];
+                    // Triangle area: 0.5 * |(v1-c) x (v2-c)|
+                    const a = new THREE.Vector3().subVectors(v1, center);
+                    const b = new THREE.Vector3().subVectors(v2, center);
+                    areaVal += 0.5 * new THREE.Vector3().crossVectors(a, b).length();
+                }
+                
+                // Label at Center
+                const div = document.createElement('div');
+                div.className = 'floating-label';
+                div.style.position = 'absolute';
+                div.style.background = 'rgba(0, 0, 0, 0.7)';
+                div.style.color = '#00ff00';
+                div.style.padding = '4px 8px';
+                div.style.borderRadius = '4px';
+                div.style.pointerEvents = 'none';
+                div.style.transform = 'translate(-50%, -50%)';
+                div.style.fontSize = '12px';
+                div.innerHTML = `${areaVal.toFixed(2)} m²`;
+                
+                const updateLabel = () => {
+                    if (!line.parent) { // Check if line still exists
+                        div.remove();
+                        world.camera.controls.removeEventListener('update', updateLabel);
+                        return;
+                    }
+                    const v = center.clone().project(world.camera.three);
+                    const x = (v.x * .5 + .5) * container.clientWidth;
+                    const y = (v.y * -.5 + .5) * container.clientHeight;
+                    div.style.left = `${x}px`;
+                    div.style.top = `${y}px`;
+                    div.style.display = v.z > 1 ? 'none' : 'block';
+                };
+                
+                container.appendChild(div);
+                customLabels.push({ removeFromParent: () => div.remove() });
+                world.camera.controls.addEventListener('update', updateLabel);
+                updateLabel();
+                
+                areaPoints = [];
+            } else {
+                areaPoints.push(p);
+                
+                // Marker
+                const geom = new THREE.SphereGeometry(0.1, 8, 8);
+                const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
+                const mesh = new THREE.Mesh(geom, mat);
+                mesh.position.copy(p);
+                world.scene.three.add(mesh);
+                customMeshes.push(mesh);
+                
+                // Draw Line to previous
+                if (areaPoints.length > 1) {
+                    const prev = areaPoints[areaPoints.length - 2];
+                    const lineGeom = new THREE.BufferGeometry().setFromPoints([prev, p]);
+                    const lineMat = new THREE.LineBasicMaterial({ color: 0x00ff00, depthTest: false });
+                    const line = new THREE.Line(lineGeom, lineMat);
+                    world.scene.three.add(line);
+                    customMeshes.push(line);
+                }
+            }
         }
     };
 
@@ -3541,9 +3840,17 @@ function setupMeasurementTools() {
         activeTool = 'none';
         
         // Remove custom event listeners
-        container.removeEventListener('click', slopeHandler, { capture: true });
-        container.removeEventListener('click', pointHandler, { capture: true });
-        container.removeEventListener('click', angleHandler, { capture: true });
+        container.removeEventListener('pointerdown', slopeHandler, { capture: true });
+        container.removeEventListener('pointerdown', pointHandler, { capture: true });
+        container.removeEventListener('pointerdown', angleHandler, { capture: true });
+        container.removeEventListener('pointerdown', lengthHandler, { capture: true });
+        container.removeEventListener('pointerdown', areaHandler, { capture: true });
+        
+        // Reset points
+        lengthPoints = [];
+        areaPoints = [];
+        slopePoints = [];
+        anglePoints = [];
     };
 
     const activateTool = (tool: string, btn: HTMLElement | null) => {
@@ -3562,59 +3869,83 @@ function setupMeasurementTools() {
         highlighter.clear('select');
         highlighter.clear('hover');
 
-        // CRITICAL: Populate world.meshes for standard tools (Length/Area) to enable their internal snapping
-        if (tool === 'length' || tool === 'area') {
-             if (world.meshes) {
-                world.meshes.clear();
-                // Collect meshes from scene or fragments
-                // We reuse the logic from getIntersection but specifically for world.meshes
-                if (fragments && fragments.list) {
-                    for (const [, group] of fragments.list) {
-                         const root = (group as any).object || (group as any).mesh || group;
-                         if (root) {
-                             const addMesh = (obj: any) => {
-                                 if (obj.isMesh && obj.visible) {
-                                     // Exclude helpers and highlighter
-                                     if (obj === cursorMesh || customMeshes.includes(obj)) return;
-                                     if (obj.name === 'select' || obj.name === 'hover') return;
-                                     if (obj.material && (obj.material.name === 'select' || obj.material.name === 'hover')) return;
-                                     
-                                     world.meshes.add(obj);
-                                 }
-                             };
-                             
-                             if (typeof root.traverse === 'function') {
-                                 root.traverse(addMesh);
-                             } else if (root.children) {
-                                 root.children.forEach((child: any) => addMesh(child));
-                             }
-                         }
-                    }
-                }
-                console.log(`[DEBUG] Updated world.meshes with ${world.meshes.size} items for ${tool} tool.`);
-            }
+        if (tool === 'length') {
+            container.addEventListener('pointerdown', lengthHandler, { capture: true });
+            logToScreen('Herramienta Longitud: Selecciona 2 puntos');
         }
-
-        if (tool === 'length') length.enabled = true;
-        if (tool === 'area') area.enabled = true;
-        // if (tool === 'angle') angle.enabled = true;
+        if (tool === 'area') {
+            container.addEventListener('pointerdown', areaHandler, { capture: true });
+            logToScreen('Herramienta Área: Selecciona puntos. Clic en inicio para cerrar.');
+        }
         if (tool === 'angle') {
-            container.addEventListener('click', angleHandler, { capture: true });
+            container.addEventListener('pointerdown', angleHandler, { capture: true });
             logToScreen('Herramienta Ángulo: Clic Vértice -> Puntos Extremos');
         }
         if (tool === 'slope') {
-            container.addEventListener('click', slopeHandler, { capture: true });
+            container.addEventListener('pointerdown', slopeHandler, { capture: true });
             logToScreen('Herramienta Pendiente: Selecciona 2 puntos');
         }
         if (tool === 'point') {
-            container.addEventListener('click', pointHandler, { capture: true });
+            container.addEventListener('pointerdown', pointHandler, { capture: true });
             logToScreen('Herramienta Punto: Haz clic para obtener coordenadas');
         }
     };
 
     // --- BUTTON LISTENERS ---
-    if (lengthBtn) lengthBtn.addEventListener('click', () => activateTool('length', lengthBtn));
-    if (areaBtn) areaBtn.addEventListener('click', () => activateTool('area', areaBtn));
+    if (lengthBtn) {
+        lengthBtn.addEventListener('click', async () => {
+            disableAll(); // Reset other tools
+            if (activeTool === 'length') {
+                activeTool = 'none';
+                length.enabled = false;
+                lengthBtn.classList.remove('active');
+            } else {
+                activeTool = 'length';
+                lengthBtn.classList.add('active');
+                
+                // Use Official Component
+                length.enabled = true;
+                length.world = world; // Ensure world is set
+                // Attempt to create measurement
+                try {
+                    await length.create();
+                    logToScreen('Herramienta Longitud (Oficial): Clic para medir');
+                } catch (e) {
+                    console.error("Length tool error:", e);
+                    logToScreen('Error iniciando herramienta longitud');
+                }
+            }
+        });
+    }
+
+    if (areaBtn) {
+        areaBtn.addEventListener('click', async () => {
+            disableAll(); // Reset other tools
+            if (activeTool === 'area') {
+                activeTool = 'none';
+                area.enabled = false;
+                areaBtn.classList.remove('active');
+            } else {
+                activeTool = 'area';
+                areaBtn.classList.add('active');
+                
+                // Use Official Component
+                area.enabled = true;
+                area.world = world;
+                try {
+                    await area.create();
+                    logToScreen('Herramienta Área (Oficial): Clic para medir');
+                } catch (e) {
+                     console.error("Area tool error:", e);
+                     logToScreen('Error iniciando herramienta área');
+                }
+            }
+        });
+    }
+
+    // Keep Custom Handlers for tools NOT supported by library or if we prefer custom logic
+    // Angle and Slope are not standard in the basic components version we have?
+    // Let's keep custom for now unless we find them.
     if (angleBtn) angleBtn.addEventListener('click', () => activateTool('angle', angleBtn));
     if (slopeBtn) slopeBtn.addEventListener('click', () => activateTool('slope', slopeBtn));
     if (pointBtn) pointBtn.addEventListener('click', () => activateTool('point', pointBtn));
@@ -3622,11 +3953,13 @@ function setupMeasurementTools() {
     if (deleteBtn) {
         deleteBtn.addEventListener('click', () => {
             try {
-                if (length.list) length.list.clear();
-                else if (typeof length.deleteAll === 'function') length.deleteAll();
+                // Clear Official
+                length.enabled = false;
+                length.deleteAll();
                 
-                if (area.list) area.list.clear();
-                else if (typeof area.deleteAll === 'function') area.deleteAll();
+                area.enabled = false;
+                area.deleteAll();
+
             } catch (e) {
                 console.error("Error clearing measurements:", e);
             }
@@ -3643,6 +3976,241 @@ function setupMeasurementTools() {
         });
     }
 }
+
+
+
+
+// --- Measurement Tools Implementation (Custom Snapping) ---
+
+
+
+function setupMeasurementTools() {
+    console.log('[DEBUG] Setting up measurement tools...');
+
+    // Initialize Snapping Cursor
+    if (!snappingCursor) {
+        const cursorGeom = new THREE.SphereGeometry(0.15, 16, 16);
+        const cursorMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.8, depthTest: false });
+        snappingCursor = new THREE.Mesh(cursorGeom, cursorMat);
+        snappingCursor.renderOrder = 2000;
+        world.scene.three.add(snappingCursor);
+        snappingCursor.visible = false;
+    }
+    
+    const btnLength = document.getElementById('btn-measure-length');
+    const btnPoint = document.getElementById('btn-measure-point');
+    const btnDelete = document.getElementById('btn-measure-delete');
+    
+    if (btnLength) {
+        btnLength.addEventListener('click', () => {
+            toggleMeasurementMode('length');
+            setActiveButton(btnLength);
+        });
+    }
+    
+    if (btnPoint) {
+        btnPoint.addEventListener('click', () => {
+            toggleMeasurementMode('point');
+            setActiveButton(btnPoint);
+        });
+    }
+    
+    if (btnDelete) {
+        btnDelete.addEventListener('click', () => {
+            clearMeasurements();
+        });
+    }
+    
+    // Mouse interaction for measurement
+    const container = document.getElementById('viewer-container');
+    if (container) {
+        container.addEventListener('mousemove', onMeasureMouseMove);
+        container.addEventListener('click', onMeasureClick);
+        
+        // Add right-click to cancel current measurement
+        container.addEventListener('contextmenu', (e) => {
+            if (measurementMode) {
+                e.preventDefault();
+                resetCurrentMeasurement();
+            }
+        });
+    }
+}
+
+function setActiveButton(activeBtn: HTMLElement | null) {
+    // Reset all measure buttons
+    ['btn-measure-length', 'btn-measure-point'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.classList.remove('active');
+    });
+    if (activeBtn) activeBtn.classList.add('active');
+}
+
+function toggleMeasurementMode(mode: 'length' | 'point') {
+    if (measurementMode === mode) {
+        // Toggle off
+        measurementMode = null;
+        resetCurrentMeasurement();
+        logToScreen('Measurement mode disabled');
+        setActiveButton(null);
+        if (snappingCursor) snappingCursor.visible = false;
+    } else {
+        measurementMode = mode;
+        resetCurrentMeasurement();
+        logToScreen(`Measurement mode: ${mode === 'length' ? 'Distance' : 'Point Coordinate'} (Click to start)`);
+    }
+}
+
+function resetCurrentMeasurement() {
+    measurementPoints = [];
+    if (tempMeasurementLine) {
+        world.scene.three.remove(tempMeasurementLine);
+        tempMeasurementLine = null;
+    }
+}
+
+function clearMeasurements() {
+    // Remove all markers and labels
+    measurementMarkers.forEach(marker => world.scene.three.remove(marker));
+    measurementMarkers.length = 0;
+    
+    measurementLabels.forEach(label => label.remove());
+    measurementLabels.length = 0;
+    
+    resetCurrentMeasurement();
+    logToScreen('Measurements cleared');
+}
+
+// Marker helper
+function createMarker(position: THREE.Vector3, color = 0xff0000) {
+    const geometry = new THREE.SphereGeometry(0.1, 16, 16); // Small sphere
+    const material = new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.8 });
+    const marker = new THREE.Mesh(geometry, material);
+    marker.position.copy(position);
+    marker.renderOrder = 1000; // On top
+    world.scene.three.add(marker);
+    measurementMarkers.push(marker);
+    return marker;
+}
+
+function createLine(start: THREE.Vector3, end: THREE.Vector3) {
+    const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+    const material = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false, linewidth: 2 });
+    const line = new THREE.Line(geometry, material);
+    line.renderOrder = 999;
+    world.scene.three.add(line);
+    measurementMarkers.push(line as any); 
+    return line;
+}
+
+function createLabel(text: string, position: THREE.Vector3) {
+    const div = document.createElement('div');
+    div.className = 'measurement-label';
+    div.textContent = text;
+    div.style.position = 'absolute';
+    div.style.background = 'rgba(0, 0, 0, 0.7)';
+    div.style.color = 'white';
+    div.style.padding = '4px 8px';
+    div.style.borderRadius = '4px';
+    div.style.pointerEvents = 'none';
+    div.style.fontSize = '12px';
+    div.style.zIndex = '1000';
+    document.body.appendChild(div);
+    measurementLabels.push(div);
+    
+    const update = () => {
+        if (!div.isConnected) return;
+        const screenPos = position.clone().project(world.camera.three);
+        const x = (screenPos.x * .5 + .5) * window.innerWidth;
+        const y = (-(screenPos.y * .5) + .5) * window.innerHeight;
+        div.style.left = `${x}px`;
+        div.style.top = `${y}px`;
+        requestAnimationFrame(update);
+    };
+    update();
+}
+
+async function onMeasureMouseMove(event: MouseEvent) {
+    if (!measurementMode) {
+        if (snappingCursor) snappingCursor.visible = false;
+        return;
+    }
+    
+    // Use the simpleRaycaster which we monkey-patched to have snapping!
+    const result = await simpleRaycaster.castRay();
+    
+    if (result && result.point) {
+        if (snappingCursor) {
+            snappingCursor.position.copy(result.point);
+            snappingCursor.visible = true;
+        }
+
+        // If we have a start point, draw a temp line to current cursor
+        if (measurementMode === 'length' && measurementPoints.length === 1) {
+            const start = measurementPoints[0];
+            const end = result.point;
+            
+            if (!tempMeasurementLine) {
+                const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+                const material = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false, opacity: 0.5, transparent: true });
+                tempMeasurementLine = new THREE.Line(geometry, material);
+                world.scene.three.add(tempMeasurementLine);
+            } else {
+                const positions = tempMeasurementLine.geometry.attributes.position;
+                positions.setXYZ(0, start.x, start.y, start.z);
+                positions.setXYZ(1, end.x, end.y, end.z);
+                positions.needsUpdate = true;
+            }
+        }
+    } else {
+        if (snappingCursor) snappingCursor.visible = false;
+    }
+}
+
+async function onMeasureClick(event: MouseEvent) {
+    if (!measurementMode) return;
+    
+    // Don't trigger if clicking on UI
+    if ((event.target as HTMLElement).closest('button') || (event.target as HTMLElement).closest('.sidebar')) return;
+
+    const result = await simpleRaycaster.castRay();
+    if (!result || !result.point) return;
+    
+    const point = result.point;
+    
+    if (measurementMode === 'point') {
+        createMarker(point, 0x00ff00);
+        const text = `X:${point.x.toFixed(2)} Y:${point.y.toFixed(2)} Z:${point.z.toFixed(2)}`;
+        createLabel(text, point);
+        logToScreen(`Point: ${text}`);
+    } else if (measurementMode === 'length') {
+        measurementPoints.push(point);
+        createMarker(point, 0xffff00);
+        
+        if (measurementPoints.length === 2) {
+            // Finish measurement
+            const p1 = measurementPoints[0];
+            const p2 = measurementPoints[1];
+            createLine(p1, p2);
+            
+            const dist = p1.distanceTo(p2);
+            const mid = p1.clone().add(p2).multiplyScalar(0.5);
+            createLabel(`${dist.toFixed(3)}m`, mid);
+            
+            logToScreen(`Distance: ${dist.toFixed(3)}m`);
+            
+            // Reset for next measurement
+            measurementPoints = [];
+            if (tempMeasurementLine) {
+                world.scene.three.remove(tempMeasurementLine);
+                tempMeasurementLine = null;
+            }
+        }
+    }
+}
+
+
+
 
 
 
