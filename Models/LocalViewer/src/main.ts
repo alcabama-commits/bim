@@ -197,7 +197,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-10-v21-SnapForce';
+versionDiv.textContent = 'v2026-02-10-v23-LogEverything';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -301,6 +301,9 @@ const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRay
 
 // Helper to perform Vertex/Edge snapping on a raw intersection
 const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
+    // Debug logging for raycast attempts (throttle to avoid spam if needed, but we need to see if it fires)
+    // if (window.debugLog && Math.random() < 0.1) window.debugLog("Raycast hit checking...");
+
     if (!valid || !valid.point) {
         if (debugSphere) debugSphere.visible = false;
         return valid;
@@ -309,7 +312,7 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
     try {
         // STRICT VERTEX SNAPPING LOGIC (Based on User Request: "Puntos Finales")
         // We only look at the vertices of the hit face (Triangulation).
-        const SNAP_THRESHOLD = 0.4; // 40cm Radius (Generous but precise)
+        const SNAP_THRESHOLD = 2.0; // 2.0m Radius (Huge for testing)
 
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
@@ -343,6 +346,9 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
                  const vertex = getVertexWorld(idx);
                  const dist = vertex.distanceTo(valid.point); // 3D Distance
                  
+                 // Debug distance
+                 // if (window.debugLog) window.debugLog(`Dist to v${idx}: ${dist.toFixed(3)}`);
+
                  if (dist < minDist) {
                      minDist = dist;
                      closestVertex = vertex;
@@ -357,7 +363,7 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
                      debugSphere.position.copy(closestVertex);
                      debugSphere.visible = true;
                      debugSphere.material.color.setHex(0x00ff00); // Green for Snap
-                     debugSphere.scale.set(0.5, 0.5, 0.5); // Smaller, precise
+                     debugSphere.scale.set(0.8, 0.8, 0.8); // Big sphere
                  }
                  
                  if (window.debugLog) window.debugLog(`SNAP! Vertex (Dist: ${minDist.toFixed(3)})`);
@@ -367,6 +373,7 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
         }
     } catch (e) {
         console.warn("Snapping failed:", e);
+        if (window.debugLog) window.debugLog(`Snap Error: ${e}`);
     }
     return valid;
 };
