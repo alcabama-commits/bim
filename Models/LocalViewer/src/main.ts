@@ -5,6 +5,101 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
+
+// --- UNIVERSAL RAYCASTER SNAP PATCH (v25) ---
+// This intercepts ALL raycasts in the entire application.
+const originalIntersectObjects = THREE.Raycaster.prototype.intersectObjects;
+const originalIntersectObject = THREE.Raycaster.prototype.intersectObject;
+
+const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
+    if (!intersects || intersects.length === 0) return intersects;
+    
+    // Find the closest mesh intersection
+    const closest = intersects.find(i => i.object instanceof THREE.Mesh || i.object instanceof THREE.InstancedMesh);
+    if (!closest) return intersects;
+
+    try {
+        const SNAP_THRESHOLD = 1.5; // 1.5 meters
+        
+        if (closest.face && (closest.object as any).geometry) {
+            const geom = (closest.object as any).geometry;
+            const pos = geom.attributes.position;
+            
+            if (pos) {
+                // Get indices
+                const a = closest.face.a;
+                const b = closest.face.b;
+                const c = closest.face.c;
+                
+                const getV = (idx: number) => {
+                    const v = new THREE.Vector3();
+                    v.fromBufferAttribute(pos, idx);
+                    
+                    // Apply instance matrix if needed
+                    if (closest.object instanceof THREE.InstancedMesh && closest.instanceId !== undefined) {
+                        const m = new THREE.Matrix4();
+                        closest.object.getMatrixAt(closest.instanceId, m);
+                        v.applyMatrix4(m);
+                    }
+                    
+                    // Apply world matrix
+                    closest.object.updateMatrixWorld();
+                    v.applyMatrix4(closest.object.matrixWorld);
+                    return v;
+                };
+                
+                const va = getV(a);
+                const vb = getV(b);
+                const vc = getV(c);
+                
+                let bestV: THREE.Vector3 | null = null;
+                let minD = SNAP_THRESHOLD;
+                
+                [va, vb, vc].forEach(v => {
+                    const d = v.distanceTo(closest.point);
+                    if (d < minD) {
+                        minD = d;
+                        bestV = v;
+                    }
+                });
+                
+                if (bestV) {
+                    closest.point.copy(bestV);
+                    
+                    // Visual Update
+                    if ((window as any).debugSphere) {
+                        (window as any).debugSphere.position.copy(bestV);
+                        (window as any).debugSphere.visible = true;
+                    }
+                    
+                    // Log
+                    // if ((window as any).debugLog && Math.random() < 0.05) (window as any).debugLog("Universal Snap! " + minD.toFixed(2));
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Snap Error", e);
+    }
+    
+    return intersects;
+};
+
+THREE.Raycaster.prototype.intersectObjects = function(objects, recursive, optionalTarget) {
+    const res = originalIntersectObjects.call(this, objects, recursive, optionalTarget);
+    return applyGlobalSnap(res);
+};
+
+THREE.Raycaster.prototype.intersectObject = function(object, recursive, optionalTarget) {
+    const res = originalIntersectObject.call(this, object, recursive, optionalTarget);
+    return applyGlobalSnap(res);
+};
+// ------------------------------------------------
+
+
+
+
+
+
 // --- GLOBAL DEBUG SPHERE ---
 let debugSphere: THREE.Mesh | null = null;
 let debugLog: ((msg: string) => void) | null = null;
@@ -14,7 +109,7 @@ const setupDebugSphere = (scene: THREE.Scene) => {
     if (debugSphere) return; // Already setup
     const geom = new THREE.SphereGeometry(0.3, 16, 16);
     const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false, transparent: true, opacity: 0.8 });
-    debugSphere = new THREE.Mesh(geom, mat);
+    debugSphere = new THREE.Mesh(geom, mat); (window as any).debugSphere = debugSphere;
     debugSphere.renderOrder = 9999;
     debugSphere.visible = false;
     scene.add(debugSphere);
@@ -227,7 +322,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-10-v24-GlobalSnap';
+versionDiv.textContent = 'v2026-02-10-v25-UniversalSnap';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
