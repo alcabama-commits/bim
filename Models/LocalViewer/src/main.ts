@@ -6,27 +6,26 @@ import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
 
-// --- UNIVERSAL RAYCASTER SNAP PATCH (v25) ---
-// This intercepts ALL raycasts in the entire application.
+// --- EDGE & VERTEX SNAP PATCH (v26) ---
+// Intercepts raycasts to snap to Vertices (Corners) and Edges (Surface boundaries).
 const originalIntersectObjects = THREE.Raycaster.prototype.intersectObjects;
 const originalIntersectObject = THREE.Raycaster.prototype.intersectObject;
 
 const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
     if (!intersects || intersects.length === 0) return intersects;
     
-    // Find the closest mesh intersection
     const closest = intersects.find(i => i.object instanceof THREE.Mesh || i.object instanceof THREE.InstancedMesh);
     if (!closest) return intersects;
 
     try {
-        const SNAP_THRESHOLD = 1.5; // 1.5 meters
+        const VERTEX_THRESHOLD = 0.4; // 40cm for Vertices
+        const EDGE_THRESHOLD = 0.2;   // 20cm for Edges
         
         if (closest.face && (closest.object as any).geometry) {
             const geom = (closest.object as any).geometry;
             const pos = geom.attributes.position;
             
             if (pos) {
-                // Get indices
                 const a = closest.face.a;
                 const b = closest.face.b;
                 const c = closest.face.c;
@@ -34,15 +33,11 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
                 const getV = (idx: number) => {
                     const v = new THREE.Vector3();
                     v.fromBufferAttribute(pos, idx);
-                    
-                    // Apply instance matrix if needed
                     if (closest.object instanceof THREE.InstancedMesh && closest.instanceId !== undefined) {
                         const m = new THREE.Matrix4();
                         closest.object.getMatrixAt(closest.instanceId, m);
                         v.applyMatrix4(m);
                     }
-                    
-                    // Apply world matrix
                     closest.object.updateMatrixWorld();
                     v.applyMatrix4(closest.object.matrixWorld);
                     return v;
@@ -52,28 +47,76 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
                 const vb = getV(b);
                 const vc = getV(c);
                 
-                let bestV: THREE.Vector3 | null = null;
-                let minD = SNAP_THRESHOLD;
-                
+                let bestPoint: THREE.Vector3 | null = null;
+                let minD = Infinity;
+                let type = '';
+
+                // 1. Check Vertices
                 [va, vb, vc].forEach(v => {
                     const d = v.distanceTo(closest.point);
                     if (d < minD) {
                         minD = d;
-                        bestV = v;
+                        bestPoint = v;
+                        type = 'VERTEX';
                     }
                 });
-                
-                if (bestV) {
-                    closest.point.copy(bestV);
+
+                // Only stick to vertex if within threshold
+                if (minD > VERTEX_THRESHOLD) {
+                    // 2. Check Edges if vertex is too far
+                    // Edges: va-vb, vb-vc, vc-va
+                    const edges = [
+                        new THREE.Line3(va, vb),
+                        new THREE.Line3(vb, vc),
+                        new THREE.Line3(vc, va)
+                    ];
+                    
+                    let bestEdgeDist = Infinity;
+                    let bestEdgePoint: THREE.Vector3 | null = null;
+                    
+                    edges.forEach(edge => {
+                        const target = new THREE.Vector3();
+                        edge.closestPointToPoint(closest.point, true, target);
+                        const d = target.distanceTo(closest.point);
+                        if (d < bestEdgeDist) {
+                            bestEdgeDist = d;
+                            bestEdgePoint = target;
+                        }
+                    });
+                    
+                    if (bestEdgeDist < EDGE_THRESHOLD) {
+                        bestPoint = bestEdgePoint;
+                        minD = bestEdgeDist;
+                        type = 'EDGE';
+                    } else {
+                        // Reset if neither match
+                        bestPoint = null;
+                    }
+                }
+
+                if (bestPoint) {
+                    closest.point.copy(bestPoint);
                     
                     // Visual Update
                     if ((window as any).debugSphere) {
-                        (window as any).debugSphere.position.copy(bestV);
+                        (window as any).debugSphere.position.copy(bestPoint);
                         (window as any).debugSphere.visible = true;
+                        
+                        // Color Code: Green = Vertex, Yellow = Edge
+                        if (type === 'VERTEX') {
+                            ((window as any).debugSphere.material as THREE.MeshBasicMaterial).color.setHex(0x00ff00);
+                             (window as any).debugSphere.scale.set(1, 1, 1);
+                        } else {
+                            ((window as any).debugSphere.material as THREE.MeshBasicMaterial).color.setHex(0xffff00);
+                             (window as any).debugSphere.scale.set(0.5, 0.5, 0.5);
+                        }
                     }
                     
-                    // Log
-                    // if ((window as any).debugLog && Math.random() < 0.05) (window as any).debugLog("Universal Snap! " + minD.toFixed(2));
+                    if ((window as any).debugLog && Math.random() < 0.05) {
+                        (window as any).debugLog(`Snap: ${type} (${minD.toFixed(3)})`);
+                    }
+                } else {
+                     if ((window as any).debugSphere) (window as any).debugSphere.visible = false;
                 }
             }
         }
@@ -94,6 +137,10 @@ THREE.Raycaster.prototype.intersectObject = function(object, recursive, optional
     return applyGlobalSnap(res);
 };
 // ------------------------------------------------
+
+
+
+
 
 
 
@@ -322,7 +369,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-10-v25-UniversalSnap';
+versionDiv.textContent = 'v2026-02-10-v26-EdgeSnap';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
