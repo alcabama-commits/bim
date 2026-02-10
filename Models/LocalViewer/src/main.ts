@@ -18,8 +18,8 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
     if (!closest) return intersects;
 
     try {
-        const VERTEX_THRESHOLD = 0.4; // 40cm for Vertices
-        const EDGE_THRESHOLD = 0.2;   // 20cm for Edges
+        const VERTEX_THRESHOLD = 0.6; // Increased to 60cm for v27 // 40cm for Vertices
+        const EDGE_THRESHOLD = 0.3; // Increased to 30cm for v27   // 20cm for Edges
         
         if (closest.face && (closest.object as any).geometry) {
             const geom = (closest.object as any).geometry;
@@ -369,7 +369,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-10-v26-EdgeSnap';
+versionDiv.textContent = 'v2026-02-10-v27-EventSnap';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -552,6 +552,7 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
 
 // Override castRayToObjects
 simpleRaycaster.castRayToObjects = (items?: THREE.Object3D[], position?: THREE.Vector2) => {
+    // if (window.debugLog && Math.random() < 0.01) window.debugLog("Tool Raycast Triggered");
     // If items is undefined, it uses components.meshes (which we populated)
     const result = originalCastRayToObjects(items, position);
     return applySnappingToIntersection(result);
