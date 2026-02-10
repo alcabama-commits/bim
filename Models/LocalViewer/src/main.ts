@@ -2813,7 +2813,7 @@ function initPropertiesPanel() {
                      v.style.fontSize = '10px';
                      v.style.color = '#888';
                      v.style.marginLeft = '10px';
-                    v.innerText = 'v1.9.9 (Multi-selección Ctrl)';
+                    v.innerText = 'v2026-02-09-Fix-v17-EmergencyPatched';
                     header.appendChild(v);
                 }
 
