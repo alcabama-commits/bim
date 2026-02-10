@@ -18,8 +18,8 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
     if (!closest) return intersects;
 
     try {
-        const VERTEX_THRESHOLD = 0.25; // Adjusted to 25cm for v29-SmartSnap
-        const EDGE_THRESHOLD = 0.15; // Adjusted to 15cm for v29-SmartSnap
+        const VERTEX_THRESHOLD = 0.40; // Increased to 40cm for v30-VisualSnap (Easier snap)
+        const EDGE_THRESHOLD = 0.20; // Increased to 20cm for v30-VisualSnap
         
         if (closest.face && (closest.object as any).geometry) {
             const geom = (closest.object as any).geometry;
@@ -97,18 +97,25 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
                 if (bestPoint) {
                     closest.point.copy(bestPoint);
                     
-                    // Visual Update
-                    if ((window as any).debugSphere) {
-                        (window as any).debugSphere.position.copy(bestPoint);
-                        (window as any).debugSphere.visible = true;
-                        
-                        // Color Code: Green = Vertex, Yellow = Edge
+                    // Visual Update (v30-VisualSnap)
+                    const ds = (window as any).debugSphere; // Edge (Sphere)
+                    const dc = (window as any).debugCube;   // Vertex (Cube)
+                    
+                    if (ds && dc) {
                         if (type === 'VERTEX') {
-                            ((window as any).debugSphere.material as THREE.MeshBasicMaterial).color.setHex(0x00ff00);
-                             (window as any).debugSphere.scale.set(1, 1, 1);
+                            // Show Green Cube
+                            dc.position.copy(bestPoint);
+                            dc.visible = true;
+                            ds.visible = false;
                         } else {
-                            ((window as any).debugSphere.material as THREE.MeshBasicMaterial).color.setHex(0xffff00);
-                             (window as any).debugSphere.scale.set(0.5, 0.5, 0.5);
+                            // Show Small Yellow Sphere
+                            ds.position.copy(bestPoint);
+                            ds.visible = true;
+                            dc.visible = false;
+                            
+                            // Ensure Yellow Color & Small Scale
+                            ((ds.material) as THREE.MeshBasicMaterial).color.setHex(0xffff00);
+                            ds.scale.set(0.5, 0.5, 0.5); // Base radius 0.2 * 0.5 = 0.1m
                         }
                     }
                     
@@ -117,6 +124,7 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
                     }
                 } else {
                      if ((window as any).debugSphere) (window as any).debugSphere.visible = false;
+                     if ((window as any).debugCube) (window as any).debugCube.visible = false;
                 }
             }
         }
@@ -154,12 +162,24 @@ let debugLog: ((msg: string) => void) | null = null;
 
 const setupDebugSphere = (scene: THREE.Scene) => {
     if (debugSphere) return; // Already setup
-    const geom = new THREE.SphereGeometry(0.3, 16, 16);
-    const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false, transparent: true, opacity: 0.8 });
-    debugSphere = new THREE.Mesh(geom, mat); (window as any).debugSphere = debugSphere;
+    
+    // 1. Edge Cursor (Yellow Sphere) - Base Radius 0.2
+    const sphereGeom = new THREE.SphereGeometry(0.2, 16, 16);
+    const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffff00, depthTest: false, transparent: true, opacity: 0.8 });
+    debugSphere = new THREE.Mesh(sphereGeom, sphereMat); 
+    (window as any).debugSphere = debugSphere;
     debugSphere.renderOrder = 9999;
     debugSphere.visible = false;
     scene.add(debugSphere);
+
+    // 2. Vertex Cursor (Green Cube) - Size 0.3
+    const cubeGeom = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+    const cubeMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false, transparent: true, opacity: 0.8 });
+    const debugCube = new THREE.Mesh(cubeGeom, cubeMat);
+    (window as any).debugCube = debugCube;
+    debugCube.renderOrder = 9999;
+    debugCube.visible = false;
+    scene.add(debugCube);
     
     // Also setup log
     const debugConsole = document.getElementById('debug-console');
@@ -369,7 +389,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-10-v29-SmartSnap';
+versionDiv.textContent = 'v2026-02-10-v30-VisualSnap';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -435,7 +455,7 @@ debugSphere.visible = false;
 // Correctly add to the scene using the world object
 world.scene.three.add(debugSphere);
 
-// --- v29-SmartSnap: GLOBAL INDEPENDENT SNAPPING LOOP ---
+// --- v30-VisualSnap: GLOBAL INDEPENDENT SNAPPING LOOP ---
 container.addEventListener('mousemove', (event) => {
     if (!world || !world.camera || !world.scene) return;
     const rect = container.getBoundingClientRect();
@@ -460,7 +480,8 @@ container.addEventListener('mousemove', (event) => {
     if (intersects.length > 0) {
         applyGlobalSnap([intersects[0]]);
     } else {
-        if (debugSphere) debugSphere.visible = false;
+        if ((window as any).debugSphere) (window as any).debugSphere.visible = false;
+        if ((window as any).debugCube) (window as any).debugCube.visible = false;
     }
 });
 
