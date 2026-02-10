@@ -18,8 +18,8 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
     if (!closest) return intersects;
 
     try {
-        const VERTEX_THRESHOLD = 0.40; // Increased to 40cm for v30-VisualSnap (Easier snap)
-        const EDGE_THRESHOLD = 0.20; // Increased to 20cm for v30-VisualSnap
+        const VERTEX_THRESHOLD = 0.40; // Increased to 40cm for v31-RescueSnap (Easier snap)
+        const EDGE_THRESHOLD = 0.20; // Increased to 20cm for v31-RescueSnap
         
         if (closest.face && (closest.object as any).geometry) {
             const geom = (closest.object as any).geometry;
@@ -97,7 +97,7 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
                 if (bestPoint) {
                     closest.point.copy(bestPoint);
                     
-                    // Visual Update (v30-VisualSnap)
+                    // Visual Update (v31-RescueSnap)
                     const ds = (window as any).debugSphere; // Edge (Sphere)
                     const dc = (window as any).debugCube;   // Vertex (Cube)
                     
@@ -389,7 +389,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-10-v30-VisualSnap';
+versionDiv.textContent = 'v2026-02-10-v31-RescueSnap';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -445,17 +445,26 @@ grids.create(world);
 const baseUrl = import.meta.env.BASE_URL || './';
 
 
-// --- DEBUG VISUALIZATION ---
-const debugSphereGeom = new THREE.SphereGeometry(0.5, 32, 32); // Increased size for v21
-const debugSphereMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
+// --- DEBUG VISUALIZATION (v31-RescueSnap) ---
+// 1. Edge Cursor (Small Yellow Sphere)
+const debugSphereGeom = new THREE.SphereGeometry(0.2, 16, 16); 
+const debugSphereMat = new THREE.MeshBasicMaterial({ color: 0xffff00, depthTest: false, transparent: true, opacity: 0.8 });
 debugSphere = new THREE.Mesh(debugSphereGeom, debugSphereMat);
-(window as any).debugSphere = debugSphere; // CRITICAL FIX: Expose to global scope for applyGlobalSnap
-debugSphere.renderOrder = 999;
+(window as any).debugSphere = debugSphere;
+debugSphere.renderOrder = 9999;
 debugSphere.visible = false;
-// Correctly add to the scene using the world object
 world.scene.three.add(debugSphere);
 
-// --- v30-VisualSnap: GLOBAL INDEPENDENT SNAPPING LOOP ---
+// 2. Vertex Cursor (Green Cube)
+const debugCubeGeom = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+const debugCubeMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false, transparent: true, opacity: 0.8 });
+const debugCube = new THREE.Mesh(debugCubeGeom, debugCubeMat);
+(window as any).debugCube = debugCube;
+debugCube.renderOrder = 9999;
+debugCube.visible = false;
+world.scene.three.add(debugCube);
+
+// --- v31-RescueSnap: GLOBAL INDEPENDENT SNAPPING LOOP ---
 container.addEventListener('mousemove', (event) => {
     if (!world || !world.camera || !world.scene) return;
     const rect = container.getBoundingClientRect();
