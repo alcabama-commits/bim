@@ -43,8 +43,8 @@ const indexHtmlPath = path.join(destBase, 'index.html');
 if (fs.existsSync(indexHtmlPath)) {
         let content = fs.readFileSync(indexHtmlPath, 'utf8');
         // Update version tag
-        content = content.replace(/content=\"v[^\"]*\"/, 'content=\"v19-DebugSnap\"');
-        content = content.replace(/<title>.*<\/title>/, '<title>VSR IFC Viewer v19-DebugSnap</title>');
+        content = content.replace(/content=\"v[^\"]*\"/, 'content=\"v20-FixCrash\"');
+        content = content.replace(/<title>.*<\/title>/, '<title>VSR IFC Viewer v20-FixCrash</title>');
         fs.writeFileSync(indexHtmlPath, content);
-        console.log('Updated index.html version tag to v19-DebugSnap');
+        console.log('Updated index.html version tag to v20-FixCrash');
     }

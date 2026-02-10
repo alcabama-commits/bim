@@ -249,13 +249,15 @@ grids.create(world);
 
 const baseUrl = import.meta.env.BASE_URL || './';
 
+
 // --- DEBUG VISUALIZATION ---
 const debugSphereGeom = new THREE.SphereGeometry(0.3, 16, 16);
 const debugSphereMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
 const debugSphere = new THREE.Mesh(debugSphereGeom, debugSphereMat);
 debugSphere.renderOrder = 999;
 debugSphere.visible = false;
-scene.add(debugSphere);
+// Correctly add to the scene using the world object
+world.scene.three.add(debugSphere);
 
 const debugConsole = document.getElementById('debug-console');
 if (debugConsole) {
