@@ -18,8 +18,8 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
     if (!closest) return intersects;
 
     try {
-        const VERTEX_THRESHOLD = 0.6; // Increased to 60cm for v27 // 40cm for Vertices
-        const EDGE_THRESHOLD = 0.3; // Increased to 30cm for v27   // 20cm for Edges
+        const VERTEX_THRESHOLD = 0.25; // Adjusted to 25cm for v29-SmartSnap
+        const EDGE_THRESHOLD = 0.15; // Adjusted to 15cm for v29-SmartSnap
         
         if (closest.face && (closest.object as any).geometry) {
             const geom = (closest.object as any).geometry;
@@ -369,7 +369,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-10-v28-NuclearDebug';
+versionDiv.textContent = 'v2026-02-10-v29-SmartSnap';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -435,7 +435,7 @@ debugSphere.visible = false;
 // Correctly add to the scene using the world object
 world.scene.three.add(debugSphere);
 
-// --- v28-NuclearDebug: GLOBAL INDEPENDENT SNAPPING LOOP ---
+// --- v29-SmartSnap: GLOBAL INDEPENDENT SNAPPING LOOP ---
 container.addEventListener('mousemove', (event) => {
     if (!world || !world.camera || !world.scene) return;
     const rect = container.getBoundingClientRect();
