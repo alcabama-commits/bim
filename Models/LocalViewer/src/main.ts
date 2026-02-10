@@ -197,7 +197,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-09-Fix-v16-RulerOnly';
+versionDiv.textContent = 'v2026-02-10-v21-SnapForce';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -251,7 +251,7 @@ const baseUrl = import.meta.env.BASE_URL || './';
 
 
 // --- DEBUG VISUALIZATION ---
-const debugSphereGeom = new THREE.SphereGeometry(0.3, 16, 16);
+const debugSphereGeom = new THREE.SphereGeometry(0.5, 32, 32); // Increased size for v21
 const debugSphereMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
 const debugSphere = new THREE.Mesh(debugSphereGeom, debugSphereMat);
 debugSphere.renderOrder = 999;
@@ -299,13 +299,21 @@ const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRay
 // Helper to perform Vertex/Edge snapping on a raw intersection
 const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
     if (!valid) {
+        // if (window.debugLog && Math.random() < 0.05) window.debugLog("No intersection to snap");
+        if (debugSphere) debugSphere.visible = false;
+        return null;
+    }
+    // Force log every few frames to confirm function is called
+    if (Math.random() < 0.01 && window.debugLog) window.debugLog("Snap checking...");
+
+    if (!valid) {
         if (debugSphere) debugSphere.visible = false;
         return null;
     }
 
     try {
         // Threshold in units (meters) - Large for testing
-        const SNAP_THRESHOLD = 0.8;
+        const SNAP_THRESHOLD = 1.2; // Increased for v21
 
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
@@ -354,6 +362,11 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              // Check Vertices
              for (const p of vertices) {
                  const dist = p.distanceTo(valid.point);
+                 // v21 Debug
+                 if (dist < 2.0 && window.debugLog && Math.random() < 0.01) {
+                     window.debugLog(`Vertex nearby: ${dist.toFixed(2)}`);
+                 }
+
                  if (dist < minDist) {
                      minDist = dist;
                      closestPoint.copy(p);
@@ -4192,6 +4205,11 @@ function createLabel(text: string, position: THREE.Vector3) {
 }
 
 async function onMeasureMouseMove(event: MouseEvent) {
+    // Debug for v21
+    if (Math.random() < 0.05 && measurementMode) {
+         // console.log("Measure Mouse Move Active");
+    }
+
     if (!measurementMode) {
         if (snappingCursor) snappingCursor.visible = false;
         return;
