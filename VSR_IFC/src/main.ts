@@ -275,61 +275,80 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
     if (!valid) return null;
 
     try {
-        // Threshold in units (meters)
-        const SNAP_THRESHOLD = 0.4;
+        // Threshold in units (meters). Increased to 0.5 for better detection.
+        const SNAP_THRESHOLD = 0.5;
+        
+        let closestPoint = new THREE.Vector3();
+        let minDist = Infinity;
+        let found = false;
 
+        // Common helper to get world coordinates from geometry index
+        const getVertexWorld = (idx: number, geometry: THREE.BufferGeometry) => {
+             const pos = geometry.attributes.position;
+             const tempV = new THREE.Vector3();
+             // Safety check for index
+             if (idx >= 0 && idx < pos.count) {
+                 tempV.fromBufferAttribute(pos, idx);
+                 
+                 // Apply Instance Matrix if it's an InstancedMesh (Fragments)
+                 if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
+                      const instanceMatrix = new THREE.Matrix4();
+                      valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
+                      tempV.applyMatrix4(instanceMatrix);
+                 }
+                 
+                 // Apply World Matrix
+                 tempV.applyMatrix4(valid.object.matrixWorld);
+             }
+             return tempV;
+        };
+
+        // 1. Handle Mesh / InstancedMesh (Triangles)
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
-             if (!geom || !geom.attributes.position) return valid;
-             
-             const pos = geom.attributes.position;
-             const indices = [valid.face.a, valid.face.b, valid.face.c];
-             
-             // Helpers to get world coordinates
-             const getVertexWorld = (idx: number) => {
-                 const tempV = new THREE.Vector3();
-                 if (idx >= 0 && idx < pos.count) {
-                     tempV.fromBufferAttribute(pos, idx);
-                     if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
-                          const instanceMatrix = new THREE.Matrix4();
-                          valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
-                          tempV.applyMatrix4(instanceMatrix);
+             if (geom && geom.attributes.position) {
+                 const indices = [valid.face.a, valid.face.b, valid.face.c];
+                 const candidates = indices.map(idx => getVertexWorld(idx, geom));
+
+                 for (const p of candidates) {
+                     const dist = p.distanceTo(valid.point);
+                     if (dist < minDist) {
+                         minDist = dist;
+                         closestPoint.copy(p);
+                         found = true;
                      }
-                     tempV.applyMatrix4(valid.object.matrixWorld);
-                 }
-                 return tempV;
-             };
-
-             const vA = getVertexWorld(indices[0]);
-             const vB = getVertexWorld(indices[1]);
-             const vC = getVertexWorld(indices[2]);
-
-             // Candidates: Vertices
-             const candidates = [vA, vB, vC];
-
-             // Candidates: Midpoints - DISABLED per user request (focus on endpoints)
-             // candidates.push(vA.clone().add(vB).multiplyScalar(0.5));
-             // candidates.push(vB.clone().add(vC).multiplyScalar(0.5));
-             // candidates.push(vC.clone().add(vA).multiplyScalar(0.5));
-
-             let closestPoint = new THREE.Vector3();
-             let minDist = Infinity;
-             let found = false;
-
-             for (const p of candidates) {
-                 const dist = p.distanceTo(valid.point);
-                 if (dist < minDist) {
-                     minDist = dist;
-                     closestPoint.copy(p);
-                     found = true;
                  }
              }
-             
-             if (found && minDist < SNAP_THRESHOLD) {
-                 valid.point.copy(closestPoint);
-                 (valid as any).isSnapped = true; // Mark as snapped for visual feedback
+        } 
+        // 2. Handle Line / LineSegments (Edges/Axes)
+        else if ((valid.object instanceof THREE.Line || valid.object instanceof THREE.LineSegments) && valid.index !== undefined) {
+             const geom = (valid.object as any).geometry;
+             if (geom && geom.attributes.position) {
+                 // For LineSegments, valid.index is the start of the segment
+                 const indices = [valid.index, valid.index + 1];
+                 const candidates = indices.map(idx => getVertexWorld(idx, geom));
+
+                 for (const p of candidates) {
+                     const dist = p.distanceTo(valid.point);
+                     if (dist < minDist) {
+                         minDist = dist;
+                         closestPoint.copy(p);
+                         found = true;
+                     }
+                 }
              }
         }
+
+        // Apply Snap if within threshold
+        if (found) {
+            // console.log(`[Snap] Candidate found. Dist: ${minDist.toFixed(4)}`);
+            if (minDist < SNAP_THRESHOLD) {
+                valid.point.copy(closestPoint);
+                (valid as any).isSnapped = true; // Mark as snapped for visual feedback
+                // console.log('[Snap] APPLIED');
+            }
+        }
+
     } catch (e) {
         console.warn("Snapping failed:", e);
         // Fallback: return valid without snapping
