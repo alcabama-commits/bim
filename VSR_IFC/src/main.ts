@@ -197,7 +197,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-10-v22-ScreenSnap';
+versionDiv.textContent = 'v2026-02-10-v23-SuperSnap';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -300,12 +300,13 @@ const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRay
 const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
     if (!valid) {
         if (debugSphere) debugSphere.visible = false;
+        document.body.style.cursor = ''; // Reset cursor if hitting nothing
         return null;
     }
 
     try {
         // Screen-Space Snapping Settings
-        const SNAP_PIXEL_THRESHOLD = 30; // Snap if vertex is within 30 pixels of cursor
+        const SNAP_PIXEL_THRESHOLD = 60; // Increased to 60px for easier selection
         
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
@@ -336,15 +337,6 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              // Candidates: ONLY Vertices (Endpoints) to avoid noise
              const candidates = [vA, vB, vC];
              
-             // Midpoints DISABLED to make corner selection easier
-             /*
-             const midpoints = [
-                 vA.clone().add(vB).multiplyScalar(0.5),
-                 vB.clone().add(vC).multiplyScalar(0.5),
-                 vC.clone().add(vA).multiplyScalar(0.5)
-             ];
-             */
-
              let closestPoint = new THREE.Vector3();
              let minPixelDist = Infinity;
              let found = false;
@@ -376,19 +368,24 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
 
              if (found && minPixelDist < SNAP_PIXEL_THRESHOLD) {
                  valid.point.copy(closestPoint);
+                 (valid as any).isSnapped = true;
                  
                  // Visual Feedback
                  if (typeof debugSphere !== 'undefined') {
                      debugSphere.position.copy(closestPoint);
                      debugSphere.visible = true;
-                     // User liked the "Green point", so we use Green for Vertices now
                      debugSphere.material.color.setHex(0x00ff00); 
-                     debugSphere.scale.set(1.5, 1.5, 1.5); // Make it slightly larger
+                     debugSphere.scale.set(2.0, 2.0, 2.0); // Bigger
+                     debugSphere.material.depthTest = false; // Always visible
+                     debugSphere.renderOrder = 999;
                  }
+                 
+                 document.body.style.cursor = 'crosshair';
                  
                  if (window.debugLog) window.debugLog(`Snapped to VERTEX (Px: ${minPixelDist.toFixed(1)})`);
              } else {
                  if (typeof debugSphere !== 'undefined') debugSphere.visible = false;
+                 document.body.style.cursor = ''; // Reset
              }
         }
     } catch (e) {
@@ -1814,24 +1811,26 @@ async function loadModelList() {
     }
 
     try {
-        const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
-        logToScreen('Scanning GitHub for models...');
+        // Switch to local models.json for reliability and speed
+        // const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
+        logToScreen('Loading local models list...');
         
-        const response = await fetch(GITHUB_API_URL);
-        if (!response.ok) throw new Error(`GitHub API Error: ${response.status}`);
+        const response = await fetch(`${baseUrl}models.json`);
+        if (!response.ok) throw new Error(`Local models.json Error: ${response.status}`);
         
         const data = await response.json();
-        if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
+        if (!Array.isArray(data)) throw new Error('Invalid models.json format');
 
+        // Filter: ONLY 2442602 per user request for testing
         const models = data
-            .filter((item: any) => item.name.toLowerCase().endsWith('.frag'))
+            .filter((item: any) => item.name.includes('2442602')) 
             .map((item: any) => ({
                 name: item.name,
-                path: `models/${item.name}`,
-                url: item.download_url
+                path: item.path,
+                url: `${baseUrl}${item.path}`
             }));
 
-        logToScreen(`GitHub Scan: ${models.length} .frag models found`);
+        logToScreen(`Models Found: ${models.length} (Filtered for 2442602)`);
 
         // Group models by specialty
         const groups: Record<string, any[]> = {};
