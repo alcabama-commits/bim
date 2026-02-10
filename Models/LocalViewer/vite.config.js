@@ -14,7 +14,6 @@ const modelsGenerator = () => {
       generateModels();
     },
     configureServer(server) {
-      // Watch for changes in public/models
       const modelsPath = path.resolve(__dirname, 'public/models');
       server.watcher.add(modelsPath);
       
@@ -44,13 +43,11 @@ function generateModels() {
     const files = fs.readdirSync(modelsDir).filter(file => file.toLowerCase().endsWith('.frag'));
     
     const models = files.map(file => {
-      // Basic cleanup for name: remove extension, replace _ with space
-      // You can customize this name generation logic
       const name = file.replace(/\.frag$/i, '').replace(/_/g, ' ');
       return {
         name: name,
         path: `models/${file}`,
-        folder: 'Auto' // Frontend logic (getSpecialtyFromIfcPath) handles the actual grouping
+        folder: 'Auto'
       };
     });
 
@@ -63,10 +60,15 @@ function generateModels() {
 
 export default defineConfig({
   plugins: [modelsGenerator()],
-  base: './', // Ensures relative paths for GitHub Pages
+  resolve: {
+    alias: {
+      'three': path.resolve(__dirname, './node_modules/three')
+    }
+  },
+  base: './',
   build: {
-    target: 'esnext', // Enable top-level await
-    outDir: '../docs/VSR_IFC', // Deploys to docs/VSR_IFC for GitHub Pages
+    target: 'esnext',
+    outDir: '../docs/VSR_IFC',
     emptyOutDir: true,
     rollupOptions: {
       input: {

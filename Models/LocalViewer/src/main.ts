@@ -48,80 +48,52 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
                 const vc = getV(c);
                 
                 let bestPoint: THREE.Vector3 | null = null;
-                let minD = Infinity;
-                let type = '';
-
-                // 1. Check Vertices
-                [va, vb, vc].forEach(v => {
-                    const d = v.distanceTo(closest.point);
-                    if (d < minD) {
-                        minD = d;
+                let minDist = Infinity;
+                
+                // 1. Vertex Snap (Green Cube)
+                const snapVertex = (v: THREE.Vector3) => {
+                    const d = closest.point.distanceTo(v);
+                    if (d < VERTEX_THRESHOLD && d < minDist) {
+                        minDist = d;
                         bestPoint = v;
-                        type = 'VERTEX';
                     }
-                });
-
-                // Only stick to vertex if within threshold
-                if (minD > VERTEX_THRESHOLD) {
-                    // 2. Check Edges if vertex is too far
-                    // Edges: va-vb, vb-vc, vc-va
-                    const edges = [
-                        new THREE.Line3(va, vb),
-                        new THREE.Line3(vb, vc),
-                        new THREE.Line3(vc, va)
-                    ];
-                    
-                    let bestEdgeDist = Infinity;
-                    let bestEdgePoint: THREE.Vector3 | null = null;
-                    
-                    edges.forEach(edge => {
-                        const target = new THREE.Vector3();
-                        edge.closestPointToPoint(closest.point, true, target);
-                        const d = target.distanceTo(closest.point);
-                        if (d < bestEdgeDist) {
-                            bestEdgeDist = d;
-                            bestEdgePoint = target;
-                        }
-                    });
-                    
-                    if (bestEdgeDist < EDGE_THRESHOLD) {
-                        bestPoint = bestEdgePoint;
-                        minD = bestEdgeDist;
-                        type = 'EDGE';
-                    } else {
-                        // Reset if neither match
-                        bestPoint = null;
-                    }
-                }
-
+                };
+                snapVertex(va);
+                snapVertex(vb);
+                snapVertex(vc);
+                
                 if (bestPoint) {
                     closest.point.copy(bestPoint);
-                    
-                    // Visual Update (v31-RescueSnap)
-                    const ds = (window as any).debugSphere; // Edge (Sphere)
-                    const dc = (window as any).debugCube;   // Vertex (Cube)
-                    
-                    if (ds && dc) {
-                        if (type === 'VERTEX') {
-                            // Show Green Cube
-                            dc.position.copy(bestPoint);
-                            dc.visible = true;
-                            ds.visible = false;
-                        } else {
-                            // Show Small Yellow Sphere
-                            ds.position.copy(bestPoint);
-                            ds.visible = true;
-                            dc.visible = false;
-                            
-                            // Ensure Yellow Color & Small Scale
-                            ((ds.material) as THREE.MeshBasicMaterial).color.setHex(0xffff00);
-                            ds.scale.set(0.5, 0.5, 0.5); // Base radius 0.2 * 0.5 = 0.1m
-                        }
+                    if ((window as any).debugCube) {
+                        (window as any).debugCube.position.copy(bestPoint);
+                        (window as any).debugCube.visible = true;
                     }
-                    
-                    if ((window as any).debugLog && Math.random() < 0.05) {
-                        (window as any).debugLog(`Snap: ${type} (${minD.toFixed(3)})`);
+                    if ((window as any).debugSphere) (window as any).debugSphere.visible = false;
+                    return intersects;
+                }
+                
+                // 2. Edge Snap (Yellow Sphere)
+                const snapEdge = (v1: THREE.Vector3, v2: THREE.Vector3) => {
+                    const line = new THREE.Line3(v1, v2);
+                    const closestOnLine = new THREE.Vector3();
+                    line.closestPointToPoint(closest.point, true, closestOnLine);
+                    const d = closest.point.distanceTo(closestOnLine);
+                    if (d < EDGE_THRESHOLD && d < minDist) {
+                        minDist = d;
+                        bestPoint = closestOnLine;
                     }
+                };
+                snapEdge(va, vb);
+                snapEdge(vb, vc);
+                snapEdge(vc, va);
+                
+                if (bestPoint) {
+                    closest.point.copy(bestPoint);
+                    if ((window as any).debugSphere) {
+                        (window as any).debugSphere.position.copy(bestPoint);
+                        (window as any).debugSphere.visible = true;
+                    }
+                    if ((window as any).debugCube) (window as any).debugCube.visible = false;
                 } else {
                      if ((window as any).debugSphere) (window as any).debugSphere.visible = false;
                      if ((window as any).debugCube) (window as any).debugCube.visible = false;
@@ -135,65 +107,38 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
     return intersects;
 };
 
+// Apply patch to Raycaster
 THREE.Raycaster.prototype.intersectObjects = function(objects, recursive, optionalTarget) {
-    const res = originalIntersectObjects.call(this, objects, recursive, optionalTarget);
-    return applyGlobalSnap(res);
+    const intersects = originalIntersectObjects.call(this, objects, recursive, optionalTarget);
+    return applyGlobalSnap(intersects);
 };
 
 THREE.Raycaster.prototype.intersectObject = function(object, recursive, optionalTarget) {
-    const res = originalIntersectObject.call(this, object, recursive, optionalTarget);
-    return applyGlobalSnap(res);
+    const intersects = originalIntersectObject.call(this, object, recursive, optionalTarget);
+    return applyGlobalSnap(intersects);
 };
-// ------------------------------------------------
 
-
-
-
-
-
-
-
-
-
-// --- GLOBAL DEBUG SPHERE ---
-let debugSphere: THREE.Mesh | null = null;
-let debugLog: ((msg: string) => void) | null = null;
-
-
+// Setup global debug sphere function (v28-NuclearDebug)
 const setupDebugSphere = (scene: THREE.Scene) => {
-    if (debugSphere) return; // Already setup
-    
-    // 1. Edge Cursor (Yellow Sphere) - Base Radius 0.2
+    // 1. Edge Cursor (Yellow Sphere)
     const sphereGeom = new THREE.SphereGeometry(0.2, 16, 16);
     const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffff00, depthTest: false, transparent: true, opacity: 0.8 });
-    debugSphere = new THREE.Mesh(sphereGeom, sphereMat); 
-    (window as any).debugSphere = debugSphere;
+    let debugSphere = new THREE.Mesh(sphereGeom, sphereMat);
     debugSphere.renderOrder = 9999;
     debugSphere.visible = false;
     scene.add(debugSphere);
+    (window as any).debugSphere = debugSphere;
+    console.log("DebugSphere Initialized (Global)");
 
-    // 2. Vertex Cursor (Green Cube) - Size 0.2 (Reduced)
-    const cubeGeom = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+    // 2. Vertex Cursor (Green Cube)
+    const cubeGeom = new THREE.BoxGeometry(0.2, 0.2, 0.2); // Reduced size
     const cubeMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false, transparent: true, opacity: 0.8 });
-    const debugCube = new THREE.Mesh(cubeGeom, cubeMat);
-    (window as any).debugCube = debugCube;
+    let debugCube = new THREE.Mesh(cubeGeom, cubeMat);
     debugCube.renderOrder = 9999;
     debugCube.visible = false;
     scene.add(debugCube);
-    
-    // Also setup log
-    const debugConsole = document.getElementById('debug-console');
-    if (debugConsole) {
-        debugConsole.style.display = 'block';
-        debugLog = (msg: string) => {
-             const line = document.createElement('div');
-             line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-             debugConsole.appendChild(line);
-             debugConsole.scrollTop = debugConsole.scrollHeight;
-             if (debugConsole.children.length > 50) debugConsole.removeChild(debugConsole.firstChild);
-        };
-        (window as any).debugLog = debugLog;
-    }
+    (window as any).debugCube = debugCube;
+    console.log("DebugCube Initialized (Global)");
 };
 
 
@@ -204,6 +149,7 @@ let tempMeasurementLine: THREE.Line | null = null;
 const measurementLabels: HTMLElement[] = [];
 const measurementMarkers: THREE.Mesh[] = [];
 let snappingCursor: THREE.Mesh | null = null;
+let debugSphere: THREE.Mesh | null = null;
 
 
 // --- EMERGENCY PATCH: Vector3.fromBufferAttribute ---
@@ -377,7 +323,7 @@ setTimeout(patchAcceleratedRaycast, 1000);
 // But for "Edges", we can try to find if there is an alternative.
 // Since we are fixing the build, we will remove the calls to missing components for now.
 
-console.log('VSR_IFC Version: 2026-02-03-Fix-v13-BuildFix');
+console.log('VSR_IFC Version: v2026-02-10-v33-FixBundle');
 const versionDiv = document.createElement('div');
 versionDiv.style.position = 'fixed';
 versionDiv.style.bottom = '10px';
@@ -389,7 +335,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-10-v32-StableSnap';
+versionDiv.textContent = 'v33-FixBundle';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -497,33 +443,29 @@ container.addEventListener('mousemove', (event) => {
 const debugConsole = document.getElementById('debug-console');
 if (debugConsole) {
     debugConsole.style.display = 'block'; // Force visible
-    const log = (msg) => {
-        const line = document.createElement('div');
-        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-        debugConsole.appendChild(line);
-        debugConsole.scrollTop = debugConsole.scrollHeight;
-        if (debugConsole.children.length > 20) debugConsole.removeChild(debugConsole.firstChild);
-    };
-    window.debugLog = log;
-} else {
-    window.debugLog = console.log;
 }
 
 const fragments = components.get(OBC.FragmentsManager);
 
-// Initialize fragments with the worker BEFORE getting other components
-// that might depend on it (like Classifier or Hider)
-try {
-    await fragments.init(`${baseUrl}fragments/fragments.mjs`);
-} catch (error) {
-    console.error("Critical Error: Fragments init failed", error);
-    throw new Error(`Fragments init failed: ${error}`);
-}
+const fileOpener = document.createElement('input');
+fileOpener.type = 'file';
+fileOpener.accept = '.frag';
+fileOpener.style.display = 'none';
+document.body.appendChild(fileOpener);
 
+fileOpener.addEventListener('change', async () => {
+    if (fileOpener.files && fileOpener.files.length > 0) {
+        const file = fileOpener.files[0];
+        const data = await file.arrayBuffer();
+        const buffer = new Uint8Array(data);
+        await fragments.load(buffer);
+    }
+});
+
+// --- Model Classifier & Hider (For Sidebar) ---
 const classifier = components.get(OBC.Classifier);
 const hider = components.get(OBC.Hider);
 
-// --- GLOBAL RAYCASTER PATCH FOR SNAPPING (Official Tools Support) ---
-// This ensures that ALL tools using OBC.Raycasters (like Length, Area) benefit from snapping logic
-// even if they don't explicitly use a VertexPicker or if Snapper is missing.
+// --- Raycasters (For other tools) ---
 const raycasters = components.get(OBC.Raycasters);
+raycasters.get(world);
