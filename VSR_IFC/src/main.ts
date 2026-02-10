@@ -312,7 +312,7 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
     try {
         // Screen-Space Snapping Settings
         const SNAP_PIXEL_THRESHOLD = 150; // High threshold for "magnetic" feel
-        const SMART_SEARCH_LIMIT = 3000; // If geometry has fewer vertices, check ALL of them
+        const SMART_SEARCH_LIMIT = 10000; // Increased to 10000 for HyperSnap
 
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
@@ -336,10 +336,36 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              };
 
              let candidates: THREE.Vector3[] = [];
+             
+             // Strategy 1: Bounding Box Corners (The "Golden" Snap Points)
+             // Even if the mesh is tessellated weirdly, the bounding box corners are usually the logical corners
+             if (!geom.boundingBox) geom.computeBoundingBox();
+             if (geom.boundingBox) {
+                 const box = geom.boundingBox;
+                 const corners = [
+                     new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+                     new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+                     new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+                     new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+                     new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+                     new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+                     new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+                     new THREE.Vector3(box.max.x, box.max.y, box.max.z)
+                 ];
+                 
+                 corners.forEach(c => {
+                     if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
+                          const instanceMatrix = new THREE.Matrix4();
+                          valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
+                          c.applyMatrix4(instanceMatrix);
+                     }
+                     c.applyMatrix4(valid.object.matrixWorld);
+                     candidates.push(c);
+                 });
+             }
 
-             // SMART STRATEGY: 
-             // If geometry is small enough, check ALL vertices to find the absolute closest one in screen space.
-             // This solves the issue where the ray hits a face whose vertices are far, but a neighbor face has a close vertex.
+             // Strategy 2: Global Vertex Search (SmartSnap)
+             // If geometry is manageable, check ALL vertices
              if (pos.count < SMART_SEARCH_LIMIT) {
                 // Brute force all vertices
                 for (let i = 0; i < pos.count; i++) {
@@ -348,11 +374,11 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              } else {
                 // Fallback: Just triangle vertices
                 const indices = [valid.face.a, valid.face.b, valid.face.c];
-                candidates = [
+                candidates.push(
                     getVertexWorld(indices[0]),
                     getVertexWorld(indices[1]),
                     getVertexWorld(indices[2])
-                ];
+                );
              }
              
              let closestPoint = new THREE.Vector3();
@@ -393,8 +419,8 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
                  if (typeof debugSphere !== 'undefined') {
                      debugSphere.position.copy(closestPoint);
                      debugSphere.visible = true;
-                     debugSphere.material.color.setHex(0x00ffff); // CYAN for Smart Snap
-                     debugSphere.scale.set(3.0, 3.0, 3.0); // Very Big
+                     debugSphere.material.color.setHex(0xFFD700); // GOLD for HyperSnap
+                     debugSphere.scale.set(3.0, 3.0, 3.0); 
                      debugSphere.material.depthTest = false; 
                      debugSphere.renderOrder = 999;
                  }
@@ -404,23 +430,13 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
                  // Visual Feedback 2: Rubber Band Line (To show what we are snapping to)
                  if (!window.snapLine) {
                      const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-                     const mat = new THREE.LineBasicMaterial({ color: 0x00ffff, depthTest: false, transparent: true, opacity: 0.6 });
+                     const mat = new THREE.LineBasicMaterial({ color: 0xFFD700, depthTest: false, transparent: true, opacity: 0.8 });
                      window.snapLine = new THREE.Line(geo, mat);
                      window.snapLine.renderOrder = 999;
                      world.scene.three.add(window.snapLine);
                  }
                  
-                 // We need the ORIGINAL hit point for the line start, but valid.point is already modified.
-                 // We can re-project or just use the screen point... 
-                 // Actually, let's just use the camera-to-point ray? No.
-                 // Let's use the cursor position in 3D? We don't have it easily without the original hit.
-                 // But wait, valid.point was modified IN PLACE. 
-                 // We can use the logic that 'closestPoint' is the destination.
-                 // And we can approximate the source by using the raycaster ray?
-                 // Or we can just skip the line start and only draw if we had the original.
-                 // For now, let's just highlight the point.
-                 
-                 if (window.debugLog) window.debugLog(`SmartSnap: ${pos.count < SMART_SEARCH_LIMIT ? 'GLOBAL' : 'LOCAL'} (Px: ${minPixelDist.toFixed(1)})`);
+                 if (window.debugLog) window.debugLog(`HyperSnap: ${found ? 'LOCKED' : 'NONE'} (Px: ${minPixelDist.toFixed(1)})`);
              } else {
                  if (typeof debugSphere !== 'undefined') debugSphere.visible = false;
                  document.body.style.cursor = ''; 
