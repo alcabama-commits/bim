@@ -323,7 +323,7 @@ setTimeout(patchAcceleratedRaycast, 1000);
 // But for "Edges", we can try to find if there is an alternative.
 // Since we are fixing the build, we will remove the calls to missing components for now.
 
-console.log('VSR_IFC Version: v2026-02-10-v34-MagneticSnap');
+console.log('VSR_IFC Version: v2026-02-10-v35-RescueInit');
 const versionDiv = document.createElement('div');
 versionDiv.style.position = 'fixed';
 versionDiv.style.bottom = '10px';
@@ -335,7 +335,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v34-MagneticSnap';
+versionDiv.textContent = 'v35-RescueInit';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -446,6 +446,19 @@ if (debugConsole) {
 }
 
 const fragments = components.get(OBC.FragmentsManager);
+
+// --- RESTORED INITIALIZATION (CRITICAL FIX v35) ---
+// Initialize fragments with the worker BEFORE getting other components
+// that might depend on it (like Classifier or Hider)
+try {
+    // Note: await at top level is supported by 'esnext' target in vite config
+    await fragments.init(`${baseUrl}fragments/fragments.mjs`);
+    console.log("FragmentsManager initialized successfully.");
+} catch (error) {
+    console.error("Critical Error: Fragments init failed", error);
+    // Continue anyway to try to render what we can, but likely broken
+}
+// --------------------------------------------------
 
 const fileOpener = document.createElement('input');
 fileOpener.type = 'file';
