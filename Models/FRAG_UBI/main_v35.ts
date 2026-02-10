@@ -323,7 +323,7 @@ setTimeout(patchAcceleratedRaycast, 1000);
 // But for "Edges", we can try to find if there is an alternative.
 // Since we are fixing the build, we will remove the calls to missing components for now.
 
-console.log('VSR_IFC Version: v2026-02-10-v35-RescueInit');
+console.log('VSR_IFC Version: v2026-02-10-v36-ModelLoader');
 const versionDiv = document.createElement('div');
 versionDiv.style.position = 'fixed';
 versionDiv.style.bottom = '10px';
@@ -335,7 +335,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v35-RescueInit';
+versionDiv.textContent = 'v36-ModelLoader';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -449,16 +449,78 @@ const fragments = components.get(OBC.FragmentsManager);
 
 // --- RESTORED INITIALIZATION (CRITICAL FIX v35) ---
 // Initialize fragments with the worker BEFORE getting other components
-// that might depend on it (like Classifier or Hider)
 try {
-    // Note: await at top level is supported by 'esnext' target in vite config
     await fragments.init(`${baseUrl}fragments/fragments.mjs`);
     console.log("FragmentsManager initialized successfully.");
 } catch (error) {
     console.error("Critical Error: Fragments init failed", error);
-    // Continue anyway to try to render what we can, but likely broken
 }
-// --------------------------------------------------
+
+// --- AUTOMATIC MODEL LOADING (v36-ModelLoader) ---
+// This was missing in v35, causing the blank viewer.
+async function loadModels() {
+    try {
+        console.log("Fetching models.json...");
+        const response = await fetch(`${baseUrl}models.json`);
+        if (!response.ok) {
+            console.warn(`models.json not found at ${baseUrl}models.json`);
+            return;
+        }
+        
+        const models = await response.json();
+        console.log(`Found ${models.length} models.`);
+        
+        for (const model of models) {
+            try {
+                const modelPath = `${baseUrl}${model.path}`;
+                console.log(`Loading: ${model.name}`);
+                
+                const modelResponse = await fetch(modelPath);
+                if (!modelResponse.ok) throw new Error(`Status ${modelResponse.status}`);
+                
+                const buffer = await modelResponse.arrayBuffer();
+                const data = new Uint8Array(buffer);
+                await fragments.load(data);
+                
+            } catch (err) {
+                console.error(`Failed to load ${model.name}:`, err);
+            }
+        }
+        
+        console.log("All models loaded. Updating scene...");
+        
+        // Zoom to fit models
+        // We can use a simple timeout to ensure everything is rendered
+        setTimeout(() => {
+            // Traverse scene to find meshes that are NOT grid or debug
+            const box = new THREE.Box3();
+            let hasObjects = false;
+            
+            world.scene.three.traverse((obj) => {
+                if (obj instanceof THREE.Mesh || obj instanceof THREE.InstancedMesh) {
+                    // Skip debug objects and grid
+                    if (obj === debugSphere || obj === debugCube) return;
+                    if ((obj as any).isGrid) return; 
+                    
+                    // Add to bounds
+                    // This is a rough approximation, ideally we use fragment bounding boxes
+                    hasObjects = true;
+                }
+            });
+            
+            if (hasObjects) {
+                world.camera.controls.fitToSphere(world.scene.three, 1.2);
+            }
+        }, 500);
+
+    } catch (e) {
+        console.error("Error in loadModels:", e);
+    }
+}
+
+// Execute loading
+await loadModels();
+
 
 const fileOpener = document.createElement('input');
 fileOpener.type = 'file';
