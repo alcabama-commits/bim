@@ -276,7 +276,7 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
 
     try {
         // Threshold in units (meters). Increased to 0.5 for better detection.
-        const SNAP_THRESHOLD = 0.5;
+        const SNAP_THRESHOLD = 0.8;
         
         let closestPoint = new THREE.Vector3();
         let minDist = Infinity;
@@ -3913,7 +3913,8 @@ function setupMeasurementTools_Deprecated() {
         }
     };
 
-    // --- BUTTON LISTENERS ---
+    // --- BUTTON LISTENERS (LEGACY - DISABLED TO AVOID CONFLICT WITH NEW EXACT COPY) ---
+    /*
     if (lengthBtn) {
         lengthBtn.addEventListener('click', async () => {
             disableAll(); // Reset other tools
@@ -3997,6 +3998,7 @@ function setupMeasurementTools_Deprecated() {
             customMeshes = [];
         });
     }
+    */
 }
 
 
