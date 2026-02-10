@@ -197,7 +197,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-10-v21-SnapForce';
+versionDiv.textContent = 'v2026-02-10-v22-ScreenSnap';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -296,25 +296,17 @@ const simpleRaycaster = raycasters.get(world);
 
 const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRaycaster);
 
-// Helper to perform Vertex/Edge snapping on a raw intersection
+// Helper to perform Vertex Snapping on a raw intersection
 const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
-    if (!valid) {
-        // if (window.debugLog && Math.random() < 0.05) window.debugLog("No intersection to snap");
-        if (debugSphere) debugSphere.visible = false;
-        return null;
-    }
-    // Force log every few frames to confirm function is called
-    if (Math.random() < 0.01 && window.debugLog) window.debugLog("Snap checking...");
-
     if (!valid) {
         if (debugSphere) debugSphere.visible = false;
         return null;
     }
 
     try {
-        // Threshold in units (meters) - Large for testing
-        const SNAP_THRESHOLD = 1.2; // Increased for v21
-
+        // Screen-Space Snapping Settings
+        const SNAP_PIXEL_THRESHOLD = 30; // Snap if vertex is within 30 pixels of cursor
+        
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
              if (!geom || !geom.attributes.position) return valid;
@@ -341,64 +333,60 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              const vB = getVertexWorld(indices[1]);
              const vC = getVertexWorld(indices[2]);
 
-             // Candidates: Vertices (Endpoints)
-             const vertices = [vA, vB, vC];
+             // Candidates: ONLY Vertices (Endpoints) to avoid noise
+             const candidates = [vA, vB, vC];
              
-             // Candidates: Midpoints
+             // Midpoints DISABLED to make corner selection easier
+             /*
              const midpoints = [
                  vA.clone().add(vB).multiplyScalar(0.5),
                  vB.clone().add(vC).multiplyScalar(0.5),
                  vC.clone().add(vA).multiplyScalar(0.5)
              ];
-
-             // Candidate: Face Center (Centroid)
-             const centroid = vA.clone().add(vB).add(vC).multiplyScalar(1/3);
+             */
 
              let closestPoint = new THREE.Vector3();
-             let minDist = Infinity;
+             let minPixelDist = Infinity;
              let found = false;
-             let type = '';
-
-             // Check Vertices
-             for (const p of vertices) {
-                 const dist = p.distanceTo(valid.point);
-                 // v21 Debug
-                 if (dist < 2.0 && window.debugLog && Math.random() < 0.01) {
-                     window.debugLog(`Vertex nearby: ${dist.toFixed(2)}`);
-                 }
-
-                 if (dist < minDist) {
-                     minDist = dist;
-                     closestPoint.copy(p);
-                     found = true;
-                     type = 'VERTEX';
-                 }
-             }
-
-             // Check Midpoints
-             for (const p of midpoints) {
-                 const dist = p.distanceTo(valid.point);
-                 if (dist < minDist) {
-                     minDist = dist;
-                     closestPoint.copy(p);
-                     found = true;
-                     type = 'MIDPOINT';
-                 }
-             }
              
-             if (found && minDist < SNAP_THRESHOLD) {
+             // Project intersection (cursor ray) to screen
+             const screenPoint = valid.point.clone().project(world.camera.three);
+             screenPoint.z = 0; // Flatten for 2D check
+             
+             const width = container.clientWidth;
+             const height = container.clientHeight;
+
+             // Check Vertices in Screen Space
+             for (const p of candidates) {
+                 // Project candidate to screen
+                 const screenCandidate = p.clone().project(world.camera.three);
+                 screenCandidate.z = 0;
+                 
+                 // Calculate pixel distance
+                 const dx = (screenCandidate.x - screenPoint.x) * (width / 2);
+                 const dy = (screenCandidate.y - screenPoint.y) * (height / 2);
+                 const pixelDist = Math.sqrt(dx*dx + dy*dy);
+
+                 if (pixelDist < minPixelDist) {
+                     minPixelDist = pixelDist;
+                     closestPoint.copy(p);
+                     found = true;
+                 }
+             }
+
+             if (found && minPixelDist < SNAP_PIXEL_THRESHOLD) {
                  valid.point.copy(closestPoint);
                  
-                 // Visual Debug
+                 // Visual Feedback
                  if (typeof debugSphere !== 'undefined') {
                      debugSphere.position.copy(closestPoint);
                      debugSphere.visible = true;
-                     // Color coding
-                     if (type === 'VERTEX') debugSphere.material.color.setHex(0xff0000); // Red
-                     else debugSphere.material.color.setHex(0x00ff00); // Green
+                     // User liked the "Green point", so we use Green for Vertices now
+                     debugSphere.material.color.setHex(0x00ff00); 
+                     debugSphere.scale.set(1.5, 1.5, 1.5); // Make it slightly larger
                  }
                  
-                 if (window.debugLog) window.debugLog(`Snapped to ${type} (Dist: ${minDist.toFixed(3)})`);
+                 if (window.debugLog) window.debugLog(`Snapped to VERTEX (Px: ${minPixelDist.toFixed(1)})`);
              } else {
                  if (typeof debugSphere !== 'undefined') debugSphere.visible = false;
              }
