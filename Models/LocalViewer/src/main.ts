@@ -5,6 +5,36 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
+// --- GLOBAL DEBUG SPHERE ---
+let debugSphere: THREE.Mesh | null = null;
+let debugLog: ((msg: string) => void) | null = null;
+
+
+const setupDebugSphere = (scene: THREE.Scene) => {
+    if (debugSphere) return; // Already setup
+    const geom = new THREE.SphereGeometry(0.3, 16, 16);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false, transparent: true, opacity: 0.8 });
+    debugSphere = new THREE.Mesh(geom, mat);
+    debugSphere.renderOrder = 9999;
+    debugSphere.visible = false;
+    scene.add(debugSphere);
+    
+    // Also setup log
+    const debugConsole = document.getElementById('debug-console');
+    if (debugConsole) {
+        debugConsole.style.display = 'block';
+        debugLog = (msg: string) => {
+             const line = document.createElement('div');
+             line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+             debugConsole.appendChild(line);
+             debugConsole.scrollTop = debugConsole.scrollHeight;
+             if (debugConsole.children.length > 50) debugConsole.removeChild(debugConsole.firstChild);
+        };
+        (window as any).debugLog = debugLog;
+    }
+};
+
+
 // --- Measurement State (Hoisted to top to avoid ReferenceError) ---
 let measurementMode: 'length' | 'point' | null = null;
 let measurementPoints: THREE.Vector3[] = [];
@@ -197,7 +227,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-10-v23-LogEverything';
+versionDiv.textContent = 'v2026-02-10-v24-GlobalSnap';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -256,7 +286,7 @@ const baseUrl = import.meta.env.BASE_URL || './';
 // --- DEBUG VISUALIZATION ---
 const debugSphereGeom = new THREE.SphereGeometry(0.5, 32, 32); // Increased size for v21
 const debugSphereMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
-const debugSphere = new THREE.Mesh(debugSphereGeom, debugSphereMat);
+debugSphere = new THREE.Mesh(debugSphereGeom, debugSphereMat);
 debugSphere.renderOrder = 999;
 debugSphere.visible = false;
 // Correctly add to the scene using the world object
