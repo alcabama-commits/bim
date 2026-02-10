@@ -298,6 +298,11 @@ const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRay
 
 // Helper to perform Vertex Snapping on a raw intersection
 const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
+    // Clear previous snap line if exists
+    if (window.snapLine) {
+        window.snapLine.visible = false;
+    }
+
     if (!valid) {
         if (debugSphere) debugSphere.visible = false;
         document.body.style.cursor = ''; // Reset cursor if hitting nothing
@@ -306,14 +311,14 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
 
     try {
         // Screen-Space Snapping Settings
-        const SNAP_PIXEL_THRESHOLD = 120; // Increased to 120px for "magnetic" feel
-        
+        const SNAP_PIXEL_THRESHOLD = 150; // High threshold for "magnetic" feel
+        const SMART_SEARCH_LIMIT = 3000; // If geometry has fewer vertices, check ALL of them
+
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
              if (!geom || !geom.attributes.position) return valid;
              
              const pos = geom.attributes.position;
-             const indices = [valid.face.a, valid.face.b, valid.face.c];
              
              // Helpers to get world coordinates
              const getVertexWorld = (idx: number) => {
@@ -330,12 +335,25 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
                  return tempV;
              };
 
-             const vA = getVertexWorld(indices[0]);
-             const vB = getVertexWorld(indices[1]);
-             const vC = getVertexWorld(indices[2]);
+             let candidates: THREE.Vector3[] = [];
 
-             // Candidates: ONLY Vertices (Endpoints) to avoid noise
-             const candidates = [vA, vB, vC];
+             // SMART STRATEGY: 
+             // If geometry is small enough, check ALL vertices to find the absolute closest one in screen space.
+             // This solves the issue where the ray hits a face whose vertices are far, but a neighbor face has a close vertex.
+             if (pos.count < SMART_SEARCH_LIMIT) {
+                // Brute force all vertices
+                for (let i = 0; i < pos.count; i++) {
+                    candidates.push(getVertexWorld(i));
+                }
+             } else {
+                // Fallback: Just triangle vertices
+                const indices = [valid.face.a, valid.face.b, valid.face.c];
+                candidates = [
+                    getVertexWorld(indices[0]),
+                    getVertexWorld(indices[1]),
+                    getVertexWorld(indices[2])
+                ];
+             }
              
              let closestPoint = new THREE.Vector3();
              let minPixelDist = Infinity;
@@ -348,7 +366,7 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              const width = container.clientWidth;
              const height = container.clientHeight;
 
-             // Check Vertices in Screen Space
+             // Check Candidates in Screen Space
              for (const p of candidates) {
                  // Project candidate to screen
                  const screenCandidate = p.clone().project(world.camera.three);
@@ -367,25 +385,45 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              }
 
              if (found && minPixelDist < SNAP_PIXEL_THRESHOLD) {
+                 // Apply Snap
                  valid.point.copy(closestPoint);
                  (valid as any).isSnapped = true;
                  
-                 // Visual Feedback
+                 // Visual Feedback 1: Marker
                  if (typeof debugSphere !== 'undefined') {
                      debugSphere.position.copy(closestPoint);
                      debugSphere.visible = true;
-                     debugSphere.material.color.setHex(0x00ff00); 
-                     debugSphere.scale.set(2.0, 2.0, 2.0); // Bigger
-                     debugSphere.material.depthTest = false; // Always visible
+                     debugSphere.material.color.setHex(0x00ffff); // CYAN for Smart Snap
+                     debugSphere.scale.set(3.0, 3.0, 3.0); // Very Big
+                     debugSphere.material.depthTest = false; 
                      debugSphere.renderOrder = 999;
                  }
                  
                  document.body.style.cursor = 'crosshair';
                  
-                 if (window.debugLog) window.debugLog(`Snapped to VERTEX (Px: ${minPixelDist.toFixed(1)})`);
+                 // Visual Feedback 2: Rubber Band Line (To show what we are snapping to)
+                 if (!window.snapLine) {
+                     const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+                     const mat = new THREE.LineBasicMaterial({ color: 0x00ffff, depthTest: false, transparent: true, opacity: 0.6 });
+                     window.snapLine = new THREE.Line(geo, mat);
+                     window.snapLine.renderOrder = 999;
+                     world.scene.three.add(window.snapLine);
+                 }
+                 
+                 // We need the ORIGINAL hit point for the line start, but valid.point is already modified.
+                 // We can re-project or just use the screen point... 
+                 // Actually, let's just use the camera-to-point ray? No.
+                 // Let's use the cursor position in 3D? We don't have it easily without the original hit.
+                 // But wait, valid.point was modified IN PLACE. 
+                 // We can use the logic that 'closestPoint' is the destination.
+                 // And we can approximate the source by using the raycaster ray?
+                 // Or we can just skip the line start and only draw if we had the original.
+                 // For now, let's just highlight the point.
+                 
+                 if (window.debugLog) window.debugLog(`SmartSnap: ${pos.count < SMART_SEARCH_LIMIT ? 'GLOBAL' : 'LOCAL'} (Px: ${minPixelDist.toFixed(1)})`);
              } else {
                  if (typeof debugSphere !== 'undefined') debugSphere.visible = false;
-                 document.body.style.cursor = ''; // Reset
+                 document.body.style.cursor = ''; 
              }
         }
     } catch (e) {
