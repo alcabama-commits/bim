@@ -276,7 +276,7 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
 
     try {
         // Threshold in units (meters)
-        const SNAP_THRESHOLD = 0.4;
+        const SNAP_THRESHOLD = 0.5;
 
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
@@ -304,19 +304,27 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              const vB = getVertexWorld(indices[1]);
              const vC = getVertexWorld(indices[2]);
 
-             // Candidates: Vertices
-             const candidates = [vA, vB, vC];
-
+             // Candidates: Vertices (Endpoints)
+             const vertices = [vA, vB, vC];
+             
              // Candidates: Midpoints
-             candidates.push(vA.clone().add(vB).multiplyScalar(0.5));
-             candidates.push(vB.clone().add(vC).multiplyScalar(0.5));
-             candidates.push(vC.clone().add(vA).multiplyScalar(0.5));
+             const midpoints = [
+                 vA.clone().add(vB).multiplyScalar(0.5),
+                 vB.clone().add(vC).multiplyScalar(0.5),
+                 vC.clone().add(vA).multiplyScalar(0.5)
+             ];
+
+             // Candidate: Face Center (Centroid)
+             const centroid = vA.clone().add(vB).add(vC).multiplyScalar(1/3);
 
              let closestPoint = new THREE.Vector3();
              let minDist = Infinity;
              let found = false;
 
-             for (const p of candidates) {
+             // Check all candidates
+             const allCandidates = [...vertices, ...midpoints, centroid];
+
+             for (const p of allCandidates) {
                  const dist = p.distanceTo(valid.point);
                  if (dist < minDist) {
                      minDist = dist;

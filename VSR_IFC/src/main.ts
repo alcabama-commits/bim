@@ -275,80 +275,68 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
     if (!valid) return null;
 
     try {
-        // Threshold in units (meters). Increased to 0.5 for better detection.
-        const SNAP_THRESHOLD = 0.8;
-        
-        let closestPoint = new THREE.Vector3();
-        let minDist = Infinity;
-        let found = false;
+        // Threshold in units (meters)
+        const SNAP_THRESHOLD = 0.5;
 
-        // Common helper to get world coordinates from geometry index
-        const getVertexWorld = (idx: number, geometry: THREE.BufferGeometry) => {
-             const pos = geometry.attributes.position;
-             const tempV = new THREE.Vector3();
-             // Safety check for index
-             if (idx >= 0 && idx < pos.count) {
-                 tempV.fromBufferAttribute(pos, idx);
-                 
-                 // Apply Instance Matrix if it's an InstancedMesh (Fragments)
-                 if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
-                      const instanceMatrix = new THREE.Matrix4();
-                      valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
-                      tempV.applyMatrix4(instanceMatrix);
-                 }
-                 
-                 // Apply World Matrix
-                 tempV.applyMatrix4(valid.object.matrixWorld);
-             }
-             return tempV;
-        };
-
-        // 1. Handle Mesh / InstancedMesh (Triangles)
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
-             if (geom && geom.attributes.position) {
-                 const indices = [valid.face.a, valid.face.b, valid.face.c];
-                 const candidates = indices.map(idx => getVertexWorld(idx, geom));
-
-                 for (const p of candidates) {
-                     const dist = p.distanceTo(valid.point);
-                     if (dist < minDist) {
-                         minDist = dist;
-                         closestPoint.copy(p);
-                         found = true;
+             if (!geom || !geom.attributes.position) return valid;
+             
+             const pos = geom.attributes.position;
+             const indices = [valid.face.a, valid.face.b, valid.face.c];
+             
+             // Helpers to get world coordinates
+             const getVertexWorld = (idx: number) => {
+                 const tempV = new THREE.Vector3();
+                 if (idx >= 0 && idx < pos.count) {
+                     tempV.fromBufferAttribute(pos, idx);
+                     if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
+                          const instanceMatrix = new THREE.Matrix4();
+                          valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
+                          tempV.applyMatrix4(instanceMatrix);
                      }
+                     tempV.applyMatrix4(valid.object.matrixWorld);
+                 }
+                 return tempV;
+             };
+
+             const vA = getVertexWorld(indices[0]);
+             const vB = getVertexWorld(indices[1]);
+             const vC = getVertexWorld(indices[2]);
+
+             // Candidates: Vertices (Endpoints)
+             const vertices = [vA, vB, vC];
+             
+             // Candidates: Midpoints
+             const midpoints = [
+                 vA.clone().add(vB).multiplyScalar(0.5),
+                 vB.clone().add(vC).multiplyScalar(0.5),
+                 vC.clone().add(vA).multiplyScalar(0.5)
+             ];
+
+             // Candidate: Face Center (Centroid)
+             const centroid = vA.clone().add(vB).add(vC).multiplyScalar(1/3);
+
+             let closestPoint = new THREE.Vector3();
+             let minDist = Infinity;
+             let found = false;
+
+             // Check all candidates
+             const allCandidates = [...vertices, ...midpoints, centroid];
+
+             for (const p of allCandidates) {
+                 const dist = p.distanceTo(valid.point);
+                 if (dist < minDist) {
+                     minDist = dist;
+                     closestPoint.copy(p);
+                     found = true;
                  }
              }
-        } 
-        // 2. Handle Line / LineSegments (Edges/Axes)
-        else if ((valid.object instanceof THREE.Line || valid.object instanceof THREE.LineSegments) && valid.index !== undefined) {
-             const geom = (valid.object as any).geometry;
-             if (geom && geom.attributes.position) {
-                 // For LineSegments, valid.index is the start of the segment
-                 const indices = [valid.index, valid.index + 1];
-                 const candidates = indices.map(idx => getVertexWorld(idx, geom));
-
-                 for (const p of candidates) {
-                     const dist = p.distanceTo(valid.point);
-                     if (dist < minDist) {
-                         minDist = dist;
-                         closestPoint.copy(p);
-                         found = true;
-                     }
-                 }
+             
+             if (found && minDist < SNAP_THRESHOLD) {
+                 valid.point.copy(closestPoint);
              }
         }
-
-        // Apply Snap if within threshold
-        if (found) {
-            // console.log(`[Snap] Candidate found. Dist: ${minDist.toFixed(4)}`);
-            if (minDist < SNAP_THRESHOLD) {
-                valid.point.copy(closestPoint);
-                (valid as any).isSnapped = true; // Mark as snapped for visual feedback
-                // console.log('[Snap] APPLIED');
-            }
-        }
-
     } catch (e) {
         console.warn("Snapping failed:", e);
         // Fallback: return valid without snapping
@@ -1772,26 +1760,24 @@ async function loadModelList() {
     }
 
     try {
-        // CHANGED: Load from local models.json instead of GitHub API
-        // FILTER: Only load 2442602.frag as requested
-        logToScreen('Loading local models list...');
+        const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
+        logToScreen('Scanning GitHub for models...');
         
-        const response = await fetch('models.json');
-        if (!response.ok) throw new Error(`Failed to load models.json: ${response.status}`);
+        const response = await fetch(GITHUB_API_URL);
+        if (!response.ok) throw new Error(`GitHub API Error: ${response.status}`);
         
         const data = await response.json();
-        if (!Array.isArray(data)) throw new Error('Invalid models.json format');
+        if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
 
         const models = data
-            .filter((item: any) => item.path.endsWith('.frag'))
-            .filter((item: any) => item.path.includes('2442602')) // DEBUG: Focus on single model
+            .filter((item: any) => item.name.toLowerCase().endsWith('.frag'))
             .map((item: any) => ({
                 name: item.name,
-                path: item.path,
-                url: item.path // Use path as URL for local loading
+                path: `models/${item.name}`,
+                url: item.download_url
             }));
 
-        logToScreen(`Local Scan: ${models.length} models found (Filtered for 2442602)`);
+        logToScreen(`GitHub Scan: ${models.length} .frag models found`);
 
         // Group models by specialty
         const groups: Record<string, any[]> = {};
@@ -3913,8 +3899,7 @@ function setupMeasurementTools_Deprecated() {
         }
     };
 
-    // --- BUTTON LISTENERS (LEGACY - DISABLED TO AVOID CONFLICT WITH NEW EXACT COPY) ---
-    /*
+    // --- BUTTON LISTENERS ---
     if (lengthBtn) {
         lengthBtn.addEventListener('click', async () => {
             disableAll(); // Reset other tools
@@ -3998,7 +3983,6 @@ function setupMeasurementTools_Deprecated() {
             customMeshes = [];
         });
     }
-    */
 }
 
 
@@ -4078,7 +4062,6 @@ function toggleMeasurementMode(mode: 'length' | 'point') {
         logToScreen('Measurement mode disabled');
         setActiveButton(null);
         if (snappingCursor) snappingCursor.visible = false;
-        document.body.style.cursor = 'default';
     } else {
         measurementMode = mode;
         resetCurrentMeasurement();
@@ -4168,18 +4151,6 @@ async function onMeasureMouseMove(event: MouseEvent) {
         if (snappingCursor) {
             snappingCursor.position.copy(result.point);
             snappingCursor.visible = true;
-
-            // Visual feedback for snapping
-            const mat = snappingCursor.material as THREE.MeshBasicMaterial;
-            if ((result as any).isSnapped) {
-                mat.color.setHex(0xFFD700); // Gold/Yellow for snap
-                snappingCursor.scale.set(1.5, 1.5, 1.5); // Make it larger
-                document.body.style.cursor = 'crosshair'; // Change mouse cursor
-            } else {
-                mat.color.setHex(0xFF00FF); // Magenta default
-                snappingCursor.scale.set(1, 1, 1);
-                document.body.style.cursor = 'default';
-            }
         }
 
         // If we have a start point, draw a temp line to current cursor
