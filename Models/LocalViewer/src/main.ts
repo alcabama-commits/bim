@@ -335,7 +335,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v36-ModelLoader';
+versionDiv.textContent = 'v37-LoadFix';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -480,7 +480,8 @@ async function loadModels() {
                 
                 const buffer = await modelResponse.arrayBuffer();
                 const data = new Uint8Array(buffer);
-                await fragments.load(data);
+                // Fix for v37: Use fragments.core.load with mandatory modelId
+                await fragments.core.load(data, { modelId: model.name });
                 
             } catch (err) {
                 console.error(`Failed to load ${model.name}:`, err);
@@ -533,7 +534,8 @@ fileOpener.addEventListener('change', async () => {
         const file = fileOpener.files[0];
         const data = await file.arrayBuffer();
         const buffer = new Uint8Array(data);
-        await fragments.load(buffer);
+        // Fix for v37: Use fragments.core.load with mandatory modelId
+        await fragments.core.load(buffer, { modelId: file.name });
     }
 });
 
