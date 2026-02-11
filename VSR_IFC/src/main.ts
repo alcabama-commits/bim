@@ -296,8 +296,10 @@ const simpleRaycaster = raycasters.get(world);
 
 const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRaycaster);
 
-// Helper to perform Vertex Snapping on a raw intersection
-const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
+let lastPointerNDC: THREE.Vector2 | null = null;
+let lastSnapped: { object: THREE.Object3D; point: THREE.Vector3 } | null = null;
+
+const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerNDC?: THREE.Vector2 | null) => {
     // Clear previous snap line if exists
     if (window.snapLine) {
         window.snapLine.visible = false;
@@ -306,141 +308,153 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
     if (!valid) {
         if (debugSphere) debugSphere.visible = false;
         document.body.style.cursor = ''; // Reset cursor if hitting nothing
+        lastSnapped = null;
         return null;
     }
 
     try {
-        // Screen-Space Snapping Settings
-        const SNAP_PIXEL_THRESHOLD = 150; // High threshold for "magnetic" feel
-        const SMART_SEARCH_LIMIT = 10000; // Increased to 10000 for HyperSnap
+        const SNAP_THRESHOLD_PX = 45;
+        const STICKY_THRESHOLD_PX = 60;
+
+        const rect = container.getBoundingClientRect();
+        const ndc = pointerNDC ?? lastPointerNDC;
+        const pointerPx = ndc
+            ? {
+                x: (ndc.x * 0.5 + 0.5) * rect.width + rect.left,
+                y: (-(ndc.y * 0.5) + 0.5) * rect.height + rect.top
+            }
+            : {
+                x: rect.left + rect.width * 0.5,
+                y: rect.top + rect.height * 0.5
+            };
+
+        const hitNDC = valid.point.clone().project(world.camera.three);
+
+        const isValidCandidate = (v: THREE.Vector3) => {
+            if (!Number.isFinite(v.x) || !Number.isFinite(v.y) || !Number.isFinite(v.z)) return false;
+            if (v.lengthSq() === 0 && valid.point.lengthSq() > 1) return false;
+            return true;
+        };
+
+        const candidates: THREE.Vector3[] = [];
 
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
-             const geom = (valid.object as any).geometry;
-             if (!geom || !geom.attributes.position) return valid;
-             
-             const pos = geom.attributes.position;
-             
-             // Helpers to get world coordinates
-             const getVertexWorld = (idx: number) => {
-                 const tempV = new THREE.Vector3();
-                 if (idx >= 0 && idx < pos.count) {
-                     tempV.fromBufferAttribute(pos, idx);
-                     if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
-                          const instanceMatrix = new THREE.Matrix4();
-                          valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
-                          tempV.applyMatrix4(instanceMatrix);
-                     }
-                     tempV.applyMatrix4(valid.object.matrixWorld);
-                 }
-                 return tempV;
-             };
+            const geom = (valid.object as any).geometry;
+            const pos = geom?.attributes?.position;
+            if (pos && pos.count > 0) {
+                const maxIndex = pos.count - 1;
+                const idxs = [valid.face.a, valid.face.b, valid.face.c].filter((i) => i >= 0 && i <= maxIndex);
+                const instanceMatrix =
+                    valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined
+                        ? (() => {
+                            const m = new THREE.Matrix4();
+                            valid.object.getMatrixAt(valid.instanceId, m);
+                            return m;
+                        })()
+                        : null;
 
-             let candidates: THREE.Vector3[] = [];
-             
-             // Strategy 1: Bounding Box Corners (The "Golden" Snap Points)
-             // Even if the mesh is tessellated weirdly, the bounding box corners are usually the logical corners
-             if (!geom.boundingBox) geom.computeBoundingBox();
-             if (geom.boundingBox) {
-                 const box = geom.boundingBox;
-                 const corners = [
-                     new THREE.Vector3(box.min.x, box.min.y, box.min.z),
-                     new THREE.Vector3(box.min.x, box.min.y, box.max.z),
-                     new THREE.Vector3(box.min.x, box.max.y, box.min.z),
-                     new THREE.Vector3(box.min.x, box.max.y, box.max.z),
-                     new THREE.Vector3(box.max.x, box.min.y, box.min.z),
-                     new THREE.Vector3(box.max.x, box.min.y, box.max.z),
-                     new THREE.Vector3(box.max.x, box.max.y, box.min.z),
-                     new THREE.Vector3(box.max.x, box.max.y, box.max.z)
-                 ];
-                 
-                 corners.forEach(c => {
-                     if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
-                          const instanceMatrix = new THREE.Matrix4();
-                          valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
-                          c.applyMatrix4(instanceMatrix);
-                     }
-                     c.applyMatrix4(valid.object.matrixWorld);
-                     candidates.push(c);
-                 });
-             }
-
-             // Strategy 2: Global Vertex Search (SmartSnap)
-             // If geometry is manageable, check ALL vertices
-             if (pos.count < SMART_SEARCH_LIMIT) {
-                // Brute force all vertices
-                for (let i = 0; i < pos.count; i++) {
-                    candidates.push(getVertexWorld(i));
+                for (const idx of idxs) {
+                    const v = new THREE.Vector3().fromBufferAttribute(pos, idx);
+                    if (instanceMatrix) v.applyMatrix4(instanceMatrix);
+                    v.applyMatrix4(valid.object.matrixWorld);
+                    if (isValidCandidate(v)) candidates.push(v);
                 }
-             } else {
-                // Fallback: Just triangle vertices
-                const indices = [valid.face.a, valid.face.b, valid.face.c];
-                candidates.push(
-                    getVertexWorld(indices[0]),
-                    getVertexWorld(indices[1]),
-                    getVertexWorld(indices[2])
-                );
-             }
-             
-             let closestPoint = new THREE.Vector3();
-             let minPixelDist = Infinity;
-             let found = false;
-             
-             // Project intersection (cursor ray) to screen
-             const screenPoint = valid.point.clone().project(world.camera.three);
-             screenPoint.z = 0; // Flatten for 2D check
-             
-             const width = container.clientWidth;
-             const height = container.clientHeight;
+            }
+        } else if ((valid.object instanceof THREE.Line || valid.object instanceof THREE.LineSegments) && valid.index !== undefined) {
+            const geom = (valid.object as any).geometry;
+            const pos = geom?.attributes?.position;
+            if (pos && pos.count > 0) {
+                const maxIndex = pos.count - 1;
+                const idxFromGeomIndex = (i: number) => (geom?.index ? geom.index.getX(i) : i);
+                const i1 = idxFromGeomIndex(valid.index);
+                const i2 = idxFromGeomIndex(valid.index + 1);
+                for (const idx of [i1, i2]) {
+                    if (idx < 0 || idx > maxIndex) continue;
+                    const v = new THREE.Vector3().fromBufferAttribute(pos, idx).applyMatrix4(valid.object.matrixWorld);
+                    if (isValidCandidate(v)) candidates.push(v);
+                }
+            }
+        }
 
-             // Check Candidates in Screen Space
-             for (const p of candidates) {
-                 // Project candidate to screen
-                 const screenCandidate = p.clone().project(world.camera.three);
-                 screenCandidate.z = 0;
-                 
-                 // Calculate pixel distance
-                 const dx = (screenCandidate.x - screenPoint.x) * (width / 2);
-                 const dy = (screenCandidate.y - screenPoint.y) * (height / 2);
-                 const pixelDist = Math.sqrt(dx*dx + dy*dy);
+        const findMatchingCandidate = (p: THREE.Vector3) => {
+            for (const c of candidates) {
+                if (c.distanceToSquared(p) < 1e-10) return c;
+            }
+            return null;
+        };
 
-                 if (pixelDist < minPixelDist) {
-                     minPixelDist = pixelDist;
-                     closestPoint.copy(p);
-                     found = true;
-                 }
-             }
+        if (lastSnapped && lastSnapped.object === valid.object) {
+            const stable = findMatchingCandidate(lastSnapped.point);
+            if (stable) {
+                const stableNdc = stable.clone().project(world.camera.three);
+                const stablePx = {
+                    x: (stableNdc.x * 0.5 + 0.5) * rect.width + rect.left,
+                    y: (-(stableNdc.y * 0.5) + 0.5) * rect.height + rect.top
+                };
+                const dx = stablePx.x - pointerPx.x;
+                const dy = stablePx.y - pointerPx.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist <= STICKY_THRESHOLD_PX) {
+                    valid.point.copy(stable);
+                    (valid as any).isSnapped = true;
+                    if (debugSphere) {
+                        debugSphere.position.copy(stable);
+                        debugSphere.visible = true;
+                        (debugSphere.material as any).color?.setHex?.(0xFFD700);
+                        debugSphere.scale.set(2.0, 2.0, 2.0);
+                    }
+                    document.body.style.cursor = 'crosshair';
+                    return valid;
+                }
+            }
+        }
 
-             if (found && minPixelDist < SNAP_PIXEL_THRESHOLD) {
-                 // Apply Snap
-                 valid.point.copy(closestPoint);
-                 (valid as any).isSnapped = true;
-                 
-                 // Visual Feedback 1: Marker
-                 if (typeof debugSphere !== 'undefined') {
-                     debugSphere.position.copy(closestPoint);
-                     debugSphere.visible = true;
-                     debugSphere.material.color.setHex(0xFFD700); // GOLD for HyperSnap
-                     debugSphere.scale.set(3.0, 3.0, 3.0); 
-                     debugSphere.material.depthTest = false; 
-                     debugSphere.renderOrder = 999;
-                 }
-                 
-                 document.body.style.cursor = 'crosshair';
-                 
-                 // Visual Feedback 2: Rubber Band Line (To show what we are snapping to)
-                 if (!window.snapLine) {
-                     const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-                     const mat = new THREE.LineBasicMaterial({ color: 0xFFD700, depthTest: false, transparent: true, opacity: 0.8 });
-                     window.snapLine = new THREE.Line(geo, mat);
-                     window.snapLine.renderOrder = 999;
-                     world.scene.three.add(window.snapLine);
-                 }
-                 
-                 if (window.debugLog) window.debugLog(`HyperSnap: ${found ? 'LOCKED' : 'NONE'} (Px: ${minPixelDist.toFixed(1)})`);
-             } else {
-                 if (typeof debugSphere !== 'undefined') debugSphere.visible = false;
-                 document.body.style.cursor = ''; 
-             }
+        let bestPoint: THREE.Vector3 | null = null;
+        let bestDist = Infinity;
+        let bestDepthDelta = Infinity;
+
+        for (const p of candidates) {
+            const pNdc = p.clone().project(world.camera.three);
+            if (Math.abs(pNdc.z) > 1) continue;
+            const px = {
+                x: (pNdc.x * 0.5 + 0.5) * rect.width + rect.left,
+                y: (-(pNdc.y * 0.5) + 0.5) * rect.height + rect.top
+            };
+            const dx = px.x - pointerPx.x;
+            const dy = px.y - pointerPx.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > SNAP_THRESHOLD_PX) continue;
+
+            const depthDelta = Math.abs(pNdc.z - hitNDC.z);
+
+            if (dist + 1e-6 < bestDist) {
+                bestDist = dist;
+                bestDepthDelta = depthDelta;
+                bestPoint = p;
+            } else if (Math.abs(dist - bestDist) <= 1.0 && depthDelta < bestDepthDelta) {
+                bestDist = dist;
+                bestDepthDelta = depthDelta;
+                bestPoint = p;
+            }
+        }
+
+        if (bestPoint) {
+            valid.point.copy(bestPoint);
+            (valid as any).isSnapped = true;
+            lastSnapped = { object: valid.object, point: bestPoint.clone() };
+
+            if (debugSphere) {
+                debugSphere.position.copy(bestPoint);
+                debugSphere.visible = true;
+                (debugSphere.material as any).color?.setHex?.(0xFFD700);
+                debugSphere.scale.set(2.0, 2.0, 2.0);
+            }
+
+            document.body.style.cursor = 'crosshair';
+        } else {
+            if (debugSphere) debugSphere.visible = false;
+            document.body.style.cursor = '';
+            lastSnapped = null;
         }
     } catch (e) {
         console.warn("Snapping failed:", e);
@@ -452,8 +466,9 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
 // Override castRayToObjects
 simpleRaycaster.castRayToObjects = (items?: THREE.Object3D[], position?: THREE.Vector2) => {
     // If items is undefined, it uses components.meshes (which we populated)
+    if (position) lastPointerNDC = position.clone();
     const result = originalCastRayToObjects(items, position);
-    return applySnappingToIntersection(result);
+    return applySnappingToIntersection(result, position ?? null);
 };
 
 // Also override castRay if it exists and is different
@@ -467,9 +482,9 @@ if (simpleRaycaster.castRay) {
          const result = originalCastRay(items);
          // If result is promise?
          if (result && typeof result.then === 'function') {
-             return result.then((res: any) => applySnappingToIntersection(res));
+             return result.then((res: any) => applySnappingToIntersection(res, lastPointerNDC));
          }
-         return applySnappingToIntersection(result);
+         return applySnappingToIntersection(result, lastPointerNDC);
     };
 }
 
@@ -3209,216 +3224,16 @@ function setupMeasurementTools_Deprecated() {
             }
             
             if (valid) {
-                // --- ENHANCED SNAP LOGIC (Screen Space) ---
-                const hitPoint = valid.point;
-                let snapPoint = hitPoint.clone();
-                let isSnapped = false;
-                
-                // Snap Threshold in Pixels
-                const SNAP_THRESHOLD_PX = 60;
-                
-                try {
-                    const geom = (valid.object as any).geometry;
-                    const candidates: THREE.Vector3[] = [];
-
-                    // Handle Meshes
-                    if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
-                        const pos = geom.attributes.position;
-                        
-                        const vA = new THREE.Vector3();
-                        const vB = new THREE.Vector3();
-                        const vC = new THREE.Vector3();
-
-                        // Safe check for geometry access
-                        // DELETE ORIGINAL UNSAFE BLOCK
-                        /*
-                        vA.fromBufferAttribute(pos, valid.face.a);
-                        vB.fromBufferAttribute(pos, valid.face.b);
-                        vC.fromBufferAttribute(pos, valid.face.c);
-
-                        // Transform to world space
-                        if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
-                             const instanceMatrix = new THREE.Matrix4();
-                             valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
-                             const matrixWorld = valid.object.matrixWorld;
-                             vA.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                             vB.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                             vC.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                        } else {
-                            valid.object.updateMatrixWorld(); 
-                            vA.applyMatrix4(valid.object.matrixWorld);
-                            vB.applyMatrix4(valid.object.matrixWorld);
-                            vC.applyMatrix4(valid.object.matrixWorld);
-                        }
-
-                        // Project to Screen Space for "Visual" Snapping
-                        const toScreen = (v: THREE.Vector3) => {
-                            const p = v.clone().project(world.camera.three);
-                            const rect = container.getBoundingClientRect();
-                            return {
-                                x: (p.x * 0.5 + 0.5) * rect.width + rect.left,
-                                y: (-(p.y * 0.5) + 0.5) * rect.height + rect.top,
-                                z: p.z,
-                                vec3: v // Keep original 3D for reverse mapping
-                            };
-                        };
-
-                        const sA = toScreen(vA);
-                        const sB = toScreen(vB);
-                        const sC = toScreen(vC);
-                        const mouseScreen = { x: event.clientX, y: event.clientY };
-
-                        // Helper: Distance to segment in screen space
-                        const distToSegment = (p: {x: number, y: number}, a: {x: number, y: number}, b: {x: number, y: number}) => {
-                            const l2 = (a.x - b.x)**2 + (a.y - b.y)**2;
-                            if (l2 === 0) return { dist: Math.sqrt((p.x - a.x)**2 + (p.y - a.y)**2), t: 0 };
-                            let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2;
-                            t = Math.max(0, Math.min(1, t));
-                            const projX = a.x + t * (b.x - a.x);
-                            const projY = a.y + t * (b.y - a.y);
-                            return { 
-                                dist: Math.sqrt((p.x - projX)**2 + (p.y - projY)**2), 
-                                t: t 
-                            };
-                        };
-                        */
-
-                        // Candidates: Vertices
-                        // Safe check for geometry access
-                        if (pos && pos.count > 0) {
-                            // Ensure indices are within bounds
-                            const maxIndex = pos.count - 1;
-                            
-                            const getVertex = (idx: number, target: THREE.Vector3) => {
-                                if (idx > maxIndex) return false;
-                                try {
-                                    target.fromBufferAttribute(pos, idx);
-                                    return true;
-                                } catch (e) {
-                                    return false;
-                                }
-                            };
-
-                            if (getVertex(valid.face.a, vA) && 
-                                getVertex(valid.face.b, vB) && 
-                                getVertex(valid.face.c, vC)) {
-
-                                // DEBUG: Check for suspicious vertices (all zero or NaN)
-                                if (vA.lengthSq() < 0.0001 && vB.lengthSq() < 0.0001 && vC.lengthSq() < 0.0001) {
-                                    console.warn("[SNAP] All vertices are zero! Geometry likely corrupt or uninitialized.");
-                                }
-
-                                // Transform to world space
-                                if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
-                                     const instanceMatrix = new THREE.Matrix4();
-                                     valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
-                                     const matrixWorld = valid.object.matrixWorld;
-                                     vA.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                                     vB.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                                     vC.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
-                                } else {
-                                    valid.object.updateMatrixWorld(); 
-                                    vA.applyMatrix4(valid.object.matrixWorld);
-                                    vB.applyMatrix4(valid.object.matrixWorld);
-                                    vC.applyMatrix4(valid.object.matrixWorld);
-                                }
-
-                                // Candidates: Vertices (End points only per user request)
-                                candidates.push(vA, vB, vC);
-                            }
-                        }
-                    }
-                    // Handle Lines
-                    else if ((valid.object instanceof THREE.Line || valid.object instanceof THREE.LineSegments) && valid.index !== undefined) {
-                         const pos = geom.attributes.position;
-                         const vA = new THREE.Vector3();
-                         const vB = new THREE.Vector3();
-                         
-                         let idx1, idx2;
-                         if (valid.object instanceof THREE.LineSegments) {
-                             idx1 = valid.index;
-                             idx2 = valid.index + 1;
-                             if (geom.index) {
-                                 idx1 = geom.index.getX(valid.index);
-                                 idx2 = geom.index.getX(valid.index + 1);
-                             }
-                         } else {
-                             idx1 = valid.index;
-                             idx2 = valid.index + 1;
-                             if (geom.index) {
-                                 idx1 = geom.index.getX(valid.index);
-                                 idx2 = geom.index.getX(valid.index + 1);
-                             }
-                         }
-
-                         if (idx1 !== undefined && idx2 !== undefined) {
-                             vA.fromBufferAttribute(pos, idx1);
-                             vB.fromBufferAttribute(pos, idx2);
-                             
-                             valid.object.updateMatrixWorld();
-                             vA.applyMatrix4(valid.object.matrixWorld);
-                             vB.applyMatrix4(valid.object.matrixWorld);
-                             
-                             candidates.push(vA, vB);
-                         }
-                    }
-
-                    if (candidates.length > 0) {
-                        // Project to Screen Space for "Visual" Snapping
-                        const toScreen = (v: THREE.Vector3) => {
-                            const p = v.clone().project(world.camera.three);
-                            const rect = container.getBoundingClientRect();
-                            return {
-                                x: (p.x * 0.5 + 0.5) * rect.width + rect.left,
-                                y: (-(p.y * 0.5) + 0.5) * rect.height + rect.top,
-                                z: p.z 
-                            };
-                        };
-
-                        const mouseScreen = { x: event.clientX, y: event.clientY };
-                        
-                        let bestDist = SNAP_THRESHOLD_PX;
-                        let bestPoint = null;
-
-                        for (const p of candidates) {
-                            const s = toScreen(p);
-                            if (Math.abs(s.z) > 1) continue; 
-
-                            const dx = s.x - mouseScreen.x;
-                            const dy = s.y - mouseScreen.y;
-                            const dist = Math.sqrt(dx*dx + dy*dy);
-
-                            if (dist < bestDist) {
-                                bestDist = dist;
-                                bestPoint = p;
-                            }
-                        }
-                        
-                        if (bestPoint) {
-                            snapPoint = bestPoint;
-                            isSnapped = true;
-                        }
-                    }
-                } catch (err) {
-                    console.warn("Snap calculation error:", err);
-                }
-                
-                // Visual Feedback for Snap
-                if (isSnapped) {
-                    cursorMat.color.setHex(0xFFD700); // Gold
+                if ((valid as any).isSnapped) {
+                    cursorMat.color.setHex(0xFFD700);
                     cursorMesh.scale.set(2.0, 2.0, 2.0);
-                    valid.point.copy(snapPoint); // CRITICAL: Update the hit point
-                    
-                    // Show Snap Indicator
-                    logToScreen(`SNAP! (X:${snapPoint.x.toFixed(2)}, Y:${snapPoint.y.toFixed(2)}, Z:${snapPoint.z.toFixed(2)})`);
                 } else {
-                    cursorMat.color.setHex(0xff00ff); // Magenta
+                    cursorMat.color.setHex(0xff00ff);
                     cursorMesh.scale.set(1.0, 1.0, 1.0);
                 }
-                
                 return valid;
             }
-            
+
             return valid;
 
     };
@@ -4201,6 +4016,12 @@ async function onMeasureMouseMove(event: MouseEvent) {
     }
     
     // Use the simpleRaycaster which we monkey-patched to have snapping!
+    {
+        const rect = container.getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        lastPointerNDC = new THREE.Vector2(x, y);
+    }
     const result = await simpleRaycaster.castRay();
     
     if (result && result.point) {
@@ -4237,6 +4058,12 @@ async function onMeasureClick(event: MouseEvent) {
     // Don't trigger if clicking on UI
     if ((event.target as HTMLElement).closest('button') || (event.target as HTMLElement).closest('.sidebar')) return;
 
+    {
+        const rect = container.getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        lastPointerNDC = new THREE.Vector2(x, y);
+    }
     const result = await simpleRaycaster.castRay();
     if (!result || !result.point) return;
     
