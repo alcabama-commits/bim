@@ -313,8 +313,16 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerND
     }
 
     try {
-        const SNAP_THRESHOLD_PX = 45;
-        const STICKY_THRESHOLD_PX = 60;
+        // Pixel thresholds for snapping behaviour (screen space)
+        // SNAP_THRESHOLD_PX  -> distancia máxima desde el cursor para que un vértice sea candidato
+        // STICKY_THRESHOLD_PX -> rango en el que mantenemos el último punto para evitar "salto" brusco
+        //
+        // Valores más pequeños = snapping más preciso (hay que apuntar mejor)
+        // Valores más grandes  = más fácil enganchar, pero menos precisión visual.
+        //
+        // Antes: 45 / 60 (demasiado grandes, hacía que atrapara puntos lejos del cursor)
+        const SNAP_THRESHOLD_PX = 14;
+        const STICKY_THRESHOLD_PX = 22;
 
         const rect = container.getBoundingClientRect();
         const ndc = pointerNDC ?? lastPointerNDC;
