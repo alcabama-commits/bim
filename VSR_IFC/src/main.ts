@@ -188,10 +188,11 @@ const logToScreen = (msg: string) => {
     console.log('[UI]', msg);
 };
 
-// --- GLOBAL RAYCASTER PATCH FOR SNAPPING (NUEVA IMPLEMENTACIÓN 3D) ---
+// --- GLOBAL RAYCASTER PATCH FOR SNAPPING (NUEVA IMPLEMENTACIÓN 3D MULTI-OBJETO) ---
 const raycasters = components.get(OBC.Raycasters);
 const simpleRaycaster = raycasters.get(world);
-const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRaycaster);
+// No necesitamos originalCastRayToObjects si vamos a re-implementar la lógica de intersección para obtener múltiples hits
+// const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRaycaster);
 
 // Estado para sticky snap
 let lastSnapped: { object: THREE.Object3D; point: THREE.Vector3 } | null = null;
@@ -199,230 +200,281 @@ let lastPointerNDC: THREE.Vector2 | null = null;
 
 interface SnapCandidate {
     point: THREE.Vector3;
-    type: 'vertex' | 'edge';
+    type: 'vertex' | 'edge' | 'intersection' | 'face';
+    distanceToRay: number;
+    distanceToCamera: number;
+    intersection: THREE.Intersection;
 }
 
-const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerNDC?: THREE.Vector2 | null) => {
-    // Limpiar feedback visual previo
+const computeDistanceToRay = (ray: THREE.Ray, point: THREE.Vector3) => {
+    const toPoint = point.clone().sub(ray.origin);
+    const proj = toPoint.dot(ray.direction);
+    const closest = ray.origin.clone().add(ray.direction.clone().multiplyScalar(proj));
+    return point.distanceTo(closest);
+};
+
+const pushSnapCandidate = (
+    point: THREE.Vector3,
+    type: SnapCandidate['type'],
+    intersection: THREE.Intersection,
+    ray: THREE.Ray,
+    out: SnapCandidate[]
+) => {
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.z)) return;
+    out.push({
+        point,
+        type,
+        distanceToRay: computeDistanceToRay(ray, point),
+        distanceToCamera: point.distanceTo(ray.origin),
+        intersection
+    });
+};
+
+const getClosestPointOnSegmentToRay = (a: THREE.Vector3, b: THREE.Vector3, ray: THREE.Ray) => {
+    const pointOnRay = new THREE.Vector3();
+    const pointOnSegment = new THREE.Vector3();
+    ray.distanceSqToSegment(a, b, pointOnRay, pointOnSegment);
+    return pointOnSegment;
+};
+
+const getSnapCandidatesFromIntersection = (valid: THREE.Intersection, ray: THREE.Ray, candidatesOut: SnapCandidate[]) => {
+    if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
+        const geom = (valid.object as any).geometry;
+        const pos = geom?.attributes?.position;
+        if (pos && pos.count > 0) {
+            const maxIndex = pos.count - 1;
+            const indices = [valid.face.a, valid.face.b, valid.face.c]
+                .filter(i => i >= 0 && i <= maxIndex);
+            
+            const instanceMatrix = (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined)
+                ? (() => {
+                    const m = new THREE.Matrix4();
+                    valid.object.getMatrixAt(valid.instanceId, m);
+                    return m;
+                })()
+                : null;
+
+            // Vértices del triángulo
+            const vertices: THREE.Vector3[] = [];
+            for (const idx of indices) {
+                const v = new THREE.Vector3().fromBufferAttribute(pos, idx);
+                if (instanceMatrix) v.applyMatrix4(instanceMatrix);
+                v.applyMatrix4(valid.object.matrixWorld);
+                if (Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z)) {
+                    vertices.push(v);
+                    pushSnapCandidate(v, 'vertex', valid, ray, candidatesOut);
+                }
+            }
+
+            // Punto exacto de impacto en la cara como fallback
+            pushSnapCandidate(valid.point.clone(), 'face', valid, ray, candidatesOut);
+
+            // Puntos de arista reales (no midpoint)
+            if (vertices.length === 3) {
+                const addEdge = (p1: THREE.Vector3, p2: THREE.Vector3) => {
+                    const closestOnEdge = getClosestPointOnSegmentToRay(p1, p2, ray);
+                    pushSnapCandidate(closestOnEdge, 'edge', valid, ray, candidatesOut);
+                };
+                addEdge(vertices[0], vertices[1]);
+                addEdge(vertices[1], vertices[2]);
+                addEdge(vertices[2], vertices[0]);
+            }
+        }
+    } else if ((valid.object instanceof THREE.Line || valid.object instanceof THREE.LineSegments) && valid.index !== undefined) {
+        // Lógica para líneas... (simplificada por brevedad, similar a arriba)
+        const geom = (valid.object as any).geometry;
+        const pos = geom?.attributes?.position;
+        if (pos && pos.count > 0) {
+             const getIndex = (i: number) => geom?.index ? geom.index.getX(i) : i;
+             const i1 = getIndex(valid.index);
+             const i2 = getIndex(valid.index + 1);
+             const lineVerts: THREE.Vector3[] = [];
+             
+             // Check vertices
+             [i1, i2].forEach(idx => {
+                 if(idx < 0 || idx >= pos.count) return;
+                 const v = new THREE.Vector3().fromBufferAttribute(pos, idx).applyMatrix4(valid.object.matrixWorld);
+                 pushSnapCandidate(v, 'vertex', valid, ray, candidatesOut);
+                 lineVerts.push(v);
+             });
+             
+             // Check closest point on segment
+             if(lineVerts.length === 2) {
+                 const closestOnSegment = getClosestPointOnSegmentToRay(lineVerts[0], lineVerts[1], ray);
+                 pushSnapCandidate(closestOnSegment, 'edge', valid, ray, candidatesOut);
+             }
+        }
+    }
+};
+
+const addElementIntersectionCandidates = (
+    relevantIntersections: THREE.Intersection[],
+    ray: THREE.Ray,
+    out: SnapCandidate[],
+    cameraDistance: number
+) => {
+    const extent = Math.max(1, cameraDistance * 2);
+    for (let i = 0; i < relevantIntersections.length; i++) {
+        for (let j = i + 1; j < relevantIntersections.length; j++) {
+            const a = relevantIntersections[i];
+            const b = relevantIntersections[j];
+            if (!a.face || !b.face) continue;
+            if (a.object === b.object) continue;
+
+            const n1 = a.face.normal.clone().transformDirection(a.object.matrixWorld).normalize();
+            const n2 = b.face.normal.clone().transformDirection(b.object.matrixWorld).normalize();
+            const lineDir = n1.clone().cross(n2);
+            if (lineDir.lengthSq() < 1e-8) continue;
+            lineDir.normalize();
+
+            const planeA = new THREE.Plane().setFromNormalAndCoplanarPoint(n1, a.point);
+            const planeB = new THREE.Plane().setFromNormalAndCoplanarPoint(n2, b.point);
+            if (Math.abs(planeA.distanceToPoint(b.point)) > extent) continue;
+
+            const inPlaneDir = n1.clone().cross(lineDir).normalize();
+            if (inPlaneDir.lengthSq() < 1e-8) continue;
+
+            const testLine = new THREE.Line3(
+                a.point.clone().addScaledVector(inPlaneDir, -extent),
+                a.point.clone().addScaledVector(inPlaneDir, extent)
+            );
+
+            const linePoint = new THREE.Vector3();
+            const hasPoint = planeB.intersectLine(testLine, linePoint);
+            if (!hasPoint) continue;
+
+            const segA = linePoint.clone().addScaledVector(lineDir, -extent);
+            const segB = linePoint.clone().addScaledVector(lineDir, extent);
+            const pointOnRay = new THREE.Vector3();
+            const pointOnLine = new THREE.Vector3();
+            ray.distanceSqToSegment(segA, segB, pointOnRay, pointOnLine);
+            pushSnapCandidate(pointOnLine, 'intersection', a, ray, out);
+        }
+    }
+};
+
+const findBestSnap = (intersections: THREE.Intersection[]) => {
     if (snapMarker) snapMarker.visible = false;
     if (snapLine) snapLine.visible = false;
-    
-    if (!valid) {
-        if (debugSphere) debugSphere.visible = false;
-        document.body.style.cursor = '';
+    document.body.style.cursor = '';
+
+    if (!intersections || intersections.length === 0) {
         lastSnapped = null;
         return null;
     }
 
-    try {
-        // Umbral adaptativo ajustado para mayor precisión
-        const camDist = world.camera.three.position.distanceTo(valid.point);
-        const WORLD_UNITS_THRESHOLD = Math.max(0.002, camDist * 0.015); // Aumentado ligeramente para facilitar captura, pero priorizando vértices
-        const STICKY_THRESHOLD = WORLD_UNITS_THRESHOLD * 1.5; // Sticky moderado
+    const firstHit = intersections[0];
+    const ray = new THREE.Ray();
+    ray.origin.copy(world.camera.three.position);
+    ray.direction.copy(firstHit.point).sub(ray.origin).normalize();
 
-        // Obtener candidatos con tipo
-        const candidates: SnapCandidate[] = [];
-        
-        if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
-            const geom = (valid.object as any).geometry;
-            const pos = geom?.attributes?.position;
-            if (pos && pos.count > 0) {
-                const maxIndex = pos.count - 1;
-                const indices = [valid.face.a, valid.face.b, valid.face.c]
-                    .filter(i => i >= 0 && i <= maxIndex);
-                
-                const instanceMatrix = (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined)
-                    ? (() => {
-                        const m = new THREE.Matrix4();
-                        valid.object.getMatrixAt(valid.instanceId, m);
-                        return m;
-                    })()
-                    : null;
+    const camDist = firstHit.distance;
+    const WORLD_UNITS_THRESHOLD = THREE.MathUtils.clamp(camDist * 0.003, 0.001, 0.03);
+    const STICKY_THRESHOLD = WORLD_UNITS_THRESHOLD * 0.6;
 
-                // Vértices del triángulo
-                const vertices: THREE.Vector3[] = [];
-                for (const idx of indices) {
-                    const v = new THREE.Vector3().fromBufferAttribute(pos, idx);
-                    if (instanceMatrix) v.applyMatrix4(instanceMatrix);
-                    v.applyMatrix4(valid.object.matrixWorld);
-                    if (Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z) && 
-                        !(v.lengthSq() === 0 && valid.point.lengthSq() > 1)) {
-                        vertices.push(v);
-                        candidates.push({ point: v, type: 'vertex' });
-                    }
-                }
+    const candidates: SnapCandidate[] = [];
+    const depthWindow = THREE.MathUtils.clamp(camDist * 0.01, 0.03, 0.25);
+    const relevantIntersections = intersections
+        .filter(i => (i.distance - firstHit.distance) < depthWindow)
+        .slice(0, 12);
 
-                // Añadir puntos medios de aristas
-                if (vertices.length === 3) {
-                    candidates.push({ 
-                        point: new THREE.Vector3().addVectors(vertices[0], vertices[1]).multiplyScalar(0.5), 
-                        type: 'edge' 
-                    });
-                    candidates.push({ 
-                        point: new THREE.Vector3().addVectors(vertices[1], vertices[2]).multiplyScalar(0.5), 
-                        type: 'edge' 
-                    });
-                    candidates.push({ 
-                        point: new THREE.Vector3().addVectors(vertices[2], vertices[0]).multiplyScalar(0.5), 
-                        type: 'edge' 
-                    });
-                }
-            }
-        } else if ((valid.object instanceof THREE.Line || valid.object instanceof THREE.LineSegments) && valid.index !== undefined) {
-            const geom = (valid.object as any).geometry;
-            const pos = geom?.attributes?.position;
-            if (pos && pos.count > 0) {
-                const maxIndex = pos.count - 1;
-                const getIndex = (i: number) => geom?.index ? geom.index.getX(i) : i;
-                const i1 = getIndex(valid.index);
-                const i2 = getIndex(valid.index + 1);
-                
-                const lineVerts: THREE.Vector3[] = [];
-                for (const idx of [i1, i2]) {
-                    if (idx < 0 || idx > maxIndex) continue;
-                    const v = new THREE.Vector3().fromBufferAttribute(pos, idx)
-                        .applyMatrix4(valid.object.matrixWorld);
-                    if (Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z)) {
-                        lineVerts.push(v);
-                        candidates.push({ point: v, type: 'vertex' });
-                    }
-                }
-                
-                if (lineVerts.length === 2) {
-                    candidates.push({ 
-                        point: new THREE.Vector3().addVectors(lineVerts[0], lineVerts[1]).multiplyScalar(0.5), 
-                        type: 'edge' 
-                    });
-                }
-            }
-        }
+    for (const hit of relevantIntersections) {
+        getSnapCandidatesFromIntersection(hit, ray, candidates);
+    }
+    addElementIntersectionCandidates(relevantIntersections, ray, candidates, camDist);
 
-        if (candidates.length === 0) {
-            if (debugSphere) debugSphere.visible = false;
-            document.body.style.cursor = '';
-            lastSnapped = null;
-            return valid;
-        }
+    if (candidates.length === 0) return firstHit;
 
-        // --- SNAPPING POR DISTANCIA 3D AL RAYO ---
-        
-        // 1) Calcular rayo desde cámara
-        const ray = new THREE.Ray();
-        ray.origin.copy(world.camera.three.position);
-        ray.direction.copy(valid.point).sub(ray.origin).normalize();
-
-        // 2) Función distancia 3D
-        const distanceToRay = (p: THREE.Vector3) => {
-            const toPoint = p.clone().sub(ray.origin);
-            const proj = toPoint.dot(ray.direction);
-            const closest = ray.origin.clone().add(ray.direction.clone().multiplyScalar(proj));
-            return p.distanceTo(closest);
-        };
-
-        // 3) Sticky-snap (con preferencia al mismo punto)
-        if (lastSnapped && lastSnapped.object === valid.object) {
-            const distToRay = distanceToRay(lastSnapped.point);
-            if (distToRay <= STICKY_THRESHOLD) {
-                valid.point.copy(lastSnapped.point);
-                (valid as any).isSnapped = true;
-                
-                createSnapMarker();
-                if (snapMarker) {
-                    snapMarker.position.copy(lastSnapped.point);
-                    snapMarker.visible = true;
-                }
-                if (snapLine && cursorMesh) {
-                    snapLine.geometry.setFromPoints([cursorMesh.position, lastSnapped.point]);
-                    snapLine.visible = true;
-                }
-                document.body.style.cursor = 'crosshair';
-                return valid;
-            }
-        }
-
-        // 4) Evaluar candidatos
-        let bestPoint: THREE.Vector3 | null = null;
-        let bestScore = Infinity;
-
-        for (const c of candidates) {
-            const distToRay = distanceToRay(c.point);
-            
-            // Si está fuera del rango máximo, ignorar
-            if (distToRay > WORLD_UNITS_THRESHOLD) continue;
-
-            // Score base = distancia al rayo
-            let score = distToRay;
-            
-            // PRIORIZACIÓN: Los vértices son "más atractivos" que las aristas
-            // Dividimos su score (distancia efectiva) para que ganen a una arista cercana
-            if (c.type === 'vertex') {
-                score *= 0.4; // Gran preferencia a vértices
-            }
-
-            // Factor menor: profundidad (preferir lo más cercano a la cámara si hay empate)
-            const depth = c.point.distanceTo(world.camera.three.position);
-            score += depth * 0.00001; 
-
-            if (score < bestScore) {
-                bestScore = score;
-                bestPoint = c.point;
-            }
-        }
-
-        // 5) Aplicar snap
-        if (bestPoint) {
-            valid.point.copy(bestPoint);
-            (valid as any).isSnapped = true;
-            lastSnapped = { object: valid.object, point: bestPoint.clone() };
-
+    if (lastSnapped) {
+        const distToRay = computeDistanceToRay(ray, lastSnapped.point);
+        if (distToRay < STICKY_THRESHOLD) {
             createSnapMarker();
             if (snapMarker) {
-                snapMarker.position.copy(bestPoint);
+                snapMarker.position.copy(lastSnapped.point);
                 snapMarker.visible = true;
             }
             if (snapLine && cursorMesh) {
-                snapLine.geometry.setFromPoints([cursorMesh.position, bestPoint]);
+                snapLine.geometry.setFromPoints([cursorMesh.position, lastSnapped.point]);
                 snapLine.visible = true;
             }
             document.body.style.cursor = 'crosshair';
-            
-            if (window.debugLog) {
-                // window.debugLog(`Snap! Point: ...`);
-            }
-        } else {
-            if (snapMarker) snapMarker.visible = false;
-            if (snapLine) snapLine.visible = false;
-            document.body.style.cursor = '';
-            lastSnapped = null;
+            return {
+                ...firstHit,
+                point: lastSnapped.point.clone(),
+                object: lastSnapped.object,
+                // @ts-ignore
+                isSnapped: true
+            };
         }
-
-    } catch (e) {
-        console.warn("Snapping failed:", e);
     }
-    return valid;
+
+    let bestCandidate: SnapCandidate | null = null;
+    let bestScore = Infinity;
+
+    for (const c of candidates) {
+        if (c.distanceToRay > WORLD_UNITS_THRESHOLD) continue;
+
+        let score = c.distanceToRay;
+        if (c.type === 'intersection') score *= 0.2;
+        if (c.type === 'vertex') score *= 0.35;
+        if (c.type === 'edge') score *= 0.75;
+        if (c.type === 'face') score *= 1.25;
+        score += c.distanceToCamera * 0.0001;
+
+        if (score < bestScore) {
+            bestScore = score;
+            bestCandidate = c;
+        }
+    }
+
+    if (bestCandidate) {
+        lastSnapped = { object: bestCandidate.intersection.object, point: bestCandidate.point.clone() };
+
+        createSnapMarker();
+        if (snapMarker) {
+            snapMarker.position.copy(bestCandidate.point);
+            snapMarker.visible = true;
+        }
+        if (snapLine && cursorMesh) {
+            snapLine.geometry.setFromPoints([cursorMesh.position, bestCandidate.point]);
+            snapLine.visible = true;
+        }
+        document.body.style.cursor = 'crosshair';
+
+        const result = bestCandidate.intersection;
+        result.point.copy(bestCandidate.point);
+        (result as any).isSnapped = true;
+        return result;
+    }
+
+    return firstHit;
 };
 
-// Override de los métodos del raycaster
+// Override de los métodos del raycaster para soportar MULTI-INTERSECCIÓN
 simpleRaycaster.castRayToObjects = (items?: THREE.Object3D[], position?: THREE.Vector2) => {
     if (position) lastPointerNDC = position.clone();
-    const result = originalCastRayToObjects(items, position);
-    return applySnappingToIntersection(result, position ?? null);
+    
+    // Usar el raycaster de Three.js directamente para obtener TODAS las intersecciones
+    const raycaster = (simpleRaycaster as any)._raycaster as THREE.Raycaster; // Acceso privado o asumir global
+    if (!raycaster) return null;
+
+    // Configurar raycaster
+    const camera = world.camera.three;
+    if (position) {
+        raycaster.setFromCamera(position, camera);
+    } else if (lastPointerNDC) {
+        raycaster.setFromCamera(lastPointerNDC, camera);
+    } else {
+        return null;
+    }
+
+    const targetItems = items || components.meshes;
+    // Obtener todas las intersecciones
+    const intersections = raycaster.intersectObjects(targetItems, false);
+
+    return findBestSnap(intersections);
 };
 
-// @ts-ignore
-if (simpleRaycaster.castRay) {
-    // @ts-ignore
-    const originalCastRay = simpleRaycaster.castRay.bind(simpleRaycaster);
-    // @ts-ignore
-    simpleRaycaster.castRay = (items) => {
-         // @ts-ignore
-         const result = originalCastRay(items);
-         if (result && typeof result.then === 'function') {
-             return result.then((res: any) => applySnappingToIntersection(res, lastPointerNDC));
-         }
-         return applySnappingToIntersection(result, lastPointerNDC);
-    };
-}
 
 // --- FRAGMENTS & COMPONENTS ---
 const baseUrl = import.meta.env.BASE_URL || './';
