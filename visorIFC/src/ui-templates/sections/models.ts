@@ -14,8 +14,6 @@ export const modelsPanelTemplate: BUI.StatefullComponent<ModelsPanelState> = (
 
   const ifcLoader = components.get(OBC.IfcLoader);
   const fragments = components.get(OBC.FragmentsManager);
-  const classifier = components.get(OBC.Classifier);
-  const hider = components.get(OBC.Hider);
 
   const [modelsList] = CUI.tables.modelsList({
     components,
@@ -74,7 +72,7 @@ export const modelsPanelTemplate: BUI.StatefullComponent<ModelsPanelState> = (
   };
 
   return BUI.html`
-    <bim-panel-section fixed icon=${appIcons.LAYOUT} label="Models">
+    <bim-panel-section fixed icon=${appIcons.MODEL} label="Models">
       <div style="display: flex; gap: 0.5rem;">
         <bim-text-input @input=${onSearch} vertical placeholder="Search..." debounce="200"></bim-text-input>
         <bim-button style="flex: 0;" icon=${appIcons.ADD}>
