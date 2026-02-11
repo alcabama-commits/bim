@@ -151,20 +151,20 @@ let snapLine: THREE.Line | null = null;
 function createSnapMarker() {
     if (snapMarker) return;
     
-    // Marcador más prominente para snap
-    const geometry = new THREE.SphereGeometry(0.25, 32, 32);
+    // Marcador más preciso (esfera más pequeña)
+    const geometry = new THREE.SphereGeometry(0.05, 16, 16);
     const material = new THREE.MeshBasicMaterial({ 
         color: 0x00FF00, 
         depthTest: false, 
         transparent: true, 
-        opacity: 0.9 
+        opacity: 1.0 
     });
     snapMarker = new THREE.Mesh(geometry, material);
     snapMarker.visible = false;
     snapMarker.renderOrder = 999;
     world.scene.three.add(snapMarker);
     
-    // Línea visual desde cursor al punto de snap
+    // Línea visual más sutil
     const lineGeom = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(), 
         new THREE.Vector3()
@@ -173,7 +173,7 @@ function createSnapMarker() {
         color: 0x00FF00, 
         depthTest: false, 
         transparent: true, 
-        opacity: 0.7 
+        opacity: 0.5 
     });
     snapLine = new THREE.Line(lineGeom, lineMat);
     snapLine.visible = false;
@@ -197,6 +197,11 @@ const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRay
 let lastSnapped: { object: THREE.Object3D; point: THREE.Vector3 } | null = null;
 let lastPointerNDC: THREE.Vector2 | null = null;
 
+interface SnapCandidate {
+    point: THREE.Vector3;
+    type: 'vertex' | 'edge';
+}
+
 const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerNDC?: THREE.Vector2 | null) => {
     // Limpiar feedback visual previo
     if (snapMarker) snapMarker.visible = false;
@@ -210,13 +215,13 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerND
     }
 
     try {
-        // Umbral adaptativo más agresivo para facilitar snap
+        // Umbral adaptativo ajustado para mayor precisión
         const camDist = world.camera.three.position.distanceTo(valid.point);
-        const WORLD_UNITS_THRESHOLD = Math.max(0.005, camDist * 0.008); // 0.8% de distancia, mínimo 5mm
-        const STICKY_THRESHOLD = WORLD_UNITS_THRESHOLD * 4; // Sticky más generoso
+        const WORLD_UNITS_THRESHOLD = Math.max(0.002, camDist * 0.015); // Aumentado ligeramente para facilitar captura, pero priorizando vértices
+        const STICKY_THRESHOLD = WORLD_UNITS_THRESHOLD * 1.5; // Sticky moderado
 
-        // Obtener vértices candidatos (triángulo + aristas para más opciones)
-        const candidates: THREE.Vector3[] = [];
+        // Obtener candidatos con tipo
+        const candidates: SnapCandidate[] = [];
         
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
             const geom = (valid.object as any).geometry;
@@ -243,21 +248,24 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerND
                     if (Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z) && 
                         !(v.lengthSq() === 0 && valid.point.lengthSq() > 1)) {
                         vertices.push(v);
-                        candidates.push(v);
+                        candidates.push({ point: v, type: 'vertex' });
                     }
                 }
 
-                // Añadir puntos medios de aristas para más opciones de snap
+                // Añadir puntos medios de aristas
                 if (vertices.length === 3) {
-                    // Arista AB
-                    const midAB = new THREE.Vector3().addVectors(vertices[0], vertices[1]).multiplyScalar(0.5);
-                    candidates.push(midAB);
-                    // Arista BC
-                    const midBC = new THREE.Vector3().addVectors(vertices[1], vertices[2]).multiplyScalar(0.5);
-                    candidates.push(midBC);
-                    // Arista CA
-                    const midCA = new THREE.Vector3().addVectors(vertices[2], vertices[0]).multiplyScalar(0.5);
-                    candidates.push(midCA);
+                    candidates.push({ 
+                        point: new THREE.Vector3().addVectors(vertices[0], vertices[1]).multiplyScalar(0.5), 
+                        type: 'edge' 
+                    });
+                    candidates.push({ 
+                        point: new THREE.Vector3().addVectors(vertices[1], vertices[2]).multiplyScalar(0.5), 
+                        type: 'edge' 
+                    });
+                    candidates.push({ 
+                        point: new THREE.Vector3().addVectors(vertices[2], vertices[0]).multiplyScalar(0.5), 
+                        type: 'edge' 
+                    });
                 }
             }
         } else if ((valid.object instanceof THREE.Line || valid.object instanceof THREE.LineSegments) && valid.index !== undefined) {
@@ -269,19 +277,22 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerND
                 const i1 = getIndex(valid.index);
                 const i2 = getIndex(valid.index + 1);
                 
+                const lineVerts: THREE.Vector3[] = [];
                 for (const idx of [i1, i2]) {
                     if (idx < 0 || idx > maxIndex) continue;
                     const v = new THREE.Vector3().fromBufferAttribute(pos, idx)
                         .applyMatrix4(valid.object.matrixWorld);
                     if (Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z)) {
-                        candidates.push(v);
+                        lineVerts.push(v);
+                        candidates.push({ point: v, type: 'vertex' });
                     }
                 }
                 
-                // Añadir punto medio de la línea
-                if (candidates.length === 2) {
-                    const midPoint = new THREE.Vector3().addVectors(candidates[0], candidates[1]).multiplyScalar(0.5);
-                    candidates.push(midPoint);
+                if (lineVerts.length === 2) {
+                    candidates.push({ 
+                        point: new THREE.Vector3().addVectors(lineVerts[0], lineVerts[1]).multiplyScalar(0.5), 
+                        type: 'edge' 
+                    });
                 }
             }
         }
@@ -293,14 +304,14 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerND
             return valid;
         }
 
-        // --- NUEVO: SNAPPING POR DISTANCIA 3D AL RAYO ---
+        // --- SNAPPING POR DISTANCIA 3D AL RAYO ---
         
-        // 1) Calcular rayo desde cámara pasando por el punto de intersección
+        // 1) Calcular rayo desde cámara
         const ray = new THREE.Ray();
         ray.origin.copy(world.camera.three.position);
         ray.direction.copy(valid.point).sub(ray.origin).normalize();
 
-        // 2) Función para calcular distancia 3D de un punto al rayo
+        // 2) Función distancia 3D
         const distanceToRay = (p: THREE.Vector3) => {
             const toPoint = p.clone().sub(ray.origin);
             const proj = toPoint.dot(ray.direction);
@@ -308,14 +319,13 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerND
             return p.distanceTo(closest);
         };
 
-        // 3) Sticky-snap: si ya tenemos un punto y es el mismo objeto, mantenerlo
+        // 3) Sticky-snap (con preferencia al mismo punto)
         if (lastSnapped && lastSnapped.object === valid.object) {
             const distToRay = distanceToRay(lastSnapped.point);
             if (distToRay <= STICKY_THRESHOLD) {
                 valid.point.copy(lastSnapped.point);
                 (valid as any).isSnapped = true;
                 
-                // Feedback visual mejorado
                 createSnapMarker();
                 if (snapMarker) {
                     snapMarker.position.copy(lastSnapped.point);
@@ -330,31 +340,41 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerND
             }
         }
 
-        // 4) Evaluar candidatos por distancia 3D al rayo
+        // 4) Evaluar candidatos
         let bestPoint: THREE.Vector3 | null = null;
         let bestScore = Infinity;
 
-        for (const p of candidates) {
-            const distToRay = distanceToRay(p);
-            if (distToRay > WORLD_UNITS_THRESHOLD) continue; // Fuera de rango
+        for (const c of candidates) {
+            const distToRay = distanceToRay(c.point);
+            
+            // Si está fuera del rango máximo, ignorar
+            if (distToRay > WORLD_UNITS_THRESHOLD) continue;
 
-            // Score: distancia al rayo + pequeño peso de profundidad (preferir puntos frontales)
-            const depth = p.distanceTo(world.camera.three.position);
-            const score = distToRay + depth * 0.0001; // Peso muy pequeño
+            // Score base = distancia al rayo
+            let score = distToRay;
+            
+            // PRIORIZACIÓN: Los vértices son "más atractivos" que las aristas
+            // Dividimos su score (distancia efectiva) para que ganen a una arista cercana
+            if (c.type === 'vertex') {
+                score *= 0.4; // Gran preferencia a vértices
+            }
+
+            // Factor menor: profundidad (preferir lo más cercano a la cámara si hay empate)
+            const depth = c.point.distanceTo(world.camera.three.position);
+            score += depth * 0.00001; 
 
             if (score < bestScore) {
                 bestScore = score;
-                bestPoint = p;
+                bestPoint = c.point;
             }
         }
 
-        // 5) Aplicar el mejor snap encontrado
+        // 5) Aplicar snap
         if (bestPoint) {
             valid.point.copy(bestPoint);
             (valid as any).isSnapped = true;
             lastSnapped = { object: valid.object, point: bestPoint.clone() };
 
-            // Feedback visual mejorado
             createSnapMarker();
             if (snapMarker) {
                 snapMarker.position.copy(bestPoint);
@@ -366,12 +386,10 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerND
             }
             document.body.style.cursor = 'crosshair';
             
-            // Log para debug
             if (window.debugLog) {
-                window.debugLog(`Snap! Point: (${bestPoint.x.toFixed(3)}, ${bestPoint.y.toFixed(3)}, ${bestPoint.z.toFixed(3)})`);
+                // window.debugLog(`Snap! Point: ...`);
             }
         } else {
-            // No hay snap válido
             if (snapMarker) snapMarker.visible = false;
             if (snapLine) snapLine.visible = false;
             document.body.style.cursor = '';
@@ -380,7 +398,6 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerND
 
     } catch (e) {
         console.warn("Snapping failed:", e);
-        if (window.debugLog) window.debugLog(`Error: ${e.message}`);
     }
     return valid;
 };
