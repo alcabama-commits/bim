@@ -139,10 +139,47 @@ const raycaster = new THREE.Raycaster();
 
 // --- Cursor Setup ---
 const cursorGeom = new THREE.SphereGeometry(0.15, 16, 16);
-const cursorMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, depthTest: false });
+const cursorMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, depthTest: false, transparent: true, opacity: 0.8 });
 const cursorMesh = new THREE.Mesh(cursorGeom, cursorMat);
 cursorMesh.visible = false;
 world.scene.three.add(cursorMesh);
+
+// --- Snap Visual Feedback ---
+let snapMarker: THREE.Mesh | null = null;
+let snapLine: THREE.Line | null = null;
+
+function createSnapMarker() {
+    if (snapMarker) return;
+    
+    // Marcador más prominente para snap
+    const geometry = new THREE.SphereGeometry(0.25, 32, 32);
+    const material = new THREE.MeshBasicMaterial({ 
+        color: 0x00FF00, 
+        depthTest: false, 
+        transparent: true, 
+        opacity: 0.9 
+    });
+    snapMarker = new THREE.Mesh(geometry, material);
+    snapMarker.visible = false;
+    snapMarker.renderOrder = 999;
+    world.scene.three.add(snapMarker);
+    
+    // Línea visual desde cursor al punto de snap
+    const lineGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(), 
+        new THREE.Vector3()
+    ]);
+    const lineMat = new THREE.LineBasicMaterial({ 
+        color: 0x00FF00, 
+        depthTest: false, 
+        transparent: true, 
+        opacity: 0.7 
+    });
+    snapLine = new THREE.Line(lineGeom, lineMat);
+    snapLine.visible = false;
+    snapLine.renderOrder = 998;
+    world.scene.three.add(snapLine);
+}
 
 // --- Debug Panel ---
 const debugPanel = document.getElementById('debug-panel')!;
@@ -162,7 +199,8 @@ let lastPointerNDC: THREE.Vector2 | null = null;
 
 const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerNDC?: THREE.Vector2 | null) => {
     // Limpiar feedback visual previo
-    if (window.snapLine) window.snapLine.visible = false;
+    if (snapMarker) snapMarker.visible = false;
+    if (snapLine) snapLine.visible = false;
     
     if (!valid) {
         if (debugSphere) debugSphere.visible = false;
@@ -172,12 +210,12 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerND
     }
 
     try {
-        // Umbral adaptativo basado en distancia a cámara
+        // Umbral adaptativo más agresivo para facilitar snap
         const camDist = world.camera.three.position.distanceTo(valid.point);
-        const WORLD_UNITS_THRESHOLD = Math.max(0.01, camDist * 0.005); // 0.5% de distancia, mínimo 1cm
-        const STICKY_THRESHOLD = WORLD_UNITS_THRESHOLD * 3; // Sticky más generoso
+        const WORLD_UNITS_THRESHOLD = Math.max(0.005, camDist * 0.008); // 0.8% de distancia, mínimo 5mm
+        const STICKY_THRESHOLD = WORLD_UNITS_THRESHOLD * 4; // Sticky más generoso
 
-        // Obtener vértices candidatos (solo del triángulo impactado)
+        // Obtener vértices candidatos (triángulo + aristas para más opciones)
         const candidates: THREE.Vector3[] = [];
         
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
@@ -196,15 +234,30 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerND
                     })()
                     : null;
 
+                // Vértices del triángulo
+                const vertices: THREE.Vector3[] = [];
                 for (const idx of indices) {
                     const v = new THREE.Vector3().fromBufferAttribute(pos, idx);
                     if (instanceMatrix) v.applyMatrix4(instanceMatrix);
                     v.applyMatrix4(valid.object.matrixWorld);
-                    // Validar que el vértice es finito y no es origen espurio
                     if (Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z) && 
                         !(v.lengthSq() === 0 && valid.point.lengthSq() > 1)) {
+                        vertices.push(v);
                         candidates.push(v);
                     }
+                }
+
+                // Añadir puntos medios de aristas para más opciones de snap
+                if (vertices.length === 3) {
+                    // Arista AB
+                    const midAB = new THREE.Vector3().addVectors(vertices[0], vertices[1]).multiplyScalar(0.5);
+                    candidates.push(midAB);
+                    // Arista BC
+                    const midBC = new THREE.Vector3().addVectors(vertices[1], vertices[2]).multiplyScalar(0.5);
+                    candidates.push(midBC);
+                    // Arista CA
+                    const midCA = new THREE.Vector3().addVectors(vertices[2], vertices[0]).multiplyScalar(0.5);
+                    candidates.push(midCA);
                 }
             }
         } else if ((valid.object instanceof THREE.Line || valid.object instanceof THREE.LineSegments) && valid.index !== undefined) {
@@ -223,6 +276,12 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerND
                     if (Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z)) {
                         candidates.push(v);
                     }
+                }
+                
+                // Añadir punto medio de la línea
+                if (candidates.length === 2) {
+                    const midPoint = new THREE.Vector3().addVectors(candidates[0], candidates[1]).multiplyScalar(0.5);
+                    candidates.push(midPoint);
                 }
             }
         }
@@ -256,12 +315,15 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerND
                 valid.point.copy(lastSnapped.point);
                 (valid as any).isSnapped = true;
                 
-                // Feedback visual
-                if (debugSphere) {
-                    debugSphere.position.copy(lastSnapped.point);
-                    debugSphere.visible = true;
-                    (debugSphere.material as any).color?.setHex?.(0xFFD700); // Oro para sticky
-                    debugSphere.scale.set(2.5, 2.5, 2.5);
+                // Feedback visual mejorado
+                createSnapMarker();
+                if (snapMarker) {
+                    snapMarker.position.copy(lastSnapped.point);
+                    snapMarker.visible = true;
+                }
+                if (snapLine && cursorMesh) {
+                    snapLine.geometry.setFromPoints([cursorMesh.position, lastSnapped.point]);
+                    snapLine.visible = true;
                 }
                 document.body.style.cursor = 'crosshair';
                 return valid;
@@ -293,16 +355,25 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null, pointerND
             lastSnapped = { object: valid.object, point: bestPoint.clone() };
 
             // Feedback visual mejorado
-            if (debugSphere) {
-                debugSphere.position.copy(bestPoint);
-                debugSphere.visible = true;
-                (debugSphere.material as any).color?.setHex?.(0x00FF00); // Verde para snap 3D
-                debugSphere.scale.set(3.0, 3.0, 3.0);
+            createSnapMarker();
+            if (snapMarker) {
+                snapMarker.position.copy(bestPoint);
+                snapMarker.visible = true;
+            }
+            if (snapLine && cursorMesh) {
+                snapLine.geometry.setFromPoints([cursorMesh.position, bestPoint]);
+                snapLine.visible = true;
             }
             document.body.style.cursor = 'crosshair';
+            
+            // Log para debug
+            if (window.debugLog) {
+                window.debugLog(`Snap! Point: (${bestPoint.x.toFixed(3)}, ${bestPoint.y.toFixed(3)}, ${bestPoint.z.toFixed(3)})`);
+            }
         } else {
             // No hay snap válido
-            if (debugSphere) debugSphere.visible = false;
+            if (snapMarker) snapMarker.visible = false;
+            if (snapLine) snapLine.visible = false;
             document.body.style.cursor = '';
             lastSnapped = null;
         }
@@ -521,7 +592,7 @@ const pointHandler = (event: MouseEvent) => {
     highlighter.clear('hover');
 
     event.stopImmediatePropagation();
-    event.preventDefault();
+    event.preventDefault(); // Add this
     
     console.log("[DEBUG] Point tool click detected");
     const hit = getIntersection(event);
@@ -728,6 +799,11 @@ function createLabel(text: string, position: THREE.Vector3) {
 }
 
 async function onMeasureMouseMove(event: MouseEvent) {
+    // Debug for v21
+    if (Math.random() < 0.05 && measurementMode) {
+         // console.log("Measure Mouse Move Active");
+    }
+
     if (!measurementMode) {
         if (snappingCursor) snappingCursor.visible = false;
         return;
@@ -749,7 +825,7 @@ async function onMeasureMouseMove(event: MouseEvent) {
             snappingCursor.visible = true;
         }
 
-        // Dibujar línea temporal
+        // If we have a start point, draw a temp line to current cursor
         if (measurementMode === 'length' && measurementPoints.length === 1) {
             const start = measurementPoints[0];
             const end = result.point;
@@ -821,11 +897,14 @@ async function onMeasureClick(event: MouseEvent) {
     }
 }
 
+
+
+
 // --- UI CONTROLS CONTINUATION ---
 // Add any additional UI controls here...
 
 // --- Initialize ---
-logToScreen('VSR IFC Viewer Ready - Snapping 3D Implementado');
+logToScreen('VSR IFC Viewer Ready - Snapping 3D Mejorado con Visualización');
 
 // Export for global access
 (window as any).components = components;
