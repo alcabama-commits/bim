@@ -3215,7 +3215,7 @@ function setupMeasurementTools_Deprecated() {
                 let isSnapped = false;
                 
                 // Snap Threshold in Pixels
-                const SNAP_THRESHOLD_PX = 40;
+                const SNAP_THRESHOLD_PX = 60;
                 
                 try {
                     const geom = (valid.object as any).geometry;
@@ -3405,8 +3405,8 @@ function setupMeasurementTools_Deprecated() {
                 
                 // Visual Feedback for Snap
                 if (isSnapped) {
-                    cursorMat.color.setHex(0x00ff00); // Green
-                    cursorMesh.scale.set(1.5, 1.5, 1.5);
+                    cursorMat.color.setHex(0xFFD700); // Gold
+                    cursorMesh.scale.set(2.0, 2.0, 2.0);
                     valid.point.copy(snapPoint); // CRITICAL: Update the hit point
                     
                     // Show Snap Indicator
