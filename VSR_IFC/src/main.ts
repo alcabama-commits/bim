@@ -3215,8 +3215,7 @@ function setupMeasurementTools_Deprecated() {
                 let isSnapped = false;
                 
                 // Snap Threshold in Pixels
-                // Reduced to prevent snapping to distant objects
-                const SNAP_THRESHOLD_PX = 15;
+                const SNAP_THRESHOLD_PX = 40;
                 
                 try {
                     const geom = (valid.object as any).geometry;
@@ -3324,63 +3323,8 @@ function setupMeasurementTools_Deprecated() {
                                     vC.applyMatrix4(valid.object.matrixWorld);
                                 }
 
-                                // Project to Screen Space for "Visual" Snapping
-                                const toScreen = (v: THREE.Vector3) => {
-                                    const p = v.clone().project(world.camera.three);
-                                    const rect = container.getBoundingClientRect();
-                                    return {
-                                        x: (p.x * 0.5 + 0.5) * rect.width + rect.left,
-                                        y: (-(p.y * 0.5) + 0.5) * rect.height + rect.top,
-                                        z: p.z,
-                                        vec3: v // Keep original 3D for reverse mapping
-                                    };
-                                };
-
-                                const sA = toScreen(vA);
-                                const sB = toScreen(vB);
-                                const sC = toScreen(vC);
-                                const mouseScreen = { x: event.clientX, y: event.clientY };
-
-                                // Helper: Distance to segment in screen space
-                                const distToSegment = (p: {x: number, y: number}, a: {x: number, y: number}, b: {x: number, y: number}) => {
-                                    const l2 = (a.x - b.x)**2 + (a.y - b.y)**2;
-                                    if (l2 === 0) return { dist: Math.sqrt((p.x - a.x)**2 + (p.y - a.y)**2), t: 0 };
-                                    let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2;
-                                    t = Math.max(0, Math.min(1, t));
-                                    const projX = a.x + t * (b.x - a.x);
-                                    const projY = a.y + t * (b.y - a.y);
-                                    return { 
-                                        dist: Math.sqrt((p.x - projX)**2 + (p.y - projY)**2), 
-                                        t: t 
-                                    };
-                                };
-
-                                // Candidates: Vertices
+                                // Candidates: Vertices (End points only per user request)
                                 candidates.push(vA, vB, vC);
-                                
-                                // Candidates: Midpoints
-                                candidates.push(
-                                    new THREE.Vector3().addVectors(vA, vB).multiplyScalar(0.5),
-                                    new THREE.Vector3().addVectors(vB, vC).multiplyScalar(0.5),
-                                    new THREE.Vector3().addVectors(vC, vA).multiplyScalar(0.5)
-                                );
-
-                                // Candidates: Dynamic Edge Snapping (Screen Space Project)
-                                const edges = [
-                                    { start: sA, end: sB, vStart: vA, vEnd: vB },
-                                    { start: sB, end: sC, vStart: vB, vEnd: vC },
-                                    { start: sC, end: sA, vStart: vC, vEnd: vA }
-                                ];
-
-                                for (const edge of edges) {
-                                    const res = distToSegment(mouseScreen, edge.start, edge.end);
-                                    if (res.dist < SNAP_THRESHOLD_PX) {
-                                        // Interpolate 3D point
-                                        const edgeVec = new THREE.Vector3().subVectors(edge.vEnd, edge.vStart);
-                                        const snapPt = new THREE.Vector3().copy(edge.vStart).add(edgeVec.multiplyScalar(res.t));
-                                        candidates.push(snapPt);
-                                    }
-                                }
                             }
                         }
                     }
@@ -3415,7 +3359,7 @@ function setupMeasurementTools_Deprecated() {
                              vA.applyMatrix4(valid.object.matrixWorld);
                              vB.applyMatrix4(valid.object.matrixWorld);
                              
-                             candidates.push(vA, vB, new THREE.Vector3().addVectors(vA, vB).multiplyScalar(0.5));
+                             candidates.push(vA, vB);
                          }
                     }
 
