@@ -141,6 +141,7 @@ const components = new OBC.Components();
 const worlds = components.get(OBC.Worlds);
 const world = worlds.create();
 
+// Use SimpleScene/Renderer/Camera to avoid complex dependency crashes
 world.scene = new OBC.SimpleScene(components);
 world.renderer = new OBC.SimpleRenderer(components, container);
 world.camera = new OBC.SimpleCamera(components);
@@ -155,13 +156,8 @@ world.scene.three.background = new THREE.Color(0x202124); // Dark gray backgroun
 const grids = components.get(OBC.Grids);
 grids.create(world);
 
-// --- Setup Default Cube (Visual Feedback) ---
-const cubeGeom = new THREE.BoxGeometry(1, 1, 1);
-const cubeMat = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
-const cube = new THREE.Mesh(cubeGeom, cubeMat);
-cube.position.set(0, 0.5, 0);
-world.scene.three.add(cube);
-world.camera.controls.setLookAt(3, 3, 3, 0, 0, 0);
+// --- Camera Initial Position ---
+world.camera.controls.setLookAt(5, 5, 5, 0, 0, 0);
 
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
@@ -622,9 +618,6 @@ hider.isolate = async (selection: any) => {
     
     // Sync hiddenItems for Isolate
     try {
-         // console.warn("[DEBUG] Global Isolate Triggered. Syncing hiddenItems...");
-         // console.log("[DEBUG] Selection keys:", Object.keys(selection));
-
          for (const [uuid, model] of fragments.list) {
              const allIds = await model.getItemsIdsWithGeometry();
              
@@ -668,7 +661,6 @@ hider.isolate = async (selection: any) => {
                      hiddenCount++;
                  }
              }
-             // console.log(`[DEBUG] Model ${uuid}: Total ${allIds.size}, Visible ${visibleIDsForThisModel.size}, Hidden ${hiddenCount}`);
          }
     } catch (e) {
          console.error("Error updating hidden items during global isolate:", e);
@@ -690,6 +682,16 @@ try {
     }
 } catch (e) {
     console.error("Clipper init failed:", e);
+}
+
+// --- HIGHLIGHTER SAFE INIT ---
+let highlighter: any = null;
+try {
+    highlighter = components.get(OBF.Highlighter);
+    highlighter.setup({ world });
+    highlighter.zoomToSelection = true;
+} catch(e) {
+    console.error("Highlighter init failed:", e);
 }
 
 // --- TOOL SYSTEM ---
@@ -812,67 +814,116 @@ const pointHandler = (event: MouseEvent) => {
 };
 
 // --- TOOL BUTTONS (FIXED IDs) ---
-document.getElementById('btn-measure-point')?.addEventListener('click', () => {
-    activeTool = 'point';
-    logToScreen('Point tool activated');
-    container.addEventListener('click', pointHandler);
-});
-
-document.getElementById('btn-measure-angle')?.addEventListener('click', () => {
-    activeTool = 'angle';
-    logToScreen('Angle tool activated');
-});
-
-document.getElementById('btn-measure-slope')?.addEventListener('click', () => {
-    activeTool = 'slope';
-    logToScreen('Slope tool activated');
-});
-
-document.getElementById('btn-measure-delete')?.addEventListener('click', () => {
+const deactivateAllTools = () => {
     activeTool = 'none';
+    measurementMode = null;
     
-    // Clear custom
-    measurementPoints = [];
-    measurementMarkers.forEach(m => world.scene.three.remove(m));
-    measurementLabels.forEach(l => l.remove());
-    measurementMarkers.length = 0;
-    measurementLabels.length = 0;
+    // Disable Area tool if active
+    if (area) area.enabled = false;
+    
+    // UI updates
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    
+    // Clear listeners
+    container.removeEventListener('click', onMeasureClick);
+    container.removeEventListener('mousemove', onMeasureMouseMove);
+    
+    // Hide cursor
+    if (snappingCursor) snappingCursor.visible = false;
     if (tempMeasurementLine) {
         world.scene.three.remove(tempMeasurementLine);
         tempMeasurementLine = null;
     }
     
-    // Clear Area
-    if (area) area.deleteAll();
+    measurementPoints = [];
+    logToScreen('Tool deactivated');
+};
+
+const activateTool = (tool: 'length' | 'point' | 'angle' | 'slope') => {
+    if (activeTool === tool) {
+        deactivateAllTools();
+        return;
+    }
     
-    // Clear Point (customMeshes)
+    deactivateAllTools();
+    activeTool = tool;
+    measurementMode = tool === 'length' ? 'length' : null; // Keep for compatibility if needed
+    
+    // UI update
+    const btnId = tool === 'length' ? 'btn-measure-length' : 
+                  tool === 'point' ? 'btn-measure-point' :
+                  tool === 'angle' ? 'btn-measure-angle' : 'btn-measure-slope';
+    document.getElementById(btnId)?.classList.add('active');
+    
+    // Setup listeners
+    container.addEventListener('click', onMeasureClick);
+    container.addEventListener('mousemove', onMeasureMouseMove);
+    
+    // Create cursor if needed
+    if (!snappingCursor) {
+        const cursorGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+        const cursorMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
+        snappingCursor = new THREE.Mesh(cursorGeometry, cursorMaterial);
+        world.scene.three.add(snappingCursor);
+    }
+    snappingCursor.visible = false;
+    
+    logToScreen(`${tool.charAt(0).toUpperCase() + tool.slice(1)} tool activated`);
+};
+
+document.getElementById('btn-measure-point')?.addEventListener('click', () => activateTool('point'));
+document.getElementById('btn-measure-length')?.addEventListener('click', () => activateTool('length'));
+document.getElementById('btn-measure-angle')?.addEventListener('click', () => activateTool('angle'));
+document.getElementById('btn-measure-slope')?.addEventListener('click', () => activateTool('slope'));
+
+document.getElementById('btn-measure-delete')?.addEventListener('click', () => {
+    deactivateAllTools();
+    
+    // Clear all measurements
+    measurementMarkers.forEach(m => world.scene.three.remove(m));
+    measurementMarkers.length = 0;
+    
+    measurementLabels.forEach(l => l.remove());
+    measurementLabels.length = 0;
+    
     customMeshes.forEach(m => world.scene.three.remove(m));
     customMeshes.length = 0;
-    document.querySelectorAll('.floating-label').forEach(el => el.remove());
-
-    logToScreen('Tools deactivated & Cleared');
-    container.removeEventListener('click', pointHandler);
+    
+    document.querySelectorAll('.measurement-label').forEach(el => el.remove());
+    document.querySelectorAll('.floating-label').forEach(el => el.remove()); 
+    
+    if (area) area.deleteAll();
+    
+    logToScreen('All measurements cleared');
 });
 
 // --- MODEL LOADING ---
-const loadModel = async (fragmentsFile: File) => {
+const loadFragment = async (buffer: ArrayBuffer, name: string) => {
     const fragmentsManager = components.get(OBC.FragmentsManager);
-    const buffer = await fragmentsFile.arrayBuffer();
     const fragment = await fragmentsManager.load(buffer);
     
-    // Populate components.meshes for raycasting
     if (!components.meshes) components.meshes = [];
     
     const root = fragment.mesh || fragment.object;
     if (root) {
+        // Essential for OBC Tools (Highlighter, Clipper, etc)
+        if (world.meshes) world.meshes.add(root);
+
         root.traverse((child: any) => {
             if ((child.isMesh || child.isInstancedMesh) && child.visible) {
                 components.meshes.push(child);
+                if (world.meshes) world.meshes.add(child);
             }
         });
     }
     
-    logToScreen(`Model loaded: ${fragmentsFile.name}`);
+    logToScreen(`Model loaded: ${name}`);
+    return fragment;
+};
+
+const loadModel = async (fragmentsFile: File) => {
+    const buffer = await fragmentsFile.arrayBuffer();
+    await loadFragment(buffer, fragmentsFile.name);
 };
 
 // --- UI CONTROLS ---
@@ -887,51 +938,7 @@ document.getElementById('file-input')?.addEventListener('change', async (e) => {
     }
 });
 
-// --- MEASUREMENT MODE TOGGLE ---
-document.getElementById('btn-measure-length')?.addEventListener('click', () => {
-    const btn = document.getElementById('btn-measure-length')!;
-    if (measurementMode) {
-        measurementMode = null;
-        btn.classList.remove('active');
-        
-        // Clean up
-        measurementPoints = [];
-        measurementMarkers.forEach(m => world.scene.three.remove(m));
-        measurementLabels.forEach(l => l.remove());
-        measurementMarkers.length = 0;
-        measurementLabels.length = 0;
-        
-        if (tempMeasurementLine) {
-            world.scene.three.remove(tempMeasurementLine);
-            tempMeasurementLine = null;
-        }
-        
-        if (snappingCursor) {
-            world.scene.three.remove(snappingCursor);
-            snappingCursor = null;
-        }
-        
-        container.removeEventListener('click', onMeasureClick);
-        container.removeEventListener('mousemove', onMeasureMouseMove);
-        
-        logToScreen('Measurement mode deactivated');
-    } else {
-        measurementMode = 'length';
-        btn.classList.add('active');
-        
-        // Create snapping cursor
-        const cursorGeometry = new THREE.SphereGeometry(0.2, 16, 16);
-        const cursorMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
-        snappingCursor = new THREE.Mesh(cursorGeometry, cursorMaterial);
-        snappingCursor.visible = false;
-        world.scene.three.add(snappingCursor);
-        
-        container.addEventListener('click', onMeasureClick);
-        container.addEventListener('mousemove', onMeasureMouseMove);
-        
-        logToScreen('Measurement mode activated');
-    }
-});
+
 
 // --- MEASUREMENT FUNCTIONS ---
 function createMarker(position: THREE.Vector3, color: number = 0xffff00) {
@@ -981,7 +988,7 @@ function createLabel(text: string, position: THREE.Vector3) {
 }
 
 async function onMeasureMouseMove(event: MouseEvent) {
-    if (!measurementMode) {
+    if (activeTool === 'none') {
         if (snappingCursor) snappingCursor.visible = false;
         return;
     }
@@ -1002,30 +1009,42 @@ async function onMeasureMouseMove(event: MouseEvent) {
             snappingCursor.visible = true;
         }
 
-        // If we have a start point, draw a temp line to current cursor
-        if (measurementMode === 'length' && measurementPoints.length === 1) {
-            const start = measurementPoints[0];
-            const end = result.point;
-            
-            if (!tempMeasurementLine) {
-                const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
-                const material = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false, opacity: 0.5, transparent: true });
-                tempMeasurementLine = new THREE.Line(geometry, material);
-                world.scene.three.add(tempMeasurementLine);
-            } else {
-                const positions = tempMeasurementLine.geometry.attributes.position;
-                positions.setXYZ(0, start.x, start.y, start.z);
-                positions.setXYZ(1, end.x, end.y, end.z);
-                positions.needsUpdate = true;
+        // Temp line logic
+        const currentPoint = result.point;
+        
+        if (activeTool === 'length' && measurementPoints.length === 1) {
+            updateTempLine(measurementPoints[0], currentPoint);
+        } else if (activeTool === 'slope' && measurementPoints.length === 1) {
+             updateTempLine(measurementPoints[0], currentPoint);
+        } else if (activeTool === 'angle') {
+            if (measurementPoints.length === 1) {
+                updateTempLine(measurementPoints[0], currentPoint);
+            } else if (measurementPoints.length === 2) {
+                updateTempLine(measurementPoints[1], currentPoint);
             }
         }
+
     } else {
         if (snappingCursor) snappingCursor.visible = false;
     }
 }
 
+function updateTempLine(start: THREE.Vector3, end: THREE.Vector3) {
+    if (!tempMeasurementLine) {
+        const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+        const material = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false, opacity: 0.5, transparent: true });
+        tempMeasurementLine = new THREE.Line(geometry, material);
+        world.scene.three.add(tempMeasurementLine);
+    } else {
+        const positions = tempMeasurementLine.geometry.attributes.position;
+        positions.setXYZ(0, start.x, start.y, start.z);
+        positions.setXYZ(1, end.x, end.y, end.z);
+        positions.needsUpdate = true;
+    }
+}
+
 async function onMeasureClick(event: MouseEvent) {
-    if (!measurementMode) return;
+    if (activeTool === 'none') return;
     
     // Don't trigger if clicking on UI
     if ((event.target as HTMLElement).closest('button') || (event.target as HTMLElement).closest('.sidebar')) return;
@@ -1043,17 +1062,17 @@ async function onMeasureClick(event: MouseEvent) {
     
     const point = result.point;
     
-    if (measurementMode === 'point') {
+    if (activeTool === 'point') {
         createMarker(point, 0x00ff00);
         const text = `X:${point.x.toFixed(2)} Y:${point.y.toFixed(2)} Z:${point.z.toFixed(2)}`;
         createLabel(text, point);
         logToScreen(`Point: ${text}`);
-    } else if (measurementMode === 'length') {
+    } 
+    else if (activeTool === 'length') {
         measurementPoints.push(point);
         createMarker(point, 0xffff00);
         
         if (measurementPoints.length === 2) {
-            // Finish measurement
             const p1 = measurementPoints[0];
             const p2 = measurementPoints[1];
             createLine(p1, p2);
@@ -1063,14 +1082,69 @@ async function onMeasureClick(event: MouseEvent) {
             createLabel(`${dist.toFixed(3)}m`, mid);
             
             logToScreen(`Distance: ${dist.toFixed(3)}m`);
-            
-            // Reset for next measurement
-            measurementPoints = [];
-            if (tempMeasurementLine) {
-                world.scene.three.remove(tempMeasurementLine);
-                tempMeasurementLine = null;
-            }
+            resetMeasurementState();
         }
+    }
+    else if (activeTool === 'angle') {
+        measurementPoints.push(point);
+        createMarker(point, 0x00ffff); // Cyan for angle
+
+        if (measurementPoints.length === 2) {
+            createLine(measurementPoints[0], measurementPoints[1], 0x00ffff);
+        }
+        else if (measurementPoints.length === 3) {
+            const p1 = measurementPoints[0]; // Start
+            const p2 = measurementPoints[1]; // Vertex
+            const p3 = measurementPoints[2]; // End
+            
+            createLine(p2, p3, 0x00ffff);
+            
+            // Calculate Angle
+            const v1 = p1.clone().sub(p2).normalize();
+            const v2 = p3.clone().sub(p2).normalize();
+            const angleRad = v1.angleTo(v2);
+            const angleDeg = THREE.MathUtils.radToDeg(angleRad);
+            
+            createLabel(`${angleDeg.toFixed(1)}°`, p2);
+            logToScreen(`Angle: ${angleDeg.toFixed(1)}°`);
+            resetMeasurementState();
+        }
+    }
+    else if (activeTool === 'slope') {
+        measurementPoints.push(point);
+        createMarker(point, 0xff00ff); // Magenta for slope
+
+        if (measurementPoints.length === 2) {
+            const p1 = measurementPoints[0];
+            const p2 = measurementPoints[1];
+            createLine(p1, p2, 0xff00ff);
+            
+            const dy = Math.abs(p2.y - p1.y);
+            const dx = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.z - p1.z, 2));
+            
+            let text = '';
+            if (dx < 0.001) {
+                text = 'Vertical';
+            } else {
+                const slope = dy / dx;
+                const deg = THREE.MathUtils.radToDeg(Math.atan(slope));
+                const pct = slope * 100;
+                text = `${deg.toFixed(1)}° (${pct.toFixed(1)}%)`;
+            }
+            
+            const mid = p1.clone().add(p2).multiplyScalar(0.5);
+            createLabel(text, mid);
+            logToScreen(`Slope: ${text}`);
+            resetMeasurementState();
+        }
+    }
+}
+
+function resetMeasurementState() {
+    measurementPoints = [];
+    if (tempMeasurementLine) {
+        world.scene.three.remove(tempMeasurementLine);
+        tempMeasurementLine = null;
     }
 }
 
@@ -1221,11 +1295,7 @@ window.addEventListener('keydown', async (e) => {
 
             case 'AR': // Área
                 if (area) {
-                    if (measurementMode) {
-                        // Disable custom tools
-                        const btnMeasure = document.getElementById('btn-measure-length');
-                        if(btnMeasure && measurementMode) btnMeasure.click();
-                    }
+                    deactivateAllTools();
                     area.enabled = true;
                     area.create();
                     logToScreen('Herramienta: Área (Click para puntos, Doble click/Enter para terminar)');
@@ -1320,8 +1390,44 @@ window.addEventListener('mousedown', async (e) => {
     }
 });
 
-logToScreen('VSR IFC Viewer Ready - v34 Hotfix');
+logToScreen('VSR IFC Viewer Ready - v36 Restored');
 
 // Export for global access
 (window as any).components = components;
 (window as any).world = world;
+
+// --- AUTO LOAD MODELS ---
+const initModels = async () => {
+    try {
+        const response = await fetch(`${baseUrl}models.json`);
+        if (!response.ok) throw new Error('models.json not found');
+        const models = await response.json();
+        
+        for (const model of models) {
+             const path = `${baseUrl}${model.path}`;
+             try {
+                 const modelRes = await fetch(path);
+                 if (!modelRes.ok) throw new Error(`Status ${modelRes.status}`);
+                 const buffer = await modelRes.arrayBuffer();
+                 await loadFragment(buffer, model.name);
+             } catch (e) {
+                 console.error(`Failed to load model ${model.name}`, e);
+             }
+        }
+    } catch (e) {
+        // Fallback: Try loading specific file if models.json fails
+        console.warn("Auto-load failed (models.json)", e);
+        try {
+            const path = `${baseUrl}models/2442602.frag`;
+            const modelRes = await fetch(path);
+            if(modelRes.ok) {
+                const buffer = await modelRes.arrayBuffer();
+                await loadFragment(buffer, "2442602.frag");
+            }
+        } catch(ex) {
+            // ignore
+        }
+    }
+};
+
+initModels();
