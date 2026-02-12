@@ -912,7 +912,7 @@ window.addEventListener('mousedown', async (e) => {
     }
 });
 
-logToScreen('VSR IFC Viewer Ready - Snapping 3D Mejorado con Visualización');
+logToScreen('VSR IFC Viewer Ready - v34 - ' + new Date().toLocaleTimeString());
 
 // --- DEBUG: Red Cube to verify Renderer ---
 const cubeGeom = new THREE.BoxGeometry(1, 1, 1);
