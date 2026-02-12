@@ -206,6 +206,24 @@ interface SnapCandidate {
     intersection: THREE.Intersection;
 }
 
+const getWorldUnitsPerPixel = (distanceToTarget: number) => {
+    const renderer = world.renderer?.three as THREE.WebGLRenderer | undefined;
+    const canvas = renderer?.domElement;
+    const viewportHeight = Math.max(1, canvas?.clientHeight || window.innerHeight || 1);
+    const camera = world.camera.three as THREE.PerspectiveCamera | THREE.OrthographicCamera;
+
+    if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+        const perspective = camera as THREE.PerspectiveCamera;
+        const fovRad = THREE.MathUtils.degToRad(perspective.fov);
+        const viewHeight = 2 * Math.tan(fovRad / 2) * Math.max(distanceToTarget, 0.001);
+        return viewHeight / viewportHeight;
+    }
+
+    const ortho = camera as THREE.OrthographicCamera;
+    const viewHeight = (ortho.top - ortho.bottom) / Math.max(ortho.zoom, 0.001);
+    return viewHeight / viewportHeight;
+};
+
 const computeDistanceToRay = (ray: THREE.Ray, point: THREE.Vector3) => {
     const toPoint = point.clone().sub(ray.origin);
     const proj = toPoint.dot(ray.direction);
@@ -369,8 +387,9 @@ const findBestSnap = (intersections: THREE.Intersection[]) => {
     ray.direction.copy(firstHit.point).sub(ray.origin).normalize();
 
     const camDist = firstHit.distance;
-    const WORLD_UNITS_THRESHOLD = THREE.MathUtils.clamp(camDist * 0.003, 0.001, 0.03);
-    const STICKY_THRESHOLD = WORLD_UNITS_THRESHOLD * 0.6;
+    const worldUnitsPerPixel = getWorldUnitsPerPixel(camDist);
+    const WORLD_UNITS_THRESHOLD = THREE.MathUtils.clamp(worldUnitsPerPixel * 12, 0.0006, 0.03);
+    const STICKY_THRESHOLD = WORLD_UNITS_THRESHOLD * 0.45;
 
     const candidates: SnapCandidate[] = [];
     const depthWindow = THREE.MathUtils.clamp(camDist * 0.01, 0.03, 0.25);
@@ -385,45 +404,52 @@ const findBestSnap = (intersections: THREE.Intersection[]) => {
 
     if (candidates.length === 0) return firstHit;
 
-    if (lastSnapped) {
-        const distToRay = computeDistanceToRay(ray, lastSnapped.point);
-        if (distToRay < STICKY_THRESHOLD) {
-            createSnapMarker();
-            if (snapMarker) {
-                snapMarker.position.copy(lastSnapped.point);
-                snapMarker.visible = true;
-            }
-            if (snapLine && cursorMesh) {
-                snapLine.geometry.setFromPoints([cursorMesh.position, lastSnapped.point]);
-                snapLine.visible = true;
-            }
-            document.body.style.cursor = 'crosshair';
-            return {
-                ...firstHit,
-                point: lastSnapped.point.clone(),
-                object: lastSnapped.object,
-                // @ts-ignore
-                isSnapped: true
-            };
-        }
-    }
-
     let bestCandidate: SnapCandidate | null = null;
     let bestScore = Infinity;
+    let bestMainScore = Infinity;
 
     for (const c of candidates) {
         if (c.distanceToRay > WORLD_UNITS_THRESHOLD) continue;
 
         let score = c.distanceToRay;
-        if (c.type === 'intersection') score *= 0.2;
-        if (c.type === 'vertex') score *= 0.35;
-        if (c.type === 'edge') score *= 0.75;
-        if (c.type === 'face') score *= 1.25;
+        if (c.type === 'intersection') score *= 0.15;
+        if (c.type === 'vertex') score *= 0.25;
+        if (c.type === 'edge') score *= 0.85;
+        if (c.type === 'face') score *= 1.4;
         score += c.distanceToCamera * 0.0001;
+        const mainScore = c.distanceToRay * (c.type === 'intersection' ? 0.6 : c.type === 'vertex' ? 0.75 : c.type === 'edge' ? 1 : 1.3);
 
-        if (score < bestScore) {
+        if (mainScore < bestMainScore || (mainScore === bestMainScore && score < bestScore)) {
+            bestMainScore = mainScore;
             bestScore = score;
             bestCandidate = c;
+        }
+    }
+
+    if (lastSnapped) {
+        const stickyDistanceToRay = computeDistanceToRay(ray, lastSnapped.point);
+        if (stickyDistanceToRay < STICKY_THRESHOLD) {
+            const stickyScore = stickyDistanceToRay * 0.95;
+            const shouldKeepSticky = !bestCandidate || stickyScore <= bestMainScore * 0.7;
+            if (shouldKeepSticky) {
+                createSnapMarker();
+                if (snapMarker) {
+                    snapMarker.position.copy(lastSnapped.point);
+                    snapMarker.visible = true;
+                }
+                if (snapLine && cursorMesh) {
+                    snapLine.geometry.setFromPoints([cursorMesh.position, lastSnapped.point]);
+                    snapLine.visible = true;
+                }
+                document.body.style.cursor = 'crosshair';
+                return {
+                    ...firstHit,
+                    point: lastSnapped.point.clone(),
+                    object: lastSnapped.object,
+                    // @ts-ignore
+                    isSnapped: true
+                };
+            }
         }
     }
 
