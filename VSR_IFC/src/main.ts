@@ -743,20 +743,31 @@ const pointHandler = (event: MouseEvent) => {
 };
 
 // --- TOOL BUTTONS ---
-document.getElementById('btn-point')?.addEventListener('click', () => {
+document.getElementById('btn-measure-point')?.addEventListener('click', () => {
     activeTool = 'point';
     logToScreen('Point tool activated');
     container.addEventListener('click', pointHandler);
 });
 
-document.getElementById('btn-angle')?.addEventListener('click', () => {
+document.getElementById('btn-measure-angle')?.addEventListener('click', () => {
     activeTool = 'angle';
     logToScreen('Angle tool activated');
 });
 
-document.getElementById('btn-slope')?.addEventListener('click', () => {
+document.getElementById('btn-measure-slope')?.addEventListener('click', () => {
     activeTool = 'slope';
     logToScreen('Slope tool activated');
+});
+
+document.getElementById('btn-measure-area')?.addEventListener('click', () => {
+    if (area.enabled) {
+        area.enabled = false;
+        logToScreen('Area tool deactivated');
+    } else {
+        area.enabled = true;
+        area.create();
+        logToScreen('Area tool activated');
+    }
 });
 
 document.getElementById('btn-none')?.addEventListener('click', () => {
@@ -799,11 +810,11 @@ document.getElementById('file-input')?.addEventListener('change', async (e) => {
 });
 
 // --- MEASUREMENT MODE TOGGLE ---
-document.getElementById('btn-measure')?.addEventListener('click', () => {
-    const btn = document.getElementById('btn-measure')!;
+document.getElementById('btn-measure-length')?.addEventListener('click', () => {
+    const btn = document.getElementById('btn-measure-length')!;
     if (measurementMode) {
         measurementMode = null;
-        btn.textContent = 'Medir';
+        // btn.textContent = 'Medir'; // REMOVED: Don't overwrite icon
         btn.classList.remove('active');
         
         // Clean up
@@ -829,7 +840,7 @@ document.getElementById('btn-measure')?.addEventListener('click', () => {
         logToScreen('Measurement mode deactivated');
     } else {
         measurementMode = 'length';
-        btn.textContent = 'Detener';
+        // btn.textContent = 'Detener'; // REMOVED: Don't overwrite icon
         btn.classList.add('active');
         
         // Create snapping cursor
@@ -1130,12 +1141,10 @@ window.addEventListener('keydown', async (e) => {
 
             case 'RL': // Regla (Length)
                 // Trigger existing custom tool
-                const btnMeasure = document.getElementById('btn-measure');
+                const btnMeasure = document.getElementById('btn-measure-length');
                 if (btnMeasure && !measurementMode) {
                     btnMeasure.click();
                 } else if (measurementMode !== 'length') {
-                    // Switch to length if in point mode?
-                    // Currently btn-measure toggles.
                     if (activeTool !== 'none') activeTool = 'none'; // Disable others
                     measurementMode = 'length';
                     logToScreen('Herramienta: Regla');
@@ -1147,45 +1156,47 @@ window.addEventListener('keydown', async (e) => {
                 // Use OBF.AreaMeasurement
                 if (measurementMode) {
                     // Disable custom tools
-                    const btnMeasure = document.getElementById('btn-measure');
+                    const btnMeasure = document.getElementById('btn-measure-length');
                     if(btnMeasure && measurementMode) btnMeasure.click();
                 }
-                area.enabled = true;
-                area.create();
-                logToScreen('Herramienta: Área (Click para puntos, Doble click/Enter para terminar)');
+                // Also trigger UI button if it exists to sync state
+                const btnArea = document.getElementById('btn-measure-area');
+                if (btnArea && !area.enabled) {
+                    btnArea.click();
+                } else {
+                    area.enabled = true;
+                    area.create();
+                    logToScreen('Herramienta: Área (Click para puntos, Doble click/Enter para terminar)');
+                }
                 keyBuffer = '';
                 break;
 
             case 'AG': // Ángulo
-                const btnAngle = document.getElementById('btn-angle');
+                const btnAngle = document.getElementById('btn-measure-angle');
                 if (btnAngle) btnAngle.click();
                 keyBuffer = '';
                 break;
 
             case 'PN': // Pendiente
-                const btnSlope = document.getElementById('btn-slope');
+                const btnSlope = document.getElementById('btn-measure-slope');
                 if (btnSlope) btnSlope.click();
                 keyBuffer = '';
                 break;
 
             case 'CO': // Coordenada por punto
                 if (measurementMode === 'length') {
-                    // Toggle off length first?
-                     const btnMeasure = document.getElementById('btn-measure');
+                    // Toggle off length first
+                     const btnMeasure = document.getElementById('btn-measure-length');
                      if(btnMeasure) btnMeasure.click();
                 }
-                // Activate point
-                 const btnPoint = document.getElementById('btn-point'); // Wait, main.ts has btn-measure-point logic? 
-                 // Actually the main.ts I read had `document.getElementById('btn-point')?.addEventListener`.
-                 // But index.html had `btn-measure-point`. 
-                 // Let's check main.ts listener IDs.
-                 // Line 746: `document.getElementById('btn-point')`
-                 // Index.html Line 178: `id="btn-measure-point"`
-                 // MISMATCH! I should fix this too or use the ID that exists in DOM.
-                 // I will assume `activeTool = 'point'` logic.
-                 activeTool = 'point';
-                 container.addEventListener('click', pointHandler);
-                 logToScreen('Herramienta: Coordenada');
+                const btnPoint = document.getElementById('btn-measure-point');
+                if (btnPoint) {
+                    btnPoint.click();
+                } else {
+                    activeTool = 'point';
+                    container.addEventListener('click', pointHandler);
+                    logToScreen('Herramienta: Coordenada');
+                }
                 keyBuffer = '';
                 break;
 
