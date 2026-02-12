@@ -334,7 +334,7 @@ const App: React.FC = () => {
                  {calibration && (
                     <div className="bg-alcabama/90 backdrop-blur text-white px-3 py-1 rounded-full shadow-lg text-[10px] font-bold flex items-center gap-2 pointer-events-auto">
                       <i className="fa-solid fa-check"></i>
-                      <span>Escala: {calibration.realDistance}m = {calibration.pixelDistance.toFixed(0)}px</span>
+                      <span>Escala: {calibration.realValue}m = {calibration.world.toFixed(0)}px</span>
                     </div>
                  )}
               </div>
