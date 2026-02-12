@@ -252,8 +252,18 @@ const DwgRenderer: React.FC<Props> = ({
       camera.updateProjectionMatrix()
     }
     window.addEventListener('resize', onResize)
+    
+    // Add ResizeObserver to handle container size changes (e.g. sidebar toggle)
+    const resizeObserver = new ResizeObserver(() => {
+       onResize()
+    })
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+
     return () => {
       window.removeEventListener('resize', onResize)
+      resizeObserver.disconnect()
       ctrls.dispose()
       r.dispose()
     }
@@ -992,12 +1002,12 @@ const DwgRenderer: React.FC<Props> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative flex-1 overflow-hidden bg-gray-50 h-full ${tool === 'hand' ? 'cursor-grab' : 'cursor-crosshair'}`}
+      className={`relative flex-1 overflow-hidden bg-gray-50 dark:bg-slate-950 h-full ${tool === 'hand' ? 'cursor-grab' : 'cursor-crosshair'}`}
     >
       {/* Fit to View Button */}
       <button 
         onClick={fitToView}
-        className="absolute top-2 right-2 bg-white hover:bg-gray-50 text-gray-700 hover:text-alcabama border border-gray-200 px-3 py-1.5 rounded shadow-sm text-sm font-medium z-50 flex items-center gap-2 transition-colors"
+        className="absolute top-2 right-2 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 hover:text-alcabama dark:hover:text-alcabama border border-gray-200 dark:border-slate-700 px-3 py-1.5 rounded shadow-sm text-sm font-medium z-50 flex items-center gap-2 transition-colors"
         title="Centrar dibujo"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1007,14 +1017,14 @@ const DwgRenderer: React.FC<Props> = ({
       </button>
 
       {/* Zoom Slider */}
-      <div className="absolute top-1/2 right-4 transform -translate-y-1/2 flex flex-col items-center bg-white/90 p-2 rounded-xl z-50 gap-2 shadow-lg border border-gray-200 backdrop-blur-sm">
+      <div className="absolute top-1/2 right-4 transform -translate-y-1/2 flex flex-col items-center bg-white/90 dark:bg-slate-800/90 p-2 rounded-xl z-50 gap-2 shadow-lg border border-gray-200 dark:border-slate-700 backdrop-blur-sm">
          <div className="flex flex-col items-center gap-1 mb-2">
-            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Zoom</span>
+            <span className="text-[10px] text-gray-500 dark:text-slate-400 uppercase tracking-wider font-bold">Zoom</span>
             <input 
               type="number" 
               value={Math.round(zoomLevel * 100)} 
               onChange={handleZoomInput} // Note: Check if handleZoomInput exists in scope, it should.
-              className="w-12 bg-gray-50 text-gray-800 text-xs text-center rounded border border-gray-200 py-1 focus:border-alcabama outline-none font-mono"
+              className="w-12 bg-gray-50 dark:bg-slate-900 text-gray-800 dark:text-slate-200 text-xs text-center rounded border border-gray-200 dark:border-slate-700 py-1 focus:border-alcabama outline-none font-mono"
             />
             <span className="text-xs text-gray-400">%</span>
          </div>
@@ -1025,7 +1035,7 @@ const DwgRenderer: React.FC<Props> = ({
             step="0.1"
             value={zoomLevel} 
             onChange={handleManualZoom}
-            className="h-40 w-2 appearance-none bg-slate-600 rounded-lg outline-none slider-vertical"
+            className="h-40 w-2 appearance-none bg-slate-200 dark:bg-slate-700 rounded-lg outline-none slider-vertical accent-alcabama"
             style={{ writingMode: 'bt-lr', WebkitAppearance: 'slider-vertical' } as any}
             {...{ orient: "vertical" } as any}
          />
@@ -1036,8 +1046,8 @@ const DwgRenderer: React.FC<Props> = ({
         onClick={() => setShowInfo(!showInfo)}
         className={`absolute top-2 left-2 z-50 w-8 h-8 flex items-center justify-center rounded-lg transition-all border ${
           showInfo 
-            ? 'bg-slate-800 border-yellow-500/50 text-yellow-500 shadow-lg shadow-yellow-500/10' 
-            : 'bg-slate-900/50 border-transparent text-slate-600 hover:text-slate-400 hover:bg-slate-800'
+            ? 'bg-slate-800 border-alcabama/50 text-alcabama shadow-lg shadow-alcabama/10' 
+            : 'bg-white/50 dark:bg-slate-900/50 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800'
         }`}
         title="Información Técnica"
       >
@@ -1262,12 +1272,12 @@ const DwgRenderer: React.FC<Props> = ({
         )}
       </div>
       {loading && (
-        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50">
+        <div className="absolute inset-0 bg-white/90 dark:bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 transition-colors duration-300">
           <div className="flex flex-col items-center gap-6">
-            <div className="w-16 h-16 border-4 border-yellow-500/30 border-t-yellow-500 animate-spin rounded-full"></div>
+            <div className="w-16 h-16 border-4 border-alcabama/30 border-t-alcabama animate-spin rounded-full"></div>
             <div className="text-center">
-              <span className="block text-yellow-500 font-mono text-xs tracking-widest uppercase mb-1">{loadingText}</span>
-              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Preparando geometría...</span>
+              <span className="block text-alcabama font-mono text-xs tracking-widest uppercase mb-1">{loadingText}</span>
+              <span className="text-gray-500 dark:text-slate-400 text-[10px] uppercase font-bold tracking-widest">Preparando geometría...</span>
             </div>
           </div>
         </div>

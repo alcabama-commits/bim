@@ -156,7 +156,7 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen w-full bg-gray-50 dark:bg-slate-950 text-gray-800 dark:text-slate-200 overflow-hidden select-none font-sans">
       {/* Sidebar */}
-      <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 transition-all duration-300 flex flex-col overflow-hidden relative shadow-sm z-20`}>
+      <div className={`${isSidebarOpen ? 'w-64 border-r' : 'w-0 border-none'} bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 transition-all duration-300 flex flex-col overflow-hidden relative shadow-sm z-20`}>
         <div className="h-14 flex items-center justify-between px-4 border-b border-gray-100 dark:border-slate-800 shrink-0">
           <span className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">Galería</span>
           <button onClick={() => setIsSidebarOpen(false)} className="text-gray-400 hover:text-alcabama transition-colors">
