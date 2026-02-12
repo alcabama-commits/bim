@@ -999,7 +999,7 @@ const DwgRenderer: React.FC<Props> = ({
       {/* Fit to View Button */}
       <button 
         onClick={fitToView}
-        className={`absolute top-2 right-2 ${isDarkMode ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-indigo-600 hover:bg-indigo-700'} text-white px-3 py-1.5 rounded shadow-lg text-sm font-medium z-50 flex items-center gap-2 transition-colors`}
+        className={`absolute top-2 right-2 ${isDarkMode ? 'bg-alcabama-600 hover:bg-alcabama-500' : 'bg-alcabama-600 hover:bg-alcabama-700'} text-white px-3 py-1.5 rounded shadow-lg text-sm font-medium z-50 flex items-center gap-2 transition-colors`}
         title="Centrar dibujo"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1016,7 +1016,7 @@ const DwgRenderer: React.FC<Props> = ({
               type="number" 
               value={Math.round(zoomLevel * 100)} 
               onChange={handleZoomInput}
-              className="w-12 bg-slate-900 text-white text-xs text-center rounded border border-slate-600 py-1 focus:border-blue-500 outline-none"
+              className="w-12 bg-slate-900 text-white text-xs text-center rounded border border-slate-600 py-1 focus:border-alcabama-500 outline-none"
             />
             <span className="text-xs text-slate-400">%</span>
          </div>
@@ -1039,8 +1039,8 @@ const DwgRenderer: React.FC<Props> = ({
         className={`absolute top-2 left-2 z-50 w-8 h-8 flex items-center justify-center rounded-lg transition-all border ${
           showInfo 
             ? isDarkMode 
-              ? 'bg-slate-800 border-indigo-500/50 text-indigo-400 shadow-lg shadow-indigo-500/10' 
-              : 'bg-indigo-50 border-indigo-200 text-indigo-600 shadow-lg shadow-indigo-500/10'
+              ? 'bg-slate-800 border-alcabama-500/50 text-alcabama-400 shadow-lg shadow-alcabama-500/10' 
+              : 'bg-alcabama-50 border-alcabama-200 text-alcabama-600 shadow-lg shadow-alcabama-500/10'
             : isDarkMode
               ? 'bg-slate-900/50 border-transparent text-slate-600 hover:text-slate-400 hover:bg-slate-800'
               : 'bg-white/50 border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-100'
@@ -1060,7 +1060,7 @@ const DwgRenderer: React.FC<Props> = ({
             </div>
             <div className="flex justify-between">
               <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Zoom</span>
-              <span className="text-indigo-500">{debugInfo.zoom}x</span>
+              <span className="text-alcabama-500">{debugInfo.zoom}x</span>
             </div>
             <div className="flex justify-between">
               <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Snaps</span>
@@ -1101,7 +1101,7 @@ const DwgRenderer: React.FC<Props> = ({
         // Ensure s.x and s.y are valid numbers
         if (isNaN(s.x) || isNaN(s.y)) return null
         
-        const color = "#6366f1" // Indigo-500
+        const color = "#d3045c" // Alcabama
         
         return (
           <svg className="absolute inset-0 pointer-events-none w-full h-full z-10">
@@ -1118,7 +1118,7 @@ const DwgRenderer: React.FC<Props> = ({
       {polyPoints.length > 0 && renderer && tool === 'area' && (
         <svg className="absolute inset-0 pointer-events-none w-full h-full z-10">
           {(() => {
-            const color = "#22c55e"
+            const color = "#d3045c"
             const pts = polyPoints.map(p => projectToScreen(p))
             return (
               <>
@@ -1147,10 +1147,10 @@ const DwgRenderer: React.FC<Props> = ({
             const path = spts.map(p => `${p.x},${p.y}`).join(' ')
             const cx = spts.reduce((acc, p) => acc + p.x, 0) / spts.length
             const cy = spts.reduce((acc, p) => acc + p.y, 0) / spts.length
-            const color = "#22c55e"
+            const color = "#d3045c"
             return (
               <g key={`area-${i}`}>
-                <polygon points={path} fill="rgba(34,197,94,0.15)" stroke={color} strokeWidth="2" />
+                <polygon points={path} fill="rgba(211,4,92,0.15)" stroke={color} strokeWidth="2" />
                 <g transform={`translate(${cx}, ${cy - 12})`}>
                   <rect x="-60" y="-12" width="120" height="24" rx="12" fill="#000" stroke={color} strokeWidth="2" />
                   <text fontSize="12" fontWeight="900" textAnchor="middle" fill={color} dy="5" className="font-mono">
@@ -1190,7 +1190,7 @@ const DwgRenderer: React.FC<Props> = ({
             const bHead1 = { x: b1.x + outUx * arrowLen + px * arrowWing, y: b1.y + outUy * arrowLen + py * arrowWing }
             const bHead2 = { x: b1.x + outUx * arrowLen - px * arrowWing, y: b1.y + outUy * arrowLen - py * arrowWing }
             const mid = { x: (a1.x + b1.x) / 2, y: (a1.y + b1.y) / 2 - 10 }
-            const color = "#6366f1"
+            const color = "#d3045c"
             return (
               <g key={i}>
                 <line x1={a.x} y1={a.y} x2={a1.x} y2={a1.y} stroke={color} strokeWidth="2" />
@@ -1216,7 +1216,7 @@ const DwgRenderer: React.FC<Props> = ({
         <svg className="absolute inset-0 pointer-events-none w-full h-full">
           {points.map((p, i) => {
             const s = projectToScreen(p)
-            return <circle key={i} cx={s.x} cy={s.y} r="6" fill="#6366f1" stroke="#000" strokeWidth="2" />
+            return <circle key={i} cx={s.x} cy={s.y} r="6" fill="#d3045c" stroke="#000" strokeWidth="2" />
           })}
           {points.length === 2 && (() => {
             const a = projectToScreen(points[0])
@@ -1224,10 +1224,10 @@ const DwgRenderer: React.FC<Props> = ({
             const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 20 }
             return (
               <>
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#6366f1" strokeWidth="3" strokeDasharray="6,4" />
+                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#d3045c" strokeWidth="3" strokeDasharray="6,4" />
                 <g transform={`translate(${mid.x}, ${mid.y})`}>
-                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#6366f1" strokeWidth="2" />
-                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#6366f1" dy="5" className="font-mono">
+                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#d3045c" strokeWidth="2" />
+                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#d3045c" dy="5" className="font-mono">
                     {displayDist()}
                   </text>
                 </g>
@@ -1270,9 +1270,9 @@ const DwgRenderer: React.FC<Props> = ({
       {loading && (
         <div className={`absolute inset-0 ${isDarkMode ? 'bg-slate-950/80' : 'bg-white/80'} backdrop-blur-md flex items-center justify-center z-50`}>
           <div className="flex flex-col items-center gap-6">
-            <div className="w-16 h-16 border-4 border-indigo-500/30 border-t-indigo-500 animate-spin rounded-full"></div>
+            <div className="w-16 h-16 border-4 border-alcabama-500/30 border-t-alcabama-500 animate-spin rounded-full"></div>
             <div className="text-center">
-              <span className="block text-indigo-500 font-mono text-xs tracking-widest uppercase mb-1">{loadingText}</span>
+              <span className="block text-alcabama-500 font-mono text-xs tracking-widest uppercase mb-1">{loadingText}</span>
               <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Preparando geometría...</span>
             </div>
           </div>
