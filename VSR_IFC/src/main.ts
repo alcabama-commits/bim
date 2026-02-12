@@ -182,9 +182,37 @@ function createSnapMarker() {
 }
 
 // --- Debug Panel ---
-const debugPanel = document.getElementById('debug-panel')!;
+let debugPanel = document.getElementById('debug-panel');
+if (!debugPanel) {
+    debugPanel = document.createElement('div');
+    debugPanel.id = 'debug-panel';
+    debugPanel.style.position = 'fixed';
+    debugPanel.style.bottom = '10px';
+    debugPanel.style.left = '50%';
+    debugPanel.style.transform = 'translateX(-50%)';
+    debugPanel.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    debugPanel.style.color = 'white';
+    debugPanel.style.padding = '10px 20px';
+    debugPanel.style.borderRadius = '5px';
+    debugPanel.style.zIndex = '1000';
+    debugPanel.style.pointerEvents = 'none';
+    debugPanel.style.fontFamily = 'sans-serif';
+    debugPanel.style.fontSize = '14px';
+    debugPanel.style.transition = 'opacity 0.5s';
+    document.body.appendChild(debugPanel);
+}
+
+let debugTimeout: any;
 const logToScreen = (msg: string) => {
-    debugPanel.textContent = msg;
+    if (debugPanel) {
+        debugPanel.textContent = msg;
+        debugPanel.style.opacity = '1';
+        
+        clearTimeout(debugTimeout);
+        debugTimeout = setTimeout(() => {
+            if (debugPanel) debugPanel.style.opacity = '0';
+        }, 3000);
+    }
     console.log('[UI]', msg);
 };
 
@@ -774,6 +802,103 @@ document.getElementById('btn-none')?.addEventListener('click', () => {
     activeTool = 'none';
     logToScreen('Tools deactivated');
     container.removeEventListener('click', pointHandler);
+});
+
+// --- ADDITIONAL TOOL BUTTONS ---
+document.getElementById('projection-toggle')?.addEventListener('click', async () => {
+    const camera = world.camera;
+    const current = camera.projection.current;
+    const next = current === 'Perspective' ? 'Orthographic' : 'Perspective';
+    await camera.projection.set(next);
+    logToScreen(`Proyección: ${next === 'Perspective' ? 'Perspectiva' : 'Ortogonal'}`);
+});
+
+document.getElementById('fit-model-btn')?.addEventListener('click', async () => {
+    if (components.meshes && components.meshes.length > 0) {
+        const bbox = new THREE.Box3();
+        for(const mesh of components.meshes) {
+            if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
+                if(mesh.geometry) {
+                    if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+                    if(mesh.geometry.boundingBox) {
+                        const meshBox = mesh.geometry.boundingBox.clone();
+                        meshBox.applyMatrix4(mesh.matrixWorld);
+                        bbox.union(meshBox);
+                    }
+                }
+            }
+        }
+        if(!bbox.isEmpty()) {
+            const sphere = new THREE.Sphere();
+            bbox.getBoundingSphere(sphere);
+            await world.camera.controls.fitToSphere(sphere, true);
+            logToScreen('Ajustado a pantalla');
+        }
+    }
+});
+
+document.getElementById('btn-hide')?.addEventListener('click', async () => {
+    const hider = components.get(OBF.Hider);
+    const highlighter = components.get(OBF.Highlighter);
+    const selection = highlighter.selection.select;
+    if (Object.keys(selection).length > 0) {
+        await hider.set(false, selection);
+        highlighter.clear('select');
+        logToScreen('Selección ocultada');
+    }
+});
+
+document.getElementById('btn-isolate')?.addEventListener('click', async () => {
+    const hider = components.get(OBF.Hider);
+    const highlighter = components.get(OBF.Highlighter);
+    const selection = highlighter.selection.select;
+    if (Object.keys(selection).length > 0) {
+        await hider.isolate(selection);
+        highlighter.clear('select');
+        logToScreen('Selección aislada');
+    }
+});
+
+document.getElementById('btn-show-all')?.addEventListener('click', async () => {
+    const hider = components.get(OBF.Hider);
+    await hider.set(true);
+    logToScreen('Mostrar todo');
+});
+
+document.getElementById('grid-toggle')?.addEventListener('click', () => {
+    const grid = components.get(OBC.Grids);
+    grid.enabled = !grid.enabled;
+    logToScreen(`Rejilla: ${grid.enabled ? 'On' : 'Off'}`);
+});
+
+document.getElementById('clipper-toggle')?.addEventListener('click', () => {
+    const clipper = components.get(OBC.Clipper);
+    clipper.create();
+    logToScreen('Plano de corte creado');
+});
+
+document.getElementById('btn-measure-delete')?.addEventListener('click', () => {
+    // Clear custom
+    measurementPoints = [];
+    measurementMarkers.forEach(m => world.scene.three.remove(m));
+    measurementLabels.forEach(l => l.remove());
+    measurementMarkers.length = 0;
+    measurementLabels.length = 0;
+    if (tempMeasurementLine) {
+        world.scene.three.remove(tempMeasurementLine);
+        tempMeasurementLine = null;
+    }
+    
+    // Clear Area
+    const area = components.get(OBF.AreaMeasurement);
+    area.deleteAll();
+    
+    // Clear Point (customMeshes)
+    customMeshes.forEach(m => world.scene.three.remove(m));
+    customMeshes.length = 0;
+    document.querySelectorAll('.floating-label').forEach(el => el.remove());
+
+    logToScreen('Medidas borradas');
 });
 
 // --- MODEL LOADING ---
