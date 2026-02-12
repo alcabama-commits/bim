@@ -18,8 +18,8 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
     if (!closest) return intersects;
 
     try {
-        const VERTEX_THRESHOLD = 0.6; // Increased to 60cm for v27 // 40cm for Vertices
-        const EDGE_THRESHOLD = 0.3; // Increased to 30cm for v27   // 20cm for Edges
+        const VERTEX_THRESHOLD = 0.25; // Adjusted to 25cm for v29-SmartSnap
+        const EDGE_THRESHOLD = 0.15; // Adjusted to 15cm for v29-SmartSnap
         
         if (closest.face && (closest.object as any).geometry) {
             const geom = (closest.object as any).geometry;
@@ -369,7 +369,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-10-v27-EventSnap';
+versionDiv.textContent = 'v2026-02-10-v29-SmartSnap';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -429,10 +429,40 @@ const baseUrl = import.meta.env.BASE_URL || './';
 const debugSphereGeom = new THREE.SphereGeometry(0.5, 32, 32); // Increased size for v21
 const debugSphereMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
 debugSphere = new THREE.Mesh(debugSphereGeom, debugSphereMat);
+(window as any).debugSphere = debugSphere; // CRITICAL FIX: Expose to global scope for applyGlobalSnap
 debugSphere.renderOrder = 999;
 debugSphere.visible = false;
 // Correctly add to the scene using the world object
 world.scene.three.add(debugSphere);
+
+// --- v29-SmartSnap: GLOBAL INDEPENDENT SNAPPING LOOP ---
+container.addEventListener('mousemove', (event) => {
+    if (!world || !world.camera || !world.scene) return;
+    const rect = container.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    const tempRaycaster = new THREE.Raycaster();
+    tempRaycaster.setFromCamera(new THREE.Vector2(x, y), world.camera.three);
+    
+    // NUCLEAR DEBUG: Raycast against EVERYTHING in scene
+    const candidates: THREE.Object3D[] = [];
+    world.scene.three.traverse((child) => {
+        if (child instanceof THREE.Mesh || child instanceof THREE.InstancedMesh) {
+            candidates.push(child);
+        }
+    });
+
+    if (candidates.length === 0) return;
+    
+    const intersects = tempRaycaster.intersectObjects(candidates, true);
+    
+    if (intersects.length > 0) {
+        applyGlobalSnap([intersects[0]]);
+    } else {
+        if (debugSphere) debugSphere.visible = false;
+    }
+});
 
 const debugConsole = document.getElementById('debug-console');
 if (debugConsole) {
