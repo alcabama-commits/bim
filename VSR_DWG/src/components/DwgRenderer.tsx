@@ -15,11 +15,10 @@ interface Props {
   onCalibrationComplete: (c: Calibration) => void
   onDocInfo: (info: string) => void
   snapSettings: SnapSettings
-  isDarkMode: boolean
 }
 
 const DwgRenderer: React.FC<Props> = ({
-  file, tool, showGrid, isBlueprint, calibration, onCalibrationComplete, onDocInfo, snapSettings, isDarkMode
+  file, tool, showGrid, isBlueprint, calibration, onCalibrationComplete, onDocInfo, snapSettings
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const controlsTargetRef = useRef<HTMLDivElement>(null)
@@ -210,8 +209,7 @@ const DwgRenderer: React.FC<Props> = ({
     const r = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true })
     r.setPixelRatio(window.devicePixelRatio)
     r.setSize(containerRef.current?.clientWidth || 800, containerRef.current?.clientHeight || 600)
-    // Initial color set based on prop, but useEffect below handles updates
-    r.setClearColor(isDarkMode ? 0x0f172a : 0xf8fafc, 1)
+    r.setClearColor(0x0b1220, 1)
     setRenderer(r)
 
     camera.position.set(0, 0, 10)
@@ -252,18 +250,8 @@ const DwgRenderer: React.FC<Props> = ({
       camera.updateProjectionMatrix()
     }
     window.addEventListener('resize', onResize)
-    
-    // Add ResizeObserver to handle container size changes (e.g. sidebar toggle)
-    const resizeObserver = new ResizeObserver(() => {
-       onResize()
-    })
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current)
-    }
-
     return () => {
       window.removeEventListener('resize', onResize)
-      resizeObserver.disconnect()
       ctrls.dispose()
       r.dispose()
     }
@@ -326,40 +314,21 @@ const DwgRenderer: React.FC<Props> = ({
 
       const updateMat = (m: any) => {
         if (m.color) {
-          if (isDarkMode) {
-            // DARK MODE LOGIC
-            // Special case: Pure black -> White (for dark bg)
-            if (m.color.getHex() === 0x000000 || m.color.getHex() === 0x1e293b) {
-              m.color.setHex(0xffffff)
-              return
-            }
+          // Special case: Pure black -> White
+          if (m.color.getHex() === 0x000000) {
+            m.color.setHex(0xffffff)
+            return
+          }
 
-            // Ensure visibility: Lighten dark colors
-            const hsl = { h: 0, s: 0, l: 0 }
-            m.color.getHSL(hsl)
-            
-            // If lightness is too low (dark), lighten it
-            // This ensures visibility on dark background
-            if (hsl.l < 0.3) {
-              m.color.setHSL(hsl.h, hsl.s, 0.7)
-            }
-          } else {
-            // LIGHT MODE LOGIC
-            // Special case: Pure white -> Black (for light bg)
-            if (m.color.getHex() === 0xffffff) {
-              m.color.setHex(0x000000)
-              return
-            }
-
-            // Ensure visibility: Darken light colors
-            const hsl = { h: 0, s: 0, l: 0 }
-            m.color.getHSL(hsl)
-            
-            // If lightness is too high (light), darken it
-            // This ensures visibility on light background
-            if (hsl.l > 0.65) {
-              m.color.setHSL(hsl.h, hsl.s, 0.4)
-            }
+          // Ensure visibility: Lighten dark colors
+          const hsl = { h: 0, s: 0, l: 0 }
+          m.color.getHSL(hsl)
+          
+          // If lightness is too low (dark), boost it significantly
+          // This ensures visibility on dark background (original)
+          // AND visibility on white background (inverted) because inverted light = dark
+          if (hsl.l < 0.35) {
+            m.color.setHSL(hsl.h, hsl.s, 0.6)
           }
         }
       }
@@ -371,20 +340,14 @@ const DwgRenderer: React.FC<Props> = ({
       }
     }
 
-    // Update background color
-    renderer.setClearColor(isDarkMode ? 0x0f172a : 0xf8fafc, 1) // slate-950 vs gray-50
-
     if (isBlueprint) {
       renderer.domElement.style.filter = 'invert(1) hue-rotate(180deg) brightness(1.1) contrast(1.25)'
-      // In blueprint mode, we might want specific contrast handling too, but usually invert handles it.
-      // However, if we change materials for dark mode, invert might flip them back to dark.
-      // Let's rely on standard contrast first, then invert.
       entityRoot.traverse(ensureContrast)
     } else {
       renderer.domElement.style.filter = ''
       entityRoot.traverse(ensureContrast)
     }
-  }, [isBlueprint, isDarkMode, renderer, entityRoot])
+  }, [isBlueprint, renderer, entityRoot])
 
   useEffect(() => {
     if (!renderer || !showGrid) return
@@ -470,7 +433,7 @@ const DwgRenderer: React.FC<Props> = ({
               console.log('DWG Database:', Object.keys(db || {}), db)
               
               const root = new THREE.Group()
-              const material = new THREE.LineBasicMaterial({ color: 0x1e293b })
+              const material = new THREE.LineBasicMaterial({ color: 0xffffff })
               
               // Helper to create line from points
               const createLine = (pts: THREE.Vector3[], closed: boolean, container: THREE.Object3D) => {
@@ -618,7 +581,7 @@ const DwgRenderer: React.FC<Props> = ({
         loader.setFont(font)
         loader.setEnableLayer(true)
         loader.setConsumeUnits(true)
-        loader.setDefaultColor(0x000000)
+        loader.setDefaultColor(0xffffff)
         if (loadTimeoutRef.current) {
           clearTimeout(loadTimeoutRef.current)
         }
@@ -1002,12 +965,12 @@ const DwgRenderer: React.FC<Props> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative flex-1 overflow-hidden bg-gray-50 dark:bg-slate-950 h-full ${tool === 'hand' ? 'cursor-grab' : 'cursor-crosshair'}`}
+      className={`relative flex-1 overflow-hidden bg-slate-900 h-full ${tool === 'hand' ? 'cursor-grab' : 'cursor-crosshair'}`}
     >
       {/* Fit to View Button */}
       <button 
         onClick={fitToView}
-        className="absolute top-2 right-2 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 text-gray-700 dark:text-slate-200 hover:text-alcabama dark:hover:text-alcabama border border-gray-200 dark:border-slate-700 px-3 py-1.5 rounded shadow-sm text-sm font-medium z-50 flex items-center gap-2 transition-colors"
+        className="absolute top-2 right-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded shadow-lg text-sm font-medium z-50 flex items-center gap-2"
         title="Centrar dibujo"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1017,16 +980,16 @@ const DwgRenderer: React.FC<Props> = ({
       </button>
 
       {/* Zoom Slider */}
-      <div className="absolute top-1/2 right-4 transform -translate-y-1/2 flex flex-col items-center bg-white/90 dark:bg-slate-800/90 p-2 rounded-xl z-50 gap-2 shadow-lg border border-gray-200 dark:border-slate-700 backdrop-blur-sm">
+      <div className="absolute top-1/2 right-4 transform -translate-y-1/2 flex flex-col items-center bg-slate-800/80 p-2 rounded-xl z-50 gap-2 shadow-xl border border-slate-700">
          <div className="flex flex-col items-center gap-1 mb-2">
-            <span className="text-[10px] text-gray-500 dark:text-slate-400 uppercase tracking-wider font-bold">Zoom</span>
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider">Zoom</span>
             <input 
               type="number" 
               value={Math.round(zoomLevel * 100)} 
-              onChange={handleZoomInput} // Note: Check if handleZoomInput exists in scope, it should.
-              className="w-12 bg-gray-50 dark:bg-slate-900 text-gray-800 dark:text-slate-200 text-xs text-center rounded border border-gray-200 dark:border-slate-700 py-1 focus:border-alcabama outline-none font-mono"
+              onChange={handleZoomInput}
+              className="w-12 bg-slate-900 text-white text-xs text-center rounded border border-slate-600 py-1 focus:border-blue-500 outline-none"
             />
-            <span className="text-xs text-gray-400">%</span>
+            <span className="text-xs text-slate-400">%</span>
          </div>
          <input 
             type="range" 
@@ -1035,7 +998,7 @@ const DwgRenderer: React.FC<Props> = ({
             step="0.1"
             value={zoomLevel} 
             onChange={handleManualZoom}
-            className="h-40 w-2 appearance-none bg-slate-200 dark:bg-slate-700 rounded-lg outline-none slider-vertical accent-alcabama"
+            className="h-40 w-2 appearance-none bg-slate-600 rounded-lg outline-none slider-vertical"
             style={{ writingMode: 'bt-lr', WebkitAppearance: 'slider-vertical' } as any}
             {...{ orient: "vertical" } as any}
          />
@@ -1046,8 +1009,8 @@ const DwgRenderer: React.FC<Props> = ({
         onClick={() => setShowInfo(!showInfo)}
         className={`absolute top-2 left-2 z-50 w-8 h-8 flex items-center justify-center rounded-lg transition-all border ${
           showInfo 
-            ? 'bg-slate-800 border-alcabama/50 text-alcabama shadow-lg shadow-alcabama/10' 
-            : 'bg-white/50 dark:bg-slate-900/50 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800'
+            ? 'bg-slate-800 border-yellow-500/50 text-yellow-500 shadow-lg shadow-yellow-500/10' 
+            : 'bg-slate-900/50 border-transparent text-slate-600 hover:text-slate-400 hover:bg-slate-800'
         }`}
         title="Información Técnica"
       >
@@ -1272,12 +1235,12 @@ const DwgRenderer: React.FC<Props> = ({
         )}
       </div>
       {loading && (
-        <div className="absolute inset-0 bg-white/90 dark:bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 transition-colors duration-300">
+        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50">
           <div className="flex flex-col items-center gap-6">
-            <div className="w-16 h-16 border-4 border-alcabama/30 border-t-alcabama animate-spin rounded-full"></div>
+            <div className="w-16 h-16 border-4 border-yellow-500/30 border-t-yellow-500 animate-spin rounded-full"></div>
             <div className="text-center">
-              <span className="block text-alcabama font-mono text-xs tracking-widest uppercase mb-1">{loadingText}</span>
-              <span className="text-gray-500 dark:text-slate-400 text-[10px] uppercase font-bold tracking-widest">Preparando geometría...</span>
+              <span className="block text-yellow-500 font-mono text-xs tracking-widest uppercase mb-1">{loadingText}</span>
+              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Preparando geometría...</span>
             </div>
           </div>
         </div>

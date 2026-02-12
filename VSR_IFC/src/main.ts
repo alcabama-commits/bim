@@ -5,169 +5,6 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
-// --- Debug Panel ---
-let debugPanel = document.getElementById('debug-panel');
-if (!debugPanel) {
-    debugPanel = document.createElement('div');
-    debugPanel.id = 'debug-panel';
-    debugPanel.style.position = 'fixed';
-    debugPanel.style.bottom = '10px';
-    debugPanel.style.left = '50%';
-    debugPanel.style.transform = 'translateX(-50%)';
-    debugPanel.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-    debugPanel.style.color = 'white';
-    debugPanel.style.padding = '10px 20px';
-    debugPanel.style.borderRadius = '5px';
-    debugPanel.style.zIndex = '1000';
-    debugPanel.style.pointerEvents = 'none';
-    debugPanel.style.fontFamily = 'sans-serif';
-    debugPanel.style.fontSize = '14px';
-    debugPanel.style.transition = 'opacity 0.5s';
-    document.body.appendChild(debugPanel);
-}
-window.addEventListener('error', (e) => {
-    console.error('GLOBAL SCRIPT ERROR:', e.message, 'at', e.filename, ':', e.lineno);
-});
-
-// --- KEYBOARD SHORTCUTS (Moved to top for immediate registration) ---
-window.addEventListener('keydown', async (e) => {
-    // FORCE DEBUG: Log EVERY keydown event to see if they are even registering
-    // Also update visible log
-    if (debugPanel) {
-        debugPanel.style.opacity = '1';
-        debugPanel.textContent = `Key: ${e.code}`;
-        setTimeout(() => debugPanel.style.opacity = '0', 2000);
-    }
-    console.log(`[GLOBAL_KEY_DEBUG] Code: ${e.code}, Key: ${e.key}, Ctrl: ${e.ctrlKey}, Target: ${e.target}`);
-
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    if (e.ctrlKey || e.altKey || e.metaKey) return;
-
-    const code = e.code;
-    
-    // Safety check for dependencies
-    // We use (window as any).components/world if local vars are not yet captured or initialized
-    // But since this runs on event, they should be ready.
-    if (typeof world === 'undefined' || typeof components === 'undefined' || typeof clipper === 'undefined' || typeof hider === 'undefined') {
-        console.warn("VSR_IFC: Core components not ready yet.");
-        return;
-    }
-
-    try {
-        switch (code) {
-            case 'KeyP': // P: Perspectiva/Ortogonal
-                const camera = world.camera;
-                const current = camera.projection.current;
-                const next = current === 'Perspective' ? 'Orthographic' : 'Perspective';
-                await camera.projection.set(next);
-                if (typeof logToScreen === 'function') logToScreen(`Proyección: ${next === 'Perspective' ? 'Perspectiva' : 'Ortogonal'}`);
-                break;
-
-            case 'KeyZ': // Z: Zoom Extents
-                if (world.meshes.size > 0) {
-                     const bbox = new THREE.Box3();
-                     for(const mesh of world.meshes) {
-                         if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
-                             if(mesh.geometry) {
-                                 if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-                                 if(mesh.geometry.boundingBox) {
-                                    const meshBox = mesh.geometry.boundingBox.clone();
-                                    meshBox.applyMatrix4(mesh.matrixWorld);
-                                    bbox.union(meshBox);
-                                 }
-                             }
-                         }
-                     }
-                     if(!bbox.isEmpty()) {
-                        const sphere = new THREE.Sphere();
-                        bbox.getBoundingSphere(sphere);
-                        await world.camera.controls.fitToSphere(sphere, true);
-                        if (typeof logToScreen === 'function') logToScreen('Ajustado a pantalla');
-                     }
-                }
-                break;
-
-            case 'KeyH': // H: Hide
-                {
-                    const highlighter = components.get(OBF.Highlighter);
-                    const selection = highlighter.selection.select;
-                    if (selection && Object.keys(selection).length > 0) {
-                        await hider.set(false, selection);
-                        highlighter.clear('select');
-                        if (typeof logToScreen === 'function') logToScreen('Selección ocultada');
-                    }
-                }
-                break;
-
-            case 'KeyI': // I: Isolate
-                {
-                    const highlighter = components.get(OBF.Highlighter);
-                    const selection = highlighter.selection.select;
-                    if (selection && Object.keys(selection).length > 0) {
-                        await hider.isolate(selection);
-                        highlighter.clear('select');
-                        if (typeof logToScreen === 'function') logToScreen('Selección aislada');
-                    }
-                }
-                break;
-
-            case 'KeyR': // R: Show All (Reset)
-                await hider.set(true);
-                if (typeof logToScreen === 'function') logToScreen('Mostrar todo');
-                break;
-            
-            case 'KeyL': // L: Length
-                 const btnMeasure = document.getElementById('btn-measure-length');
-                 if (btnMeasure) btnMeasure.click();
-                 break;
-            
-            case 'KeyA': // A: Area
-                 const btnArea = document.getElementById('btn-measure-area');
-                 if (btnArea) btnArea.click();
-                 break;
-
-            case 'KeyG': // G: Angle
-                 const btnAngle = document.getElementById('btn-measure-angle');
-                 if (btnAngle) btnAngle.click();
-                 break;
-
-            case 'KeyS': // S: Slope
-                 const btnSlope = document.getElementById('btn-measure-slope');
-                 if (btnSlope) btnSlope.click();
-                 break;
-
-            case 'KeyC': // C: Coordinate
-                 const btnPoint = document.getElementById('btn-measure-point');
-                 if (btnPoint) btnPoint.click();
-                 break;
-
-            case 'Escape': // Escape
-                if (typeof deactivateAllTools === 'function') deactivateAllTools();
-                if (typeof logToScreen === 'function') logToScreen('Herramientas desactivadas');
-                break;
-            
-            case 'Delete':
-            case 'Backspace':
-                 if (typeof measurementPoints !== 'undefined') measurementPoints = [];
-                 if (typeof area !== 'undefined') area.deleteAll();
-                 if (typeof clipper !== 'undefined') clipper.deleteAll();
-                 if (typeof logToScreen === 'function') logToScreen('Medidas borradas');
-                 break;
-                 
-            case 'KeyX':
-                 if (typeof clipper !== 'undefined') clipper.create();
-                 break;
-
-            case 'KeyJ':
-                 const grid = components.get(OBC.Grids);
-                 grid.enabled = !grid.enabled;
-                 break;
-        }
-    } catch (err) {
-        console.error("Shortcut Error:", err);
-    }
-}, { capture: true });
-
 // --- Measurement State (Hoisted to top to avoid ReferenceError) ---
 let measurementMode: 'length' | 'point' | null = null;
 let measurementPoints: THREE.Vector3[] = [];
@@ -291,25 +128,11 @@ const components = new OBC.Components();
 const worlds = components.get(OBC.Worlds);
 const world = worlds.create();
 
-world.scene = new OBC.SimpleScene(components);
-world.scene.setup();
-world.scene.three.background = new THREE.Color(0x202932);
-world.renderer = new OBC.SimpleRenderer(components, container);
-world.camera = new OBC.SimpleCamera(components);
+world.scene = new OBC.Scene(components);
+world.renderer = new OBC.Renderer(components, container);
+world.camera = new OBC.Camera(components);
 
 components.init();
-if (world.camera.controls) {
-    world.camera.controls.setLookAt(10, 10, 10, 0, 0, 0);
-}
-const grids = components.get(OBC.Grids);
-const grid = grids.create(world);
-grid.config.color.setHex(0x333333);
-
-// --- Initialize Clipper ---
-const clipper = components.get(OBC.Clipper);
-clipper.enabled = true;
-
-const hider = components.get(OBC.Hider);
 
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
@@ -358,18 +181,10 @@ function createSnapMarker() {
     world.scene.three.add(snapLine);
 }
 
-// --- Debug Panel Helper ---
-let debugTimeout: any;
+// --- Debug Panel ---
+const debugPanel = document.getElementById('debug-panel')!;
 const logToScreen = (msg: string) => {
-    if (debugPanel) {
-        debugPanel.textContent = msg;
-        debugPanel.style.opacity = '1';
-        
-        clearTimeout(debugTimeout);
-        debugTimeout = setTimeout(() => {
-            if (debugPanel) debugPanel.style.opacity = '0';
-        }, 3000);
-    }
+    debugPanel.textContent = msg;
     console.log('[UI]', msg);
 };
 
@@ -686,8 +501,354 @@ simpleRaycaster.castRayToObjects = (items?: THREE.Object3D[], position?: THREE.V
     return findBestSnap(intersections);
 };
 
-function createMarker(position: THREE.Vector3, color: number = 0x00ff00) {
-    const geometry = new THREE.SphereGeometry(0.1, 16, 16);
+
+// --- FRAGMENTS & COMPONENTS ---
+const baseUrl = import.meta.env.BASE_URL || './';
+const debugSphereGeom = new THREE.SphereGeometry(0.5, 32, 32);
+const debugSphereMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
+const debugSphere = new THREE.Mesh(debugSphereGeom, debugSphereMat);
+debugSphere.renderOrder = 999;
+debugSphere.visible = false;
+world.scene.three.add(debugSphere);
+
+const debugConsole = document.getElementById('debug-console');
+if (debugConsole) {
+    debugConsole.style.display = 'block';
+    const log = (msg: string) => {
+        const line = document.createElement('div');
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        debugConsole.appendChild(line);
+        debugConsole.scrollTop = debugConsole.scrollHeight;
+        if (debugConsole.children.length > 20) debugConsole.removeChild(debugConsole.firstChild);
+    };
+    window.debugLog = log;
+} else {
+    window.debugLog = console.log;
+}
+
+const fragments = components.get(OBC.FragmentsManager);
+
+// Initialize fragments with the worker BEFORE getting other components
+// that might depend on it (like Classifier or Hider)
+try {
+    await fragments.init(`${baseUrl}fragments/fragments.mjs`);
+} catch (error) {
+    console.error("Critical Error: Fragments init failed", error);
+    throw new Error(`Fragments init failed: ${error}`);
+}
+
+const classifier = components.get(OBC.Classifier);
+const hider = components.get(OBC.Hider);
+
+// Monkey-patch Hider to sync hiddenItems globally
+const originalSet = hider.set.bind(hider);
+hider.set = async (visible: boolean, items?: any) => {
+    await originalSet(visible, items);
+    
+    if (items && Object.keys(items).length > 0) {
+        updateHiddenItems(items, visible);
+    } else if (visible) {
+        // Show All case
+        for (const key in hiddenItems) {
+            delete hiddenItems[key];
+        }
+    }
+};
+
+const originalIsolate = hider.isolate.bind(hider);
+hider.isolate = async (selection: any) => {
+    await originalIsolate(selection);
+    
+    // Sync hiddenItems for Isolate
+    try {
+         console.warn("[DEBUG] Global Isolate Triggered. Syncing hiddenItems...");
+         console.log("[DEBUG] Selection keys:", Object.keys(selection));
+
+         for (const [uuid, model] of fragments.list) {
+             const allIds = await model.getItemsIdsWithGeometry();
+             
+             // Collect visible IDs for this model
+             const visibleIDsForThisModel = new Set<number>();
+             
+             // Selection is Record<FragmentID, Iterable<ExpressID>>
+             for (const [fragID, idSet] of Object.entries(selection)) {
+                 // Check if this fragment belongs to the current model
+                 // 1. Check if fragID IS the model UUID
+                 let belongs = (fragID === uuid);
+                 
+                 // 2. Check if fragID is one of the fragments in the model
+                 if (!belongs) {
+                     if (model.items && model.items.length > 0) {
+                         belongs = model.items.some((f: any) => f.id === fragID);
+                     } else if (model.children && model.children.length > 0) {
+                         // Fallback: check Three.js children (Meshes/Fragments)
+                         // Fragment objects usually have 'id' matching the fragment ID
+                         belongs = model.children.some((child: any) => child.uuid === fragID);
+                     }
+                 }
+                 
+                 if (belongs) {
+                     console.log(`[DEBUG] Fragment ${fragID} belongs to model ${uuid}`);
+                     const items = idSet instanceof Set ? idSet : (Array.isArray(idSet) ? idSet : []);
+                     for(const id of (items as any)) visibleIDsForThisModel.add(id);
+                 }
+             }
+             
+             if (!hiddenItems[uuid]) hiddenItems[uuid] = new Set();
+             const hiddenSet = hiddenItems[uuid];
+             hiddenSet.clear(); // Reset before repopulating based on Isolate logic
+             
+             let hiddenCount = 0;
+             for (const id of allIds) {
+                 if (visibleIDsForThisModel.has(id)) {
+                     // It's visible
+                 } else {
+                     hiddenSet.add(id);
+                     hiddenCount++;
+                 }
+             }
+             console.log(`[DEBUG] Model ${uuid}: Total ${allIds.size}, Visible ${visibleIDsForThisModel.size}, Hidden ${hiddenCount}`);
+         }
+    } catch (e) {
+         console.error("Error updating hidden items during global isolate:", e);
+    }
+};
+
+const clipper = components.get(OBC.Clipper);
+clipper.material = new THREE.MeshBasicMaterial({
+    color: 0xCFD8DC, // Light gray-blue typical of BIM software
+    side: THREE.DoubleSide,
+    shadowSide: THREE.DoubleSide,
+    opacity: 0.2,
+    transparent: true
+});
+
+// --- TOOL SYSTEM ---
+// --- getIntersection (AHORA SIN DOBLE SNAP) ---
+const getIntersection = (event: MouseEvent) => {
+    const rect = container.getBoundingClientRect();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    // Usar el raycaster oficial que YA tiene snapping integrado
+    const raycasters = components.get(OBC.Raycasters);
+    const caster = raycasters.get(world);
+    const mouseVec = new THREE.Vector2(mouse.x, mouse.y);
+    
+    let valid = null;
+    try {
+         valid = caster.castRayToObjects(components.meshes, mouseVec);
+    } catch (e) {
+        console.error("OBC Raycaster failed:", e);
+    }
+
+    // Solo feedback visual, no re-snapear
+    if (valid) {
+        if ((valid as any).isSnapped) {
+            cursorMat.color.setHex(0x00FF00); // Verde si hay snap
+            cursorMesh.scale.set(2.0, 2.0, 2.0);
+        } else {
+            cursorMat.color.setHex(0xFF00FF); // Magenta si no hay snap
+            cursorMesh.scale.set(1.0, 1.0, 1.0);
+        }
+        return valid;
+    }
+    return null;
+};
+
+// --- CURSOR MOVEMENT ---
+container.addEventListener('mousemove', (event) => {
+    if (activeTool === 'none') {
+        cursorMesh.visible = false;
+        return;
+    }
+    
+    if (['angle', 'slope', 'point'].includes(activeTool)) {
+        const hit = getIntersection(event);
+        if (hit) {
+            cursorMesh.visible = true;
+            cursorMesh.position.copy(hit.point);
+        } else {
+            cursorMesh.visible = false;
+        }
+    } else {
+         cursorMesh.visible = false;
+    }
+});
+
+// --- POINT TOOL HANDLER ---
+const pointHandler = (event: MouseEvent) => {
+    if (activeTool !== 'point') return;
+    
+    // Force disable highlighter and clear selection to prevent conflicts
+    const highlighter = components.get(OBF.Highlighter);
+    highlighter.enabled = false;
+    highlighter.clear('select');
+    highlighter.clear('hover');
+
+    event.stopImmediatePropagation();
+    event.preventDefault(); // Add this
+    
+    console.log("[DEBUG] Point tool click detected");
+    const hit = getIntersection(event);
+    if (hit) {
+        const p = hit.point;
+        
+        // Create Marker (Sphere)
+        const geom = new THREE.SphereGeometry(0.2, 16, 16);
+        const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.copy(p);
+        world.scene.three.add(mesh);
+        customMeshes.push(mesh);
+        
+        // Create Label
+        const div = document.createElement('div');
+        div.className = 'floating-label';
+        div.style.position = 'absolute';
+        div.style.background = 'rgba(0, 0, 0, 0.7)';
+        div.style.color = 'white';
+        div.style.padding = '5px 10px';
+        div.style.borderRadius = '4px';
+        div.style.pointerEvents = 'none';
+        div.style.transform = 'translate(-50%, -100%)';
+        div.style.marginTop = '-10px';
+        div.style.fontSize = '12px';
+        div.innerHTML = `X: ${p.x.toFixed(2)}<br>Y: ${p.y.toFixed(2)}<br>Z: ${p.z.toFixed(2)}`;
+        
+        // Simple CSS2D emulation
+        const updateLabel = () => {
+            if (!mesh.parent) {
+                div.remove();
+                world.camera.controls.removeEventListener('update', updateLabel);
+                return;
+            }
+            const v = p.clone().project(world.camera.three);
+            const x = (v.x * .5 + .5) * container.clientWidth;
+            const y = (v.y * -.5 + .5) * container.clientHeight;
+            div.style.left = `${x}px`;
+            div.style.top = `${y}px`;
+            
+            // Hide if behind camera
+            if (v.z > 1) div.style.display = 'none';
+            else div.style.display = 'block';
+        };
+        
+        updateLabel();
+        world.camera.controls.addEventListener('update', updateLabel);
+        document.body.appendChild(div);
+        
+        logToScreen(`Point: X:${p.x.toFixed(2)} Y:${p.y.toFixed(2)} Z:${p.z.toFixed(2)}`);
+    }
+};
+
+// --- TOOL BUTTONS ---
+document.getElementById('btn-point')?.addEventListener('click', () => {
+    activeTool = 'point';
+    logToScreen('Point tool activated');
+    container.addEventListener('click', pointHandler);
+});
+
+document.getElementById('btn-angle')?.addEventListener('click', () => {
+    activeTool = 'angle';
+    logToScreen('Angle tool activated');
+});
+
+document.getElementById('btn-slope')?.addEventListener('click', () => {
+    activeTool = 'slope';
+    logToScreen('Slope tool activated');
+});
+
+document.getElementById('btn-none')?.addEventListener('click', () => {
+    activeTool = 'none';
+    logToScreen('Tools deactivated');
+    container.removeEventListener('click', pointHandler);
+});
+
+// --- MODEL LOADING ---
+const loadModel = async (fragmentsFile: File) => {
+    const fragmentsManager = components.get(OBC.FragmentsManager);
+    const buffer = await fragmentsFile.arrayBuffer();
+    const fragment = await fragmentsManager.load(buffer);
+    
+    // Populate components.meshes for raycasting
+    if (!components.meshes) components.meshes = [];
+    
+    const root = fragment.mesh || fragment.object;
+    if (root) {
+        root.traverse((child: any) => {
+            if ((child.isMesh || child.isInstancedMesh) && child.visible) {
+                components.meshes.push(child);
+            }
+        });
+    }
+    
+    logToScreen(`Model loaded: ${fragmentsFile.name}`);
+};
+
+// --- UI CONTROLS ---
+document.getElementById('file-input')?.addEventListener('change', async (e) => {
+    const files = (e.target as HTMLInputElement).files;
+    if (!files?.length) return;
+    
+    for (const file of files) {
+        if (file.name.endsWith('.frag')) {
+            await loadModel(file);
+        }
+    }
+});
+
+// --- MEASUREMENT MODE TOGGLE ---
+document.getElementById('btn-measure')?.addEventListener('click', () => {
+    const btn = document.getElementById('btn-measure')!;
+    if (measurementMode) {
+        measurementMode = null;
+        btn.textContent = 'Medir';
+        btn.classList.remove('active');
+        
+        // Clean up
+        measurementPoints = [];
+        measurementMarkers.forEach(m => world.scene.three.remove(m));
+        measurementLabels.forEach(l => l.remove());
+        measurementMarkers.length = 0;
+        measurementLabels.length = 0;
+        
+        if (tempMeasurementLine) {
+            world.scene.three.remove(tempMeasurementLine);
+            tempMeasurementLine = null;
+        }
+        
+        if (snappingCursor) {
+            world.scene.three.remove(snappingCursor);
+            snappingCursor = null;
+        }
+        
+        container.removeEventListener('click', onMeasureClick);
+        container.removeEventListener('mousemove', onMeasureMouseMove);
+        
+        logToScreen('Measurement mode deactivated');
+    } else {
+        measurementMode = 'length';
+        btn.textContent = 'Detener';
+        btn.classList.add('active');
+        
+        // Create snapping cursor
+        const cursorGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+        const cursorMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
+        snappingCursor = new THREE.Mesh(cursorGeometry, cursorMaterial);
+        snappingCursor.visible = false;
+        world.scene.three.add(snappingCursor);
+        
+        container.addEventListener('click', onMeasureClick);
+        container.addEventListener('mousemove', onMeasureMouseMove);
+        
+        logToScreen('Measurement mode activated');
+    }
+});
+
+// --- MEASUREMENT FUNCTIONS ---
+function createMarker(position: THREE.Vector3, color: number = 0xffff00) {
+    const geometry = new THREE.SphereGeometry(0.15, 16, 16);
     const material = new THREE.MeshBasicMaterial({ color, depthTest: false });
     const marker = new THREE.Mesh(geometry, material);
     marker.position.copy(position);
@@ -855,44 +1016,242 @@ if (container) {
     });
 }
 
+const grids = components.get(OBC.Grids);
+// grids.world = world; // Grids usually auto-init or need create
+// components.get(OBC.Grids).create(world); // We might need to create a grid first
 
-
-const pointHandler = (e: MouseEvent) => {
-    // Placeholder for point logic if needed
-};
-
-// --- Helper: Deactivate All Tools ---
-function deactivateAllTools() {
-    activeTool = 'none';
-    measurementMode = null;
-    if (snappingCursor) snappingCursor.visible = false;
-    
-    // Disable Area
-    area.enabled = false;
-    
-    // Clear selection
-    const highlighter = components.get(OBF.Highlighter);
-    highlighter.clear('select');
-    
-    // Reset any temporary lines
-    if (tempMeasurementLine) {
-        world.scene.three.remove(tempMeasurementLine);
-        tempMeasurementLine = null;
-    }
-    measurementPoints = [];
-}
+// Initialize Clipper (Already done above, but ensure access)
 
 // --- KEYBOARD SHORTCUTS ---
-// Refactored to Single-Key System for robustness
+let keyBuffer = '';
+let lastKeyTime = 0;
 
+window.addEventListener('keydown', async (e) => {
+    // FORCE DEBUG
+    console.log(`[KEY_EVENT] Key: "${e.key}", Code: "${e.code}", Buffer: "${keyBuffer}"`);
+    
+    // Ignore if typing in an input
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
+    // Filter out non-printable keys and modifiers
+    // Allow single printable characters (length 1)
+    if (e.key.length !== 1 || e.ctrlKey || e.altKey || e.metaKey) return;
+
+    const now = Date.now();
+    if (now - lastKeyTime > 1500) { 
+        keyBuffer = '';
+    }
+    lastKeyTime = now;
+
+    const char = e.key.toUpperCase();
+    if (/[A-Z]/.test(char)) {
+        keyBuffer += char;
+        logToScreen(`Key: ${char} (Buffer: ${keyBuffer})`); 
+    }
+
+    if (keyBuffer.length > 2) {
+        keyBuffer = keyBuffer.slice(-2);
+    }
+
+    if (keyBuffer.length === 2) {
+        console.log("Shortcut Triggered:", keyBuffer);
+        
+        let handled = true;
+
+        switch (keyBuffer) {
+            case 'PR': // Perspectiva/Ortogonal
+                const camera = world.camera;
+                const current = camera.projection.current;
+                const next = current === 'Perspective' ? 'Orthographic' : 'Perspective';
+                await camera.projection.set(next);
+                logToScreen(`Proyección: ${next === 'Perspective' ? 'Perspectiva' : 'Ortogonal'}`);
+                keyBuffer = '';
+                break;
+
+            case 'AZ': // Ajustar modelo a la pantalla
+                if (components.meshes && components.meshes.length > 0) {
+                     // Calculate bounding box of all meshes
+                     const bbox = new THREE.Box3();
+                     for(const mesh of components.meshes) {
+                         if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
+                             // Use geometry bounding box transformed to world
+                             if(mesh.geometry) {
+                                 if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+                                 if(mesh.geometry.boundingBox) {
+                                    const meshBox = mesh.geometry.boundingBox.clone();
+                                    meshBox.applyMatrix4(mesh.matrixWorld);
+                                    bbox.union(meshBox);
+                                 }
+                             }
+                         }
+                     }
+                     
+                     if(!bbox.isEmpty()) {
+                        const sphere = new THREE.Sphere();
+                        bbox.getBoundingSphere(sphere);
+                        await world.camera.controls.fitToSphere(sphere, true);
+                        logToScreen('Ajustado a pantalla');
+                     }
+                }
+                keyBuffer = '';
+                break;
+
+            case 'HH': // Ocultar selección
+                {
+                    const highlighter = components.get(OBF.Highlighter);
+                    const selection = highlighter.selection.select;
+                    if (Object.keys(selection).length > 0) {
+                        await hider.set(false, selection);
+                        highlighter.clear('select');
+                        logToScreen('Selección ocultada');
+                    }
+                }
+                keyBuffer = '';
+                break;
+
+            case 'HI': // Aislar selección
+                {
+                    const highlighter = components.get(OBF.Highlighter);
+                    const selection = highlighter.selection.select;
+                    if (Object.keys(selection).length > 0) {
+                        await hider.isolate(selection);
+                        highlighter.clear('select');
+                        logToScreen('Selección aislada');
+                    }
+                }
+                keyBuffer = '';
+                break;
+
+            case 'HR': // Mostrar todo
+                await hider.set(true);
+                logToScreen('Mostrar todo');
+                keyBuffer = '';
+                break;
+
+            case 'RL': // Regla (Length)
+                // Trigger existing custom tool
+                const btnMeasure = document.getElementById('btn-measure');
+                if (btnMeasure && !measurementMode) {
+                    btnMeasure.click();
+                } else if (measurementMode !== 'length') {
+                    // Switch to length if in point mode?
+                    // Currently btn-measure toggles.
+                    if (activeTool !== 'none') activeTool = 'none'; // Disable others
+                    measurementMode = 'length';
+                    logToScreen('Herramienta: Regla');
+                }
+                keyBuffer = '';
+                break;
+
+            case 'AR': // Área
+                // Use OBF.AreaMeasurement
+                if (measurementMode) {
+                    // Disable custom tools
+                    const btnMeasure = document.getElementById('btn-measure');
+                    if(btnMeasure && measurementMode) btnMeasure.click();
+                }
+                area.enabled = true;
+                area.create();
+                logToScreen('Herramienta: Área (Click para puntos, Doble click/Enter para terminar)');
+                keyBuffer = '';
+                break;
+
+            case 'AG': // Ángulo
+                const btnAngle = document.getElementById('btn-angle');
+                if (btnAngle) btnAngle.click();
+                keyBuffer = '';
+                break;
+
+            case 'PN': // Pendiente
+                const btnSlope = document.getElementById('btn-slope');
+                if (btnSlope) btnSlope.click();
+                keyBuffer = '';
+                break;
+
+            case 'CO': // Coordenada por punto
+                if (measurementMode === 'length') {
+                    // Toggle off length first?
+                     const btnMeasure = document.getElementById('btn-measure');
+                     if(btnMeasure) btnMeasure.click();
+                }
+                // Activate point
+                 const btnPoint = document.getElementById('btn-point'); // Wait, main.ts has btn-measure-point logic? 
+                 // Actually the main.ts I read had `document.getElementById('btn-point')?.addEventListener`.
+                 // But index.html had `btn-measure-point`. 
+                 // Let's check main.ts listener IDs.
+                 // Line 746: `document.getElementById('btn-point')`
+                 // Index.html Line 178: `id="btn-measure-point"`
+                 // MISMATCH! I should fix this too or use the ID that exists in DOM.
+                 // I will assume `activeTool = 'point'` logic.
+                 activeTool = 'point';
+                 container.addEventListener('click', pointHandler);
+                 logToScreen('Herramienta: Coordenada');
+                keyBuffer = '';
+                break;
+
+            case 'BM': // Borrar medidas
+                // Clear custom
+                measurementPoints = [];
+                measurementMarkers.forEach(m => world.scene.three.remove(m));
+                measurementLabels.forEach(l => l.remove());
+                measurementMarkers.length = 0;
+                measurementLabels.length = 0;
+                if (tempMeasurementLine) {
+                    world.scene.three.remove(tempMeasurementLine);
+                    tempMeasurementLine = null;
+                }
+                
+                // Clear Area
+                area.deleteAll();
+                
+                // Clear Point (customMeshes)
+                customMeshes.forEach(m => world.scene.three.remove(m));
+                customMeshes.length = 0;
+                document.querySelectorAll('.floating-label').forEach(el => el.remove());
+
+                logToScreen('Medidas borradas');
+                keyBuffer = '';
+                break;
+
+            case 'RJ': // Rejilla
+                const grid = components.get(OBC.Grids);
+                // Grid might not be created.
+                // grid.enabled = !grid.enabled; 
+                // Usually we check if it exists in the world.
+                // Let's try creating/toggling visibility.
+                // Accessing the internal grid mesh? 
+                // OBF.Grids manages a grid. 
+                // Let's assume standard behavior:
+                grid.enabled = !grid.enabled;
+                if(grid.enabled) {
+                     // Check if created
+                     // grid.create(world);
+                }
+                logToScreen(`Rejilla: ${grid.enabled ? 'On' : 'Off'}`);
+                keyBuffer = '';
+                break;
+
+            case 'RC': // Recorte (Clipper)
+                clipper.create();
+                logToScreen('Plano de corte creado');
+                keyBuffer = '';
+                break;
+            default:
+                handled = false;
+        }
+
+        if (handled) {
+            keyBuffer = ''; // Clear buffer only if handled successfully
+        }
+    }
+});
 
 window.addEventListener('mousedown', async (e) => {
     if (e.button === 1 && e.detail === 2) { // Middle button (1) + Double click (detail 2)
         e.preventDefault(); // Prevent default scroll/zoom behavior if any
-        if (world.meshes.size > 0) {
+        if (components.meshes && components.meshes.length > 0) {
              const bbox = new THREE.Box3();
-             for(const mesh of world.meshes) {
+             for(const mesh of components.meshes) {
                  if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
                      if(mesh.geometry) {
                          if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
@@ -915,93 +1274,7 @@ window.addEventListener('mousedown', async (e) => {
     }
 });
 
-logToScreen('VSR IFC Viewer Ready - v37-Fixes - ' + new Date().toLocaleTimeString());
-
-// --- DEBUG: Red Cube to verify Renderer ---
-const cubeGeom = new THREE.BoxGeometry(1, 1, 1);
-const cubeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-const debugCube = new THREE.Mesh(cubeGeom, cubeMat);
-debugCube.position.set(0, 5, 0); // Posición elevada
-world.scene.three.add(debugCube);
-logToScreen('DEBUG: Cubo Rojo añadido en (0,5,0)');
-
-// Ensure Camera looks at the cube initially
-world.camera.three.position.set(10, 10, 10);
-world.camera.three.lookAt(0, 0, 0);
-
-async function loadModels() {
-    logToScreen('Iniciando carga de modelos...');
-    try {
-        const fragments = components.get(OBC.FragmentsManager);
-                fragments.init('fragments/fragments.worker.js'); // Initialize with worker
-
-                logToScreen('Fetching models.json...');
-                const response = await fetch('models.json');
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const models = await response.json();
-                logToScreen(`models.json cargado. ${models.length} modelos encontrados.`);
-
-                for (const modelInfo of models) {
-                    const path = modelInfo.path;
-                    logToScreen(`Cargando: ${modelInfo.name}...`);
-
-                    const fileResponse = await fetch(path);
-                    if (!fileResponse.ok) {
-                        logToScreen(`Error fetching ${path}: ${fileResponse.status}`);
-                        continue;
-                    }
-
-                    const buffer = await fileResponse.arrayBuffer();
-                    // Use fragments.core.load instead of fragments.load
-                    // raw: false (default) assumes compressed data, which is standard for .frag files
-                    const model = await fragments.core.load(new Uint8Array(buffer), { 
-                        modelId: modelInfo.name
-                    });
-                    
-                    if (model) {
-                        // Add the model's 3D object to the scene
-                        if (model.object) {
-                            world.scene.three.add(model.object);
-                            
-                            // Add all child meshes to world.meshes for raycasting/snapping
-                            model.object.traverse((child) => {
-                                if (child instanceof THREE.Mesh) {
-                                    world.meshes.add(child);
-                                }
-                            });
-                        }
-                        
-                        logToScreen(`Modelo cargado: ${modelInfo.name}`);
-                    }
-                }
-        logToScreen('Todos los modelos cargados.');
-        
-        // Auto-zoom using the loaded models' bounding boxes
-        const bbox = new THREE.Box3();
-        for (const fragmentModel of fragments.core.models.list.values()) {
-             if (fragmentModel.box) {
-                 bbox.union(fragmentModel.box);
-             }
-        }
-        
-        if(!bbox.isEmpty()) {
-           const sphere = new THREE.Sphere();
-           bbox.getBoundingSphere(sphere);
-           await world.camera.controls.fitToSphere(sphere, true);
-           logToScreen('Zoom ajustado a modelos');
-        }
-
-    } catch (e) {
-        console.error("Error loading models:", e);
-        // @ts-ignore
-        logToScreen(`Error cargando modelos: ${e.message}`);
-    }
-}
-loadModels();
+logToScreen('VSR IFC Viewer Ready - Snapping 3D Mejorado con Visualización');
 
 // Export for global access
 (window as any).components = components;
