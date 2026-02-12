@@ -924,8 +924,13 @@ const loadModel = async (fragmentsFile: File) => {
 
 // --- UI CONTROLS ---
 document.getElementById('file-input')?.addEventListener('change', async (e) => {
-    const files = (e.target as HTMLInputElement).files;
+    const input = e.target as HTMLInputElement;
+    const files = input.files;
     if (!files?.length) return;
+    
+    // Remove focus from input so shortcuts work immediately
+    input.blur();
+    window.focus();
     
     for (const file of files) {
         if (file.name.endsWith('.frag')) {
