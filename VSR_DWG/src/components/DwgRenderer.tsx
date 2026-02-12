@@ -13,12 +13,11 @@ interface Props {
   isBlueprint: boolean
   calibration: Calibration | null
   onCalibrationComplete: (c: Calibration) => void
-  onDocInfo: (info: string) => void
   snapSettings: SnapSettings
 }
 
 const DwgRenderer: React.FC<Props> = ({
-  file, tool, showGrid, isBlueprint, calibration, onCalibrationComplete, onDocInfo, snapSettings
+  file, tool, showGrid, isBlueprint, calibration, onCalibrationComplete, snapSettings
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const controlsTargetRef = useRef<HTMLDivElement>(null)
@@ -546,7 +545,6 @@ const DwgRenderer: React.FC<Props> = ({
               camera.updateProjectionMatrix()
               controls?.target.set(center.x, center.y, 0)
               controls?.update()
-              onDocInfo(`DWG cargado. Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
             })(),
             new Promise((_, reject) => {
               loadTimeoutRef.current = window.setTimeout(() => reject(new Error('DWG_TIMEOUT')), 20000)
@@ -621,7 +619,6 @@ const DwgRenderer: React.FC<Props> = ({
               camera.updateProjectionMatrix()
               controls?.target.set(center.x, center.y, 0)
               controls?.update()
-              onDocInfo(`DXF cargado. Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
             }
           } else {
             console.error('No entity found in DXF data')
@@ -660,7 +657,6 @@ const DwgRenderer: React.FC<Props> = ({
               controls?.target.set(center.x, center.y, 0)
               controls?.update()
               setErrorMsg(null)
-              onDocInfo(`DXF cargado (viewer). Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
             }
           } catch (e) {
             console.error('Viewer loader failed', e)
@@ -704,7 +700,6 @@ const DwgRenderer: React.FC<Props> = ({
             controls?.target.set(center.x, center.y, 0)
             controls?.update()
             setErrorMsg(null)
-            onDocInfo(`DXF cargado (viewer). Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
             setLoading(false)
             URL.revokeObjectURL(url)
           } else {

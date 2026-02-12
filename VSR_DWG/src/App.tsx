@@ -52,7 +52,6 @@ const App: React.FC = () => {
   const [showGrid, setShowGrid] = useState(false)
   const [isBlueprint, setIsBlueprint] = useState(false)
   const [calibration, setCalibration] = useState<Calibration | null>(null)
-  const [docInfo, setDocInfo] = useState<string>('')
   const [snapSettings, setSnapSettings] = useState<SnapSettings>({
     enableEndpoint: true,
     enableMidpoint: true,
@@ -78,7 +77,6 @@ const App: React.FC = () => {
     if (f) {
       setFile(f)
       setCalibration(null)
-      setDocInfo('')
       setDownloadError(null)
     }
   }
@@ -122,7 +120,6 @@ const App: React.FC = () => {
       
       setFile(newFile)
       setCalibration(null)
-      setDocInfo('')
       setSelectedRepoFile(rf)
     } catch (err) {
       console.error(err)
@@ -368,16 +365,9 @@ const App: React.FC = () => {
               isBlueprint={isBlueprint}
               calibration={calibration}
               onCalibrationComplete={onCalibrationComplete}
-              onDocInfo={(info) => setDocInfo(info)}
               snapSettings={snapSettings}
             />
           </ErrorBoundary>
-        )}
-
-        {docInfo && (
-          <div className="absolute bottom-6 left-6 bg-slate-900/90 backdrop-blur border border-slate-700 px-4 py-2 rounded-xl z-40 shadow-2xl">
-            <span className="text-[11px] text-slate-300">{docInfo}</span>
-          </div>
         )}
       </div>
     </div>
