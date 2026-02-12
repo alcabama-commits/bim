@@ -805,7 +805,8 @@ document.getElementById('btn-none')?.addEventListener('click', () => {
 });
 
 // --- ADDITIONAL TOOL BUTTONS ---
-document.getElementById('projection-toggle')?.addEventListener('click', async () => {
+document.getElementById('projection-toggle')?.addEventListener('click', async (e) => {
+    (e.currentTarget as HTMLElement).blur(); // Release focus
     const camera = world.camera;
     const current = camera.projection.current;
     const next = current === 'Perspective' ? 'Orthographic' : 'Perspective';
@@ -813,7 +814,8 @@ document.getElementById('projection-toggle')?.addEventListener('click', async ()
     logToScreen(`Proyección: ${next === 'Perspective' ? 'Perspectiva' : 'Ortogonal'}`);
 });
 
-document.getElementById('fit-model-btn')?.addEventListener('click', async () => {
+document.getElementById('fit-model-btn')?.addEventListener('click', async (e) => {
+    (e.currentTarget as HTMLElement).blur();
     if (components.meshes && components.meshes.length > 0) {
         const bbox = new THREE.Box3();
         for(const mesh of components.meshes) {
@@ -837,7 +839,8 @@ document.getElementById('fit-model-btn')?.addEventListener('click', async () => 
     }
 });
 
-document.getElementById('btn-hide')?.addEventListener('click', async () => {
+document.getElementById('btn-hide')?.addEventListener('click', async (e) => {
+    (e.currentTarget as HTMLElement).blur();
     const hider = components.get(OBF.Hider);
     const highlighter = components.get(OBF.Highlighter);
     const selection = highlighter.selection.select;
@@ -848,7 +851,8 @@ document.getElementById('btn-hide')?.addEventListener('click', async () => {
     }
 });
 
-document.getElementById('btn-isolate')?.addEventListener('click', async () => {
+document.getElementById('btn-isolate')?.addEventListener('click', async (e) => {
+    (e.currentTarget as HTMLElement).blur();
     const hider = components.get(OBF.Hider);
     const highlighter = components.get(OBF.Highlighter);
     const selection = highlighter.selection.select;
@@ -859,25 +863,29 @@ document.getElementById('btn-isolate')?.addEventListener('click', async () => {
     }
 });
 
-document.getElementById('btn-show-all')?.addEventListener('click', async () => {
+document.getElementById('btn-show-all')?.addEventListener('click', async (e) => {
+    (e.currentTarget as HTMLElement).blur();
     const hider = components.get(OBF.Hider);
     await hider.set(true);
     logToScreen('Mostrar todo');
 });
 
-document.getElementById('grid-toggle')?.addEventListener('click', () => {
+document.getElementById('grid-toggle')?.addEventListener('click', (e) => {
+    (e.currentTarget as HTMLElement).blur();
     const grid = components.get(OBC.Grids);
     grid.enabled = !grid.enabled;
     logToScreen(`Rejilla: ${grid.enabled ? 'On' : 'Off'}`);
 });
 
-document.getElementById('clipper-toggle')?.addEventListener('click', () => {
+document.getElementById('clipper-toggle')?.addEventListener('click', (e) => {
+    (e.currentTarget as HTMLElement).blur();
     const clipper = components.get(OBC.Clipper);
     clipper.create();
     logToScreen('Plano de corte creado');
 });
 
-document.getElementById('btn-measure-delete')?.addEventListener('click', () => {
+document.getElementById('btn-measure-delete')?.addEventListener('click', (e) => {
+    (e.currentTarget as HTMLElement).blur();
     // Clear custom
     measurementPoints = [];
     measurementMarkers.forEach(m => world.scene.three.remove(m));
@@ -1179,7 +1187,7 @@ window.addEventListener('keydown', async (e) => {
     if (e.key.length !== 1 || e.ctrlKey || e.altKey || e.metaKey) return;
 
     const now = Date.now();
-    if (now - lastKeyTime > 1500) { 
+    if (now - lastKeyTime > 2000) { 
         keyBuffer = '';
     }
     lastKeyTime = now;
@@ -1199,7 +1207,8 @@ window.addEventListener('keydown', async (e) => {
         
         let handled = true;
 
-        switch (keyBuffer) {
+        try {
+            switch (keyBuffer) {
             case 'PR': // Perspectiva/Ortogonal
                 const camera = world.camera;
                 const current = camera.projection.current;
@@ -1379,6 +1388,11 @@ window.addEventListener('keydown', async (e) => {
                 break;
             default:
                 handled = false;
+            }
+        } catch (err) {
+            console.error("Error executing shortcut:", err);
+            logToScreen(`Error: ${err}`);
+            handled = true;
         }
 
         if (handled) {
