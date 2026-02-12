@@ -128,9 +128,9 @@ const components = new OBC.Components();
 const worlds = components.get(OBC.Worlds);
 const world = worlds.create();
 
-world.scene = new OBC.Scene(components);
-world.renderer = new OBC.Renderer(components, container);
-world.camera = new OBC.Camera(components);
+world.scene = new OBC.SimpleScene(components);
+world.renderer = new OBC.SimpleRenderer(components, container);
+world.camera = new OBC.SimpleCamera(components);
 
 components.init();
 
