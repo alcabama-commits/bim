@@ -354,27 +354,7 @@ function createSnapMarker() {
     world.scene.three.add(snapLine);
 }
 
-// --- Debug Panel ---
-let debugPanel = document.getElementById('debug-panel');
-if (!debugPanel) {
-    debugPanel = document.createElement('div');
-    debugPanel.id = 'debug-panel';
-    debugPanel.style.position = 'fixed';
-    debugPanel.style.bottom = '10px';
-    debugPanel.style.left = '50%';
-    debugPanel.style.transform = 'translateX(-50%)';
-    debugPanel.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-    debugPanel.style.color = 'white';
-    debugPanel.style.padding = '10px 20px';
-    debugPanel.style.borderRadius = '5px';
-    debugPanel.style.zIndex = '1000';
-    debugPanel.style.pointerEvents = 'none';
-    debugPanel.style.fontFamily = 'sans-serif';
-    debugPanel.style.fontSize = '14px';
-    debugPanel.style.transition = 'opacity 0.5s';
-    document.body.appendChild(debugPanel);
-}
-
+// --- Debug Panel Helper ---
 let debugTimeout: any;
 const logToScreen = (msg: string) => {
     if (debugPanel) {
