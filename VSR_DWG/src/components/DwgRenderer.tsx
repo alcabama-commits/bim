@@ -15,10 +15,11 @@ interface Props {
   onCalibrationComplete: (c: Calibration) => void
   onDocInfo: (info: string) => void
   snapSettings: SnapSettings
+  isDarkMode: boolean
 }
 
 const DwgRenderer: React.FC<Props> = ({
-  file, tool, showGrid, isBlueprint, calibration, onCalibrationComplete, onDocInfo, snapSettings
+  file, tool, showGrid, isBlueprint, calibration, onCalibrationComplete, onDocInfo, snapSettings, isDarkMode
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const controlsTargetRef = useRef<HTMLDivElement>(null)
@@ -209,7 +210,8 @@ const DwgRenderer: React.FC<Props> = ({
     const r = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true })
     r.setPixelRatio(window.devicePixelRatio)
     r.setSize(containerRef.current?.clientWidth || 800, containerRef.current?.clientHeight || 600)
-    r.setClearColor(0xf8fafc, 1)
+    // Initial color set based on prop, but useEffect below handles updates
+    r.setClearColor(isDarkMode ? 0x0f172a : 0xf8fafc, 1)
     setRenderer(r)
 
     camera.position.set(0, 0, 10)
@@ -314,20 +316,40 @@ const DwgRenderer: React.FC<Props> = ({
 
       const updateMat = (m: any) => {
         if (m.color) {
-          // Special case: Pure white -> Black (for light bg)
-          if (m.color.getHex() === 0xffffff) {
-            m.color.setHex(0x000000)
-            return
-          }
+          if (isDarkMode) {
+            // DARK MODE LOGIC
+            // Special case: Pure black -> White (for dark bg)
+            if (m.color.getHex() === 0x000000 || m.color.getHex() === 0x1e293b) {
+              m.color.setHex(0xffffff)
+              return
+            }
 
-          // Ensure visibility: Darken light colors
-          const hsl = { h: 0, s: 0, l: 0 }
-          m.color.getHSL(hsl)
-          
-          // If lightness is too high (light), darken it
-          // This ensures visibility on light background
-          if (hsl.l > 0.65) {
-            m.color.setHSL(hsl.h, hsl.s, 0.4)
+            // Ensure visibility: Lighten dark colors
+            const hsl = { h: 0, s: 0, l: 0 }
+            m.color.getHSL(hsl)
+            
+            // If lightness is too low (dark), lighten it
+            // This ensures visibility on dark background
+            if (hsl.l < 0.3) {
+              m.color.setHSL(hsl.h, hsl.s, 0.7)
+            }
+          } else {
+            // LIGHT MODE LOGIC
+            // Special case: Pure white -> Black (for light bg)
+            if (m.color.getHex() === 0xffffff) {
+              m.color.setHex(0x000000)
+              return
+            }
+
+            // Ensure visibility: Darken light colors
+            const hsl = { h: 0, s: 0, l: 0 }
+            m.color.getHSL(hsl)
+            
+            // If lightness is too high (light), darken it
+            // This ensures visibility on light background
+            if (hsl.l > 0.65) {
+              m.color.setHSL(hsl.h, hsl.s, 0.4)
+            }
           }
         }
       }
@@ -339,14 +361,20 @@ const DwgRenderer: React.FC<Props> = ({
       }
     }
 
+    // Update background color
+    renderer.setClearColor(isDarkMode ? 0x0f172a : 0xf8fafc, 1) // slate-950 vs gray-50
+
     if (isBlueprint) {
       renderer.domElement.style.filter = 'invert(1) hue-rotate(180deg) brightness(1.1) contrast(1.25)'
+      // In blueprint mode, we might want specific contrast handling too, but usually invert handles it.
+      // However, if we change materials for dark mode, invert might flip them back to dark.
+      // Let's rely on standard contrast first, then invert.
       entityRoot.traverse(ensureContrast)
     } else {
       renderer.domElement.style.filter = ''
       entityRoot.traverse(ensureContrast)
     }
-  }, [isBlueprint, renderer, entityRoot])
+  }, [isBlueprint, isDarkMode, renderer, entityRoot])
 
   useEffect(() => {
     if (!renderer || !showGrid) return

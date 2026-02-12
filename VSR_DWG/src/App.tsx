@@ -67,11 +67,19 @@ const App: React.FC = () => {
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({})
+  const [isDarkMode, setIsDarkMode] = useState(true)
 
   // Load files on mount
   React.useEffect(() => {
     loadRepoFiles()
-  }, [])
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [isDarkMode])
+
+  const toggleTheme = () => setIsDarkMode(!isDarkMode)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
@@ -146,11 +154,11 @@ const App: React.FC = () => {
   }, [])
 
   return (
-    <div className="flex h-screen w-full bg-gray-50 text-gray-800 overflow-hidden select-none font-sans">
+    <div className="flex h-screen w-full bg-gray-50 dark:bg-slate-950 text-gray-800 dark:text-slate-200 overflow-hidden select-none font-sans">
       {/* Sidebar */}
-      <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} bg-white border-r border-gray-200 transition-all duration-300 flex flex-col overflow-hidden relative shadow-sm z-20`}>
-        <div className="h-14 flex items-center justify-between px-4 border-b border-gray-100 shrink-0">
-          <span className="text-sm font-bold uppercase tracking-wider text-gray-500">Galería</span>
+      <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-800 transition-all duration-300 flex flex-col overflow-hidden relative shadow-sm z-20`}>
+        <div className="h-14 flex items-center justify-between px-4 border-b border-gray-100 dark:border-slate-800 shrink-0">
+          <span className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">Galería</span>
           <button onClick={() => setIsSidebarOpen(false)} className="text-gray-400 hover:text-alcabama transition-colors">
             <i className="fa-solid fa-chevron-left"></i>
           </button>
@@ -176,7 +184,7 @@ const App: React.FC = () => {
               <div key={folder} className="mb-4">
                 <button 
                   onClick={() => toggleFolder(folder)}
-                  className="w-full text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2 px-2 flex items-center justify-between sticky top-0 bg-white py-1 z-10 border-b border-gray-100 hover:text-alcabama transition-colors"
+                  className="w-full text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider mb-2 px-2 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 py-1 z-10 border-b border-gray-100 dark:border-slate-800 hover:text-alcabama transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <i className={`fa-regular ${collapsedFolders[folder] ? 'fa-folder' : 'fa-folder-open'} text-gray-400`}></i>
@@ -192,13 +200,13 @@ const App: React.FC = () => {
                       onClick={() => selectRepoFile(rf)}
                       className={`w-full text-left p-2.5 rounded-lg border transition group flex flex-col gap-1
                         ${selectedRepoFile?.filename === rf.filename 
-                          ? 'bg-alcabama/5 border-alcabama/30' 
-                          : 'bg-white border-gray-100 hover:bg-gray-50 hover:border-alcabama/30'
+                          ? 'bg-alcabama/5 border-alcabama/30 dark:bg-alcabama/10 dark:border-alcabama/50' 
+                          : 'bg-white dark:bg-slate-800 border-gray-100 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 hover:border-alcabama/30'
                         }`}
                     >
                       <div className="flex items-center gap-2">
                         <i className={`fa-regular fa-file-lines text-xs ${selectedRepoFile?.filename === rf.filename ? 'text-alcabama' : 'text-gray-400 group-hover:text-alcabama'}`}></i>
-                        <span className={`text-xs font-medium truncate ${selectedRepoFile?.filename === rf.filename ? 'text-alcabama' : 'text-gray-600 group-hover:text-gray-900'}`}>
+                        <span className={`text-xs font-medium truncate ${selectedRepoFile?.filename === rf.filename ? 'text-alcabama' : 'text-gray-600 dark:text-slate-300 group-hover:text-gray-900 dark:group-hover:text-white'}`}>
                           {rf.name}
                         </span>
                       </div>
@@ -215,7 +223,7 @@ const App: React.FC = () => {
           )}
         </div>
 
-        <div className="p-4 border-t border-gray-100 bg-gray-50/50 flex flex-col gap-4">
+        <div className="p-4 border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 flex flex-col gap-4">
           <label className="cursor-pointer bg-alcabama hover:bg-pink-700 text-white px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition active:scale-95 flex items-center justify-center gap-2 w-full shadow-sm">
             <i className="fa-solid fa-upload"></i>
             <span>Subir Archivo</span>
@@ -224,7 +232,7 @@ const App: React.FC = () => {
           
           <div className="flex justify-center mt-2">
              <img 
-               src="https://i.postimg.cc/fRJ4M9Mp/LOGO-BIM.png" 
+               src={isDarkMode ? "https://i.postimg.cc/ZnmQywXc/LOGO-BIM-BLANCO.png" : "https://i.postimg.cc/fRJ4M9Mp/LOGO-BIM.png"}
                alt="BIM Department" 
                className="h-12 object-contain opacity-80 hover:opacity-100 transition-opacity"
              />
@@ -232,13 +240,13 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0 h-full relative bg-gray-100">
-        <header className="h-14 bg-white border-b border-gray-200 px-4 flex items-center justify-between z-30 shadow-sm">
+      <div className="flex-1 flex flex-col min-w-0 h-full relative bg-gray-100 dark:bg-slate-950">
+        <header className="h-14 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-4 flex items-center justify-between z-30 shadow-sm">
           <div className="flex items-center gap-4">
             {!isSidebarOpen && (
               <button 
                 onClick={() => setIsSidebarOpen(true)}
-                className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-gray-400 hover:text-alcabama transition mr-2"
+                className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-alcabama transition mr-2"
                 title="Mostrar Galería"
               >
                 <i className="fa-solid fa-bars"></i>
@@ -246,64 +254,67 @@ const App: React.FC = () => {
             )}
             <div className="flex items-center gap-2">
               <img 
-                src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente_negro.png" 
+                src={isDarkMode ? "https://i.postimg.cc/0yDgcyBp/Logo-transparente_blanco.png" : "https://i.postimg.cc/GmWLmfZZ/Logo-transparente_negro.png"}
                 alt="Alcabama" 
                 className="h-8 object-contain"
               />
             </div>
-            {file && <div className="h-6 w-px bg-gray-200 mx-2"></div>}
-            {file && <span className="text-xs text-gray-500 font-mono truncate max-w-[200px]">{file.name}</span>}
+            {file && <div className="h-6 w-px bg-gray-200 dark:bg-slate-700 mx-2"></div>}
+            {file && <span className="text-xs text-gray-500 dark:text-slate-400 font-mono truncate max-w-[200px]">{file.name}</span>}
           </div>
 
           <div className="flex items-center gap-1">
-            <div className="flex bg-gray-100 rounded p-1 border border-gray-200 mr-4">
+            <div className="flex bg-gray-100 dark:bg-slate-800 rounded p-1 border border-gray-200 dark:border-slate-700 mr-4">
               <button 
                 onClick={() => setActiveTool('hand')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'hand' ? 'bg-white text-alcabama shadow-sm' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'hand' ? 'bg-white dark:bg-slate-700 text-alcabama shadow-sm' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-slate-200'}`}
                 title="Mano (Pan)"
               >
                 <i className="fa-solid fa-hand-pointer text-xs"></i>
               </button>
               <button 
                 onClick={() => setActiveTool('measure')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'measure' ? 'bg-white text-alcabama shadow-sm' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'measure' ? 'bg-white dark:bg-slate-700 text-alcabama shadow-sm' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-slate-200'}`}
                 title="Medir"
               >
                 <i className="fa-solid fa-ruler text-xs"></i>
               </button>
               <button 
                 onClick={() => setActiveTool('area')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'area' ? 'bg-white text-alcabama shadow-sm' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'area' ? 'bg-white dark:bg-slate-700 text-alcabama shadow-sm' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-slate-200'}`}
                 title="Área"
               >
                 <i className="fa-solid fa-draw-polygon text-xs"></i>
               </button>
               <button 
                 onClick={() => setActiveTool('dimension')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'dimension' ? 'bg-white text-alcabama shadow-sm' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'dimension' ? 'bg-white dark:bg-slate-700 text-alcabama shadow-sm' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-slate-200'}`}
                 title="Cotas"
               >
                 <i className="fa-solid fa-ruler-combined text-xs"></i>
               </button>
               <button 
                 onClick={() => setActiveTool('calibrate')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'calibrate' ? 'bg-alcabama text-white shadow-sm' : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'calibrate' ? 'bg-alcabama text-white shadow-sm' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700 hover:text-gray-700 dark:hover:text-slate-200'}`}
                 title="Calibrar Escala"
               >
                 <i className="fa-solid fa-arrows-left-right-to-line text-xs"></i>
               </button>
             </div>
 
-            <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded transition ${showGrid ? 'text-alcabama bg-alcabama/10' : 'text-gray-400 hover:bg-gray-100'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
-            <button onClick={() => setIsBlueprint(!isBlueprint)} className={`w-8 h-8 rounded transition ${isBlueprint ? 'text-alcabama bg-alcabama/10' : 'text-gray-400 hover:bg-gray-100'}`} title="Modo Blueprint"><i className="fa-solid fa-eye-slash text-xs"></i></button>
+            <button onClick={toggleTheme} className="w-8 h-8 rounded transition text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-alcabama" title={isDarkMode ? "Modo Claro" : "Modo Oscuro"}>
+              <i className={`fa-solid ${isDarkMode ? 'fa-sun' : 'fa-moon'} text-xs`}></i>
+            </button>
+            <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded transition ${showGrid ? 'text-alcabama bg-alcabama/10' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
+            <button onClick={() => setIsBlueprint(!isBlueprint)} className={`w-8 h-8 rounded transition ${isBlueprint ? 'text-alcabama bg-alcabama/10' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800'}`} title="Modo Blueprint"><i className="fa-solid fa-eye-slash text-xs"></i></button>
             
-            <div className="hidden md:flex items-center gap-2 ml-4 px-3 py-1.5 rounded bg-gray-50 border border-gray-200">
+            <div className="hidden md:flex items-center gap-2 ml-4 px-3 py-1.5 rounded bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700">
               <span className="text-[10px] text-gray-400 font-medium">SNAP</span>
-              <label className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer hover:text-alcabama transition-colors">
+              <label className="flex items-center gap-1.5 text-[10px] text-gray-600 dark:text-slate-300 cursor-pointer hover:text-alcabama transition-colors">
                 <input type="checkbox" className="accent-alcabama" checked={snapSettings.enableEndpoint} onChange={(e) => setSnapSettings(s => ({ ...s, enableEndpoint: e.target.checked }))} />
                 <span>End</span>
               </label>
-              <label className="flex items-center gap-1.5 text-[10px] text-gray-600 cursor-pointer hover:text-alcabama transition-colors">
+              <label className="flex items-center gap-1.5 text-[10px] text-gray-600 dark:text-slate-300 cursor-pointer hover:text-alcabama transition-colors">
                 <input type="checkbox" className="accent-alcabama" checked={snapSettings.enableMidpoint} onChange={(e) => setSnapSettings(s => ({ ...s, enableMidpoint: e.target.checked }))} />
                 <span>Mid</span>
               </label>
@@ -311,7 +322,7 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <main className="flex-1 relative overflow-hidden bg-white">
+        <main className="flex-1 relative overflow-hidden bg-white dark:bg-slate-950">
           {file ? (
             <ErrorBoundary>
               <DwgRenderer 
@@ -323,6 +334,7 @@ const App: React.FC = () => {
                 onCalibrationComplete={onCalibrationComplete}
                 onDocInfo={setDocInfo}
                 snapSettings={snapSettings}
+                isDarkMode={isDarkMode}
               />
               {/* Overlay Controls / Info */}
               <div className="absolute bottom-4 left-4 pointer-events-none flex flex-col gap-2">
