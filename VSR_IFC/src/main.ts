@@ -128,9 +128,9 @@ const components = new OBC.Components();
 const worlds = components.get(OBC.Worlds);
 const world = worlds.create();
 
-world.scene = new OBC.Scene(components);
-world.renderer = new OBC.Renderer(components, container);
-world.camera = new OBC.Camera(components);
+world.scene = new OBC.SimpleScene(components);
+world.renderer = new OBC.SimpleRenderer(components, container);
+world.camera = new OBC.SimpleCamera(components);
 
 components.init();
 
@@ -703,7 +703,7 @@ const grids = components.get(OBC.Grids);
 // components.get(OBC.Grids).create(world); // We might need to create a grid first
 
 // Initialize Clipper (Already done above, but ensure access)
-const clipper = components.get(OBF.Clipper);
+const clipper = components.get(OBC.Clipper);
 clipper.enabled = true;
 
 const hider = components.get(OBC.Hider);
