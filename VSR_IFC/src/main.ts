@@ -1018,20 +1018,30 @@ window.addEventListener('keydown', async (e) => {
     // Ignore if typing in an input
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
+    // Filter out non-printable keys and modifiers
+    if (e.key.length !== 1 || e.ctrlKey || e.altKey || e.metaKey) return;
+
     const now = Date.now();
-    if (now - lastKeyTime > 1000) {
+    if (now - lastKeyTime > 1500) { // Increased timeout to 1.5s
         keyBuffer = '';
     }
     lastKeyTime = now;
 
-    keyBuffer += e.key.toUpperCase();
+    const char = e.key.toUpperCase();
+    if (/[A-Z]/.test(char)) {
+        keyBuffer += char;
+        logToScreen(`Key: ${char} (Buffer: ${keyBuffer})`); // Visual feedback
+    }
+
     if (keyBuffer.length > 2) {
         keyBuffer = keyBuffer.slice(-2);
     }
 
     if (keyBuffer.length === 2) {
-        // console.log("Shortcut Buffer:", keyBuffer);
+        console.log("Shortcut Triggered:", keyBuffer);
         
+        let handled = true;
+
         switch (keyBuffer) {
             case 'PR': // Perspectiva/Ortogonal
                 const camera = world.camera;
@@ -1210,6 +1220,12 @@ window.addEventListener('keydown', async (e) => {
                 logToScreen('Plano de corte creado');
                 keyBuffer = '';
                 break;
+            default:
+                handled = false;
+        }
+
+        if (handled) {
+            keyBuffer = ''; // Clear buffer only if handled successfully
         }
     }
 });
