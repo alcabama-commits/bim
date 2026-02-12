@@ -915,7 +915,7 @@ window.addEventListener('mousedown', async (e) => {
     }
 });
 
-logToScreen('VSR IFC Viewer Ready - v36-Fixes - ' + new Date().toLocaleTimeString());
+logToScreen('VSR IFC Viewer Ready - v37-Fixes - ' + new Date().toLocaleTimeString());
 
 // --- DEBUG: Red Cube to verify Renderer ---
 const cubeGeom = new THREE.BoxGeometry(1, 1, 1);
@@ -962,38 +962,38 @@ async function loadModels() {
                         modelId: modelInfo.name
                     });
                     
-                    // fragments.core.load adds it to the system, but we might need to add to world.meshes manually if not auto-added?
-                    // In v3, fragments usually handle their own meshes.
-                    // But core memories say: "Official tools (Length, Area, Highlighter) in OBC require explicit mesh registration to world.meshes"
                     if (model) {
-                        world.meshes.add(model);
+                        // Add the model's 3D object to the scene
+                        if (model.object) {
+                            world.scene.three.add(model.object);
+                            
+                            // Add all child meshes to world.meshes for raycasting/snapping
+                            model.object.traverse((child) => {
+                                if (child instanceof THREE.Mesh) {
+                                    world.meshes.add(child);
+                                }
+                            });
+                        }
+                        
                         logToScreen(`Modelo cargado: ${modelInfo.name}`);
                     }
                 }
         logToScreen('Todos los modelos cargados.');
         
-        // Auto-zoom to models
-         if (world.meshes.size > 0) {
-             const bbox = new THREE.Box3();
-             for(const mesh of world.meshes) {
-                 if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
-                     if(mesh.geometry) {
-                         if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-                         if(mesh.geometry.boundingBox) {
-                            const meshBox = mesh.geometry.boundingBox.clone();
-                            meshBox.applyMatrix4(mesh.matrixWorld);
-                            bbox.union(meshBox);
-                         }
-                     }
-                 }
+        // Auto-zoom using the loaded models' bounding boxes
+        const bbox = new THREE.Box3();
+        for (const fragmentModel of fragments.core.models.list.values()) {
+             if (fragmentModel.box) {
+                 bbox.union(fragmentModel.box);
              }
-             if(!bbox.isEmpty()) {
-                const sphere = new THREE.Sphere();
-                bbox.getBoundingSphere(sphere);
-                await world.camera.controls.fitToSphere(sphere, true);
-                logToScreen('Zoom ajustado a modelos');
-             }
-       }
+        }
+        
+        if(!bbox.isEmpty()) {
+           const sphere = new THREE.Sphere();
+           bbox.getBoundingSphere(sphere);
+           await world.camera.controls.fitToSphere(sphere, true);
+           logToScreen('Zoom ajustado a modelos');
+        }
 
     } catch (e) {
         console.error("Error loading models:", e);
