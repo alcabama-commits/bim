@@ -68,6 +68,15 @@ const App: React.FC = () => {
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({})
   const [isDarkMode, setIsDarkMode] = useState(true)
 
+  // Sync dark mode with HTML element
+  React.useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [isDarkMode])
+
   // Load files on mount
   React.useEffect(() => {
     loadRepoFiles()
