@@ -4,5 +4,6 @@ export default {
     "./src/**/*.{ts,tsx}",
   ],
   theme: { extend: {} },
+  darkMode: 'class',
   plugins: [],
 }

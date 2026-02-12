@@ -14,10 +14,11 @@ interface Props {
   calibration: Calibration | null
   onCalibrationComplete: (c: Calibration) => void
   snapSettings: SnapSettings
+  isDarkMode: boolean
 }
 
 const DwgRenderer: React.FC<Props> = ({
-  file, tool, showGrid, isBlueprint, calibration, onCalibrationComplete, snapSettings
+  file, tool, showGrid, isBlueprint, calibration, onCalibrationComplete, snapSettings, isDarkMode
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const controlsTargetRef = useRef<HTMLDivElement>(null)
@@ -204,11 +205,44 @@ const DwgRenderer: React.FC<Props> = ({
   }, [entityRoot])
 
   useEffect(() => {
+    if (renderer) {
+      renderer.setClearColor(isDarkMode ? 0x020617 : 0xf8fafc, 1)
+    }
+  }, [isDarkMode, renderer])
+
+  useEffect(() => {
+    if (!containerRef.current || !renderer) return
+
+    const resizeObserver = new ResizeObserver(() => {
+      const w = containerRef.current?.clientWidth || 800
+      const h = containerRef.current?.clientHeight || 600
+      renderer.setSize(w, h)
+      
+      const aspect = w / h
+      const frustumHeight = camera.top - camera.bottom
+      const frustumWidth = frustumHeight * aspect
+      
+      const cy = (camera.top + camera.bottom) / 2
+      const cx = (camera.left + camera.right) / 2
+      
+      camera.left = cx - frustumWidth / 2
+      camera.right = cx + frustumWidth / 2
+      camera.top = cy + frustumHeight / 2
+      camera.bottom = cy - frustumHeight / 2
+      
+      camera.updateProjectionMatrix()
+    })
+
+    resizeObserver.observe(containerRef.current)
+    return () => resizeObserver.disconnect()
+  }, [renderer, camera])
+
+  useEffect(() => {
     if (!canvasRef.current || renderer) return
     const r = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true })
     r.setPixelRatio(window.devicePixelRatio)
     r.setSize(containerRef.current?.clientWidth || 800, containerRef.current?.clientHeight || 600)
-    r.setClearColor(0x0b1220, 1)
+    r.setClearColor(isDarkMode ? 0x020617 : 0xf8fafc, 1)
     setRenderer(r)
 
     camera.position.set(0, 0, 10)
@@ -960,12 +994,12 @@ const DwgRenderer: React.FC<Props> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative flex-1 overflow-hidden bg-slate-900 h-full ${tool === 'hand' ? 'cursor-grab' : 'cursor-crosshair'}`}
+      className={`relative flex-1 overflow-hidden ${isDarkMode ? 'bg-slate-950' : 'bg-slate-50'} h-full ${tool === 'hand' ? 'cursor-grab' : 'cursor-crosshair'}`}
     >
       {/* Fit to View Button */}
       <button 
         onClick={fitToView}
-        className="absolute top-2 right-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded shadow-lg text-sm font-medium z-50 flex items-center gap-2"
+        className={`absolute top-2 right-2 ${isDarkMode ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-indigo-600 hover:bg-indigo-700'} text-white px-3 py-1.5 rounded shadow-lg text-sm font-medium z-50 flex items-center gap-2 transition-colors`}
         title="Centrar dibujo"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1004,8 +1038,12 @@ const DwgRenderer: React.FC<Props> = ({
         onClick={() => setShowInfo(!showInfo)}
         className={`absolute top-2 left-2 z-50 w-8 h-8 flex items-center justify-center rounded-lg transition-all border ${
           showInfo 
-            ? 'bg-slate-800 border-yellow-500/50 text-yellow-500 shadow-lg shadow-yellow-500/10' 
-            : 'bg-slate-900/50 border-transparent text-slate-600 hover:text-slate-400 hover:bg-slate-800'
+            ? isDarkMode 
+              ? 'bg-slate-800 border-indigo-500/50 text-indigo-400 shadow-lg shadow-indigo-500/10' 
+              : 'bg-indigo-50 border-indigo-200 text-indigo-600 shadow-lg shadow-indigo-500/10'
+            : isDarkMode
+              ? 'bg-slate-900/50 border-transparent text-slate-600 hover:text-slate-400 hover:bg-slate-800'
+              : 'bg-white/50 border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-100'
         }`}
         title="Información Técnica"
       >
@@ -1014,31 +1052,31 @@ const DwgRenderer: React.FC<Props> = ({
 
       {/* Debug Info Overlay */}
       {showInfo && (
-        <div className="absolute top-12 left-2 bg-slate-900/90 backdrop-blur border border-slate-700 text-slate-300 p-3 text-[10px] rounded-xl pointer-events-none z-50 shadow-2xl font-mono min-w-[180px]">
+        <div className={`absolute top-12 left-2 ${isDarkMode ? 'bg-slate-900/90 text-slate-300 border-slate-700' : 'bg-white/90 text-slate-600 border-slate-200'} backdrop-blur border p-3 text-[10px] rounded-xl pointer-events-none z-50 shadow-2xl font-mono min-w-[180px]`}>
           <div className="space-y-1">
-            <div className="flex justify-between border-b border-slate-800 pb-1 mb-1">
-              <span className="text-slate-500">Pos</span>
-              <span className="text-white">{debugInfo.pos || '0.00, 0.00'}</span>
+            <div className={`flex justify-between border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'} pb-1 mb-1`}>
+              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Pos</span>
+              <span className={isDarkMode ? 'text-white' : 'text-slate-900'}>{debugInfo.pos || '0.00, 0.00'}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Zoom</span>
-              <span className="text-yellow-500">{debugInfo.zoom}x</span>
+              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Zoom</span>
+              <span className="text-indigo-500">{debugInfo.zoom}x</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Snaps</span>
+              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Snaps</span>
               <span>{debugInfo.candidates} pts</span>
             </div>
             <div className="flex justify-between items-start gap-2">
-              <span className="text-slate-500 shrink-0">Objs</span>
+              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Objs</span>
               <span className="text-right leading-tight opacity-70 break-all">{debugStats || '-'}</span>
             </div>
-            <div className="flex justify-between border-t border-slate-800 pt-1 mt-1">
-              <span className="text-slate-500">Tool</span>
-              <span className="uppercase font-bold text-indigo-400">{tool}</span>
+            <div className={`flex justify-between border-t ${isDarkMode ? 'border-slate-800' : 'border-slate-100'} pt-1 mt-1`}>
+              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Tool</span>
+              <span className="uppercase font-bold text-indigo-500">{tool}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Status</span>
-              <span className={`${snap ? 'text-green-400' : 'text-slate-600'}`}>
+              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Status</span>
+              <span className={`${snap ? 'text-green-500' : isDarkMode ? 'text-slate-600' : 'text-slate-300'}`}>
                 {snap ? snap.type.toUpperCase() : 'IDLE'}
               </span>
             </div>
@@ -1063,7 +1101,7 @@ const DwgRenderer: React.FC<Props> = ({
         // Ensure s.x and s.y are valid numbers
         if (isNaN(s.x) || isNaN(s.y)) return null
         
-        const color = "#facc15" // Yellow-400
+        const color = "#6366f1" // Indigo-500
         
         return (
           <svg className="absolute inset-0 pointer-events-none w-full h-full z-10">
@@ -1152,7 +1190,7 @@ const DwgRenderer: React.FC<Props> = ({
             const bHead1 = { x: b1.x + outUx * arrowLen + px * arrowWing, y: b1.y + outUy * arrowLen + py * arrowWing }
             const bHead2 = { x: b1.x + outUx * arrowLen - px * arrowWing, y: b1.y + outUy * arrowLen - py * arrowWing }
             const mid = { x: (a1.x + b1.x) / 2, y: (a1.y + b1.y) / 2 - 10 }
-            const color = "#facc15"
+            const color = "#6366f1"
             return (
               <g key={i}>
                 <line x1={a.x} y1={a.y} x2={a1.x} y2={a1.y} stroke={color} strokeWidth="2" />
@@ -1178,7 +1216,7 @@ const DwgRenderer: React.FC<Props> = ({
         <svg className="absolute inset-0 pointer-events-none w-full h-full">
           {points.map((p, i) => {
             const s = projectToScreen(p)
-            return <circle key={i} cx={s.x} cy={s.y} r="6" fill="#facc15" stroke="#000" strokeWidth="2" />
+            return <circle key={i} cx={s.x} cy={s.y} r="6" fill="#6366f1" stroke="#000" strokeWidth="2" />
           })}
           {points.length === 2 && (() => {
             const a = projectToScreen(points[0])
@@ -1186,10 +1224,10 @@ const DwgRenderer: React.FC<Props> = ({
             const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 20 }
             return (
               <>
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#facc15" strokeWidth="3" strokeDasharray="6,4" />
+                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#6366f1" strokeWidth="3" strokeDasharray="6,4" />
                 <g transform={`translate(${mid.x}, ${mid.y})`}>
-                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#facc15" strokeWidth="2" />
-                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#facc15" dy="5" className="font-mono">
+                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#6366f1" strokeWidth="2" />
+                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#6366f1" dy="5" className="font-mono">
                     {displayDist()}
                   </text>
                 </g>
@@ -1230,11 +1268,11 @@ const DwgRenderer: React.FC<Props> = ({
         )}
       </div>
       {loading && (
-        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50">
+        <div className={`absolute inset-0 ${isDarkMode ? 'bg-slate-950/80' : 'bg-white/80'} backdrop-blur-md flex items-center justify-center z-50`}>
           <div className="flex flex-col items-center gap-6">
-            <div className="w-16 h-16 border-4 border-yellow-500/30 border-t-yellow-500 animate-spin rounded-full"></div>
+            <div className="w-16 h-16 border-4 border-indigo-500/30 border-t-indigo-500 animate-spin rounded-full"></div>
             <div className="text-center">
-              <span className="block text-yellow-500 font-mono text-xs tracking-widest uppercase mb-1">{loadingText}</span>
+              <span className="block text-indigo-500 font-mono text-xs tracking-widest uppercase mb-1">{loadingText}</span>
               <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Preparando geometría...</span>
             </div>
           </div>

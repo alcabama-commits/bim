@@ -1146,6 +1146,7 @@ function deactivateAllTools() {
     // Limpiar selección del Highlighter de OBC 
     if (typeof components !== 'undefined') { 
         try { 
+            // Asegúrate de importar OBF o usar la referencia correcta a Highlighter 
             // const highlighter = components.get(OBF.Highlighter); 
             // highlighter.clear('select'); 
         } catch(e) { console.log("No se pudo limpiar highlighter", e); } 
@@ -1158,12 +1159,7 @@ function deactivateAllTools() {
     } 
     if (typeof measurementPoints !== 'undefined') measurementPoints = []; 
     
-    // Limpiar UI - Remover clase 'active' de todos los botones
-    document.querySelectorAll('.projection-toggle-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById('grid-toggle')?.classList.add('active'); // Grid suele estar activo por defecto
-
     console.log("Herramientas desactivadas"); 
-    logToScreen("Herramientas desactivadas");
 } 
 
 // 2. El Listener Maestro 
@@ -1187,11 +1183,32 @@ window.addEventListener('keydown', async (e) => {
                 break; 
 
             case 'KeyZ': // Z: Zoom Extents (Ajustar a pantalla) 
-                await zoomToFit();
+                // Lógica de zoom robusta 
+                if ((components as any).meshes && (components as any).meshes.length > 0) { 
+                     const bbox = new THREE.Box3(); 
+                     for(const mesh of (components as any).meshes) { 
+                         if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) { 
+                             if(mesh.geometry) { 
+                                 if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox(); 
+                                 if(mesh.geometry.boundingBox) { 
+                                    const meshBox = mesh.geometry.boundingBox.clone(); 
+                                    meshBox.applyMatrix4(mesh.matrixWorld); 
+                                    bbox.union(meshBox); 
+                                 } 
+                             } 
+                         } 
+                     } 
+                     if(!bbox.isEmpty()) { 
+                        const sphere = new THREE.Sphere(); 
+                        bbox.getBoundingSphere(sphere); 
+                        await world.camera.controls.fitToSphere(sphere, true); 
+                     } 
+                } 
                 break; 
 
             case 'KeyH': // H: Ocultar selección 
-                const btnHide = document.getElementById('btn-hide'); 
+                // Simular clic en botón ocultar o llamar función directa 
+                const btnHide = document.getElementById('btn-hide'); // Asume que tienes este ID 
                 if (btnHide) btnHide.click(); 
                 break; 
 
@@ -1208,11 +1225,6 @@ window.addEventListener('keydown', async (e) => {
             case 'Escape': // Escape: Cancelar todo 
                 deactivateAllTools(); 
                 break; 
-
-            case 'Delete': // Delete: Borrar medidas
-            case 'Backspace':
-                document.getElementById('btn-measure-delete')?.click();
-                break;
                 
             // Atajos directos a botones de herramientas (Simulación de Clic) 
             // Esto es MUY seguro porque usa la lógica que YA funciona en tus botones 
