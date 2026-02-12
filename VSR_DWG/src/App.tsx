@@ -199,13 +199,13 @@ const App: React.FC = () => {
                       onClick={() => selectRepoFile(rf)}
                       className={`w-full text-left p-2.5 rounded-lg border transition group flex flex-col gap-1
                         ${selectedRepoFile?.filename === rf.filename 
-                          ? 'bg-indigo-50 dark:bg-indigo-600/20 border-indigo-200 dark:border-indigo-500/50' 
-                          : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-indigo-300 dark:hover:border-indigo-500/50'
+                          ? 'bg-alcabama-50 dark:bg-alcabama-600/20 border-alcabama-200 dark:border-alcabama-500/50' 
+                          : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-alcabama-300 dark:hover:border-alcabama-500/50'
                         }`}
                     >
                       <div className="flex items-center gap-2">
-                        <i className={`fa-regular fa-file-lines text-xs ${selectedRepoFile?.filename === rf.filename ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-indigo-500'}`}></i>
-                        <span className={`text-xs font-bold truncate ${selectedRepoFile?.filename === rf.filename ? 'text-indigo-700 dark:text-indigo-100' : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'}`}>
+                        <i className={`fa-regular fa-file-lines text-xs ${selectedRepoFile?.filename === rf.filename ? 'text-alcabama-600 dark:text-alcabama-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-alcabama-500'}`}></i>
+                        <span className={`text-xs font-bold truncate ${selectedRepoFile?.filename === rf.filename ? 'text-alcabama-700 dark:text-alcabama-100' : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'}`}>
                           {rf.name}
                         </span>
                       </div>
@@ -223,7 +223,7 @@ const App: React.FC = () => {
         </div>
 
         <div className="p-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-          <label className="cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-[10px] font-black uppercase transition active:scale-95 flex items-center justify-center gap-2 w-full shadow-lg shadow-indigo-500/20">
+          <label className="cursor-pointer bg-alcabama-600 hover:bg-alcabama-500 text-white px-3 py-2 rounded-lg text-[10px] font-black uppercase transition active:scale-95 flex items-center justify-center gap-2 w-full shadow-lg shadow-alcabama-500/20">
             <i className="fa-solid fa-upload"></i>
             <span>Subir Archivo</span>
             <input type="file" className="hidden" accept=".dxf,.dwg" onChange={handleFileChange} />
@@ -247,15 +247,13 @@ const App: React.FC = () => {
               {isDarkMode ? (
                  <img src="https://i.postimg.cc/0yDgcyBp/Logo-transparente_blanco.png" alt="Alcabama" className="h-6 object-contain opacity-90" />
               ) : (
-                 <img src="https://alcabama.com/wp-content/uploads/2022/02/logo-alcabama.png" alt="Alcabama" className="h-6 object-contain opacity-90" />
+                 <img src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente_negro.png" alt="Alcabama" className="h-6 object-contain opacity-90" />
               )}
               <div className="h-4 w-px bg-slate-300 dark:bg-slate-700"></div>
               {isDarkMode ? (
-                <div className="bg-white px-1.5 py-0.5 rounded-sm">
-                   <img src="https://i.postimg.cc/ZnmQywXc/LOGO-BIM-BLANCO.png" alt="BIM" className="h-3 object-contain invert" />
-                </div>
+                 <img src="https://i.postimg.cc/ZnmQywXc/LOGO-BIM-BLANCO.png" alt="BIM" className="h-6 object-contain" />
               ) : (
-                 <img src="https://i.postimg.cc/ZnmQywXc/LOGO-BIM-BLANCO.png" alt="BIM" className="h-4 object-contain brightness-0" />
+                 <img src="https://i.postimg.cc/fRJ4M9Mp/LOGO-BIM.png" alt="BIM" className="h-6 object-contain" />
               )}
             </div>
             {file && <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mx-2"></div>}
@@ -266,47 +264,47 @@ const App: React.FC = () => {
             <div className="flex bg-slate-100 dark:bg-slate-800 rounded p-0.5 border border-slate-200 dark:border-slate-700 mr-4">
               <button 
                 onClick={() => setActiveTool('hand')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'hand' ? 'bg-white dark:bg-indigo-600 shadow text-indigo-600 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'hand' ? 'bg-white dark:bg-alcabama-600 shadow text-alcabama-600 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
                 title="Mano (Pan)"
               >
                 <i className="fa-solid fa-hand-pointer text-xs"></i>
               </button>
               <button 
                 onClick={() => setActiveTool('measure')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'measure' ? 'bg-white dark:bg-indigo-600 shadow text-indigo-600 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'measure' ? 'bg-white dark:bg-alcabama-600 shadow text-alcabama-600 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
                 title="Medir"
               >
                 <i className="fa-solid fa-ruler text-xs"></i>
               </button>
               <button 
                 onClick={() => setActiveTool('area')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'area' ? 'bg-white dark:bg-indigo-600 shadow text-indigo-600 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'area' ? 'bg-white dark:bg-alcabama-600 shadow text-alcabama-600 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
                 title="Área"
               >
                 <i className="fa-solid fa-draw-polygon text-xs"></i>
               </button>
               <button 
                 onClick={() => setActiveTool('dimension')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'dimension' ? 'bg-white dark:bg-indigo-600 shadow text-indigo-600 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'dimension' ? 'bg-white dark:bg-alcabama-600 shadow text-alcabama-600 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
                 title="Cotas"
               >
                 <i className="fa-solid fa-ruler-combined text-xs"></i>
               </button>
               <button 
                 onClick={() => setActiveTool('calibrate')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'calibrate' ? 'bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 shadow-inner' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'calibrate' ? 'bg-alcabama-100 dark:bg-alcabama-500/20 text-alcabama-600 dark:text-alcabama-400 shadow-inner' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
                 title="Calibrar Escala"
               >
                 <i className="fa-solid fa-arrows-left-right-to-line text-xs"></i>
               </button>
             </div>
 
-            <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded transition ${showGrid ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
-            <button onClick={() => setIsBlueprint(!isBlueprint)} className={`w-8 h-8 rounded transition ${isBlueprint ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`} title="Modo Blueprint"><i className="fa-solid fa-eye-slash text-xs"></i></button>
+            <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded transition ${showGrid ? 'text-alcabama-600 dark:text-alcabama-400 bg-alcabama-50 dark:bg-alcabama-500/10' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
+            <button onClick={() => setIsBlueprint(!isBlueprint)} className={`w-8 h-8 rounded transition ${isBlueprint ? 'text-alcabama-600 dark:text-alcabama-400 bg-alcabama-50 dark:bg-alcabama-500/10' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`} title="Modo Blueprint"><i className="fa-solid fa-eye-slash text-xs"></i></button>
             
             <button 
               onClick={() => setIsDarkMode(!isDarkMode)} 
-              className={`w-8 h-8 rounded transition ${isDarkMode ? 'text-indigo-400 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'}`} 
+              className={`w-8 h-8 rounded transition ${isDarkMode ? 'text-alcabama-400 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'}`} 
               title="Alternar Tema"
             >
               <i className={`fa-solid ${isDarkMode ? 'fa-sun' : 'fa-moon'} text-xs`}></i>
@@ -345,8 +343,8 @@ const App: React.FC = () => {
 
         {isDownloading ? (
           <div className="flex-1 flex flex-col items-center justify-center bg-slate-900 m-8 rounded-3xl border border-slate-800">
-            <div className="w-16 h-16 border-4 border-indigo-500/30 border-t-indigo-500 animate-spin rounded-full mb-6"></div>
-            <span className="text-indigo-500 font-mono text-sm tracking-widest uppercase animate-pulse">Descargando archivo...</span>
+            <div className="w-16 h-16 border-4 border-alcabama-500/30 border-t-alcabama-500 animate-spin rounded-full mb-6"></div>
+            <span className="text-alcabama-500 font-mono text-sm tracking-widest uppercase animate-pulse">Descargando archivo...</span>
           </div>
         ) : downloadError ? (
           <div className="flex-1 flex flex-col items-center justify-center bg-slate-900 border-2 border-red-900/50 m-8 rounded-3xl">
