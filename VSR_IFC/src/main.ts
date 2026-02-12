@@ -147,6 +147,22 @@ world.camera = new OBC.SimpleCamera(components);
 
 components.init();
 
+// --- Setup Scene (Lights & Background) ---
+(world.scene as OBC.SimpleScene).setup();
+world.scene.three.background = new THREE.Color(0x202124); // Dark gray background
+
+// --- Setup Grid ---
+const grids = components.get(OBC.Grids);
+grids.create(world);
+
+// --- Setup Default Cube (Visual Feedback) ---
+const cubeGeom = new THREE.BoxGeometry(1, 1, 1);
+const cubeMat = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+const cube = new THREE.Mesh(cubeGeom, cubeMat);
+cube.position.set(0, 0.5, 0);
+world.scene.three.add(cube);
+world.camera.controls.setLookAt(3, 3, 3, 0, 0, 0);
+
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
 
@@ -1063,6 +1079,7 @@ async function onMeasureClick(event: MouseEvent) {
 let area: any = null;
 try {
     // Check if AreaMeasurement exists in OBF (Components Front)
+    // @ts-ignore
     const AreaClass = OBF.AreaMeasurement;
     if (AreaClass) {
         area = components.get(AreaClass);
@@ -1087,16 +1104,7 @@ if (container) {
     });
 }
 
-let grids: any = null;
-try {
-    if (OBC.Grids) {
-        grids = components.get(OBC.Grids);
-        // grids.world = world; // Grids usually auto-init or need create
-        // components.get(OBC.Grids).create(world); // We might need to create a grid first
-    }
-} catch (e) {
-    console.error("Grids init failed:", e);
-}
+
 
 
 // --- KEYBOARD SHORTCUTS ---
@@ -1267,7 +1275,7 @@ window.addEventListener('keydown', async (e) => {
 
             case 'RC': // Recorte (Clipper)
                 if (clipper) {
-                    clipper.create();
+                    clipper.create(world);
                     logToScreen('Plano de corte creado');
                 } else {
                     logToScreen('Clipper no disponible');
