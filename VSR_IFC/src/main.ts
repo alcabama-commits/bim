@@ -64,9 +64,9 @@ window.addEventListener('keydown', async (e) => {
                 break;
 
             case 'KeyZ': // Z: Zoom Extents
-                if (components.meshes && components.meshes.length > 0) {
+                if (world.meshes.size > 0) {
                      const bbox = new THREE.Box3();
-                     for(const mesh of components.meshes) {
+                     for(const mesh of world.meshes) {
                          if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
                              if(mesh.geometry) {
                                  if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
@@ -890,9 +890,9 @@ function deactivateAllTools() {
 window.addEventListener('mousedown', async (e) => {
     if (e.button === 1 && e.detail === 2) { // Middle button (1) + Double click (detail 2)
         e.preventDefault(); // Prevent default scroll/zoom behavior if any
-        if (components.meshes && components.meshes.length > 0) {
+        if (world.meshes.size > 0) {
              const bbox = new THREE.Box3();
-             for(const mesh of components.meshes) {
+             for(const mesh of world.meshes) {
                  if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
                      if(mesh.geometry) {
                          if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
@@ -915,7 +915,7 @@ window.addEventListener('mousedown', async (e) => {
     }
 });
 
-logToScreen('VSR IFC Viewer Ready - v34 - ' + new Date().toLocaleTimeString());
+logToScreen('VSR IFC Viewer Ready - v36-Fixes - ' + new Date().toLocaleTimeString());
 
 // --- DEBUG: Red Cube to verify Renderer ---
 const cubeGeom = new THREE.BoxGeometry(1, 1, 1);
@@ -973,9 +973,9 @@ async function loadModels() {
         logToScreen('Todos los modelos cargados.');
         
         // Auto-zoom to models
-         if (components.meshes.length > 0) {
+         if (world.meshes.size > 0) {
              const bbox = new THREE.Box3();
-             for(const mesh of components.meshes) {
+             for(const mesh of world.meshes) {
                  if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
                      if(mesh.geometry) {
                          if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
