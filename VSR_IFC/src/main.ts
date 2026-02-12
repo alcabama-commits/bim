@@ -298,6 +298,9 @@ world.renderer = new OBC.SimpleRenderer(components, container);
 world.camera = new OBC.SimpleCamera(components);
 
 components.init();
+if (world.camera.controls) {
+    world.camera.controls.setLookAt(10, 10, 10, 0, 0, 0);
+}
 const grids = components.get(OBC.Grids);
 const grid = grids.create(world);
 grid.config.color.setHex(0x333333);
@@ -930,32 +933,43 @@ async function loadModels() {
     logToScreen('Iniciando carga de modelos...');
     try {
         const fragments = components.get(OBC.FragmentsManager);
-        
-        logToScreen('Fetching models.json...');
-        const response = await fetch('models.json');
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const models = await response.json();
-        logToScreen(`models.json cargado. ${models.length} modelos encontrados.`);
-        
-        for (const modelInfo of models) {
-            const path = modelInfo.path;
-            logToScreen(`Cargando: ${modelInfo.name}...`);
-            
-            const fileResponse = await fetch(path);
-            if (!fileResponse.ok) {
-                logToScreen(`Error fetching ${path}: ${fileResponse.status}`);
-                continue;
-            }
-            
-            const buffer = await fileResponse.arrayBuffer();
-            const model = await fragments.load(new Uint8Array(buffer));
-            world.meshes.add(model);
-            logToScreen(`Modelo cargado: ${modelInfo.name}`);
-        }
+                fragments.init('fragments/fragments.worker.js'); // Initialize with worker
+
+                logToScreen('Fetching models.json...');
+                const response = await fetch('models.json');
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const models = await response.json();
+                logToScreen(`models.json cargado. ${models.length} modelos encontrados.`);
+
+                for (const modelInfo of models) {
+                    const path = modelInfo.path;
+                    logToScreen(`Cargando: ${modelInfo.name}...`);
+
+                    const fileResponse = await fetch(path);
+                    if (!fileResponse.ok) {
+                        logToScreen(`Error fetching ${path}: ${fileResponse.status}`);
+                        continue;
+                    }
+
+                    const buffer = await fileResponse.arrayBuffer();
+                    // Use fragments.core.load instead of fragments.load
+                    // raw: false (default) assumes compressed data, which is standard for .frag files
+                    const model = await fragments.core.load(new Uint8Array(buffer), { 
+                        modelId: modelInfo.name
+                    });
+                    
+                    // fragments.core.load adds it to the system, but we might need to add to world.meshes manually if not auto-added?
+                    // In v3, fragments usually handle their own meshes.
+                    // But core memories say: "Official tools (Length, Area, Highlighter) in OBC require explicit mesh registration to world.meshes"
+                    if (model) {
+                        world.meshes.add(model);
+                        logToScreen(`Modelo cargado: ${modelInfo.name}`);
+                    }
+                }
         logToScreen('Todos los modelos cargados.');
         
         // Auto-zoom to models
