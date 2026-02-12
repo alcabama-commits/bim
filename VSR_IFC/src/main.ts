@@ -776,6 +776,104 @@ document.getElementById('btn-none')?.addEventListener('click', () => {
     container.removeEventListener('click', pointHandler);
 });
 
+// --- ZOOM TO FIT ---
+async function zoomToFit() {
+    if (components.meshes && components.meshes.length > 0) {
+         const bbox = new THREE.Box3();
+         for(const mesh of components.meshes) {
+             if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
+                 if(mesh.geometry) {
+                     if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+                     if(mesh.geometry.boundingBox) {
+                        const meshBox = mesh.geometry.boundingBox.clone();
+                        meshBox.applyMatrix4(mesh.matrixWorld);
+                        bbox.union(meshBox);
+                     }
+                 }
+             }
+         }
+         if(!bbox.isEmpty()) {
+            const sphere = new THREE.Sphere();
+            bbox.getBoundingSphere(sphere);
+            await world.camera.controls.fitToSphere(sphere, true);
+            logToScreen('Zoom Extents');
+         }
+    }
+}
+
+// --- SIDEBAR POPULATION ---
+async function loadModelList() {
+    const modelList = document.getElementById('model-list');
+    if (!modelList) return;
+
+    try {
+        const response = await fetch(`${baseUrl}models.json`);
+        if (!response.ok) throw new Error('Failed to load models.json');
+        
+        const models = await response.json();
+        modelList.innerHTML = ''; // Clear existing
+
+        if (models.length === 0) {
+            modelList.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">No hay modelos disponibles</div>';
+            return;
+        }
+
+        models.forEach((model: any) => {
+            const btn = document.createElement('button');
+            btn.className = 'model-btn';
+            btn.style.display = 'block';
+            btn.style.width = '100%';
+            btn.style.padding = '10px';
+            btn.style.marginBottom = '5px';
+            btn.style.textAlign = 'left';
+            btn.style.background = 'rgba(255, 255, 255, 0.1)';
+            btn.style.border = 'none';
+            btn.style.color = 'white';
+            btn.style.cursor = 'pointer';
+            
+            btn.innerHTML = `<i class="fa-solid fa-cube"></i> ${model.name}`;
+            
+            btn.addEventListener('click', async () => {
+                // Visual feedback
+                document.querySelectorAll('.model-btn').forEach(b => b.style.background = 'rgba(255, 255, 255, 0.1)');
+                btn.style.background = 'rgba(0, 255, 0, 0.2)';
+                
+                try {
+                   logToScreen(`Cargando ${model.name}...`);
+                   const fragmentsManager = components.get(OBC.FragmentsManager);
+                   
+                   const fileResponse = await fetch(`${baseUrl}${model.path}`);
+                   const buffer = await fileResponse.arrayBuffer();
+                   const fragment = await fragmentsManager.load(buffer);
+                   
+                   if (!components.meshes) components.meshes = [];
+                   const root = fragment.mesh || fragment.object;
+                   if (root) {
+                        root.traverse((child: any) => {
+                            if ((child.isMesh || child.isInstancedMesh) && child.visible) {
+                                components.meshes.push(child);
+                            }
+                        });
+                   }
+                   
+                   logToScreen(`Modelo cargado: ${model.name}`);
+                   await zoomToFit();
+                   
+                } catch (e) {
+                    console.error("Error loading model", e);
+                    logToScreen("Error al cargar modelo");
+                }
+            });
+            
+            modelList.appendChild(btn);
+        });
+
+    } catch (error) {
+        console.error("Error loading model list:", error);
+        modelList.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">Error al cargar lista de modelos</div>';
+    }
+}
+
 // --- MODEL LOADING ---
 const loadModel = async (fragmentsFile: File) => {
     const fragmentsManager = components.get(OBC.FragmentsManager);
@@ -795,6 +893,7 @@ const loadModel = async (fragmentsFile: File) => {
     }
     
     logToScreen(`Model loaded: ${fragmentsFile.name}`);
+    await zoomToFit();
 };
 
 // --- UI CONTROLS ---
@@ -1033,229 +1132,100 @@ const grids = components.get(OBC.Grids);
 
 // Initialize Clipper (Already done above, but ensure access)
 
-// --- KEYBOARD SHORTCUTS ---
-let keyBuffer = '';
-let lastKeyTime = 0;
+// ==================================================================== 
+// MÓDULO DE ATAJOS DE TECLADO (Funciona en modo Capture) 
+// ==================================================================== 
 
-window.addEventListener('keydown', async (e) => {
-    // FORCE DEBUG
-    console.log(`[KEY_EVENT] Key: "${e.key}", Code: "${e.code}", Buffer: "${keyBuffer}"`);
+// 1. Función auxiliar para limpiar herramientas (necesaria para la tecla ESC) 
+function deactivateAllTools() { 
+    // Si tienes variables globales para herramientas, resetealas aquí 
+    if (typeof activeTool !== 'undefined') activeTool = 'none'; 
+    if (typeof measurementMode !== 'undefined') measurementMode = null; 
+    if (typeof snappingCursor !== 'undefined' && snappingCursor) snappingCursor.visible = false; 
     
-    // Ignore if typing in an input
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    // Limpiar selección del Highlighter de OBC 
+    if (typeof components !== 'undefined') { 
+        try { 
+            // const highlighter = components.get(OBF.Highlighter); 
+            // highlighter.clear('select'); 
+        } catch(e) { console.log("No se pudo limpiar highlighter", e); } 
+    } 
+    
+    // Limpiar líneas temporales de medición si existen 
+    if (typeof tempMeasurementLine !== 'undefined' && tempMeasurementLine) { 
+        if (typeof world !== 'undefined') world.scene.three.remove(tempMeasurementLine); 
+        tempMeasurementLine = null; 
+    } 
+    if (typeof measurementPoints !== 'undefined') measurementPoints = []; 
+    
+    // Limpiar UI - Remover clase 'active' de todos los botones
+    document.querySelectorAll('.projection-toggle-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('grid-toggle')?.classList.add('active'); // Grid suele estar activo por defecto
 
-    // Filter out non-printable keys and modifiers
-    // Allow single printable characters (length 1)
-    if (e.key.length !== 1 || e.ctrlKey || e.altKey || e.metaKey) return;
+    console.log("Herramientas desactivadas"); 
+    logToScreen("Herramientas desactivadas");
+} 
 
-    const now = Date.now();
-    if (now - lastKeyTime > 1500) { 
-        keyBuffer = '';
-    }
-    lastKeyTime = now;
+// 2. El Listener Maestro 
+window.addEventListener('keydown', async (e) => { 
+    // A. Ignorar si el usuario escribe en un input (importante para no activar atajos escribiendo nombres) 
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return; 
+    
+    // B. Ignorar combinaciones con Ctrl/Alt/Meta para no bloquear atajos del navegador 
+    if (e.ctrlKey || e.altKey || e.metaKey) return; 
 
-    const char = e.key.toUpperCase();
-    if (/[A-Z]/.test(char)) {
-        keyBuffer += char;
-        logToScreen(`Key: ${char} (Buffer: ${keyBuffer})`); 
-    }
+    // C. Verificar que el visor esté listo (ajusta 'world' o 'components' según tu versión estable) 
+    if (typeof world === 'undefined' || typeof components === 'undefined') return; 
 
-    if (keyBuffer.length > 2) {
-        keyBuffer = keyBuffer.slice(-2);
-    }
+    try { 
+        switch (e.code) { 
+            case 'KeyP': // P: Perspectiva/Ortogonal 
+                const camera = world.camera; 
+                // Ajusta esta lógica según cómo tu versión estable maneje la proyección 
+                const next = camera.projection.current === 'Perspective' ? 'Orthographic' : 'Perspective'; 
+                await camera.projection.set(next); 
+                break; 
 
-    if (keyBuffer.length === 2) {
-        console.log("Shortcut Triggered:", keyBuffer);
-        
-        let handled = true;
+            case 'KeyZ': // Z: Zoom Extents (Ajustar a pantalla) 
+                await zoomToFit();
+                break; 
 
-        switch (keyBuffer) {
-            case 'PR': // Perspectiva/Ortogonal
-                const camera = world.camera;
-                const current = camera.projection.current;
-                const next = current === 'Perspective' ? 'Orthographic' : 'Perspective';
-                await camera.projection.set(next);
-                logToScreen(`Proyección: ${next === 'Perspective' ? 'Perspectiva' : 'Ortogonal'}`);
-                keyBuffer = '';
+            case 'KeyH': // H: Ocultar selección 
+                const btnHide = document.getElementById('btn-hide'); 
+                if (btnHide) btnHide.click(); 
+                break; 
+
+            case 'KeyI': // I: Aislar selección 
+                const btnIsolate = document.getElementById('btn-isolate'); 
+                if (btnIsolate) btnIsolate.click(); 
+                break; 
+
+            case 'KeyR': // R: Mostrar todo (Reset) 
+                const btnShow = document.getElementById('btn-show-all'); 
+                if (btnShow) btnShow.click(); 
+                break; 
+            
+            case 'Escape': // Escape: Cancelar todo 
+                deactivateAllTools(); 
+                break; 
+
+            case 'Delete': // Delete: Borrar medidas
+            case 'Backspace':
+                document.getElementById('btn-measure-delete')?.click();
                 break;
-
-            case 'AZ': // Ajustar modelo a la pantalla
-                if (components.meshes && components.meshes.length > 0) {
-                     // Calculate bounding box of all meshes
-                     const bbox = new THREE.Box3();
-                     for(const mesh of components.meshes) {
-                         if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
-                             // Use geometry bounding box transformed to world
-                             if(mesh.geometry) {
-                                 if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-                                 if(mesh.geometry.boundingBox) {
-                                    const meshBox = mesh.geometry.boundingBox.clone();
-                                    meshBox.applyMatrix4(mesh.matrixWorld);
-                                    bbox.union(meshBox);
-                                 }
-                             }
-                         }
-                     }
-                     
-                     if(!bbox.isEmpty()) {
-                        const sphere = new THREE.Sphere();
-                        bbox.getBoundingSphere(sphere);
-                        await world.camera.controls.fitToSphere(sphere, true);
-                        logToScreen('Ajustado a pantalla');
-                     }
-                }
-                keyBuffer = '';
-                break;
-
-            case 'HH': // Ocultar selección
-                {
-                    const highlighter = components.get(OBF.Highlighter);
-                    const selection = highlighter.selection.select;
-                    if (Object.keys(selection).length > 0) {
-                        await hider.set(false, selection);
-                        highlighter.clear('select');
-                        logToScreen('Selección ocultada');
-                    }
-                }
-                keyBuffer = '';
-                break;
-
-            case 'HI': // Aislar selección
-                {
-                    const highlighter = components.get(OBF.Highlighter);
-                    const selection = highlighter.selection.select;
-                    if (Object.keys(selection).length > 0) {
-                        await hider.isolate(selection);
-                        highlighter.clear('select');
-                        logToScreen('Selección aislada');
-                    }
-                }
-                keyBuffer = '';
-                break;
-
-            case 'HR': // Mostrar todo
-                await hider.set(true);
-                logToScreen('Mostrar todo');
-                keyBuffer = '';
-                break;
-
-            case 'RL': // Regla (Length)
-                // Trigger existing custom tool
-                const btnMeasure = document.getElementById('btn-measure-length');
-                if (btnMeasure && !measurementMode) {
-                    btnMeasure.click();
-                } else if (measurementMode !== 'length') {
-                    if (activeTool !== 'none') activeTool = 'none'; // Disable others
-                    measurementMode = 'length';
-                    logToScreen('Herramienta: Regla');
-                }
-                keyBuffer = '';
-                break;
-
-            case 'AR': // Área
-                // Use OBF.AreaMeasurement
-                if (measurementMode) {
-                    // Disable custom tools
-                    const btnMeasure = document.getElementById('btn-measure-length');
-                    if(btnMeasure && measurementMode) btnMeasure.click();
-                }
-                // Also trigger UI button if it exists to sync state
-                const btnArea = document.getElementById('btn-measure-area');
-                if (btnArea && !area.enabled) {
-                    btnArea.click();
-                } else {
-                    area.enabled = true;
-                    area.create();
-                    logToScreen('Herramienta: Área (Click para puntos, Doble click/Enter para terminar)');
-                }
-                keyBuffer = '';
-                break;
-
-            case 'AG': // Ángulo
-                const btnAngle = document.getElementById('btn-measure-angle');
-                if (btnAngle) btnAngle.click();
-                keyBuffer = '';
-                break;
-
-            case 'PN': // Pendiente
-                const btnSlope = document.getElementById('btn-measure-slope');
-                if (btnSlope) btnSlope.click();
-                keyBuffer = '';
-                break;
-
-            case 'CO': // Coordenada por punto
-                if (measurementMode === 'length') {
-                    // Toggle off length first
-                     const btnMeasure = document.getElementById('btn-measure-length');
-                     if(btnMeasure) btnMeasure.click();
-                }
-                const btnPoint = document.getElementById('btn-measure-point');
-                if (btnPoint) {
-                    btnPoint.click();
-                } else {
-                    activeTool = 'point';
-                    container.addEventListener('click', pointHandler);
-                    logToScreen('Herramienta: Coordenada');
-                }
-                keyBuffer = '';
-                break;
-
-            case 'BM': // Borrar medidas
-                // Clear custom
-                measurementPoints = [];
-                measurementMarkers.forEach(m => world.scene.three.remove(m));
-                measurementLabels.forEach(l => l.remove());
-                measurementMarkers.length = 0;
-                measurementLabels.length = 0;
-                if (tempMeasurementLine) {
-                    world.scene.three.remove(tempMeasurementLine);
-                    tempMeasurementLine = null;
-                }
                 
-                // Clear Area
-                area.deleteAll();
-                
-                // Clear Point (customMeshes)
-                customMeshes.forEach(m => world.scene.three.remove(m));
-                customMeshes.length = 0;
-                document.querySelectorAll('.floating-label').forEach(el => el.remove());
-
-                logToScreen('Medidas borradas');
-                keyBuffer = '';
-                break;
-
-            case 'RJ': // Rejilla
-                const grid = components.get(OBC.Grids);
-                // Grid might not be created.
-                // grid.enabled = !grid.enabled; 
-                // Usually we check if it exists in the world.
-                // Let's try creating/toggling visibility.
-                // Accessing the internal grid mesh? 
-                // OBF.Grids manages a grid. 
-                // Let's assume standard behavior:
-                grid.enabled = !grid.enabled;
-                if(grid.enabled) {
-                     // Check if created
-                     // grid.create(world);
-                }
-                logToScreen(`Rejilla: ${grid.enabled ? 'On' : 'Off'}`);
-                keyBuffer = '';
-                break;
-
-            case 'RC': // Recorte (Clipper)
-                clipper.create();
-                logToScreen('Plano de corte creado');
-                keyBuffer = '';
-                break;
-            default:
-                handled = false;
-        }
-
-        if (handled) {
-            keyBuffer = ''; // Clear buffer only if handled successfully
-        }
-    }
-});
+            // Atajos directos a botones de herramientas (Simulación de Clic) 
+            // Esto es MUY seguro porque usa la lógica que YA funciona en tus botones 
+            case 'KeyL': document.getElementById('btn-measure-length')?.click(); break; 
+            case 'KeyA': document.getElementById('btn-measure-area')?.click(); break; 
+            case 'KeyG': document.getElementById('btn-measure-angle')?.click(); break; 
+            case 'KeyS': document.getElementById('btn-measure-slope')?.click(); break; 
+            case 'KeyC': document.getElementById('btn-measure-point')?.click(); break; 
+        } 
+    } catch (err) { 
+        console.error("Error en atajo:", err); 
+    } 
+}, { capture: true }); // <--- ESTO ES LO VITAL: { capture: true }
 
 window.addEventListener('mousedown', async (e) => {
     if (e.button === 1 && e.detail === 2) { // Middle button (1) + Double click (detail 2)
@@ -1285,8 +1255,11 @@ window.addEventListener('mousedown', async (e) => {
     }
 });
 
-logToScreen('VSR IFC Viewer Ready - Snapping 3D Mejorado con Visualización');
+logToScreen('VSR IFC Viewer Ready - v38-Stable-Shortcuts');
 
 // Export for global access
 (window as any).components = components;
 (window as any).world = world;
+
+// Init sidebar
+loadModelList();
