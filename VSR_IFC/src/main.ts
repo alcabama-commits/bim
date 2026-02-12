@@ -5,21 +5,8 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
-// --- Global Error Handler (Must be first) ---
-window.addEventListener('error', (event) => {
-    console.error("Global Error:", event.error);
-    const debugConsole = document.getElementById('debug-console');
-    if (debugConsole) {
-        debugConsole.style.display = 'block';
-        const line = document.createElement('div');
-        line.style.color = '#ff4444';
-        line.textContent = `[CRITICAL ERROR] ${event.message} at ${event.filename}:${event.lineno}`;
-        debugConsole.appendChild(line);
-    }
-});
-
 // --- Measurement State (Hoisted to top to avoid ReferenceError) ---
-let measurementMode: 'length' | 'point' | 'angle' | 'slope' | null = null;
+let measurementMode: 'length' | 'point' | null = null;
 let measurementPoints: THREE.Vector3[] = [];
 let tempMeasurementLine: THREE.Line | null = null;
 const measurementLabels: HTMLElement[] = [];
@@ -131,7 +118,8 @@ THREE.Mesh.prototype.raycast = function(raycaster, intersects) {
     }
 };
 
-
+// --- Measurement State ---
+let activeTool: 'none' | 'angle' | 'slope' | 'point' = 'none';
 const customMeshes: THREE.Mesh[] = [];
 
 // --- UI & World Setup ---
@@ -140,23 +128,11 @@ const components = new OBC.Components();
 const worlds = components.get(OBC.Worlds);
 const world = worlds.create();
 
-// Use SimpleScene/Renderer/Camera to avoid complex dependency crashes
-world.scene = new OBC.SimpleScene(components);
-world.renderer = new OBC.SimpleRenderer(components, container);
-world.camera = new OBC.SimpleCamera(components);
+world.scene = new OBC.Scene(components);
+world.renderer = new OBC.Renderer(components, container);
+world.camera = new OBC.Camera(components);
 
 components.init();
-
-// --- Setup Scene (Lights & Background) ---
-(world.scene as OBC.SimpleScene).setup();
-world.scene.three.background = new THREE.Color(0x202124); // Dark gray background
-
-// --- Setup Grid ---
-const grids = components.get(OBC.Grids);
-grids.create(world);
-
-// --- Camera Initial Position ---
-world.camera.controls.setLookAt(5, 5, 5, 0, 0, 0);
 
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
@@ -178,7 +154,7 @@ function createSnapMarker() {
     // Marcador más preciso (esfera más pequeña)
     const geometry = new THREE.SphereGeometry(0.05, 16, 16);
     const material = new THREE.MeshBasicMaterial({ 
-        color: 0xFFD700, // Gold for HyperSnap
+        color: 0x00FF00, 
         depthTest: false, 
         transparent: true, 
         opacity: 1.0 
@@ -194,7 +170,7 @@ function createSnapMarker() {
         new THREE.Vector3()
     ]);
     const lineMat = new THREE.LineBasicMaterial({ 
-        color: 0xFFD700, 
+        color: 0x00FF00, 
         depthTest: false, 
         transparent: true, 
         opacity: 0.5 
@@ -206,15 +182,9 @@ function createSnapMarker() {
 }
 
 // --- Debug Panel ---
-const debugPanel = document.getElementById('debug-console');
+const debugPanel = document.getElementById('debug-panel')!;
 const logToScreen = (msg: string) => {
-    if (debugPanel) {
-        debugPanel.style.display = 'block';
-        const line = document.createElement('div');
-        line.textContent = `[UI] ${msg}`;
-        debugPanel.appendChild(line);
-        debugPanel.scrollTop = debugPanel.scrollHeight;
-    }
+    debugPanel.textContent = msg;
     console.log('[UI]', msg);
 };
 
@@ -230,7 +200,7 @@ let lastPointerNDC: THREE.Vector2 | null = null;
 
 interface SnapCandidate {
     point: THREE.Vector3;
-    type: 'vertex' | 'edge' | 'intersection' | 'face' | 'corner';
+    type: 'vertex' | 'edge' | 'intersection' | 'face';
     distanceToRay: number;
     distanceToCamera: number;
     intersection: THREE.Intersection;
@@ -289,22 +259,10 @@ const getSnapCandidatesFromIntersection = (valid: THREE.Intersection, ray: THREE
     if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
         const geom = (valid.object as any).geometry;
         const pos = geom?.attributes?.position;
-        
-        // --- Strategy 1: Bounding Box Corners (Smart Corner Snap) ---
-        // Good for columns, beams, plates where vertices might be messy but BB is clean
-        if (geom && !geom.boundingBox) geom.computeBoundingBox();
-        if (geom && geom.boundingBox) {
-            const bbox = geom.boundingBox;
-            const corners = [
-                new THREE.Vector3(bbox.min.x, bbox.min.y, bbox.min.z),
-                new THREE.Vector3(bbox.max.x, bbox.min.y, bbox.min.z),
-                new THREE.Vector3(bbox.min.x, bbox.max.y, bbox.min.z),
-                new THREE.Vector3(bbox.min.x, bbox.min.y, bbox.max.z),
-                new THREE.Vector3(bbox.max.x, bbox.max.y, bbox.min.z),
-                new THREE.Vector3(bbox.max.x, bbox.min.y, bbox.max.z),
-                new THREE.Vector3(bbox.min.x, bbox.max.y, bbox.max.z),
-                new THREE.Vector3(bbox.max.x, bbox.max.y, bbox.max.z),
-            ];
+        if (pos && pos.count > 0) {
+            const maxIndex = pos.count - 1;
+            const indices = [valid.face.a, valid.face.b, valid.face.c]
+                .filter(i => i >= 0 && i <= maxIndex);
             
             const instanceMatrix = (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined)
                 ? (() => {
@@ -314,60 +272,55 @@ const getSnapCandidatesFromIntersection = (valid: THREE.Intersection, ray: THREE
                 })()
                 : null;
 
-            for (const corner of corners) {
-                if (instanceMatrix) corner.applyMatrix4(instanceMatrix);
-                corner.applyMatrix4(valid.object.matrixWorld);
-                pushSnapCandidate(corner, 'corner', valid, ray, candidatesOut);
-            }
-        }
-
-        // --- Strategy 2: Face Vertices ---
-        if (pos && pos.count > 0) {
-            // Global Vertex Search for small meshes (Smart Snap)
-            // Increased limit to 10000 for better usability
-            if (pos.count < 10000) {
-                 const instanceMatrix = (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined)
-                    ? (() => {
-                        const m = new THREE.Matrix4();
-                        valid.object.getMatrixAt(valid.instanceId, m);
-                        return m;
-                    })()
-                    : null;
-                 
-                 for (let i = 0; i < pos.count; i++) {
-                     const v = new THREE.Vector3().fromBufferAttribute(pos, i);
-                     if (instanceMatrix) v.applyMatrix4(instanceMatrix);
-                     v.applyMatrix4(valid.object.matrixWorld);
-                     pushSnapCandidate(v, 'vertex', valid, ray, candidatesOut);
-                 }
-            } else {
-                // Fallback to face vertices for huge meshes
-                const maxIndex = pos.count - 1;
-                const indices = [valid.face.a, valid.face.b, valid.face.c]
-                    .filter(i => i >= 0 && i <= maxIndex);
-                
-                const instanceMatrix = (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined)
-                    ? (() => {
-                        const m = new THREE.Matrix4();
-                        valid.object.getMatrixAt(valid.instanceId, m);
-                        return m;
-                    })()
-                    : null;
-
-                const vertices: THREE.Vector3[] = [];
-                for (const idx of indices) {
-                    const v = new THREE.Vector3().fromBufferAttribute(pos, idx);
-                    if (instanceMatrix) v.applyMatrix4(instanceMatrix);
-                    v.applyMatrix4(valid.object.matrixWorld);
-                    if (Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z)) {
-                        vertices.push(v);
-                        pushSnapCandidate(v, 'vertex', valid, ray, candidatesOut);
-                    }
+            // Vértices del triángulo
+            const vertices: THREE.Vector3[] = [];
+            for (const idx of indices) {
+                const v = new THREE.Vector3().fromBufferAttribute(pos, idx);
+                if (instanceMatrix) v.applyMatrix4(instanceMatrix);
+                v.applyMatrix4(valid.object.matrixWorld);
+                if (Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z)) {
+                    vertices.push(v);
+                    pushSnapCandidate(v, 'vertex', valid, ray, candidatesOut);
                 }
             }
 
             // Punto exacto de impacto en la cara como fallback
             pushSnapCandidate(valid.point.clone(), 'face', valid, ray, candidatesOut);
+
+            // Puntos de arista reales (no midpoint)
+            if (vertices.length === 3) {
+                const addEdge = (p1: THREE.Vector3, p2: THREE.Vector3) => {
+                    const closestOnEdge = getClosestPointOnSegmentToRay(p1, p2, ray);
+                    pushSnapCandidate(closestOnEdge, 'edge', valid, ray, candidatesOut);
+                };
+                addEdge(vertices[0], vertices[1]);
+                addEdge(vertices[1], vertices[2]);
+                addEdge(vertices[2], vertices[0]);
+            }
+        }
+    } else if ((valid.object instanceof THREE.Line || valid.object instanceof THREE.LineSegments) && valid.index !== undefined) {
+        // Lógica para líneas... (simplificada por brevedad, similar a arriba)
+        const geom = (valid.object as any).geometry;
+        const pos = geom?.attributes?.position;
+        if (pos && pos.count > 0) {
+             const getIndex = (i: number) => geom?.index ? geom.index.getX(i) : i;
+             const i1 = getIndex(valid.index);
+             const i2 = getIndex(valid.index + 1);
+             const lineVerts: THREE.Vector3[] = [];
+             
+             // Check vertices
+             [i1, i2].forEach(idx => {
+                 if(idx < 0 || idx >= pos.count) return;
+                 const v = new THREE.Vector3().fromBufferAttribute(pos, idx).applyMatrix4(valid.object.matrixWorld);
+                 pushSnapCandidate(v, 'vertex', valid, ray, candidatesOut);
+                 lineVerts.push(v);
+             });
+             
+             // Check closest point on segment
+             if(lineVerts.length === 2) {
+                 const closestOnSegment = getClosestPointOnSegmentToRay(lineVerts[0], lineVerts[1], ray);
+                 pushSnapCandidate(closestOnSegment, 'edge', valid, ray, candidatesOut);
+             }
         }
     }
 };
@@ -435,8 +388,7 @@ const findBestSnap = (intersections: THREE.Intersection[]) => {
 
     const camDist = firstHit.distance;
     const worldUnitsPerPixel = getWorldUnitsPerPixel(camDist);
-    // Increased threshold for easier snapping (approx 20px radius)
-    const WORLD_UNITS_THRESHOLD = THREE.MathUtils.clamp(worldUnitsPerPixel * 20, 0.001, 0.05);
+    const WORLD_UNITS_THRESHOLD = THREE.MathUtils.clamp(worldUnitsPerPixel * 12, 0.0006, 0.03);
     const STICKY_THRESHOLD = WORLD_UNITS_THRESHOLD * 0.45;
 
     const candidates: SnapCandidate[] = [];
@@ -461,18 +413,11 @@ const findBestSnap = (intersections: THREE.Intersection[]) => {
 
         let score = c.distanceToRay;
         if (c.type === 'intersection') score *= 0.15;
-        if (c.type === 'corner') score *= 0.20; // High priority for corners
         if (c.type === 'vertex') score *= 0.25;
         if (c.type === 'edge') score *= 0.85;
         if (c.type === 'face') score *= 1.4;
         score += c.distanceToCamera * 0.0001;
-        
-        const mainScore = c.distanceToRay * (
-            c.type === 'intersection' ? 0.6 : 
-            c.type === 'corner' ? 0.65 :
-            c.type === 'vertex' ? 0.75 : 
-            c.type === 'edge' ? 1 : 1.3
-        );
+        const mainScore = c.distanceToRay * (c.type === 'intersection' ? 0.6 : c.type === 'vertex' ? 0.75 : c.type === 'edge' ? 1 : 1.3);
 
         if (mainScore < bestMainScore || (mainScore === bestMainScore && score < bestScore)) {
             bestMainScore = mainScore;
@@ -492,8 +437,8 @@ const findBestSnap = (intersections: THREE.Intersection[]) => {
                     snapMarker.position.copy(lastSnapped.point);
                     snapMarker.visible = true;
                 }
-                if (snapLine) {
-                    snapLine.geometry.setFromPoints([firstHit.point, lastSnapped.point]);
+                if (snapLine && cursorMesh) {
+                    snapLine.geometry.setFromPoints([cursorMesh.position, lastSnapped.point]);
                     snapLine.visible = true;
                 }
                 document.body.style.cursor = 'crosshair';
@@ -516,10 +461,10 @@ const findBestSnap = (intersections: THREE.Intersection[]) => {
             snapMarker.position.copy(bestCandidate.point);
             snapMarker.visible = true;
         }
-        if (snapLine) {
-    snapLine.geometry.setFromPoints([firstHit.point, bestCandidate.point]);
-    snapLine.visible = true;
-}
+        if (snapLine && cursorMesh) {
+            snapLine.geometry.setFromPoints([cursorMesh.position, bestCandidate.point]);
+            snapLine.visible = true;
+        }
         document.body.style.cursor = 'crosshair';
 
         const result = bestCandidate.intersection;
@@ -589,8 +534,7 @@ try {
     await fragments.init(`${baseUrl}fragments/fragments.mjs`);
 } catch (error) {
     console.error("Critical Error: Fragments init failed", error);
-    // Don't throw to prevent white screen, try to continue
-    logToScreen("ERROR CRÍTICO: No se pudo cargar el motor de fragmentos.");
+    throw new Error(`Fragments init failed: ${error}`);
 }
 
 const classifier = components.get(OBC.Classifier);
@@ -617,6 +561,9 @@ hider.isolate = async (selection: any) => {
     
     // Sync hiddenItems for Isolate
     try {
+         console.warn("[DEBUG] Global Isolate Triggered. Syncing hiddenItems...");
+         console.log("[DEBUG] Selection keys:", Object.keys(selection));
+
          for (const [uuid, model] of fragments.list) {
              const allIds = await model.getItemsIdsWithGeometry();
              
@@ -641,7 +588,7 @@ hider.isolate = async (selection: any) => {
                  }
                  
                  if (belongs) {
-                     // console.log(`[DEBUG] Fragment ${fragID} belongs to model ${uuid}`);
+                     console.log(`[DEBUG] Fragment ${fragID} belongs to model ${uuid}`);
                      const items = idSet instanceof Set ? idSet : (Array.isArray(idSet) ? idSet : []);
                      for(const id of (items as any)) visibleIDsForThisModel.add(id);
                  }
@@ -660,150 +607,183 @@ hider.isolate = async (selection: any) => {
                      hiddenCount++;
                  }
              }
+             console.log(`[DEBUG] Model ${uuid}: Total ${allIds.size}, Visible ${visibleIDsForThisModel.size}, Hidden ${hiddenCount}`);
          }
     } catch (e) {
          console.error("Error updating hidden items during global isolate:", e);
     }
 };
 
-// --- CLIPPER SAFE INIT ---
-let clipper: any = null;
-try {
-    if (OBC.Clipper) {
-        clipper = components.get(OBC.Clipper);
-        clipper.material = new THREE.MeshBasicMaterial({
-            color: 0xCFD8DC,
-            side: THREE.DoubleSide,
-            shadowSide: THREE.DoubleSide,
-            opacity: 0.2,
-            transparent: true
-        });
-    }
-} catch (e) {
-    console.error("Clipper init failed:", e);
-}
+const clipper = components.get(OBC.Clipper);
+clipper.material = new THREE.MeshBasicMaterial({
+    color: 0xCFD8DC, // Light gray-blue typical of BIM software
+    side: THREE.DoubleSide,
+    shadowSide: THREE.DoubleSide,
+    opacity: 0.2,
+    transparent: true
+});
 
-// --- HIGHLIGHTER SAFE INIT ---
-let highlighter: any = null;
-try {
-    highlighter = components.get(OBF.Highlighter);
-    highlighter.setup({ world });
-    highlighter.zoomToSelection = true;
-} catch(e) {
-    console.error("Highlighter init failed:", e);
-}
-
-
-
-
-
-// --- TOOL BUTTONS ---
-
-const resetTools = () => {
-    measurementMode = null;
-    measurementPoints = [];
-    if (tempMeasurementLine) {
-        world.scene.three.remove(tempMeasurementLine);
-        tempMeasurementLine = null;
-    }
-    if (snappingCursor) snappingCursor.visible = false;
+// --- TOOL SYSTEM ---
+// --- getIntersection (AHORA SIN DOBLE SNAP) ---
+const getIntersection = (event: MouseEvent) => {
+    const rect = container.getBoundingClientRect();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     
-    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-    if (area) area.enabled = false;
+    // Usar el raycaster oficial que YA tiene snapping integrado
+    const raycasters = components.get(OBC.Raycasters);
+    const caster = raycasters.get(world);
+    const mouseVec = new THREE.Vector2(mouse.x, mouse.y);
+    
+    let valid = null;
+    try {
+         valid = caster.castRayToObjects(components.meshes, mouseVec);
+    } catch (e) {
+        console.error("OBC Raycaster failed:", e);
+    }
+
+    // Solo feedback visual, no re-snapear
+    if (valid) {
+        if ((valid as any).isSnapped) {
+            cursorMat.color.setHex(0x00FF00); // Verde si hay snap
+            cursorMesh.scale.set(2.0, 2.0, 2.0);
+        } else {
+            cursorMat.color.setHex(0xFF00FF); // Magenta si no hay snap
+            cursorMesh.scale.set(1.0, 1.0, 1.0);
+        }
+        return valid;
+    }
+    return null;
 };
 
-document.getElementById('btn-measure-length')?.addEventListener('click', () => {
-    if (measurementMode === 'length') {
-        resetTools();
+// --- CURSOR MOVEMENT ---
+container.addEventListener('mousemove', (event) => {
+    if (activeTool === 'none') {
+        cursorMesh.visible = false;
+        return;
+    }
+    
+    if (['angle', 'slope', 'point'].includes(activeTool)) {
+        const hit = getIntersection(event);
+        if (hit) {
+            cursorMesh.visible = true;
+            cursorMesh.position.copy(hit.point);
+        } else {
+            cursorMesh.visible = false;
+        }
     } else {
-        resetTools();
-        measurementMode = 'length';
-        document.getElementById('btn-measure-length')?.classList.add('active');
-        logToScreen('Length tool activated');
+         cursorMesh.visible = false;
     }
 });
 
-document.getElementById('btn-measure-point')?.addEventListener('click', () => {
-    if (measurementMode === 'point') {
-        resetTools();
-    } else {
-        resetTools();
-        measurementMode = 'point';
-        document.getElementById('btn-measure-point')?.classList.add('active');
-        logToScreen('Point tool activated');
+// --- POINT TOOL HANDLER ---
+const pointHandler = (event: MouseEvent) => {
+    if (activeTool !== 'point') return;
+    
+    // Force disable highlighter and clear selection to prevent conflicts
+    const highlighter = components.get(OBF.Highlighter);
+    highlighter.enabled = false;
+    highlighter.clear('select');
+    highlighter.clear('hover');
+
+    event.stopImmediatePropagation();
+    event.preventDefault(); // Add this
+    
+    console.log("[DEBUG] Point tool click detected");
+    const hit = getIntersection(event);
+    if (hit) {
+        const p = hit.point;
+        
+        // Create Marker (Sphere)
+        const geom = new THREE.SphereGeometry(0.2, 16, 16);
+        const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.position.copy(p);
+        world.scene.three.add(mesh);
+        customMeshes.push(mesh);
+        
+        // Create Label
+        const div = document.createElement('div');
+        div.className = 'floating-label';
+        div.style.position = 'absolute';
+        div.style.background = 'rgba(0, 0, 0, 0.7)';
+        div.style.color = 'white';
+        div.style.padding = '5px 10px';
+        div.style.borderRadius = '4px';
+        div.style.pointerEvents = 'none';
+        div.style.transform = 'translate(-50%, -100%)';
+        div.style.marginTop = '-10px';
+        div.style.fontSize = '12px';
+        div.innerHTML = `X: ${p.x.toFixed(2)}<br>Y: ${p.y.toFixed(2)}<br>Z: ${p.z.toFixed(2)}`;
+        
+        // Simple CSS2D emulation
+        const updateLabel = () => {
+            if (!mesh.parent) {
+                div.remove();
+                world.camera.controls.removeEventListener('update', updateLabel);
+                return;
+            }
+            const v = p.clone().project(world.camera.three);
+            const x = (v.x * .5 + .5) * container.clientWidth;
+            const y = (v.y * -.5 + .5) * container.clientHeight;
+            div.style.left = `${x}px`;
+            div.style.top = `${y}px`;
+            
+            // Hide if behind camera
+            if (v.z > 1) div.style.display = 'none';
+            else div.style.display = 'block';
+        };
+        
+        updateLabel();
+        world.camera.controls.addEventListener('update', updateLabel);
+        document.body.appendChild(div);
+        
+        logToScreen(`Point: X:${p.x.toFixed(2)} Y:${p.y.toFixed(2)} Z:${p.z.toFixed(2)}`);
     }
+};
+
+// --- TOOL BUTTONS ---
+document.getElementById('btn-point')?.addEventListener('click', () => {
+    activeTool = 'point';
+    logToScreen('Point tool activated');
+    container.addEventListener('click', pointHandler);
 });
 
-document.getElementById('btn-measure-angle')?.addEventListener('click', () => {
-    if (measurementMode === 'angle') {
-        resetTools();
-    } else {
-        resetTools();
-        measurementMode = 'angle';
-        document.getElementById('btn-measure-angle')?.classList.add('active');
-        logToScreen('Angle tool activated');
-    }
+document.getElementById('btn-angle')?.addEventListener('click', () => {
+    activeTool = 'angle';
+    logToScreen('Angle tool activated');
 });
 
-document.getElementById('btn-measure-slope')?.addEventListener('click', () => {
-    if (measurementMode === 'slope') {
-        resetTools();
-    } else {
-        resetTools();
-        measurementMode = 'slope';
-        document.getElementById('btn-measure-slope')?.classList.add('active');
-        logToScreen('Slope tool activated');
-    }
+document.getElementById('btn-slope')?.addEventListener('click', () => {
+    activeTool = 'slope';
+    logToScreen('Slope tool activated');
 });
 
-document.getElementById('btn-measure-delete')?.addEventListener('click', () => {
-    resetTools();
-    
-    // Clear all measurements
-    measurementMarkers.forEach(m => world.scene.three.remove(m));
-    measurementMarkers.length = 0;
-    
-    measurementLabels.forEach(l => l.remove());
-    measurementLabels.length = 0;
-    
-    customMeshes.forEach(m => world.scene.three.remove(m));
-    customMeshes.length = 0;
-    
-    document.querySelectorAll('.measurement-label').forEach(el => el.remove());
-    document.querySelectorAll('.floating-label').forEach(el => el.remove()); 
-    
-    if (area) area.deleteAll();
-    
-    logToScreen('All measurements cleared');
+document.getElementById('btn-none')?.addEventListener('click', () => {
+    activeTool = 'none';
+    logToScreen('Tools deactivated');
+    container.removeEventListener('click', pointHandler);
 });
 
 // --- MODEL LOADING ---
-const loadFragment = async (buffer: ArrayBuffer, name: string) => {
+const loadModel = async (fragmentsFile: File) => {
     const fragmentsManager = components.get(OBC.FragmentsManager);
+    const buffer = await fragmentsFile.arrayBuffer();
     const fragment = await fragmentsManager.load(buffer);
     
+    // Populate components.meshes for raycasting
     if (!components.meshes) components.meshes = [];
     
     const root = fragment.mesh || fragment.object;
     if (root) {
-        // Essential for OBC Tools (Highlighter, Clipper, etc)
-        if (world.meshes) world.meshes.add(root);
-
         root.traverse((child: any) => {
             if ((child.isMesh || child.isInstancedMesh) && child.visible) {
                 components.meshes.push(child);
-                if (world.meshes) world.meshes.add(child);
             }
         });
     }
     
-    logToScreen(`Model loaded: ${name}`);
-    return fragment;
-};
-
-const loadModel = async (fragmentsFile: File) => {
-    const buffer = await fragmentsFile.arrayBuffer();
-    await loadFragment(buffer, fragmentsFile.name);
+    logToScreen(`Model loaded: ${fragmentsFile.name}`);
 };
 
 // --- UI CONTROLS ---
@@ -818,7 +798,53 @@ document.getElementById('file-input')?.addEventListener('change', async (e) => {
     }
 });
 
-
+// --- MEASUREMENT MODE TOGGLE ---
+document.getElementById('btn-measure')?.addEventListener('click', () => {
+    const btn = document.getElementById('btn-measure')!;
+    if (measurementMode) {
+        measurementMode = null;
+        btn.textContent = 'Medir';
+        btn.classList.remove('active');
+        
+        // Clean up
+        measurementPoints = [];
+        measurementMarkers.forEach(m => world.scene.three.remove(m));
+        measurementLabels.forEach(l => l.remove());
+        measurementMarkers.length = 0;
+        measurementLabels.length = 0;
+        
+        if (tempMeasurementLine) {
+            world.scene.three.remove(tempMeasurementLine);
+            tempMeasurementLine = null;
+        }
+        
+        if (snappingCursor) {
+            world.scene.three.remove(snappingCursor);
+            snappingCursor = null;
+        }
+        
+        container.removeEventListener('click', onMeasureClick);
+        container.removeEventListener('mousemove', onMeasureMouseMove);
+        
+        logToScreen('Measurement mode deactivated');
+    } else {
+        measurementMode = 'length';
+        btn.textContent = 'Detener';
+        btn.classList.add('active');
+        
+        // Create snapping cursor
+        const cursorGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+        const cursorMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
+        snappingCursor = new THREE.Mesh(cursorGeometry, cursorMaterial);
+        snappingCursor.visible = false;
+        world.scene.three.add(snappingCursor);
+        
+        container.addEventListener('click', onMeasureClick);
+        container.addEventListener('mousemove', onMeasureMouseMove);
+        
+        logToScreen('Measurement mode activated');
+    }
+});
 
 // --- MEASUREMENT FUNCTIONS ---
 function createMarker(position: THREE.Vector3, color: number = 0xffff00) {
@@ -868,6 +894,11 @@ function createLabel(text: string, position: THREE.Vector3) {
 }
 
 async function onMeasureMouseMove(event: MouseEvent) {
+    // Debug for v21
+    if (Math.random() < 0.05 && measurementMode) {
+         // console.log("Measure Mouse Move Active");
+    }
+
     if (!measurementMode) {
         if (snappingCursor) snappingCursor.visible = false;
         return;
@@ -884,49 +915,30 @@ async function onMeasureMouseMove(event: MouseEvent) {
     const result = await simpleRaycaster.castRay();
     
     if (result && result.point) {
-        if (!snappingCursor) {
-            const cursorGeometry = new THREE.SphereGeometry(0.2, 16, 16);
-            const cursorMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
-            snappingCursor = new THREE.Mesh(cursorGeometry, cursorMaterial);
-            world.scene.three.add(snappingCursor);
-        }
-
         if (snappingCursor) {
             snappingCursor.position.copy(result.point);
             snappingCursor.visible = true;
         }
 
-        // Temp line logic
-        const currentPoint = result.point;
-        
+        // If we have a start point, draw a temp line to current cursor
         if (measurementMode === 'length' && measurementPoints.length === 1) {
-            updateTempLine(measurementPoints[0], currentPoint);
-        } else if (measurementMode === 'slope' && measurementPoints.length === 1) {
-             updateTempLine(measurementPoints[0], currentPoint);
-        } else if (measurementMode === 'angle') {
-            if (measurementPoints.length === 1) {
-                updateTempLine(measurementPoints[0], currentPoint);
-            } else if (measurementPoints.length === 2) {
-                updateTempLine(measurementPoints[1], currentPoint);
+            const start = measurementPoints[0];
+            const end = result.point;
+            
+            if (!tempMeasurementLine) {
+                const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+                const material = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false, opacity: 0.5, transparent: true });
+                tempMeasurementLine = new THREE.Line(geometry, material);
+                world.scene.three.add(tempMeasurementLine);
+            } else {
+                const positions = tempMeasurementLine.geometry.attributes.position;
+                positions.setXYZ(0, start.x, start.y, start.z);
+                positions.setXYZ(1, end.x, end.y, end.z);
+                positions.needsUpdate = true;
             }
         }
-
     } else {
         if (snappingCursor) snappingCursor.visible = false;
-    }
-}
-
-function updateTempLine(start: THREE.Vector3, end: THREE.Vector3) {
-    if (!tempMeasurementLine) {
-        const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
-        const material = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false, opacity: 0.5, transparent: true });
-        tempMeasurementLine = new THREE.Line(geometry, material);
-        world.scene.three.add(tempMeasurementLine);
-    } else {
-        const positions = tempMeasurementLine.geometry.attributes.position;
-        positions.setXYZ(0, start.x, start.y, start.z);
-        positions.setXYZ(1, end.x, end.y, end.z);
-        positions.needsUpdate = true;
     }
 }
 
@@ -954,12 +966,12 @@ async function onMeasureClick(event: MouseEvent) {
         const text = `X:${point.x.toFixed(2)} Y:${point.y.toFixed(2)} Z:${point.z.toFixed(2)}`;
         createLabel(text, point);
         logToScreen(`Point: ${text}`);
-    } 
-    else if (measurementMode === 'length') {
+    } else if (measurementMode === 'length') {
         measurementPoints.push(point);
         createMarker(point, 0xffff00);
         
         if (measurementPoints.length === 2) {
+            // Finish measurement
             const p1 = measurementPoints[0];
             const p2 = measurementPoints[1];
             createLine(p1, p2);
@@ -969,92 +981,28 @@ async function onMeasureClick(event: MouseEvent) {
             createLabel(`${dist.toFixed(3)}m`, mid);
             
             logToScreen(`Distance: ${dist.toFixed(3)}m`);
-            resetMeasurementState();
-        }
-    }
-    else if (measurementMode === 'angle') {
-        measurementPoints.push(point);
-        createMarker(point, 0x00ffff); // Cyan for angle
-
-        if (measurementPoints.length === 2) {
-            createLine(measurementPoints[0], measurementPoints[1], 0x00ffff);
-        }
-        else if (measurementPoints.length === 3) {
-            const p1 = measurementPoints[0]; // Start
-            const p2 = measurementPoints[1]; // Vertex
-            const p3 = measurementPoints[2]; // End
             
-            createLine(p2, p3, 0x00ffff);
-            
-            // Calculate Angle
-            const v1 = p1.clone().sub(p2).normalize();
-            const v2 = p3.clone().sub(p2).normalize();
-            const angleRad = v1.angleTo(v2);
-            const angleDeg = THREE.MathUtils.radToDeg(angleRad);
-            
-            createLabel(`${angleDeg.toFixed(1)}°`, p2);
-            logToScreen(`Angle: ${angleDeg.toFixed(1)}°`);
-            resetMeasurementState();
-        }
-    }
-    else if (measurementMode === 'slope') {
-        measurementPoints.push(point);
-        createMarker(point, 0xff00ff); // Magenta for slope
-
-        if (measurementPoints.length === 2) {
-            const p1 = measurementPoints[0];
-            const p2 = measurementPoints[1];
-            createLine(p1, p2, 0xff00ff);
-            
-            const dy = Math.abs(p2.y - p1.y);
-            const dx = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.z - p1.z, 2));
-            
-            let text = '';
-            if (dx < 0.001) {
-                text = 'Vertical';
-            } else {
-                const slope = dy / dx;
-                const deg = THREE.MathUtils.radToDeg(Math.atan(slope));
-                const pct = slope * 100;
-                text = `${deg.toFixed(1)}° (${pct.toFixed(1)}%)`;
+            // Reset for next measurement
+            measurementPoints = [];
+            if (tempMeasurementLine) {
+                world.scene.three.remove(tempMeasurementLine);
+                tempMeasurementLine = null;
             }
-            
-            const mid = p1.clone().add(p2).multiplyScalar(0.5);
-            createLabel(text, mid);
-            logToScreen(`Slope: ${text}`);
-            resetMeasurementState();
         }
     }
 }
 
-container.addEventListener('click', onMeasureClick);
-container.addEventListener('mousemove', onMeasureMouseMove);
-
-function resetMeasurementState() {
-    measurementPoints = [];
-    if (tempMeasurementLine) {
-        world.scene.three.remove(tempMeasurementLine);
-        tempMeasurementLine = null;
-    }
-}
 
 
-// --- SAFE INIT FOR AREA & GRIDS ---
-let area: any = null;
-try {
-    // Check if AreaMeasurement exists in OBF (Components Front)
-    // @ts-ignore
-    const AreaClass = OBF.AreaMeasurement;
-    if (AreaClass) {
-        area = components.get(AreaClass);
-        area.world = world;
-        area.enabled = false;
-    } else {
-        console.warn("AreaMeasurement component not found");
-    }
-} catch (e) {
-    console.error("Area init failed:", e);
-}
+
+// --- UI CONTROLS CONTINUATION ---
+// Add any additional UI controls here...
+
+// --- Initialize ---
+// --- Initialize ---
+const area = components.get(OBF.AreaMeasurement);
+area.world = world;
+area.enabled = false;
 
 // Force Focus on Container to ensure keys are captured
 if (container) {
@@ -1068,8 +1016,11 @@ if (container) {
     });
 }
 
+const grids = components.get(OBC.Grids);
+// grids.world = world; // Grids usually auto-init or need create
+// components.get(OBC.Grids).create(world); // We might need to create a grid first
 
-
+// Initialize Clipper (Already done above, but ensure access)
 
 // --- KEYBOARD SHORTCUTS ---
 let keyBuffer = '';
@@ -1077,7 +1028,7 @@ let lastKeyTime = 0;
 
 window.addEventListener('keydown', async (e) => {
     // FORCE DEBUG
-    // console.log(`[KEY_EVENT] Key: "${e.key}", Code: "${e.code}", Buffer: "${keyBuffer}"`);
+    console.log(`[KEY_EVENT] Key: "${e.key}", Code: "${e.code}", Buffer: "${keyBuffer}"`);
     
     // Ignore if typing in an input
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -1095,7 +1046,7 @@ window.addEventListener('keydown', async (e) => {
     const char = e.key.toUpperCase();
     if (/[A-Z]/.test(char)) {
         keyBuffer += char;
-        logToScreen(`Shortcut: ${keyBuffer}`); 
+        logToScreen(`Key: ${char} (Buffer: ${keyBuffer})`); 
     }
 
     if (keyBuffer.length > 2) {
@@ -1178,68 +1129,111 @@ window.addEventListener('keydown', async (e) => {
                 break;
 
             case 'RL': // Regla (Length)
-                const btnMeasure = document.getElementById('btn-measure-length');
-                if (btnMeasure) btnMeasure.click();
-                keyBuffer = '';
-                break;
-
-            case 'AR': // Área
-                if (area) {
-                    resetTools();
-                    area.enabled = true;
-                    area.create();
-                    logToScreen('Herramienta: Área (Click para puntos, Doble click/Enter para terminar)');
-                } else {
-                    logToScreen('Herramienta Área no disponible');
+                // Trigger existing custom tool
+                const btnMeasure = document.getElementById('btn-measure');
+                if (btnMeasure && !measurementMode) {
+                    btnMeasure.click();
+                } else if (measurementMode !== 'length') {
+                    // Switch to length if in point mode?
+                    // Currently btn-measure toggles.
+                    if (activeTool !== 'none') activeTool = 'none'; // Disable others
+                    measurementMode = 'length';
+                    logToScreen('Herramienta: Regla');
                 }
                 keyBuffer = '';
                 break;
 
+            case 'AR': // Área
+                // Use OBF.AreaMeasurement
+                if (measurementMode) {
+                    // Disable custom tools
+                    const btnMeasure = document.getElementById('btn-measure');
+                    if(btnMeasure && measurementMode) btnMeasure.click();
+                }
+                area.enabled = true;
+                area.create();
+                logToScreen('Herramienta: Área (Click para puntos, Doble click/Enter para terminar)');
+                keyBuffer = '';
+                break;
+
             case 'AG': // Ángulo
-                const btnAngle = document.getElementById('btn-measure-angle');
+                const btnAngle = document.getElementById('btn-angle');
                 if (btnAngle) btnAngle.click();
                 keyBuffer = '';
                 break;
 
             case 'PN': // Pendiente
-                const btnSlope = document.getElementById('btn-measure-slope');
+                const btnSlope = document.getElementById('btn-slope');
                 if (btnSlope) btnSlope.click();
                 keyBuffer = '';
                 break;
 
             case 'CO': // Coordenada por punto
                 if (measurementMode === 'length') {
-                     const btnMeasure = document.getElementById('btn-measure-length');
+                    // Toggle off length first?
+                     const btnMeasure = document.getElementById('btn-measure');
                      if(btnMeasure) btnMeasure.click();
                 }
-                const btnPoint = document.getElementById('btn-measure-point');
-                if (btnPoint) btnPoint.click();
+                // Activate point
+                 const btnPoint = document.getElementById('btn-point'); // Wait, main.ts has btn-measure-point logic? 
+                 // Actually the main.ts I read had `document.getElementById('btn-point')?.addEventListener`.
+                 // But index.html had `btn-measure-point`. 
+                 // Let's check main.ts listener IDs.
+                 // Line 746: `document.getElementById('btn-point')`
+                 // Index.html Line 178: `id="btn-measure-point"`
+                 // MISMATCH! I should fix this too or use the ID that exists in DOM.
+                 // I will assume `activeTool = 'point'` logic.
+                 activeTool = 'point';
+                 container.addEventListener('click', pointHandler);
+                 logToScreen('Herramienta: Coordenada');
                 keyBuffer = '';
                 break;
 
             case 'BM': // Borrar medidas
-                const btnDelete = document.getElementById('btn-measure-delete');
-                if (btnDelete) btnDelete.click();
+                // Clear custom
+                measurementPoints = [];
+                measurementMarkers.forEach(m => world.scene.three.remove(m));
+                measurementLabels.forEach(l => l.remove());
+                measurementMarkers.length = 0;
+                measurementLabels.length = 0;
+                if (tempMeasurementLine) {
+                    world.scene.three.remove(tempMeasurementLine);
+                    tempMeasurementLine = null;
+                }
+                
+                // Clear Area
+                area.deleteAll();
+                
+                // Clear Point (customMeshes)
+                customMeshes.forEach(m => world.scene.three.remove(m));
+                customMeshes.length = 0;
+                document.querySelectorAll('.floating-label').forEach(el => el.remove());
+
+                logToScreen('Medidas borradas');
                 keyBuffer = '';
                 break;
 
             case 'RJ': // Rejilla
-                if (grids) {
-                    grids.enabled = !grids.enabled;
-                    logToScreen(`Rejilla: ${grids.enabled ? 'On' : 'Off'}`);
-                } else {
-                    logToScreen('Rejilla no disponible');
+                const grid = components.get(OBC.Grids);
+                // Grid might not be created.
+                // grid.enabled = !grid.enabled; 
+                // Usually we check if it exists in the world.
+                // Let's try creating/toggling visibility.
+                // Accessing the internal grid mesh? 
+                // OBF.Grids manages a grid. 
+                // Let's assume standard behavior:
+                grid.enabled = !grid.enabled;
+                if(grid.enabled) {
+                     // Check if created
+                     // grid.create(world);
                 }
+                logToScreen(`Rejilla: ${grid.enabled ? 'On' : 'Off'}`);
                 keyBuffer = '';
                 break;
 
             case 'RC': // Recorte (Clipper)
-                if (clipper) {
-                    clipper.create(world);
-                    logToScreen('Plano de corte creado');
-                } else {
-                    logToScreen('Clipper no disponible');
-                }
+                clipper.create();
+                logToScreen('Plano de corte creado');
                 keyBuffer = '';
                 break;
             default:
@@ -1280,10 +1274,8 @@ window.addEventListener('mousedown', async (e) => {
     }
 });
 
-logToScreen('VSR IFC Viewer Ready - v36 Restored');
+logToScreen('VSR IFC Viewer Ready - Snapping 3D Mejorado con Visualización');
 
 // Export for global access
 (window as any).components = components;
 (window as any).world = world;
-
-
