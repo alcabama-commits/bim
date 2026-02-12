@@ -209,7 +209,7 @@ const DwgRenderer: React.FC<Props> = ({
     const r = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true })
     r.setPixelRatio(window.devicePixelRatio)
     r.setSize(containerRef.current?.clientWidth || 800, containerRef.current?.clientHeight || 600)
-    r.setClearColor(0x0b1220, 1)
+    r.setClearColor(0xf8fafc, 1)
     setRenderer(r)
 
     camera.position.set(0, 0, 10)
@@ -314,21 +314,20 @@ const DwgRenderer: React.FC<Props> = ({
 
       const updateMat = (m: any) => {
         if (m.color) {
-          // Special case: Pure black -> White
-          if (m.color.getHex() === 0x000000) {
-            m.color.setHex(0xffffff)
+          // Special case: Pure white -> Black (for light bg)
+          if (m.color.getHex() === 0xffffff) {
+            m.color.setHex(0x000000)
             return
           }
 
-          // Ensure visibility: Lighten dark colors
+          // Ensure visibility: Darken light colors
           const hsl = { h: 0, s: 0, l: 0 }
           m.color.getHSL(hsl)
           
-          // If lightness is too low (dark), boost it significantly
-          // This ensures visibility on dark background (original)
-          // AND visibility on white background (inverted) because inverted light = dark
-          if (hsl.l < 0.35) {
-            m.color.setHSL(hsl.h, hsl.s, 0.6)
+          // If lightness is too high (light), darken it
+          // This ensures visibility on light background
+          if (hsl.l > 0.65) {
+            m.color.setHSL(hsl.h, hsl.s, 0.4)
           }
         }
       }
@@ -433,7 +432,7 @@ const DwgRenderer: React.FC<Props> = ({
               console.log('DWG Database:', Object.keys(db || {}), db)
               
               const root = new THREE.Group()
-              const material = new THREE.LineBasicMaterial({ color: 0xffffff })
+              const material = new THREE.LineBasicMaterial({ color: 0x1e293b })
               
               // Helper to create line from points
               const createLine = (pts: THREE.Vector3[], closed: boolean, container: THREE.Object3D) => {
@@ -581,7 +580,7 @@ const DwgRenderer: React.FC<Props> = ({
         loader.setFont(font)
         loader.setEnableLayer(true)
         loader.setConsumeUnits(true)
-        loader.setDefaultColor(0xffffff)
+        loader.setDefaultColor(0x000000)
         if (loadTimeoutRef.current) {
           clearTimeout(loadTimeoutRef.current)
         }
@@ -965,12 +964,12 @@ const DwgRenderer: React.FC<Props> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative flex-1 overflow-hidden bg-slate-900 h-full ${tool === 'hand' ? 'cursor-grab' : 'cursor-crosshair'}`}
+      className={`relative flex-1 overflow-hidden bg-gray-50 h-full ${tool === 'hand' ? 'cursor-grab' : 'cursor-crosshair'}`}
     >
       {/* Fit to View Button */}
       <button 
         onClick={fitToView}
-        className="absolute top-2 right-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded shadow-lg text-sm font-medium z-50 flex items-center gap-2"
+        className="absolute top-2 right-2 bg-white hover:bg-gray-50 text-gray-700 hover:text-alcabama border border-gray-200 px-3 py-1.5 rounded shadow-sm text-sm font-medium z-50 flex items-center gap-2 transition-colors"
         title="Centrar dibujo"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -980,16 +979,16 @@ const DwgRenderer: React.FC<Props> = ({
       </button>
 
       {/* Zoom Slider */}
-      <div className="absolute top-1/2 right-4 transform -translate-y-1/2 flex flex-col items-center bg-slate-800/80 p-2 rounded-xl z-50 gap-2 shadow-xl border border-slate-700">
+      <div className="absolute top-1/2 right-4 transform -translate-y-1/2 flex flex-col items-center bg-white/90 p-2 rounded-xl z-50 gap-2 shadow-lg border border-gray-200 backdrop-blur-sm">
          <div className="flex flex-col items-center gap-1 mb-2">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider">Zoom</span>
+            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Zoom</span>
             <input 
               type="number" 
               value={Math.round(zoomLevel * 100)} 
-              onChange={handleZoomInput}
-              className="w-12 bg-slate-900 text-white text-xs text-center rounded border border-slate-600 py-1 focus:border-blue-500 outline-none"
+              onChange={handleZoomInput} // Note: Check if handleZoomInput exists in scope, it should.
+              className="w-12 bg-gray-50 text-gray-800 text-xs text-center rounded border border-gray-200 py-1 focus:border-alcabama outline-none font-mono"
             />
-            <span className="text-xs text-slate-400">%</span>
+            <span className="text-xs text-gray-400">%</span>
          </div>
          <input 
             type="range" 

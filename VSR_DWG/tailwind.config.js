@@ -3,6 +3,12 @@ export default {
     "./index.html",
     "./src/**/*.{ts,tsx}",
   ],
-  theme: { extend: {} },
+  theme: {
+    extend: {
+      colors: {
+        alcabama: '#d3045c',
+      }
+    }
+  },
   plugins: [],
 }
