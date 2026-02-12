@@ -91,7 +91,7 @@ window.addEventListener('keydown', async (e) => {
                 {
                     const highlighter = components.get(OBF.Highlighter);
                     const selection = highlighter.selection.select;
-                    if (Object.keys(selection).length > 0) {
+                    if (selection && Object.keys(selection).length > 0) {
                         await hider.set(false, selection);
                         highlighter.clear('select');
                         if (typeof logToScreen === 'function') logToScreen('Selección ocultada');
@@ -103,7 +103,7 @@ window.addEventListener('keydown', async (e) => {
                 {
                     const highlighter = components.get(OBF.Highlighter);
                     const selection = highlighter.selection.select;
-                    if (Object.keys(selection).length > 0) {
+                    if (selection && Object.keys(selection).length > 0) {
                         await hider.isolate(selection);
                         highlighter.clear('select');
                         if (typeof logToScreen === 'function') logToScreen('Selección aislada');
@@ -293,6 +293,7 @@ const world = worlds.create();
 
 world.scene = new OBC.SimpleScene(components);
 world.scene.setup();
+world.scene.three.background = new THREE.Color(0x202932);
 world.renderer = new OBC.SimpleRenderer(components, container);
 world.camera = new OBC.SimpleCamera(components);
 
@@ -912,6 +913,48 @@ window.addEventListener('mousedown', async (e) => {
 });
 
 logToScreen('VSR IFC Viewer Ready - Snapping 3D Mejorado con Visualización');
+
+async function loadModels() {
+    try {
+        const fragments = components.get(OBC.FragmentsManager);
+        const response = await fetch('models.json');
+        const models = await response.json();
+        for (const modelInfo of models) {
+            const path = modelInfo.path;
+            const buffer = await (await fetch(path)).arrayBuffer();
+            const model = await fragments.load(new Uint8Array(buffer));
+            world.meshes.add(model);
+        }
+        logToScreen('Modelos cargados');
+        
+        // Auto-zoom to models
+         if (components.meshes.length > 0) {
+             const bbox = new THREE.Box3();
+             for(const mesh of components.meshes) {
+                 if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
+                     if(mesh.geometry) {
+                         if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+                         if(mesh.geometry.boundingBox) {
+                            const meshBox = mesh.geometry.boundingBox.clone();
+                            meshBox.applyMatrix4(mesh.matrixWorld);
+                            bbox.union(meshBox);
+                         }
+                     }
+                 }
+             }
+             if(!bbox.isEmpty()) {
+                const sphere = new THREE.Sphere();
+                bbox.getBoundingSphere(sphere);
+                await world.camera.controls.fitToSphere(sphere, true);
+             }
+       }
+
+    } catch (e) {
+        console.error("Error loading models:", e);
+        logToScreen('Error cargando modelos');
+    }
+}
+loadModels();
 
 // Export for global access
 (window as any).components = components;
