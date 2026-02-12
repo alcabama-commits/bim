@@ -1072,11 +1072,11 @@ const DwgRenderer: React.FC<Props> = ({
             </div>
             <div className={`flex justify-between border-t ${isDarkMode ? 'border-slate-800' : 'border-slate-100'} pt-1 mt-1`}>
               <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Tool</span>
-              <span className="uppercase font-bold text-indigo-500">{tool}</span>
+              <span className="uppercase font-bold text-alcabama-500">{tool}</span>
             </div>
             <div className="flex justify-between">
               <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Status</span>
-              <span className={`${snap ? 'text-green-500' : isDarkMode ? 'text-slate-600' : 'text-slate-300'}`}>
+              <span className={`${snap ? 'text-alcabama-500' : isDarkMode ? 'text-slate-600' : 'text-slate-300'}`}>
                 {snap ? snap.type.toUpperCase() : 'IDLE'}
               </span>
             </div>
