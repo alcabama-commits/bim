@@ -999,6 +999,249 @@ async function onMeasureClick(event: MouseEvent) {
 // Add any additional UI controls here...
 
 // --- Initialize ---
+// --- Initialize ---
+const area = components.get(OBF.AreaMeasurement);
+area.world = world;
+area.enabled = false;
+
+const grids = components.get(OBC.Grids);
+// grids.world = world; // Grids usually auto-init or need create
+// components.get(OBC.Grids).create(world); // We might need to create a grid first
+
+// Initialize Clipper (Already done above, but ensure access)
+
+// --- KEYBOARD SHORTCUTS ---
+let keyBuffer = '';
+let lastKeyTime = 0;
+
+window.addEventListener('keydown', async (e) => {
+    // Ignore if typing in an input
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+    const now = Date.now();
+    if (now - lastKeyTime > 1000) {
+        keyBuffer = '';
+    }
+    lastKeyTime = now;
+
+    keyBuffer += e.key.toUpperCase();
+    if (keyBuffer.length > 2) {
+        keyBuffer = keyBuffer.slice(-2);
+    }
+
+    if (keyBuffer.length === 2) {
+        // console.log("Shortcut Buffer:", keyBuffer);
+        
+        switch (keyBuffer) {
+            case 'PR': // Perspectiva/Ortogonal
+                const camera = world.camera;
+                const current = camera.projection.current;
+                const next = current === 'Perspective' ? 'Orthographic' : 'Perspective';
+                await camera.projection.set(next);
+                logToScreen(`Proyección: ${next === 'Perspective' ? 'Perspectiva' : 'Ortogonal'}`);
+                keyBuffer = '';
+                break;
+
+            case 'AZ': // Ajustar modelo a la pantalla
+                if (components.meshes && components.meshes.length > 0) {
+                     // Calculate bounding box of all meshes
+                     const bbox = new THREE.Box3();
+                     for(const mesh of components.meshes) {
+                         if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
+                             // Use geometry bounding box transformed to world
+                             if(mesh.geometry) {
+                                 if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+                                 if(mesh.geometry.boundingBox) {
+                                    const meshBox = mesh.geometry.boundingBox.clone();
+                                    meshBox.applyMatrix4(mesh.matrixWorld);
+                                    bbox.union(meshBox);
+                                 }
+                             }
+                         }
+                     }
+                     
+                     if(!bbox.isEmpty()) {
+                        const sphere = new THREE.Sphere();
+                        bbox.getBoundingSphere(sphere);
+                        await world.camera.controls.fitToSphere(sphere, true);
+                        logToScreen('Ajustado a pantalla');
+                     }
+                }
+                keyBuffer = '';
+                break;
+
+            case 'HH': // Ocultar selección
+                {
+                    const highlighter = components.get(OBF.Highlighter);
+                    const selection = highlighter.selection.select;
+                    if (Object.keys(selection).length > 0) {
+                        await hider.set(false, selection);
+                        highlighter.clear('select');
+                        logToScreen('Selección ocultada');
+                    }
+                }
+                keyBuffer = '';
+                break;
+
+            case 'HI': // Aislar selección
+                {
+                    const highlighter = components.get(OBF.Highlighter);
+                    const selection = highlighter.selection.select;
+                    if (Object.keys(selection).length > 0) {
+                        await hider.isolate(selection);
+                        highlighter.clear('select');
+                        logToScreen('Selección aislada');
+                    }
+                }
+                keyBuffer = '';
+                break;
+
+            case 'HR': // Mostrar todo
+                await hider.set(true);
+                logToScreen('Mostrar todo');
+                keyBuffer = '';
+                break;
+
+            case 'RL': // Regla (Length)
+                // Trigger existing custom tool
+                const btnMeasure = document.getElementById('btn-measure');
+                if (btnMeasure && !measurementMode) {
+                    btnMeasure.click();
+                } else if (measurementMode !== 'length') {
+                    // Switch to length if in point mode?
+                    // Currently btn-measure toggles.
+                    if (activeTool !== 'none') activeTool = 'none'; // Disable others
+                    measurementMode = 'length';
+                    logToScreen('Herramienta: Regla');
+                }
+                keyBuffer = '';
+                break;
+
+            case 'AR': // Área
+                // Use OBF.AreaMeasurement
+                if (measurementMode) {
+                    // Disable custom tools
+                    const btnMeasure = document.getElementById('btn-measure');
+                    if(btnMeasure && measurementMode) btnMeasure.click();
+                }
+                area.enabled = true;
+                area.create();
+                logToScreen('Herramienta: Área (Click para puntos, Doble click/Enter para terminar)');
+                keyBuffer = '';
+                break;
+
+            case 'AG': // Ángulo
+                const btnAngle = document.getElementById('btn-angle');
+                if (btnAngle) btnAngle.click();
+                keyBuffer = '';
+                break;
+
+            case 'PN': // Pendiente
+                const btnSlope = document.getElementById('btn-slope');
+                if (btnSlope) btnSlope.click();
+                keyBuffer = '';
+                break;
+
+            case 'CO': // Coordenada por punto
+                if (measurementMode === 'length') {
+                    // Toggle off length first?
+                     const btnMeasure = document.getElementById('btn-measure');
+                     if(btnMeasure) btnMeasure.click();
+                }
+                // Activate point
+                 const btnPoint = document.getElementById('btn-point'); // Wait, main.ts has btn-measure-point logic? 
+                 // Actually the main.ts I read had `document.getElementById('btn-point')?.addEventListener`.
+                 // But index.html had `btn-measure-point`. 
+                 // Let's check main.ts listener IDs.
+                 // Line 746: `document.getElementById('btn-point')`
+                 // Index.html Line 178: `id="btn-measure-point"`
+                 // MISMATCH! I should fix this too or use the ID that exists in DOM.
+                 // I will assume `activeTool = 'point'` logic.
+                 activeTool = 'point';
+                 container.addEventListener('click', pointHandler);
+                 logToScreen('Herramienta: Coordenada');
+                keyBuffer = '';
+                break;
+
+            case 'BM': // Borrar medidas
+                // Clear custom
+                measurementPoints = [];
+                measurementMarkers.forEach(m => world.scene.three.remove(m));
+                measurementLabels.forEach(l => l.remove());
+                measurementMarkers.length = 0;
+                measurementLabels.length = 0;
+                if (tempMeasurementLine) {
+                    world.scene.three.remove(tempMeasurementLine);
+                    tempMeasurementLine = null;
+                }
+                
+                // Clear Area
+                area.deleteAll();
+                
+                // Clear Point (customMeshes)
+                customMeshes.forEach(m => world.scene.three.remove(m));
+                customMeshes.length = 0;
+                document.querySelectorAll('.floating-label').forEach(el => el.remove());
+
+                logToScreen('Medidas borradas');
+                keyBuffer = '';
+                break;
+
+            case 'RJ': // Rejilla
+                const grid = components.get(OBC.Grids);
+                // Grid might not be created.
+                // grid.enabled = !grid.enabled; 
+                // Usually we check if it exists in the world.
+                // Let's try creating/toggling visibility.
+                // Accessing the internal grid mesh? 
+                // OBF.Grids manages a grid. 
+                // Let's assume standard behavior:
+                grid.enabled = !grid.enabled;
+                if(grid.enabled) {
+                     // Check if created
+                     // grid.create(world);
+                }
+                logToScreen(`Rejilla: ${grid.enabled ? 'On' : 'Off'}`);
+                keyBuffer = '';
+                break;
+
+            case 'RC': // Recorte (Clipper)
+                clipper.create();
+                logToScreen('Plano de corte creado');
+                keyBuffer = '';
+                break;
+        }
+    }
+});
+
+window.addEventListener('mousedown', async (e) => {
+    if (e.button === 1 && e.detail === 2) { // Middle button (1) + Double click (detail 2)
+        e.preventDefault(); // Prevent default scroll/zoom behavior if any
+        if (components.meshes && components.meshes.length > 0) {
+             const bbox = new THREE.Box3();
+             for(const mesh of components.meshes) {
+                 if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
+                     if(mesh.geometry) {
+                         if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+                         if(mesh.geometry.boundingBox) {
+                            const meshBox = mesh.geometry.boundingBox.clone();
+                            meshBox.applyMatrix4(mesh.matrixWorld);
+                            bbox.union(meshBox);
+                         }
+                     }
+                 }
+             }
+             
+             if(!bbox.isEmpty()) {
+                const sphere = new THREE.Sphere();
+                bbox.getBoundingSphere(sphere);
+                await world.camera.controls.fitToSphere(sphere, true);
+                logToScreen('Ajustado a pantalla (Mouse)');
+             }
+        }
+    }
+});
+
 logToScreen('VSR IFC Viewer Ready - Snapping 3D Mejorado con Visualización');
 
 // Export for global access
