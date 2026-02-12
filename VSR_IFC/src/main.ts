@@ -5,6 +5,143 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
+console.log('--- VSR_IFC SCRIPT STARTED ---');
+window.addEventListener('error', (e) => {
+    console.error('GLOBAL SCRIPT ERROR:', e.message, 'at', e.filename, ':', e.lineno);
+});
+
+// --- KEYBOARD SHORTCUTS (Moved to top for immediate registration) ---
+window.addEventListener('keydown', async (e) => {
+    console.log(`[GLOBAL_KEY_DEBUG] Code: ${e.code}, Key: ${e.key}, Ctrl: ${e.ctrlKey}, Target: ${e.target}`);
+
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+    const code = e.code;
+    
+    // Safety check for dependencies
+    // We use (window as any).components/world if local vars are not yet captured or initialized
+    // But since this runs on event, they should be ready.
+    if (typeof world === 'undefined' || typeof components === 'undefined' || typeof clipper === 'undefined' || typeof hider === 'undefined') {
+        console.warn("VSR_IFC: Core components not ready yet.");
+        return;
+    }
+
+    try {
+        switch (code) {
+            case 'KeyP': // P: Perspectiva/Ortogonal
+                const camera = world.camera;
+                const current = camera.projection.current;
+                const next = current === 'Perspective' ? 'Orthographic' : 'Perspective';
+                await camera.projection.set(next);
+                if (typeof logToScreen === 'function') logToScreen(`Proyección: ${next === 'Perspective' ? 'Perspectiva' : 'Ortogonal'}`);
+                break;
+
+            case 'KeyZ': // Z: Zoom Extents
+                if (components.meshes && components.meshes.length > 0) {
+                     const bbox = new THREE.Box3();
+                     for(const mesh of components.meshes) {
+                         if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
+                             if(mesh.geometry) {
+                                 if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+                                 if(mesh.geometry.boundingBox) {
+                                    const meshBox = mesh.geometry.boundingBox.clone();
+                                    meshBox.applyMatrix4(mesh.matrixWorld);
+                                    bbox.union(meshBox);
+                                 }
+                             }
+                         }
+                     }
+                     if(!bbox.isEmpty()) {
+                        const sphere = new THREE.Sphere();
+                        bbox.getBoundingSphere(sphere);
+                        await world.camera.controls.fitToSphere(sphere, true);
+                        if (typeof logToScreen === 'function') logToScreen('Ajustado a pantalla');
+                     }
+                }
+                break;
+
+            case 'KeyH': // H: Hide
+                {
+                    const highlighter = components.get(OBF.Highlighter);
+                    const selection = highlighter.selection.select;
+                    if (Object.keys(selection).length > 0) {
+                        await hider.set(false, selection);
+                        highlighter.clear('select');
+                        if (typeof logToScreen === 'function') logToScreen('Selección ocultada');
+                    }
+                }
+                break;
+
+            case 'KeyI': // I: Isolate
+                {
+                    const highlighter = components.get(OBF.Highlighter);
+                    const selection = highlighter.selection.select;
+                    if (Object.keys(selection).length > 0) {
+                        await hider.isolate(selection);
+                        highlighter.clear('select');
+                        if (typeof logToScreen === 'function') logToScreen('Selección aislada');
+                    }
+                }
+                break;
+
+            case 'KeyR': // R: Show All (Reset)
+                await hider.set(true);
+                if (typeof logToScreen === 'function') logToScreen('Mostrar todo');
+                break;
+            
+            case 'KeyL': // L: Length
+                 const btnMeasure = document.getElementById('btn-measure-length');
+                 if (btnMeasure) btnMeasure.click();
+                 break;
+            
+            case 'KeyA': // A: Area
+                 const btnArea = document.getElementById('btn-measure-area');
+                 if (btnArea) btnArea.click();
+                 break;
+
+            case 'KeyG': // G: Angle
+                 const btnAngle = document.getElementById('btn-measure-angle');
+                 if (btnAngle) btnAngle.click();
+                 break;
+
+            case 'KeyS': // S: Slope
+                 const btnSlope = document.getElementById('btn-measure-slope');
+                 if (btnSlope) btnSlope.click();
+                 break;
+
+            case 'KeyC': // C: Coordinate
+                 const btnPoint = document.getElementById('btn-measure-point');
+                 if (btnPoint) btnPoint.click();
+                 break;
+
+            case 'Escape': // Escape
+                if (typeof deactivateAllTools === 'function') deactivateAllTools();
+                if (typeof logToScreen === 'function') logToScreen('Herramientas desactivadas');
+                break;
+            
+            case 'Delete':
+            case 'Backspace':
+                 if (typeof measurementPoints !== 'undefined') measurementPoints = [];
+                 if (typeof area !== 'undefined') area.deleteAll();
+                 if (typeof clipper !== 'undefined') clipper.deleteAll();
+                 if (typeof logToScreen === 'function') logToScreen('Medidas borradas');
+                 break;
+                 
+            case 'KeyX':
+                 if (typeof clipper !== 'undefined') clipper.create();
+                 break;
+
+            case 'KeyJ':
+                 const grid = components.get(OBC.Grids);
+                 grid.enabled = !grid.enabled;
+                 break;
+        }
+    } catch (err) {
+        console.error("Shortcut Error:", err);
+    }
+}, { capture: true });
+
 // --- Measurement State (Hoisted to top to avoid ReferenceError) ---
 let measurementMode: 'length' | 'point' | null = null;
 let measurementPoints: THREE.Vector3[] = [];
@@ -736,195 +873,7 @@ function deactivateAllTools() {
 // --- KEYBOARD SHORTCUTS ---
 // Refactored to Single-Key System for robustness
 
-window.addEventListener('keydown', async (e) => {
-    // FORCE DEBUG: Log EVERY keydown event to see if they are even registering
-    console.log(`[GLOBAL_KEY_DEBUG] Code: ${e.code}, Key: ${e.key}, Ctrl: ${e.ctrlKey}, Target: ${e.target}`);
 
-    // Ignore if typing in an input
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    
-    // Ignore if modifier keys (Ctrl, Alt, Meta) are pressed
-    if (e.ctrlKey || e.altKey || e.metaKey) return;
-
-    const key = e.key.toUpperCase();
-    const code = e.code;
-    
-    let handled = true;
-
-    try {
-        switch (code) {
-            case 'KeyP': // P: Perspectiva/Ortogonal
-                const camera = world.camera;
-                const current = camera.projection.current;
-                const next = current === 'Perspective' ? 'Orthographic' : 'Perspective';
-                await camera.projection.set(next);
-                logToScreen(`Proyección: ${next === 'Perspective' ? 'Perspectiva' : 'Ortogonal'}`);
-                break;
-
-            case 'KeyZ': // Z: Ajustar modelo a la pantalla (Zoom)
-                if (components.meshes && components.meshes.length > 0) {
-                     // Calculate bounding box of all meshes
-                     const bbox = new THREE.Box3();
-                     for(const mesh of components.meshes) {
-                         if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
-                             // Use geometry bounding box transformed to world
-                             if(mesh.geometry) {
-                                 if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-                                 if(mesh.geometry.boundingBox) {
-                                    const meshBox = mesh.geometry.boundingBox.clone();
-                                    meshBox.applyMatrix4(mesh.matrixWorld);
-                                    bbox.union(meshBox);
-                                 }
-                             }
-                         }
-                     }
-                     
-                     if(!bbox.isEmpty()) {
-                        const sphere = new THREE.Sphere();
-                        bbox.getBoundingSphere(sphere);
-                        await world.camera.controls.fitToSphere(sphere, true);
-                        logToScreen('Ajustado a pantalla');
-                     }
-                }
-                break;
-
-            case 'KeyH': // H: Ocultar selección
-                {
-                    const highlighter = components.get(OBF.Highlighter);
-                    const selection = highlighter.selection.select;
-                    if (Object.keys(selection).length > 0) {
-                        await hider.set(false, selection);
-                        highlighter.clear('select');
-                        logToScreen('Selección ocultada');
-                    }
-                }
-                break;
-
-            case 'KeyI': // I: Aislar selección
-                {
-                    const highlighter = components.get(OBF.Highlighter);
-                    const selection = highlighter.selection.select;
-                    if (Object.keys(selection).length > 0) {
-                        await hider.isolate(selection);
-                        highlighter.clear('select');
-                        logToScreen('Selección aislada');
-                    }
-                }
-                break;
-
-            case 'KeyR': // R: Mostrar todo (Reset)
-                await hider.set(true);
-                logToScreen('Mostrar todo');
-                break;
-
-            case 'KeyL': // L: Regla (Length)
-                // Trigger existing custom tool
-                const btnMeasure = document.getElementById('btn-measure-length');
-                if (btnMeasure && !measurementMode) {
-                    btnMeasure.click();
-                } else if (measurementMode !== 'length') {
-                    if (activeTool !== 'none') activeTool = 'none'; // Disable others
-                    measurementMode = 'length';
-                    logToScreen('Herramienta: Regla');
-                }
-                break;
-
-            case 'KeyA': // A: Área
-                // Use OBF.AreaMeasurement
-                if (measurementMode) {
-                    // Disable custom tools
-                    const btnMeasure = document.getElementById('btn-measure-length');
-                    if(btnMeasure && measurementMode) btnMeasure.click();
-                }
-                // Also trigger UI button if it exists to sync state
-                const btnArea = document.getElementById('btn-measure-area');
-                if (btnArea && !area.enabled) {
-                    btnArea.click();
-                } else {
-                    area.enabled = true;
-                    area.create();
-                    logToScreen('Herramienta: Área');
-                }
-                break;
-
-            case 'KeyG': // G: Ángulo (Grados)
-                const btnAngle = document.getElementById('btn-measure-angle');
-                if (btnAngle) btnAngle.click();
-                break;
-
-            case 'KeyS': // S: Pendiente (Slope)
-                const btnSlope = document.getElementById('btn-measure-slope');
-                if (btnSlope) btnSlope.click();
-                break;
-
-            case 'KeyC': // C: Coordenada (Coordinate)
-                if (measurementMode === 'length') {
-                    // Toggle off length first
-                    const btnMeasure = document.getElementById('btn-measure-length');
-                    if(btnMeasure) btnMeasure.click();
-                }
-                const btnPoint = document.getElementById('btn-measure-point');
-                if (btnPoint) {
-                    btnPoint.click();
-                } else {
-                    activeTool = 'point';
-                    container.addEventListener('click', pointHandler);
-                    logToScreen('Herramienta: Coordenada');
-                }
-                break;
-
-            case 'Delete':
-            case 'Backspace': // Borrar medidas
-                // Clear custom
-                measurementPoints = [];
-                measurementMarkers.forEach(m => world.scene.three.remove(m));
-                measurementLabels.forEach(l => l.remove());
-                measurementMarkers.length = 0;
-                measurementLabels.length = 0;
-                if (tempMeasurementLine) {
-                    world.scene.three.remove(tempMeasurementLine);
-                    tempMeasurementLine = null;
-                }
-                
-                // Clear Area
-                area.deleteAll();
-                
-                // Clear Point (customMeshes)
-                customMeshes.forEach(m => world.scene.three.remove(m));
-                customMeshes.length = 0;
-                document.querySelectorAll('.floating-label').forEach(el => el.remove());
-                
-                // Clear Clipper
-                clipper.deleteAll();
-
-                logToScreen('Todas las medidas borradas');
-                break;
-
-            case 'KeyJ': // J: Rejilla (Rejilla)
-                const grid = components.get(OBC.Grids);
-                grid.enabled = !grid.enabled;
-                logToScreen(`Rejilla: ${grid.enabled ? 'On' : 'Off'}`);
-                break;
-
-            case 'KeyX': // X: Recorte (Clipper/Cut)
-                clipper.create();
-                logToScreen('Plano de corte creado');
-                break;
-            
-            case 'Escape': // Escape: Cancel tools
-                deactivateAllTools();
-                logToScreen('Herramientas desactivadas');
-                break;
-
-            default:
-                handled = false;
-        }
-    } catch (err) {
-        console.error("Error executing shortcut:", err);
-        logToScreen(`Error: ${err}`);
-        handled = true;
-    }
-}, { capture: true }); // CRITICAL: Use capture phase to prevent Three.js/UI from stealing events
 
 window.addEventListener('mousedown', async (e) => {
     if (e.button === 1 && e.detail === 2) { // Middle button (1) + Double click (detail 2)
