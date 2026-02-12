@@ -737,6 +737,9 @@ function deactivateAllTools() {
 // Refactored to Single-Key System for robustness
 
 window.addEventListener('keydown', async (e) => {
+    // FORCE DEBUG: Log EVERY keydown event to see if they are even registering
+    console.log(`[GLOBAL_KEY_DEBUG] Code: ${e.code}, Key: ${e.key}, Ctrl: ${e.ctrlKey}, Target: ${e.target}`);
+
     // Ignore if typing in an input
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
     
@@ -746,9 +749,6 @@ window.addEventListener('keydown', async (e) => {
     const key = e.key.toUpperCase();
     const code = e.code;
     
-    // FORCE DEBUG
-    console.log(`[KEY_EVENT] Key: "${key}", Code: "${code}"`);
-
     let handled = true;
 
     try {
@@ -924,7 +924,7 @@ window.addEventListener('keydown', async (e) => {
         logToScreen(`Error: ${err}`);
         handled = true;
     }
-});
+}, { capture: true }); // CRITICAL: Use capture phase to prevent Three.js/UI from stealing events
 
 window.addEventListener('mousedown', async (e) => {
     if (e.button === 1 && e.detail === 2) { // Middle button (1) + Double click (detail 2)
