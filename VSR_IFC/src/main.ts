@@ -197,7 +197,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-10-v23-SuperSnap';
+versionDiv.textContent = 'v2026-02-10-v21-SnapForce';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -296,29 +296,31 @@ const simpleRaycaster = raycasters.get(world);
 
 const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRaycaster);
 
-// Helper to perform Vertex Snapping on a raw intersection
+// Helper to perform Vertex/Edge snapping on a raw intersection
 const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
-    // Clear previous snap line if exists
-    if (window.snapLine) {
-        window.snapLine.visible = false;
+    if (!valid) {
+        // if (window.debugLog && Math.random() < 0.05) window.debugLog("No intersection to snap");
+        if (debugSphere) debugSphere.visible = false;
+        return null;
     }
+    // Force log every few frames to confirm function is called
+    if (Math.random() < 0.01 && window.debugLog) window.debugLog("Snap checking...");
 
     if (!valid) {
         if (debugSphere) debugSphere.visible = false;
-        document.body.style.cursor = ''; // Reset cursor if hitting nothing
         return null;
     }
 
     try {
-        // Screen-Space Snapping Settings
-        const SNAP_PIXEL_THRESHOLD = 150; // High threshold for "magnetic" feel
-        const SMART_SEARCH_LIMIT = 10000; // Increased to 10000 for HyperSnap
+        // Threshold in units (meters) - Large for testing
+        const SNAP_THRESHOLD = 1.2; // Increased for v21
 
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
              if (!geom || !geom.attributes.position) return valid;
              
              const pos = geom.attributes.position;
+             const indices = [valid.face.a, valid.face.b, valid.face.c];
              
              // Helpers to get world coordinates
              const getVertexWorld = (idx: number) => {
@@ -335,111 +337,70 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
                  return tempV;
              };
 
-             let candidates: THREE.Vector3[] = [];
-             
-             // Strategy 1: Bounding Box Corners (The "Golden" Snap Points)
-             // Even if the mesh is tessellated weirdly, the bounding box corners are usually the logical corners
-             if (!geom.boundingBox) geom.computeBoundingBox();
-             if (geom.boundingBox) {
-                 const box = geom.boundingBox;
-                 const corners = [
-                     new THREE.Vector3(box.min.x, box.min.y, box.min.z),
-                     new THREE.Vector3(box.min.x, box.min.y, box.max.z),
-                     new THREE.Vector3(box.min.x, box.max.y, box.min.z),
-                     new THREE.Vector3(box.min.x, box.max.y, box.max.z),
-                     new THREE.Vector3(box.max.x, box.min.y, box.min.z),
-                     new THREE.Vector3(box.max.x, box.min.y, box.max.z),
-                     new THREE.Vector3(box.max.x, box.max.y, box.min.z),
-                     new THREE.Vector3(box.max.x, box.max.y, box.max.z)
-                 ];
-                 
-                 corners.forEach(c => {
-                     if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
-                          const instanceMatrix = new THREE.Matrix4();
-                          valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
-                          c.applyMatrix4(instanceMatrix);
-                     }
-                     c.applyMatrix4(valid.object.matrixWorld);
-                     candidates.push(c);
-                 });
-             }
+             const vA = getVertexWorld(indices[0]);
+             const vB = getVertexWorld(indices[1]);
+             const vC = getVertexWorld(indices[2]);
 
-             // Strategy 2: Global Vertex Search (SmartSnap)
-             // If geometry is manageable, check ALL vertices
-             if (pos.count < SMART_SEARCH_LIMIT) {
-                // Brute force all vertices
-                for (let i = 0; i < pos.count; i++) {
-                    candidates.push(getVertexWorld(i));
-                }
-             } else {
-                // Fallback: Just triangle vertices
-                const indices = [valid.face.a, valid.face.b, valid.face.c];
-                candidates.push(
-                    getVertexWorld(indices[0]),
-                    getVertexWorld(indices[1]),
-                    getVertexWorld(indices[2])
-                );
-             }
+             // Candidates: Vertices (Endpoints)
+             const vertices = [vA, vB, vC];
              
+             // Candidates: Midpoints
+             const midpoints = [
+                 vA.clone().add(vB).multiplyScalar(0.5),
+                 vB.clone().add(vC).multiplyScalar(0.5),
+                 vC.clone().add(vA).multiplyScalar(0.5)
+             ];
+
+             // Candidate: Face Center (Centroid)
+             const centroid = vA.clone().add(vB).add(vC).multiplyScalar(1/3);
+
              let closestPoint = new THREE.Vector3();
-             let minPixelDist = Infinity;
+             let minDist = Infinity;
              let found = false;
-             
-             // Project intersection (cursor ray) to screen
-             const screenPoint = valid.point.clone().project(world.camera.three);
-             screenPoint.z = 0; // Flatten for 2D check
-             
-             const width = container.clientWidth;
-             const height = container.clientHeight;
+             let type = '';
 
-             // Check Candidates in Screen Space
-             for (const p of candidates) {
-                 // Project candidate to screen
-                 const screenCandidate = p.clone().project(world.camera.three);
-                 screenCandidate.z = 0;
-                 
-                 // Calculate pixel distance
-                 const dx = (screenCandidate.x - screenPoint.x) * (width / 2);
-                 const dy = (screenCandidate.y - screenPoint.y) * (height / 2);
-                 const pixelDist = Math.sqrt(dx*dx + dy*dy);
+             // Check Vertices
+             for (const p of vertices) {
+                 const dist = p.distanceTo(valid.point);
+                 // v21 Debug
+                 if (dist < 2.0 && window.debugLog && Math.random() < 0.01) {
+                     window.debugLog(`Vertex nearby: ${dist.toFixed(2)}`);
+                 }
 
-                 if (pixelDist < minPixelDist) {
-                     minPixelDist = pixelDist;
+                 if (dist < minDist) {
+                     minDist = dist;
                      closestPoint.copy(p);
                      found = true;
+                     type = 'VERTEX';
                  }
              }
 
-             if (found && minPixelDist < SNAP_PIXEL_THRESHOLD) {
-                 // Apply Snap
+             // Check Midpoints
+             for (const p of midpoints) {
+                 const dist = p.distanceTo(valid.point);
+                 if (dist < minDist) {
+                     minDist = dist;
+                     closestPoint.copy(p);
+                     found = true;
+                     type = 'MIDPOINT';
+                 }
+             }
+             
+             if (found && minDist < SNAP_THRESHOLD) {
                  valid.point.copy(closestPoint);
-                 (valid as any).isSnapped = true;
                  
-                 // Visual Feedback 1: Marker
+                 // Visual Debug
                  if (typeof debugSphere !== 'undefined') {
                      debugSphere.position.copy(closestPoint);
                      debugSphere.visible = true;
-                     debugSphere.material.color.setHex(0xFFD700); // GOLD for HyperSnap
-                     debugSphere.scale.set(3.0, 3.0, 3.0); 
-                     debugSphere.material.depthTest = false; 
-                     debugSphere.renderOrder = 999;
+                     // Color coding
+                     if (type === 'VERTEX') debugSphere.material.color.setHex(0xff0000); // Red
+                     else debugSphere.material.color.setHex(0x00ff00); // Green
                  }
                  
-                 document.body.style.cursor = 'crosshair';
-                 
-                 // Visual Feedback 2: Rubber Band Line (To show what we are snapping to)
-                 if (!window.snapLine) {
-                     const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-                     const mat = new THREE.LineBasicMaterial({ color: 0xFFD700, depthTest: false, transparent: true, opacity: 0.8 });
-                     window.snapLine = new THREE.Line(geo, mat);
-                     window.snapLine.renderOrder = 999;
-                     world.scene.three.add(window.snapLine);
-                 }
-                 
-                 if (window.debugLog) window.debugLog(`HyperSnap: ${found ? 'LOCKED' : 'NONE'} (Px: ${minPixelDist.toFixed(1)})`);
+                 if (window.debugLog) window.debugLog(`Snapped to ${type} (Dist: ${minDist.toFixed(3)})`);
              } else {
                  if (typeof debugSphere !== 'undefined') debugSphere.visible = false;
-                 document.body.style.cursor = ''; 
              }
         }
     } catch (e) {
@@ -1865,26 +1826,24 @@ async function loadModelList() {
     }
 
     try {
-        // Switch to local models.json for reliability and speed
-        // const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
-        logToScreen('Loading local models list...');
+        const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
+        logToScreen('Scanning GitHub for models...');
         
-        const response = await fetch(`${baseUrl}models.json`);
-        if (!response.ok) throw new Error(`Local models.json Error: ${response.status}`);
+        const response = await fetch(GITHUB_API_URL);
+        if (!response.ok) throw new Error(`GitHub API Error: ${response.status}`);
         
         const data = await response.json();
-        if (!Array.isArray(data)) throw new Error('Invalid models.json format');
+        if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
 
-        // Filter: ONLY 2442602 per user request for testing
         const models = data
-            .filter((item: any) => item.name.includes('2442602')) 
+            .filter((item: any) => item.name.toLowerCase().endsWith('.frag'))
             .map((item: any) => ({
                 name: item.name,
-                path: item.path,
-                url: `${baseUrl}${item.path}`
+                path: `models/${item.name}`,
+                url: item.download_url
             }));
 
-        logToScreen(`Models Found: ${models.length} (Filtered for 2442602)`);
+        logToScreen(`GitHub Scan: ${models.length} .frag models found`);
 
         // Group models by specialty
         const groups: Record<string, any[]> = {};
