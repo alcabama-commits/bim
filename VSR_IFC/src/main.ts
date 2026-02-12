@@ -914,18 +914,49 @@ window.addEventListener('mousedown', async (e) => {
 
 logToScreen('VSR IFC Viewer Ready - Snapping 3D Mejorado con Visualización');
 
+// --- DEBUG: Red Cube to verify Renderer ---
+const cubeGeom = new THREE.BoxGeometry(1, 1, 1);
+const cubeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+const debugCube = new THREE.Mesh(cubeGeom, cubeMat);
+debugCube.position.set(0, 5, 0); // Posición elevada
+world.scene.three.add(debugCube);
+logToScreen('DEBUG: Cubo Rojo añadido en (0,5,0)');
+
+// Ensure Camera looks at the cube initially
+world.camera.three.position.set(10, 10, 10);
+world.camera.three.lookAt(0, 0, 0);
+
 async function loadModels() {
+    logToScreen('Iniciando carga de modelos...');
     try {
         const fragments = components.get(OBC.FragmentsManager);
+        
+        logToScreen('Fetching models.json...');
         const response = await fetch('models.json');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const models = await response.json();
+        logToScreen(`models.json cargado. ${models.length} modelos encontrados.`);
+        
         for (const modelInfo of models) {
             const path = modelInfo.path;
-            const buffer = await (await fetch(path)).arrayBuffer();
+            logToScreen(`Cargando: ${modelInfo.name}...`);
+            
+            const fileResponse = await fetch(path);
+            if (!fileResponse.ok) {
+                logToScreen(`Error fetching ${path}: ${fileResponse.status}`);
+                continue;
+            }
+            
+            const buffer = await fileResponse.arrayBuffer();
             const model = await fragments.load(new Uint8Array(buffer));
             world.meshes.add(model);
+            logToScreen(`Modelo cargado: ${modelInfo.name}`);
         }
-        logToScreen('Modelos cargados');
+        logToScreen('Todos los modelos cargados.');
         
         // Auto-zoom to models
          if (components.meshes.length > 0) {
@@ -946,12 +977,14 @@ async function loadModels() {
                 const sphere = new THREE.Sphere();
                 bbox.getBoundingSphere(sphere);
                 await world.camera.controls.fitToSphere(sphere, true);
+                logToScreen('Zoom ajustado a modelos');
              }
        }
 
     } catch (e) {
         console.error("Error loading models:", e);
-        logToScreen('Error cargando modelos');
+        // @ts-ignore
+        logToScreen(`Error cargando modelos: ${e.message}`);
     }
 }
 loadModels();
