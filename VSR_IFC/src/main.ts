@@ -1004,6 +1004,18 @@ const area = components.get(OBF.AreaMeasurement);
 area.world = world;
 area.enabled = false;
 
+// Force Focus on Container to ensure keys are captured
+if (container) {
+    container.tabIndex = 0; // Make focusable
+    container.focus();
+    container.style.outline = 'none'; // Remove ugly outline
+    
+    // Refocus on click
+    container.addEventListener('click', () => {
+        container.focus();
+    });
+}
+
 const grids = components.get(OBC.Grids);
 // grids.world = world; // Grids usually auto-init or need create
 // components.get(OBC.Grids).create(world); // We might need to create a grid first
@@ -1015,14 +1027,18 @@ let keyBuffer = '';
 let lastKeyTime = 0;
 
 window.addEventListener('keydown', async (e) => {
+    // FORCE DEBUG
+    console.log(`[KEY_EVENT] Key: "${e.key}", Code: "${e.code}", Buffer: "${keyBuffer}"`);
+    
     // Ignore if typing in an input
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
     // Filter out non-printable keys and modifiers
+    // Allow single printable characters (length 1)
     if (e.key.length !== 1 || e.ctrlKey || e.altKey || e.metaKey) return;
 
     const now = Date.now();
-    if (now - lastKeyTime > 1500) { // Increased timeout to 1.5s
+    if (now - lastKeyTime > 1500) { 
         keyBuffer = '';
     }
     lastKeyTime = now;
@@ -1030,7 +1046,7 @@ window.addEventListener('keydown', async (e) => {
     const char = e.key.toUpperCase();
     if (/[A-Z]/.test(char)) {
         keyBuffer += char;
-        logToScreen(`Key: ${char} (Buffer: ${keyBuffer})`); // Visual feedback
+        logToScreen(`Key: ${char} (Buffer: ${keyBuffer})`); 
     }
 
     if (keyBuffer.length > 2) {
