@@ -206,7 +206,7 @@ const DwgRenderer: React.FC<Props> = ({
 
   useEffect(() => {
     if (renderer) {
-      renderer.setClearColor(isDarkMode ? 0x020617 : 0xf8fafc, 1)
+      renderer.setClearColor(isDarkMode ? 0x181718 : 0xF9F9FA, 1)
     }
   }, [isDarkMode, renderer])
 
@@ -242,7 +242,7 @@ const DwgRenderer: React.FC<Props> = ({
     const r = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true })
     r.setPixelRatio(window.devicePixelRatio)
     r.setSize(containerRef.current?.clientWidth || 800, containerRef.current?.clientHeight || 600)
-    r.setClearColor(isDarkMode ? 0x020617 : 0xf8fafc, 1)
+    r.setClearColor(isDarkMode ? 0x181718 : 0xF9F9FA, 1)
     setRenderer(r)
 
     camera.position.set(0, 0, 10)
