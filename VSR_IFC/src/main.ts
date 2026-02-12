@@ -5,13 +5,39 @@ import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import './style.css';
 
-console.log('--- VSR_IFC SCRIPT STARTED ---');
+// --- Debug Panel ---
+let debugPanel = document.getElementById('debug-panel');
+if (!debugPanel) {
+    debugPanel = document.createElement('div');
+    debugPanel.id = 'debug-panel';
+    debugPanel.style.position = 'fixed';
+    debugPanel.style.bottom = '10px';
+    debugPanel.style.left = '50%';
+    debugPanel.style.transform = 'translateX(-50%)';
+    debugPanel.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    debugPanel.style.color = 'white';
+    debugPanel.style.padding = '10px 20px';
+    debugPanel.style.borderRadius = '5px';
+    debugPanel.style.zIndex = '1000';
+    debugPanel.style.pointerEvents = 'none';
+    debugPanel.style.fontFamily = 'sans-serif';
+    debugPanel.style.fontSize = '14px';
+    debugPanel.style.transition = 'opacity 0.5s';
+    document.body.appendChild(debugPanel);
+}
 window.addEventListener('error', (e) => {
     console.error('GLOBAL SCRIPT ERROR:', e.message, 'at', e.filename, ':', e.lineno);
 });
 
 // --- KEYBOARD SHORTCUTS (Moved to top for immediate registration) ---
 window.addEventListener('keydown', async (e) => {
+    // FORCE DEBUG: Log EVERY keydown event to see if they are even registering
+    // Also update visible log
+    if (debugPanel) {
+        debugPanel.style.opacity = '1';
+        debugPanel.textContent = `Key: ${e.code}`;
+        setTimeout(() => debugPanel.style.opacity = '0', 2000);
+    }
     console.log(`[GLOBAL_KEY_DEBUG] Code: ${e.code}, Key: ${e.key}, Ctrl: ${e.ctrlKey}, Target: ${e.target}`);
 
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -266,10 +292,20 @@ const worlds = components.get(OBC.Worlds);
 const world = worlds.create();
 
 world.scene = new OBC.SimpleScene(components);
+world.scene.setup();
 world.renderer = new OBC.SimpleRenderer(components, container);
 world.camera = new OBC.SimpleCamera(components);
 
 components.init();
+const grids = components.get(OBC.Grids);
+const grid = grids.create(world);
+grid.config.color.setHex(0x333333);
+
+// --- Initialize Clipper ---
+const clipper = components.get(OBC.Clipper);
+clipper.enabled = true;
+
+const hider = components.get(OBC.Hider);
 
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
@@ -835,15 +871,7 @@ if (container) {
     });
 }
 
-const grids = components.get(OBC.Grids);
-// grids.world = world; // Grids usually auto-init or need create
-// components.get(OBC.Grids).create(world); // We might need to create a grid first
 
-// Initialize Clipper (Already done above, but ensure access)
-const clipper = components.get(OBC.Clipper);
-clipper.enabled = true;
-
-const hider = components.get(OBC.Hider);
 
 const pointHandler = (e: MouseEvent) => {
     // Placeholder for point logic if needed
