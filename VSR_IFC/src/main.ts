@@ -529,475 +529,8 @@ simpleRaycaster.castRayToObjects = (items?: THREE.Object3D[], position?: THREE.V
     return findBestSnap(intersections);
 };
 
-
-// --- FRAGMENTS & COMPONENTS ---
-const baseUrl = import.meta.env.BASE_URL || './';
-const debugSphereGeom = new THREE.SphereGeometry(0.5, 32, 32);
-const debugSphereMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
-const debugSphere = new THREE.Mesh(debugSphereGeom, debugSphereMat);
-debugSphere.renderOrder = 999;
-debugSphere.visible = false;
-world.scene.three.add(debugSphere);
-
-const debugConsole = document.getElementById('debug-console');
-if (debugConsole) {
-    debugConsole.style.display = 'block';
-    const log = (msg: string) => {
-        const line = document.createElement('div');
-        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-        debugConsole.appendChild(line);
-        debugConsole.scrollTop = debugConsole.scrollHeight;
-        if (debugConsole.children.length > 20) debugConsole.removeChild(debugConsole.firstChild);
-    };
-    window.debugLog = log;
-} else {
-    window.debugLog = console.log;
-}
-
-const fragments = components.get(OBC.FragmentsManager);
-
-// Initialize fragments with the worker BEFORE getting other components
-// that might depend on it (like Classifier or Hider)
-try {
-    await fragments.init(`${baseUrl}fragments/fragments.mjs`);
-} catch (error) {
-    console.error("Critical Error: Fragments init failed", error);
-    throw new Error(`Fragments init failed: ${error}`);
-}
-
-const classifier = components.get(OBC.Classifier);
-const hider = components.get(OBC.Hider);
-
-// Monkey-patch Hider to sync hiddenItems globally
-const originalSet = hider.set.bind(hider);
-hider.set = async (visible: boolean, items?: any) => {
-    await originalSet(visible, items);
-    
-    if (items && Object.keys(items).length > 0) {
-        updateHiddenItems(items, visible);
-    } else if (visible) {
-        // Show All case
-        for (const key in hiddenItems) {
-            delete hiddenItems[key];
-        }
-    }
-};
-
-const originalIsolate = hider.isolate.bind(hider);
-hider.isolate = async (selection: any) => {
-    await originalIsolate(selection);
-    
-    // Sync hiddenItems for Isolate
-    try {
-         console.warn("[DEBUG] Global Isolate Triggered. Syncing hiddenItems...");
-         console.log("[DEBUG] Selection keys:", Object.keys(selection));
-
-         for (const [uuid, model] of fragments.list) {
-             const allIds = await model.getItemsIdsWithGeometry();
-             
-             // Collect visible IDs for this model
-             const visibleIDsForThisModel = new Set<number>();
-             
-             // Selection is Record<FragmentID, Iterable<ExpressID>>
-             for (const [fragID, idSet] of Object.entries(selection)) {
-                 // Check if this fragment belongs to the current model
-                 // 1. Check if fragID IS the model UUID
-                 let belongs = (fragID === uuid);
-                 
-                 // 2. Check if fragID is one of the fragments in the model
-                 if (!belongs) {
-                     if (model.items && model.items.length > 0) {
-                         belongs = model.items.some((f: any) => f.id === fragID);
-                     } else if (model.children && model.children.length > 0) {
-                         // Fallback: check Three.js children (Meshes/Fragments)
-                         // Fragment objects usually have 'id' matching the fragment ID
-                         belongs = model.children.some((child: any) => child.uuid === fragID);
-                     }
-                 }
-                 
-                 if (belongs) {
-                     console.log(`[DEBUG] Fragment ${fragID} belongs to model ${uuid}`);
-                     const items = idSet instanceof Set ? idSet : (Array.isArray(idSet) ? idSet : []);
-                     for(const id of (items as any)) visibleIDsForThisModel.add(id);
-                 }
-             }
-             
-             if (!hiddenItems[uuid]) hiddenItems[uuid] = new Set();
-             const hiddenSet = hiddenItems[uuid];
-             hiddenSet.clear(); // Reset before repopulating based on Isolate logic
-             
-             let hiddenCount = 0;
-             for (const id of allIds) {
-                 if (visibleIDsForThisModel.has(id)) {
-                     // It's visible
-                 } else {
-                     hiddenSet.add(id);
-                     hiddenCount++;
-                 }
-             }
-             console.log(`[DEBUG] Model ${uuid}: Total ${allIds.size}, Visible ${visibleIDsForThisModel.size}, Hidden ${hiddenCount}`);
-         }
-    } catch (e) {
-         console.error("Error updating hidden items during global isolate:", e);
-    }
-};
-
-const clipper = components.get(OBC.Clipper);
-clipper.material = new THREE.MeshBasicMaterial({
-    color: 0xCFD8DC, // Light gray-blue typical of BIM software
-    side: THREE.DoubleSide,
-    shadowSide: THREE.DoubleSide,
-    opacity: 0.2,
-    transparent: true
-});
-
-// --- TOOL SYSTEM ---
-// --- getIntersection (AHORA SIN DOBLE SNAP) ---
-const getIntersection = (event: MouseEvent) => {
-    const rect = container.getBoundingClientRect();
-    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    
-    // Usar el raycaster oficial que YA tiene snapping integrado
-    const raycasters = components.get(OBC.Raycasters);
-    const caster = raycasters.get(world);
-    const mouseVec = new THREE.Vector2(mouse.x, mouse.y);
-    
-    let valid = null;
-    try {
-         valid = caster.castRayToObjects(components.meshes, mouseVec);
-    } catch (e) {
-        console.error("OBC Raycaster failed:", e);
-    }
-
-    // Solo feedback visual, no re-snapear
-    if (valid) {
-        if ((valid as any).isSnapped) {
-            cursorMat.color.setHex(0x00FF00); // Verde si hay snap
-            cursorMesh.scale.set(2.0, 2.0, 2.0);
-        } else {
-            cursorMat.color.setHex(0xFF00FF); // Magenta si no hay snap
-            cursorMesh.scale.set(1.0, 1.0, 1.0);
-        }
-        return valid;
-    }
-    return null;
-};
-
-// --- CURSOR MOVEMENT ---
-container.addEventListener('mousemove', (event) => {
-    if (activeTool === 'none') {
-        cursorMesh.visible = false;
-        return;
-    }
-    
-    if (['angle', 'slope', 'point'].includes(activeTool)) {
-        const hit = getIntersection(event);
-        if (hit) {
-            cursorMesh.visible = true;
-            cursorMesh.position.copy(hit.point);
-        } else {
-            cursorMesh.visible = false;
-        }
-    } else {
-         cursorMesh.visible = false;
-    }
-});
-
-// --- POINT TOOL HANDLER ---
-const pointHandler = (event: MouseEvent) => {
-    if (activeTool !== 'point') return;
-    
-    // Force disable highlighter and clear selection to prevent conflicts
-    const highlighter = components.get(OBF.Highlighter);
-    highlighter.enabled = false;
-    highlighter.clear('select');
-    highlighter.clear('hover');
-
-    event.stopImmediatePropagation();
-    event.preventDefault(); // Add this
-    
-    console.log("[DEBUG] Point tool click detected");
-    const hit = getIntersection(event);
-    if (hit) {
-        const p = hit.point;
-        
-        // Create Marker (Sphere)
-        const geom = new THREE.SphereGeometry(0.2, 16, 16);
-        const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
-        const mesh = new THREE.Mesh(geom, mat);
-        mesh.position.copy(p);
-        world.scene.three.add(mesh);
-        customMeshes.push(mesh);
-        
-        // Create Label
-        const div = document.createElement('div');
-        div.className = 'floating-label';
-        div.style.position = 'absolute';
-        div.style.background = 'rgba(0, 0, 0, 0.7)';
-        div.style.color = 'white';
-        div.style.padding = '5px 10px';
-        div.style.borderRadius = '4px';
-        div.style.pointerEvents = 'none';
-        div.style.transform = 'translate(-50%, -100%)';
-        div.style.marginTop = '-10px';
-        div.style.fontSize = '12px';
-        div.innerHTML = `X: ${p.x.toFixed(2)}<br>Y: ${p.y.toFixed(2)}<br>Z: ${p.z.toFixed(2)}`;
-        
-        // Simple CSS2D emulation
-        const updateLabel = () => {
-            if (!mesh.parent) {
-                div.remove();
-                world.camera.controls.removeEventListener('update', updateLabel);
-                return;
-            }
-            const v = p.clone().project(world.camera.three);
-            const x = (v.x * .5 + .5) * container.clientWidth;
-            const y = (v.y * -.5 + .5) * container.clientHeight;
-            div.style.left = `${x}px`;
-            div.style.top = `${y}px`;
-            
-            // Hide if behind camera
-            if (v.z > 1) div.style.display = 'none';
-            else div.style.display = 'block';
-        };
-        
-        updateLabel();
-        world.camera.controls.addEventListener('update', updateLabel);
-        document.body.appendChild(div);
-        
-        logToScreen(`Point: X:${p.x.toFixed(2)} Y:${p.y.toFixed(2)} Z:${p.z.toFixed(2)}`);
-    }
-};
-
-// --- TOOL BUTTONS ---
-document.getElementById('btn-measure-point')?.addEventListener('click', () => {
-    activeTool = 'point';
-    logToScreen('Point tool activated');
-    container.addEventListener('click', pointHandler);
-});
-
-document.getElementById('btn-measure-angle')?.addEventListener('click', () => {
-    activeTool = 'angle';
-    logToScreen('Angle tool activated');
-});
-
-document.getElementById('btn-measure-slope')?.addEventListener('click', () => {
-    activeTool = 'slope';
-    logToScreen('Slope tool activated');
-});
-
-document.getElementById('btn-measure-area')?.addEventListener('click', () => {
-    if (area.enabled) {
-        area.enabled = false;
-        logToScreen('Area tool deactivated');
-    } else {
-        area.enabled = true;
-        area.create();
-        logToScreen('Area tool activated');
-    }
-});
-
-document.getElementById('btn-none')?.addEventListener('click', () => {
-    activeTool = 'none';
-    logToScreen('Tools deactivated');
-    container.removeEventListener('click', pointHandler);
-});
-
-// --- ADDITIONAL TOOL BUTTONS ---
-document.getElementById('projection-toggle')?.addEventListener('click', async (e) => {
-    (e.currentTarget as HTMLElement).blur(); // Release focus
-    const camera = world.camera;
-    const current = camera.projection.current;
-    const next = current === 'Perspective' ? 'Orthographic' : 'Perspective';
-    await camera.projection.set(next);
-    logToScreen(`Proyección: ${next === 'Perspective' ? 'Perspectiva' : 'Ortogonal'}`);
-});
-
-document.getElementById('fit-model-btn')?.addEventListener('click', async (e) => {
-    (e.currentTarget as HTMLElement).blur();
-    if (components.meshes && components.meshes.length > 0) {
-        const bbox = new THREE.Box3();
-        for(const mesh of components.meshes) {
-            if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
-                if(mesh.geometry) {
-                    if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-                    if(mesh.geometry.boundingBox) {
-                        const meshBox = mesh.geometry.boundingBox.clone();
-                        meshBox.applyMatrix4(mesh.matrixWorld);
-                        bbox.union(meshBox);
-                    }
-                }
-            }
-        }
-        if(!bbox.isEmpty()) {
-            const sphere = new THREE.Sphere();
-            bbox.getBoundingSphere(sphere);
-            await world.camera.controls.fitToSphere(sphere, true);
-            logToScreen('Ajustado a pantalla');
-        }
-    }
-});
-
-document.getElementById('btn-hide')?.addEventListener('click', async (e) => {
-    (e.currentTarget as HTMLElement).blur();
-    const hider = components.get(OBF.Hider);
-    const highlighter = components.get(OBF.Highlighter);
-    const selection = highlighter.selection.select;
-    if (Object.keys(selection).length > 0) {
-        await hider.set(false, selection);
-        highlighter.clear('select');
-        logToScreen('Selección ocultada');
-    }
-});
-
-document.getElementById('btn-isolate')?.addEventListener('click', async (e) => {
-    (e.currentTarget as HTMLElement).blur();
-    const hider = components.get(OBF.Hider);
-    const highlighter = components.get(OBF.Highlighter);
-    const selection = highlighter.selection.select;
-    if (Object.keys(selection).length > 0) {
-        await hider.isolate(selection);
-        highlighter.clear('select');
-        logToScreen('Selección aislada');
-    }
-});
-
-document.getElementById('btn-show-all')?.addEventListener('click', async (e) => {
-    (e.currentTarget as HTMLElement).blur();
-    const hider = components.get(OBF.Hider);
-    await hider.set(true);
-    logToScreen('Mostrar todo');
-});
-
-document.getElementById('grid-toggle')?.addEventListener('click', (e) => {
-    (e.currentTarget as HTMLElement).blur();
-    const grid = components.get(OBC.Grids);
-    grid.enabled = !grid.enabled;
-    logToScreen(`Rejilla: ${grid.enabled ? 'On' : 'Off'}`);
-});
-
-document.getElementById('clipper-toggle')?.addEventListener('click', (e) => {
-    (e.currentTarget as HTMLElement).blur();
-    const clipper = components.get(OBC.Clipper);
-    clipper.create();
-    logToScreen('Plano de corte creado');
-});
-
-document.getElementById('btn-measure-delete')?.addEventListener('click', (e) => {
-    (e.currentTarget as HTMLElement).blur();
-    // Clear custom
-    measurementPoints = [];
-    measurementMarkers.forEach(m => world.scene.three.remove(m));
-    measurementLabels.forEach(l => l.remove());
-    measurementMarkers.length = 0;
-    measurementLabels.length = 0;
-    if (tempMeasurementLine) {
-        world.scene.three.remove(tempMeasurementLine);
-        tempMeasurementLine = null;
-    }
-    
-    // Clear Area
-    const area = components.get(OBF.AreaMeasurement);
-    area.deleteAll();
-    
-    // Clear Point (customMeshes)
-    customMeshes.forEach(m => world.scene.three.remove(m));
-    customMeshes.length = 0;
-    document.querySelectorAll('.floating-label').forEach(el => el.remove());
-
-    logToScreen('Medidas borradas');
-});
-
-// --- MODEL LOADING ---
-const loadModel = async (fragmentsFile: File) => {
-    const fragmentsManager = components.get(OBC.FragmentsManager);
-    const buffer = await fragmentsFile.arrayBuffer();
-    const fragment = await fragmentsManager.load(buffer);
-    
-    // Populate components.meshes for raycasting
-    if (!components.meshes) components.meshes = [];
-    
-    const root = fragment.mesh || fragment.object;
-    if (root) {
-        root.traverse((child: any) => {
-            if ((child.isMesh || child.isInstancedMesh) && child.visible) {
-                components.meshes.push(child);
-            }
-        });
-    }
-    
-    logToScreen(`Model loaded: ${fragmentsFile.name}`);
-};
-
-// --- UI CONTROLS ---
-document.getElementById('file-input')?.addEventListener('change', async (e) => {
-    const input = e.target as HTMLInputElement;
-    const files = input.files;
-    if (!files?.length) return;
-    
-    // Remove focus from input so shortcuts work immediately
-    input.blur();
-    window.focus();
-    
-    for (const file of files) {
-        if (file.name.endsWith('.frag')) {
-            await loadModel(file);
-        }
-    }
-});
-
-// --- MEASUREMENT MODE TOGGLE ---
-document.getElementById('btn-measure-length')?.addEventListener('click', () => {
-    const btn = document.getElementById('btn-measure-length')!;
-    if (measurementMode) {
-        measurementMode = null;
-        // btn.textContent = 'Medir'; // REMOVED: Don't overwrite icon
-        btn.classList.remove('active');
-        
-        // Clean up
-        measurementPoints = [];
-        measurementMarkers.forEach(m => world.scene.three.remove(m));
-        measurementLabels.forEach(l => l.remove());
-        measurementMarkers.length = 0;
-        measurementLabels.length = 0;
-        
-        if (tempMeasurementLine) {
-            world.scene.three.remove(tempMeasurementLine);
-            tempMeasurementLine = null;
-        }
-        
-        if (snappingCursor) {
-            world.scene.three.remove(snappingCursor);
-            snappingCursor = null;
-        }
-        
-        container.removeEventListener('click', onMeasureClick);
-        container.removeEventListener('mousemove', onMeasureMouseMove);
-        
-        logToScreen('Measurement mode deactivated');
-    } else {
-        measurementMode = 'length';
-        // btn.textContent = 'Detener'; // REMOVED: Don't overwrite icon
-        btn.classList.add('active');
-        
-        // Create snapping cursor
-        const cursorGeometry = new THREE.SphereGeometry(0.2, 16, 16);
-        const cursorMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
-        snappingCursor = new THREE.Mesh(cursorGeometry, cursorMaterial);
-        snappingCursor.visible = false;
-        world.scene.three.add(snappingCursor);
-        
-        container.addEventListener('click', onMeasureClick);
-        container.addEventListener('mousemove', onMeasureMouseMove);
-        
-        logToScreen('Measurement mode activated');
-    }
-});
-
-// --- MEASUREMENT FUNCTIONS ---
-function createMarker(position: THREE.Vector3, color: number = 0xffff00) {
-    const geometry = new THREE.SphereGeometry(0.15, 16, 16);
+function createMarker(position: THREE.Vector3, color: number = 0x00ff00) {
+    const geometry = new THREE.SphereGeometry(0.1, 16, 16);
     const material = new THREE.MeshBasicMaterial({ color, depthTest: false });
     const marker = new THREE.Mesh(geometry, material);
     marker.position.copy(position);
@@ -1170,55 +703,65 @@ const grids = components.get(OBC.Grids);
 // components.get(OBC.Grids).create(world); // We might need to create a grid first
 
 // Initialize Clipper (Already done above, but ensure access)
+const clipper = components.get(OBF.Clipper);
+clipper.enabled = true;
+
+const hider = components.get(OBC.Hider);
+
+const pointHandler = (e: MouseEvent) => {
+    // Placeholder for point logic if needed
+};
+
+// --- Helper: Deactivate All Tools ---
+function deactivateAllTools() {
+    activeTool = 'none';
+    measurementMode = null;
+    if (snappingCursor) snappingCursor.visible = false;
+    
+    // Disable Area
+    area.enabled = false;
+    
+    // Clear selection
+    const highlighter = components.get(OBF.Highlighter);
+    highlighter.clear('select');
+    
+    // Reset any temporary lines
+    if (tempMeasurementLine) {
+        world.scene.three.remove(tempMeasurementLine);
+        tempMeasurementLine = null;
+    }
+    measurementPoints = [];
+}
 
 // --- KEYBOARD SHORTCUTS ---
-let keyBuffer = '';
-let lastKeyTime = 0;
+// Refactored to Single-Key System for robustness
 
 window.addEventListener('keydown', async (e) => {
-    // FORCE DEBUG
-    console.log(`[KEY_EVENT] Key: "${e.key}", Code: "${e.code}", Buffer: "${keyBuffer}"`);
-    
     // Ignore if typing in an input
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    
+    // Ignore if modifier keys (Ctrl, Alt, Meta) are pressed
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
 
-    // Filter out non-printable keys and modifiers
-    // Allow single printable characters (length 1)
-    if (e.key.length !== 1 || e.ctrlKey || e.altKey || e.metaKey) return;
+    const key = e.key.toUpperCase();
+    const code = e.code;
+    
+    // FORCE DEBUG
+    console.log(`[KEY_EVENT] Key: "${key}", Code: "${code}"`);
 
-    const now = Date.now();
-    if (now - lastKeyTime > 2000) { 
-        keyBuffer = '';
-    }
-    lastKeyTime = now;
+    let handled = true;
 
-    const char = e.key.toUpperCase();
-    if (/[A-Z]/.test(char)) {
-        keyBuffer += char;
-        logToScreen(`Key: ${char} (Buffer: ${keyBuffer})`); 
-    }
-
-    if (keyBuffer.length > 2) {
-        keyBuffer = keyBuffer.slice(-2);
-    }
-
-    if (keyBuffer.length === 2) {
-        console.log("Shortcut Triggered:", keyBuffer);
-        
-        let handled = true;
-
-        try {
-            switch (keyBuffer) {
-            case 'PR': // Perspectiva/Ortogonal
+    try {
+        switch (code) {
+            case 'KeyP': // P: Perspectiva/Ortogonal
                 const camera = world.camera;
                 const current = camera.projection.current;
                 const next = current === 'Perspective' ? 'Orthographic' : 'Perspective';
                 await camera.projection.set(next);
                 logToScreen(`Proyección: ${next === 'Perspective' ? 'Perspectiva' : 'Ortogonal'}`);
-                keyBuffer = '';
                 break;
 
-            case 'AZ': // Ajustar modelo a la pantalla
+            case 'KeyZ': // Z: Ajustar modelo a la pantalla (Zoom)
                 if (components.meshes && components.meshes.length > 0) {
                      // Calculate bounding box of all meshes
                      const bbox = new THREE.Box3();
@@ -1243,10 +786,9 @@ window.addEventListener('keydown', async (e) => {
                         logToScreen('Ajustado a pantalla');
                      }
                 }
-                keyBuffer = '';
                 break;
 
-            case 'HH': // Ocultar selección
+            case 'KeyH': // H: Ocultar selección
                 {
                     const highlighter = components.get(OBF.Highlighter);
                     const selection = highlighter.selection.select;
@@ -1256,10 +798,9 @@ window.addEventListener('keydown', async (e) => {
                         logToScreen('Selección ocultada');
                     }
                 }
-                keyBuffer = '';
                 break;
 
-            case 'HI': // Aislar selección
+            case 'KeyI': // I: Aislar selección
                 {
                     const highlighter = components.get(OBF.Highlighter);
                     const selection = highlighter.selection.select;
@@ -1269,16 +810,14 @@ window.addEventListener('keydown', async (e) => {
                         logToScreen('Selección aislada');
                     }
                 }
-                keyBuffer = '';
                 break;
 
-            case 'HR': // Mostrar todo
+            case 'KeyR': // R: Mostrar todo (Reset)
                 await hider.set(true);
                 logToScreen('Mostrar todo');
-                keyBuffer = '';
                 break;
 
-            case 'RL': // Regla (Length)
+            case 'KeyL': // L: Regla (Length)
                 // Trigger existing custom tool
                 const btnMeasure = document.getElementById('btn-measure-length');
                 if (btnMeasure && !measurementMode) {
@@ -1288,10 +827,9 @@ window.addEventListener('keydown', async (e) => {
                     measurementMode = 'length';
                     logToScreen('Herramienta: Regla');
                 }
-                keyBuffer = '';
                 break;
 
-            case 'AR': // Área
+            case 'KeyA': // A: Área
                 // Use OBF.AreaMeasurement
                 if (measurementMode) {
                     // Disable custom tools
@@ -1305,28 +843,25 @@ window.addEventListener('keydown', async (e) => {
                 } else {
                     area.enabled = true;
                     area.create();
-                    logToScreen('Herramienta: Área (Click para puntos, Doble click/Enter para terminar)');
+                    logToScreen('Herramienta: Área');
                 }
-                keyBuffer = '';
                 break;
 
-            case 'AG': // Ángulo
+            case 'KeyG': // G: Ángulo (Grados)
                 const btnAngle = document.getElementById('btn-measure-angle');
                 if (btnAngle) btnAngle.click();
-                keyBuffer = '';
                 break;
 
-            case 'PN': // Pendiente
+            case 'KeyS': // S: Pendiente (Slope)
                 const btnSlope = document.getElementById('btn-measure-slope');
                 if (btnSlope) btnSlope.click();
-                keyBuffer = '';
                 break;
 
-            case 'CO': // Coordenada por punto
+            case 'KeyC': // C: Coordenada (Coordinate)
                 if (measurementMode === 'length') {
                     // Toggle off length first
-                     const btnMeasure = document.getElementById('btn-measure-length');
-                     if(btnMeasure) btnMeasure.click();
+                    const btnMeasure = document.getElementById('btn-measure-length');
+                    if(btnMeasure) btnMeasure.click();
                 }
                 const btnPoint = document.getElementById('btn-measure-point');
                 if (btnPoint) {
@@ -1336,10 +871,10 @@ window.addEventListener('keydown', async (e) => {
                     container.addEventListener('click', pointHandler);
                     logToScreen('Herramienta: Coordenada');
                 }
-                keyBuffer = '';
                 break;
 
-            case 'BM': // Borrar medidas
+            case 'Delete':
+            case 'Backspace': // Borrar medidas
                 // Clear custom
                 measurementPoints = [];
                 measurementMarkers.forEach(m => world.scene.three.remove(m));
@@ -1358,46 +893,36 @@ window.addEventListener('keydown', async (e) => {
                 customMeshes.forEach(m => world.scene.three.remove(m));
                 customMeshes.length = 0;
                 document.querySelectorAll('.floating-label').forEach(el => el.remove());
+                
+                // Clear Clipper
+                clipper.deleteAll();
 
-                logToScreen('Medidas borradas');
-                keyBuffer = '';
+                logToScreen('Todas las medidas borradas');
                 break;
 
-            case 'RJ': // Rejilla
+            case 'KeyJ': // J: Rejilla (Rejilla)
                 const grid = components.get(OBC.Grids);
-                // Grid might not be created.
-                // grid.enabled = !grid.enabled; 
-                // Usually we check if it exists in the world.
-                // Let's try creating/toggling visibility.
-                // Accessing the internal grid mesh? 
-                // OBF.Grids manages a grid. 
-                // Let's assume standard behavior:
                 grid.enabled = !grid.enabled;
-                if(grid.enabled) {
-                     // Check if created
-                     // grid.create(world);
-                }
                 logToScreen(`Rejilla: ${grid.enabled ? 'On' : 'Off'}`);
-                keyBuffer = '';
                 break;
 
-            case 'RC': // Recorte (Clipper)
+            case 'KeyX': // X: Recorte (Clipper/Cut)
                 clipper.create();
                 logToScreen('Plano de corte creado');
-                keyBuffer = '';
                 break;
+            
+            case 'Escape': // Escape: Cancel tools
+                deactivateAllTools();
+                logToScreen('Herramientas desactivadas');
+                break;
+
             default:
                 handled = false;
-            }
-        } catch (err) {
-            console.error("Error executing shortcut:", err);
-            logToScreen(`Error: ${err}`);
-            handled = true;
         }
-
-        if (handled) {
-            keyBuffer = ''; // Clear buffer only if handled successfully
-        }
+    } catch (err) {
+        console.error("Error executing shortcut:", err);
+        logToScreen(`Error: ${err}`);
+        handled = true;
     }
 });
 
