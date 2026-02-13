@@ -35,18 +35,24 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
   }, [layerVisibility, file])
 
   const getLayerName = (obj: THREE.Object3D): string | null => {
-    let layerName = obj.userData?.layer
+    let layerName: any = null
+
+    // 1. Direct userData.layer
+    if (obj.userData?.layer) layerName = obj.userData.layer
+
+    // 2. Nested in 'entity' property (dxf-parser structure)
+    if (!layerName && obj.userData?.entity?.layer) layerName = obj.userData.entity.layer
+
+    // 3. Direct property on object
+    if (!layerName && (obj as any).layer) layerName = (obj as any).layer
+
+    // 4. Sometimes layer is just the name of the parent group if the loader groups by layer
+    // But we need to be careful not to assume all parents are layers.
     
-    // Handle case where layer is an object
-    if (typeof layerName === 'object' && layerName !== null && layerName.name) {
-       layerName = layerName.name
-    }
-    
-    // Fallback: Check if layer is directly on the object
-    if (!layerName && (obj as any).layer) {
-       const l = (obj as any).layer
-       if (typeof l === 'string') layerName = l
-       else if (typeof l === 'object' && l.name) layerName = l.name
+    // Resolve object-style layer ( {name: 'Layer1', ...} )
+    if (typeof layerName === 'object' && layerName !== null) {
+       if (layerName.name) layerName = layerName.name
+       else if (layerName.toString) layerName = layerName.toString()
     }
 
     return (layerName && typeof layerName === 'string') ? layerName : null
@@ -61,14 +67,13 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
       let debugCount = 0
       
       entityRoot.traverse((obj) => {
-        if (debugCount < 5) {
-           console.log('useLayers: object sample', { 
+        if (debugCount < 10) {
+           console.log('useLayers: object debug', { 
              type: obj.type, 
-             userData: obj.userData, 
-             name: obj.name,
-             visible: obj.visible,
-             parentName: obj.parent?.name,
-             resolvedLayer: getLayerName(obj)
+             userDataKeys: obj.userData ? Object.keys(obj.userData) : [],
+             userDataEntity: obj.userData?.entity,
+             layerProp: (obj as any).layer,
+             resolved: getLayerName(obj)
            })
            debugCount++
         }
@@ -76,14 +81,21 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
         if (layerName) {
              if (!layerMap.has(layerName)) {
                let color = '#ffffff'
-             if ((obj as any).material) {
-               const mat = (obj as any).material
-               if (Array.isArray(mat)) {
-                 if (mat[0]?.color) color = '#' + mat[0].color.getHexString()
-               } else if (mat.color) {
-                 color = '#' + mat.color.getHexString()
+               // Try to find color
+               // 1. From material
+               if ((obj as any).material) {
+                 const mat = (obj as any).material
+                 if (Array.isArray(mat)) {
+                   if (mat[0]?.color) color = '#' + mat[0].color.getHexString()
+                 } else if (mat.color) {
+                   color = '#' + mat.color.getHexString()
+                 }
                }
-             }
+               // 2. From DXF color index (sometimes in userData)
+               if (color === '#ffffff' && obj.userData?.color) {
+                  // We could convert index to hex, but for now stick to white if not simple
+               }
+
              layerMap.set(layerName, color)
            }
         }
