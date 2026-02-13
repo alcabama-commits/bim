@@ -348,6 +348,8 @@ const DwgRenderer: React.FC<Props> = ({
       const updateMat = (m: any) => {
         if (m.color) {
           const hex = m.color.getHex()
+          const hsl = { h: 0, s: 0, l: 0 }
+          m.color.getHSL(hsl)
 
           if (isDarkMode) {
             // Dark Mode Logic
@@ -358,19 +360,17 @@ const DwgRenderer: React.FC<Props> = ({
             }
 
             // Ensure visibility: Lighten dark colors
-            const hsl = { h: 0, s: 0, l: 0 }
-            m.color.getHSL(hsl)
-            
             // If lightness is too low (dark), boost it significantly
             if (hsl.l < 0.35) {
               m.color.setHSL(hsl.h, hsl.s, 0.6)
             }
           } else {
             // Light Mode Logic
-            // Special case: Pure white -> Black
-            if (hex === 0xffffff) {
+            // Invert White (or near white) to Black
+            // Check for high lightness and low saturation (White/Grey)
+            // This covers pure white (l=1, s=0) and near-whites that might be invisible on white bg
+            if (hsl.l > 0.8 && hsl.s < 0.2) {
               m.color.setHex(0x000000)
-              return
             }
           }
         }
