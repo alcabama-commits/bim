@@ -255,7 +255,13 @@ const App: React.FC = () => {
           )}
         </div>
 
-
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-black flex justify-center items-center">
+          {isDarkMode ? (
+            <img src="https://i.postimg.cc/Jzsm9C9n/LOGO_BIM_BLANCO_ICO.png" alt="BIM" className="h-12 object-contain" />
+          ) : (
+            <img src="https://i.postimg.cc/P5ChBnBN/LOGO_BIM_NEGRO_ICO.png" alt="BIM" className="h-12 object-contain" />
+          )}
+        </div>
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
