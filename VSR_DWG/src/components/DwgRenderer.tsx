@@ -1097,23 +1097,25 @@ const DwgRenderer: React.FC<Props> = ({
       {/* Layers Toggle */}
       <button 
         onClick={() => setShowLayers(!showLayers)}
-        className={`absolute top-2 left-12 z-50 w-8 h-8 flex items-center justify-center rounded-lg transition-all border ${
+        className={`absolute top-12 left-2 z-[100] w-8 h-8 flex items-center justify-center rounded-lg transition-all border shadow-lg ${
           showLayers 
             ? isDarkMode 
-              ? 'bg-slate-800 border-alcabama-500/50 text-alcabama-400 shadow-lg shadow-alcabama-500/10' 
-              : 'bg-alcabama-50 border-alcabama-200 text-alcabama-600 shadow-lg shadow-alcabama-500/10'
+              ? 'bg-slate-800 border-alcabama-500/50 text-alcabama-400 shadow-alcabama-500/10' 
+              : 'bg-alcabama-50 border-alcabama-200 text-alcabama-600 shadow-alcabama-500/10'
             : isDarkMode
-              ? 'bg-slate-900/50 border-transparent text-slate-600 hover:text-slate-400 hover:bg-slate-800'
-              : 'bg-white/50 border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+              ? 'bg-slate-900/80 border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              : 'bg-white/80 border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50'
         }`}
         title="Capas"
       >
-        <i className="fa-solid fa-layer-group text-xs"></i>
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
       </button>
 
       {/* Layers Panel */}
       {showLayers && (
-        <div className={`absolute top-12 left-2 ${isDarkMode ? 'bg-slate-900/95 text-slate-300 border-slate-700' : 'bg-white/95 text-slate-600 border-slate-200'} backdrop-blur border p-3 rounded-xl z-50 shadow-2xl min-w-[200px] max-h-[60vh] flex flex-col`}>
+        <div className={`absolute top-24 left-2 ${isDarkMode ? 'bg-slate-900/95 text-slate-300 border-slate-700' : 'bg-white/95 text-slate-600 border-slate-200'} backdrop-blur border p-3 rounded-xl z-[100] shadow-2xl min-w-[200px] max-h-[60vh] flex flex-col`}>
           <div className={`flex justify-between items-center border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'} pb-2 mb-2`}>
              <span className="text-xs font-semibold uppercase tracking-wider">Capas ({layers.length})</span>
              <div className="flex gap-2">
