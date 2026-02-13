@@ -347,21 +347,31 @@ const DwgRenderer: React.FC<Props> = ({
 
       const updateMat = (m: any) => {
         if (m.color) {
-          // Special case: Pure black -> White
-          if (m.color.getHex() === 0x000000) {
-            m.color.setHex(0xffffff)
-            return
-          }
+          const hex = m.color.getHex()
 
-          // Ensure visibility: Lighten dark colors
-          const hsl = { h: 0, s: 0, l: 0 }
-          m.color.getHSL(hsl)
-          
-          // If lightness is too low (dark), boost it significantly
-          // This ensures visibility on dark background (original)
-          // AND visibility on white background (inverted) because inverted light = dark
-          if (hsl.l < 0.35) {
-            m.color.setHSL(hsl.h, hsl.s, 0.6)
+          if (isDarkMode) {
+            // Dark Mode Logic
+            // Special case: Pure black -> White
+            if (hex === 0x000000) {
+              m.color.setHex(0xffffff)
+              return
+            }
+
+            // Ensure visibility: Lighten dark colors
+            const hsl = { h: 0, s: 0, l: 0 }
+            m.color.getHSL(hsl)
+            
+            // If lightness is too low (dark), boost it significantly
+            if (hsl.l < 0.35) {
+              m.color.setHSL(hsl.h, hsl.s, 0.6)
+            }
+          } else {
+            // Light Mode Logic
+            // Special case: Pure white -> Black
+            if (hex === 0xffffff) {
+              m.color.setHex(0x000000)
+              return
+            }
           }
         }
       }
@@ -380,7 +390,7 @@ const DwgRenderer: React.FC<Props> = ({
       renderer.domElement.style.filter = ''
       entityRoot.traverse(ensureContrast)
     }
-  }, [isBlueprint, renderer, entityRoot])
+  }, [isBlueprint, renderer, entityRoot, isDarkMode])
 
   useEffect(() => {
     if (!renderer || !showGrid) return
