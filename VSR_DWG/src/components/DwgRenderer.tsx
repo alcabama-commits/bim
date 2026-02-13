@@ -1077,41 +1077,42 @@ const DwgRenderer: React.FC<Props> = ({
          />
       </div>
 
-      {/* Debug Info Toggle */}
-      <button 
-        onClick={() => setShowInfo(!showInfo)}
-        className={`absolute top-2 left-2 z-50 w-8 h-8 flex items-center justify-center rounded-lg transition-all border ${
-          showInfo 
-            ? isDarkMode 
-              ? 'bg-slate-800 border-alcabama-500/50 text-alcabama-400 shadow-lg shadow-alcabama-500/10' 
-              : 'bg-alcabama-50 border-alcabama-200 text-alcabama-600 shadow-lg shadow-alcabama-500/10'
-            : isDarkMode
-              ? 'bg-slate-900/50 border-transparent text-slate-600 hover:text-slate-400 hover:bg-slate-800'
-              : 'bg-white/50 border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-        }`}
-        title="Información Técnica"
-      >
-        <i className="fa-solid fa-circle-info text-xs"></i>
-      </button>
+      {/* Top Left Tools */}
+      <div className="absolute top-2 left-2 z-50 flex gap-2">
+        <button 
+          onClick={() => setShowInfo(!showInfo)}
+          className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all border ${
+            showInfo 
+              ? isDarkMode 
+                ? 'bg-slate-800 border-alcabama-500/50 text-alcabama-400 shadow-lg shadow-alcabama-500/10' 
+                : 'bg-alcabama-50 border-alcabama-200 text-alcabama-600 shadow-lg shadow-alcabama-500/10'
+              : isDarkMode
+                ? 'bg-slate-900/50 border-transparent text-slate-600 hover:text-slate-400 hover:bg-slate-800'
+                : 'bg-white/50 border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+          }`}
+          title="Información Técnica"
+        >
+          <i className="fa-solid fa-circle-info text-xs"></i>
+        </button>
 
-      {/* Layers Toggle */}
-      <button 
-        onClick={() => setShowLayers(!showLayers)}
-        className={`absolute top-2 left-12 z-50 w-8 h-8 flex items-center justify-center rounded-lg transition-all border shadow-lg ${
-          showLayers 
-            ? isDarkMode 
-              ? 'bg-slate-800 border-alcabama-500/50 text-alcabama-400 shadow-alcabama-500/10' 
-              : 'bg-alcabama-50 border-alcabama-200 text-alcabama-600 shadow-alcabama-500/10'
-            : isDarkMode
-              ? 'bg-slate-900/80 border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-              : 'bg-white/80 border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-        }`}
-        title="Capas"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-        </svg>
-      </button>
+        <button 
+          onClick={() => setShowLayers(!showLayers)}
+          className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all border shadow-lg ${
+            showLayers 
+              ? isDarkMode 
+                ? 'bg-slate-800 border-alcabama-500/50 text-alcabama-400 shadow-alcabama-500/10' 
+                : 'bg-alcabama-50 border-alcabama-200 text-alcabama-600 shadow-alcabama-500/10'
+              : isDarkMode
+                ? 'bg-slate-900/80 border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                : 'bg-white/80 border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+          }`}
+          title="Capas"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+          </svg>
+        </button>
+      </div>
 
       {/* Layers Panel */}
       {showLayers && (
