@@ -68,6 +68,38 @@ const App: React.FC = () => {
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({})
   const [isDarkMode, setIsDarkMode] = useState(true)
 
+  // Sidebar Resizing Logic
+  const [sidebarWidth, setSidebarWidth] = useState(300)
+  const isResizing = React.useRef(false)
+
+  const startResizing = useCallback(() => {
+    isResizing.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [])
+
+  const stopResizing = useCallback(() => {
+    isResizing.current = false
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+  }, [])
+
+  const resize = useCallback((e: MouseEvent) => {
+    if (isResizing.current) {
+      const newWidth = Math.min(Math.max(e.clientX, 300), window.innerWidth - 100)
+      setSidebarWidth(newWidth)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    window.addEventListener('mousemove', resize)
+    window.addEventListener('mouseup', stopResizing)
+    return () => {
+      window.removeEventListener('mousemove', resize)
+      window.removeEventListener('mouseup', stopResizing)
+    }
+  }, [resize, stopResizing])
+
   // Sync dark mode with HTML element
   React.useEffect(() => {
     if (isDarkMode) {
@@ -155,7 +187,15 @@ const App: React.FC = () => {
   return (
     <div className={`flex h-screen w-full ${isDarkMode ? 'dark' : ''} bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden select-none`}>
       {/* Sidebar */}
-      <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-all duration-300 flex flex-col overflow-hidden relative`}>
+      <div 
+        style={{ width: isSidebarOpen ? sidebarWidth : 0 }}
+        className={`bg-white dark:bg-black border-r border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden relative`}
+      >
+        {/* Resize Handle */}
+        <div 
+          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-alcabama-500 z-50 transition-colors delay-100"
+          onMouseDown={startResizing}
+        />
         <div className="h-12 flex items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
           <span className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Galería</span>
           <button onClick={() => setIsSidebarOpen(false)} className="text-slate-500 hover:text-slate-800 dark:hover:text-white">
@@ -183,7 +223,7 @@ const App: React.FC = () => {
               <div key={folder} className="mb-4">
                 <button 
                   onClick={() => toggleFolder(folder)}
-                  className="w-full text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-2 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 py-1 z-10 border-b border-slate-200 dark:border-slate-800/50 hover:text-slate-800 dark:hover:text-slate-300 transition-colors"
+                  className="w-full text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-2 flex items-center justify-between sticky top-0 bg-white dark:bg-black py-1 z-10 border-b border-slate-200 dark:border-slate-800/50 hover:text-slate-800 dark:hover:text-slate-300 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <i className={`fa-regular ${collapsedFolders[folder] ? 'fa-folder' : 'fa-folder-open'} text-slate-400 dark:text-slate-600`}></i>
@@ -222,7 +262,7 @@ const App: React.FC = () => {
           )}
         </div>
 
-        <div className="p-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+        <div className="p-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-black">
           <label className="cursor-pointer bg-alcabama-600 hover:bg-alcabama-500 text-white px-3 py-2 rounded-lg text-[10px] font-black uppercase transition active:scale-95 flex items-center justify-center gap-2 w-full shadow-lg shadow-alcabama-500/20">
             <i className="fa-solid fa-upload"></i>
             <span>Subir Archivo</span>
@@ -232,7 +272,7 @@ const App: React.FC = () => {
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
-        <header className="h-12 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 flex items-center justify-between z-30 shadow-sm">
+        <header className="h-12 bg-white dark:bg-black border-b border-slate-200 dark:border-slate-800 px-4 flex items-center justify-between z-30 shadow-sm">
           <div className="flex items-center gap-4">
             {!isSidebarOpen && (
               <button 
@@ -261,7 +301,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1">
-            <div className="flex bg-slate-100 dark:bg-slate-800 rounded p-0.5 border border-slate-200 dark:border-slate-700 mr-4">
+            <div className="flex bg-slate-100 dark:bg-black rounded p-0.5 border border-slate-200 dark:border-slate-700 mr-4">
               <button 
                 onClick={() => setActiveTool('hand')}
                 className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'hand' ? 'bg-white dark:bg-alcabama-600 shadow text-alcabama-600 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}

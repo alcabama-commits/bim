@@ -886,7 +886,7 @@ const DwgRenderer: React.FC<Props> = ({
             }
           } else if (tool === 'dimension') {
             const d = next[0].distanceTo(next[1])
-            const text = calibration ? `${((d / calibration.world) * calibration.realValue).toFixed(3)} ${calibration.unit}` : `${d.toFixed(3)} u`
+            const text = calibration ? `${((d / calibration.world) * calibration.realValue).toFixed(2)} ${calibration.unit}` : `${d.toFixed(2)} m`
             const item: DimensionItem = { ax: next[0].x, ay: next[0].y, bx: next[1].x, by: next[1].y, text }
             setDimensions(prev => [...prev, item])
             setPoints([])
@@ -911,8 +911,8 @@ const DwgRenderer: React.FC<Props> = ({
     })()
     const factor = calibration ? (calibration.realValue / calibration.world) : null
     const text = factor
-      ? `${(areaWorld * factor * factor).toFixed(3)} ${calibration!.unit}²`
-      : `${areaWorld.toFixed(3)} u²`
+      ? `${(areaWorld * factor * factor).toFixed(2)} ${calibration!.unit}²`
+      : `${areaWorld.toFixed(2)} m²`
     const item: AreaItem = {
       pts: polyPoints.map(p => ({ x: p.x, y: p.y })),
       text
@@ -934,9 +934,9 @@ const DwgRenderer: React.FC<Props> = ({
     const d = points[0].distanceTo(points[1])
     if (calibration) {
       const real = (d / calibration.world) * calibration.realValue
-      return `${real.toFixed(3)} ${calibration.unit}`
+      return `${real.toFixed(2)} ${calibration.unit}`
     }
-    return `${d.toFixed(3)} u`
+    return `${d.toFixed(2)} m`
   }
 
   const handleManualZoom = (e: React.ChangeEvent<HTMLInputElement>) => {
