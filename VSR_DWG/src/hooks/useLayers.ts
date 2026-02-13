@@ -34,16 +34,48 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
     }
   }, [layerVisibility, file])
 
+  const getLayerName = (obj: THREE.Object3D): string | null => {
+    let layerName = obj.userData?.layer
+    
+    // Handle case where layer is an object
+    if (typeof layerName === 'object' && layerName !== null && layerName.name) {
+       layerName = layerName.name
+    }
+    
+    // Fallback: Check if layer is directly on the object
+    if (!layerName && (obj as any).layer) {
+       const l = (obj as any).layer
+       if (typeof l === 'string') layerName = l
+       else if (typeof l === 'object' && l.name) layerName = l.name
+    }
+
+    return (layerName && typeof layerName === 'string') ? layerName : null
+  }
+
   // Extract layers from entityRoot
   useEffect(() => {
     if (entityRoot) {
       const layerMap = new Map<string, string>()
       
+      console.log('useLayers: traversing entityRoot', entityRoot)
+      let debugCount = 0
+      
       entityRoot.traverse((obj) => {
-        const layerName = obj.userData?.layer
+        if (debugCount < 5) {
+           console.log('useLayers: object sample', { 
+             type: obj.type, 
+             userData: obj.userData, 
+             name: obj.name,
+             visible: obj.visible,
+             parentName: obj.parent?.name,
+             resolvedLayer: getLayerName(obj)
+           })
+           debugCount++
+        }
+        const layerName = getLayerName(obj)
         if (layerName) {
-           if (!layerMap.has(layerName)) {
-             let color = '#ffffff'
+             if (!layerMap.has(layerName)) {
+               let color = '#ffffff'
              if ((obj as any).material) {
                const mat = (obj as any).material
                if (Array.isArray(mat)) {
@@ -78,8 +110,9 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
   useEffect(() => {
     if (!entityRoot) return
     entityRoot.traverse((obj) => {
-       if (obj.userData?.layer) {
-          const shouldBeVisible = layerVisibility[obj.userData.layer] !== false
+       const layerName = getLayerName(obj)
+       if (layerName) {
+          const shouldBeVisible = layerVisibility[layerName] !== false
           obj.visible = shouldBeVisible
        }
     })

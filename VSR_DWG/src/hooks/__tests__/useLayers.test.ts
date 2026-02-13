@@ -20,15 +20,17 @@ describe('useLayers', () => {
     // Setup Mock EntityRoot with traverse
     mockEntityRoot = {
       traverse: vi.fn((callback) => {
-        // Mock some objects
-        const objects = [
-          { userData: { layer: 'Layer1' }, material: { color: { getHexString: () => 'ff0000' } } },
-          { userData: { layer: 'Layer2' }, material: { color: { getHexString: () => '00ff00' } } },
-          { userData: { layer: 'Layer1' } }, // Duplicate layer
-          { userData: {} } // No layer
-        ]
-        objects.forEach(callback)
-      })
+            // Mock some objects
+            const objects = [
+              { userData: { layer: 'Layer1' }, material: { color: { getHexString: () => 'ff0000' } } },
+              { userData: { layer: 'Layer2' }, material: { color: { getHexString: () => '00ff00' } } },
+              { userData: { layer: { name: 'Layer3' } }, material: { color: { getHexString: () => '0000ff' } } }, // Layer as object
+              { layer: 'Layer4', userData: {} }, // Layer as direct property
+              { userData: { layer: 'Layer1' } }, // Duplicate layer
+              { userData: {} } // No layer
+            ]
+            objects.forEach(callback)
+          })
     }
 
     mockFile = { name: 'test.dxf' }
@@ -38,10 +40,12 @@ describe('useLayers', () => {
     const { result } = renderHook(() => useLayers(mockEntityRoot, mockFile))
 
     expect(mockEntityRoot.traverse).toHaveBeenCalled()
-    expect(result.current.layers).toHaveLength(2)
+    expect(result.current.layers).toHaveLength(4)
     expect(result.current.layers).toEqual(expect.arrayContaining([
       { name: 'Layer1', color: '#ff0000' },
-      { name: 'Layer2', color: '#00ff00' }
+      { name: 'Layer2', color: '#00ff00' },
+      { name: 'Layer3', color: '#0000ff' },
+      { name: 'Layer4', color: '#ffffff' }
     ]))
   })
 
@@ -50,7 +54,9 @@ describe('useLayers', () => {
 
     expect(result.current.layerVisibility).toEqual({
       'Layer1': true,
-      'Layer2': true
+      'Layer2': true,
+      'Layer3': true,
+      'Layer4': true
     })
   })
 
@@ -68,11 +74,15 @@ describe('useLayers', () => {
   it('should not allow hiding the last visible layer', () => {
     const { result } = renderHook(() => useLayers(mockEntityRoot, mockFile))
 
-    // Hide Layer1
+    // Hide Layer1, Layer3, Layer4
     act(() => {
       result.current.toggleLayer('Layer1')
+      result.current.toggleLayer('Layer3')
+      result.current.toggleLayer('Layer4')
     })
     expect(result.current.layerVisibility['Layer1']).toBe(false)
+    expect(result.current.layerVisibility['Layer3']).toBe(false)
+    expect(result.current.layerVisibility['Layer4']).toBe(false)
 
     // Try to hide Layer2 (should fail)
     act(() => {
