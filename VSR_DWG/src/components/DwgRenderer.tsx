@@ -6,6 +6,8 @@ import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js'
 import { DXFLoader } from 'three-dxf-loader'
 import { LibreDwg, Dwg_File_Type } from '@mlightcad/libredwg-web'
 
+import { useLayers } from '../hooks/useLayers'
+
 interface Props {
   file: File | null
   tool: Tool
@@ -40,9 +42,11 @@ const DwgRenderer: React.FC<Props> = ({
   const [areas, setAreas] = useState<AreaItem[]>([])
   const [debugStats, setDebugStats] = useState<string>('')
   const [zoomLevel, setZoomLevel] = useState<number>(1)
-  const [layers, setLayers] = useState<string[]>([])
-  const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({})
+  
+  const { layers, layerVisibility, setLayerVisibility, toggleLayer, showAll, hideAll } = useLayers(entityRoot, file)
+  
   const [showLayers, setShowLayers] = useState(false)
+  const [layerSearch, setLayerSearch] = useState('')
 
   const extractSnapPoints = (root: THREE.Object3D) => {
     root.updateMatrixWorld(true)
@@ -199,26 +203,6 @@ const DwgRenderer: React.FC<Props> = ({
       console.log('EntityRoot changed, extracting snap points...')
       extractSnapPoints(entityRoot)
       
-      // Extract Layers
-      const extractedLayers = new Set<string>()
-      entityRoot.traverse((obj) => {
-        if (obj.userData?.layer) {
-           extractedLayers.add(obj.userData.layer)
-        }
-      })
-      const sortedLayers = Array.from(extractedLayers).sort()
-      console.log('Extracted Layers:', sortedLayers)
-      setLayers(sortedLayers)
-      
-      // Init visibility (all true by default)
-      setLayerVisibility(prev => {
-         const next = { ...prev }
-         sortedLayers.forEach(l => {
-            if (next[l] === undefined) next[l] = true
-         })
-         return next
-      })
-      
       // Auto-Fit on load
       // Use setTimeout to ensure renderer/controls are ready and layout is computed
       setTimeout(() => {
@@ -226,17 +210,6 @@ const DwgRenderer: React.FC<Props> = ({
       }, 100)
     }
   }, [entityRoot])
-
-  // Apply Layer Visibility
-  useEffect(() => {
-    if (!entityRoot) return
-    entityRoot.traverse((obj) => {
-       if (obj.userData?.layer) {
-          const shouldBeVisible = layerVisibility[obj.userData.layer] !== false
-          obj.visible = shouldBeVisible
-       }
-    })
-  }, [layerVisibility, entityRoot])
 
   useEffect(() => {
     if (renderer) {
@@ -1116,59 +1089,82 @@ const DwgRenderer: React.FC<Props> = ({
 
       {/* Layers Panel */}
       {showLayers && (
-        <div className={`absolute top-12 left-2 ${isDarkMode ? 'bg-slate-900/95 text-slate-300 border-slate-700' : 'bg-white/95 text-slate-600 border-slate-200'} backdrop-blur border p-3 rounded-xl z-[100] shadow-2xl min-w-[200px] max-h-[60vh] flex flex-col`}>
-          <div className={`flex justify-between items-center border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'} pb-2 mb-2`}>
-             <span className="text-xs font-semibold uppercase tracking-wider">Capas ({layers.length})</span>
-             <div className="flex gap-2">
-               <button 
-                 onClick={() => {
-                   const newVis = { ...layerVisibility }
-                   layers.forEach(l => newVis[l] = true)
-                   setLayerVisibility(newVis)
-                 }}
-                 className="text-[10px] hover:text-alcabama-500 transition-colors"
-                 title="Ver todas"
-               >
-                 <i className="fa-solid fa-eye"></i>
-               </button>
-               <button 
-                 onClick={() => {
-                   const newVis = { ...layerVisibility }
-                   layers.forEach(l => newVis[l] = false)
-                   setLayerVisibility(newVis)
-                 }}
-                 className="text-[10px] hover:text-red-500 transition-colors"
-                 title="Ocultar todas"
-               >
-                 <i className="fa-solid fa-eye-slash"></i>
-               </button>
+        <div className={`absolute top-12 left-2 ${isDarkMode ? 'bg-slate-900/95 text-slate-300 border-slate-700' : 'bg-white/95 text-slate-600 border-slate-200'} backdrop-blur border p-3 rounded-xl z-[100] shadow-2xl min-w-[240px] max-w-[300px] max-h-[60vh] flex flex-col transition-all duration-200`}>
+          <div className={`flex flex-col gap-2 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'} pb-3 mb-2`}>
+             <div className="flex justify-between items-center">
+                <span className="text-xs font-semibold uppercase tracking-wider">Capas ({layers.length})</span>
+                <div className="flex gap-1 bg-slate-100/10 rounded-lg p-0.5">
+                    <button 
+                      onClick={showAll}
+                      className={`p-1.5 rounded-md transition-all ${isDarkMode ? 'hover:bg-slate-700 text-slate-400 hover:text-alcabama-400' : 'hover:bg-slate-100 text-slate-500 hover:text-alcabama-600'}`}
+                      title="Encender todas"
+                    >
+                      <i className="fa-solid fa-eye text-xs"></i>
+                    </button>
+                    <button 
+                      onClick={hideAll}
+                      className={`p-1.5 rounded-md transition-all ${isDarkMode ? 'hover:bg-slate-700 text-slate-400 hover:text-red-400' : 'hover:bg-slate-100 text-slate-500 hover:text-red-600'}`}
+                      title="Apagar todas (mantiene 1)"
+                    >
+                      <i className="fa-solid fa-eye-slash text-xs"></i>
+                    </button>
+                 </div>
+             </div>
+             
+             {/* Search Input */}
+             <div className="relative">
+                <input 
+                  type="text" 
+                  placeholder="Buscar capa..." 
+                  value={layerSearch}
+                  onChange={e => setLayerSearch(e.target.value)}
+                  className={`w-full text-xs px-2 py-1.5 pl-7 rounded-lg border outline-none transition-colors ${
+                    isDarkMode 
+                      ? 'bg-slate-950 border-slate-700 focus:border-alcabama-500 text-slate-200 placeholder-slate-600' 
+                      : 'bg-slate-50 border-slate-200 focus:border-alcabama-500 text-slate-700 placeholder-slate-400'
+                  }`}
+                />
+                <i className={`fa-solid fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] ${isDarkMode ? 'text-slate-600' : 'text-slate-400'}`}></i>
              </div>
           </div>
           
-          <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
-            {layers.length === 0 ? (
-               <div className="text-[10px] italic opacity-50 text-center py-2">No se encontraron capas</div>
+          <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar space-y-0.5">
+            {layers.filter(l => l.name.toLowerCase().includes(layerSearch.toLowerCase())).length === 0 ? (
+               <div className="text-[10px] italic opacity-50 text-center py-4">
+                 {layers.length === 0 ? 'No hay capas' : 'No se encontraron resultados'}
+               </div>
             ) : (
-               <div className="space-y-1">
-                 {layers.map(layer => (
-                   <label key={layer} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
+               layers
+                 .filter(l => l.name.toLowerCase().includes(layerSearch.toLowerCase()))
+                 .map(layer => (
+                   <label key={layer.name} className={`group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${
                      isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'
                    }`}>
-                      <input 
-                        type="checkbox"
-                        checked={layerVisibility[layer] !== false}
-                        onChange={(e) => {
-                          setLayerVisibility(prev => ({
-                            ...prev,
-                            [layer]: e.target.checked
-                          }))
-                        }}
-                        className="rounded border-slate-500 text-alcabama-600 focus:ring-0 focus:ring-offset-0 w-3 h-3"
-                      />
-                      <span className="text-[10px] truncate select-none flex-1" title={layer}>{layer}</span>
+                      <div className="relative flex items-center">
+                        <input 
+                          type="checkbox"
+                          checked={layerVisibility[layer.name] !== false}
+                          onChange={(e) => toggleLayer(layer.name, e.target.checked)}
+                          className={`rounded border-slate-500 text-alcabama-600 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5 cursor-pointer ${isDarkMode ? 'bg-slate-700 border-slate-600' : 'bg-white'}`}
+                        />
+                      </div>
+                      
+                      {/* Color Indicator */}
+                      <div 
+                        className="w-2.5 h-2.5 rounded-full shadow-sm border border-white/10 shrink-0" 
+                        style={{backgroundColor: layer.color}}
+                        title={`Color: ${layer.color}`}
+                      ></div>
+                      
+                      <span className={`text-[11px] truncate select-none flex-1 transition-opacity ${
+                        layerVisibility[layer.name] !== false 
+                          ? (isDarkMode ? 'text-slate-200' : 'text-slate-700') 
+                          : (isDarkMode ? 'text-slate-600' : 'text-slate-400')
+                      }`} title={layer.name}>
+                        {layer.name}
+                      </span>
                    </label>
-                 ))}
-               </div>
+                 ))
             )}
           </div>
         </div>
