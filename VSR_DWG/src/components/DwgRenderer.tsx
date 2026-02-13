@@ -351,28 +351,32 @@ const DwgRenderer: React.FC<Props> = ({
           const hsl = { h: 0, s: 0, l: 0 }
           m.color.getHSL(hsl)
 
+          // console.log('Color check:', { hex: hex.toString(16), h: hsl.h, s: hsl.s, l: hsl.l, isDarkMode })
+
           if (isDarkMode) {
             // Dark Mode Logic
             // Special case: Pure black -> White
             if (hex === 0x000000) {
               m.color.setHex(0xffffff)
-              return
-            }
-
+            } 
             // Ensure visibility: Lighten dark colors
-            // If lightness is too low (dark), boost it significantly
-            if (hsl.l < 0.35) {
+            else if (hsl.l < 0.35) {
               m.color.setHSL(hsl.h, hsl.s, 0.6)
             }
           } else {
-            // Light Mode Logic
-            // Invert White (or near white) to Black
-            // Check for high lightness and low saturation (White/Grey)
-            // This covers pure white (l=1, s=0) and near-whites that might be invisible on white bg
-            if (hsl.l > 0.8 && hsl.s < 0.2) {
+            // Light Mode Logic (White Background)
+            
+            // 1. White or very light greys -> Black
+            if (hsl.l > 0.5 && hsl.s < 0.2) {
               m.color.setHex(0x000000)
             }
+            // 2. Light colors (Yellow, Cyan, Light Green) -> Darker versions
+            // These are hard to see on white background
+            else if (hsl.l > 0.6) {
+               m.color.setHSL(hsl.h, hsl.s, 0.3)
+            }
           }
+          m.needsUpdate = true
         }
       }
 
