@@ -264,9 +264,9 @@ const App: React.FC = () => {
 
         <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-black flex justify-center items-center">
           {isDarkMode ? (
-            <img src="https://i.postimg.cc/ZnmQywXc/LOGO-BIM-BLANCO.png" alt="BIM" className="h-12 object-contain" />
+            <img src="https://i.postimg.cc/Jzsm9C9n/LOGO_BIM_BLANCO_ICO.png" alt="BIM" className="h-12 object-contain" />
           ) : (
-            <img src="https://i.postimg.cc/fRJ4M9Mp/LOGO-BIM.png" alt="BIM" className="h-12 object-contain" />
+            <img src="https://i.postimg.cc/P5ChBnBN/LOGO_BIM_NEGRO_ICO.png" alt="BIM" className="h-12 object-contain" />
           )}
         </div>
       </div>
@@ -288,12 +288,6 @@ const App: React.FC = () => {
                  <img src="https://i.postimg.cc/0yDgcyBp/Logo-transparente_blanco.png" alt="Alcabama" className="h-6 object-contain opacity-90" />
               ) : (
                  <img src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente_negro.png" alt="Alcabama" className="h-6 object-contain opacity-90" />
-              )}
-              <div className="h-4 w-px bg-slate-300 dark:bg-slate-700"></div>
-              {isDarkMode ? (
-                 <img src="https://i.postimg.cc/ZnmQywXc/LOGO-BIM-BLANCO.png" alt="BIM" className="h-6 object-contain" />
-              ) : (
-                 <img src="https://i.postimg.cc/fRJ4M9Mp/LOGO-BIM.png" alt="BIM" className="h-6 object-contain" />
               )}
             </div>
             {file && <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mx-2"></div>}
