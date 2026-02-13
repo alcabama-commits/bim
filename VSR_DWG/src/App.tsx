@@ -262,12 +262,12 @@ const App: React.FC = () => {
           )}
         </div>
 
-        <div className="p-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-black">
-          <label className="cursor-pointer bg-alcabama-600 hover:bg-alcabama-500 text-white px-3 py-2 rounded-lg text-[10px] font-black uppercase transition active:scale-95 flex items-center justify-center gap-2 w-full shadow-lg shadow-alcabama-500/20">
-            <i className="fa-solid fa-upload"></i>
-            <span>Subir Archivo</span>
-            <input type="file" className="hidden" accept=".dxf,.dwg" onChange={handleFileChange} />
-          </label>
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-black flex justify-center items-center">
+          {isDarkMode ? (
+            <img src="https://i.postimg.cc/ZnmQywXc/LOGO-BIM-BLANCO.png" alt="BIM" className="h-12 object-contain" />
+          ) : (
+            <img src="https://i.postimg.cc/fRJ4M9Mp/LOGO-BIM.png" alt="BIM" className="h-12 object-contain" />
+          )}
         </div>
       </div>
 
