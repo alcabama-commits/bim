@@ -351,8 +351,6 @@ const DwgRenderer: React.FC<Props> = ({
           const hsl = { h: 0, s: 0, l: 0 }
           m.color.getHSL(hsl)
 
-          // console.log('Color check:', { hex: hex.toString(16), h: hsl.h, s: hsl.s, l: hsl.l, isDarkMode })
-
           if (isDarkMode) {
             // Dark Mode Logic
             // Special case: Pure black -> White
@@ -365,16 +363,23 @@ const DwgRenderer: React.FC<Props> = ({
             }
           } else {
             // Light Mode Logic (White Background)
+            // Goal: High contrast dark lines
             
-            // 1. White or very light greys -> Black
-            if (hsl.l > 0.5 && hsl.s < 0.2) {
-              m.color.setHex(0x000000)
+            // 1. Whites and very light colors (L > 0.5) -> Pure Black
+            // This catches White (L=1), Off-whites, and bright colors that need max contrast
+            // We use 0.45 as threshold to catch pure colors (L=0.5) like Yellow/Cyan if we want them Black
+            // But if we want to preserve color (e.g. Dark Yellow), we handle L=0.5 separately
+            
+            // Pure White/Greys -> Black
+            if (hsl.l > 0.8 || (hsl.l > 0.5 && hsl.s < 0.2)) {
+               m.color.setHex(0x000000)
             }
-            // 2. Light colors (Yellow, Cyan, Light Green) -> Darker versions
-            // These are hard to see on white background
-            else if (hsl.l > 0.6) {
+            // Colors (Yellow, Cyan, Green, etc.) -> Darken significantly
+            // Cap lightness at 0.3 to ensure readability on white
+            else if (hsl.l > 0.3) {
                m.color.setHSL(hsl.h, hsl.s, 0.3)
             }
+            // Already dark colors stay dark
           }
           m.needsUpdate = true
         }
