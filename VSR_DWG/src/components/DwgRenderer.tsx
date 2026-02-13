@@ -40,6 +40,9 @@ const DwgRenderer: React.FC<Props> = ({
   const [areas, setAreas] = useState<AreaItem[]>([])
   const [debugStats, setDebugStats] = useState<string>('')
   const [zoomLevel, setZoomLevel] = useState<number>(1)
+  const [layers, setLayers] = useState<string[]>([])
+  const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({})
+  const [showLayers, setShowLayers] = useState(false)
 
   const extractSnapPoints = (root: THREE.Object3D) => {
     root.updateMatrixWorld(true)
@@ -196,6 +199,26 @@ const DwgRenderer: React.FC<Props> = ({
       console.log('EntityRoot changed, extracting snap points...')
       extractSnapPoints(entityRoot)
       
+      // Extract Layers
+      const extractedLayers = new Set<string>()
+      entityRoot.traverse((obj) => {
+        if (obj.userData?.layer) {
+           extractedLayers.add(obj.userData.layer)
+        }
+      })
+      const sortedLayers = Array.from(extractedLayers).sort()
+      console.log('Extracted Layers:', sortedLayers)
+      setLayers(sortedLayers)
+      
+      // Init visibility (all true by default)
+      setLayerVisibility(prev => {
+         const next = { ...prev }
+         sortedLayers.forEach(l => {
+            if (next[l] === undefined) next[l] = true
+         })
+         return next
+      })
+      
       // Auto-Fit on load
       // Use setTimeout to ensure renderer/controls are ready and layout is computed
       setTimeout(() => {
@@ -203,6 +226,17 @@ const DwgRenderer: React.FC<Props> = ({
       }, 100)
     }
   }, [entityRoot])
+
+  // Apply Layer Visibility
+  useEffect(() => {
+    if (!entityRoot) return
+    entityRoot.traverse((obj) => {
+       if (obj.userData?.layer) {
+          const shouldBeVisible = layerVisibility[obj.userData.layer] !== false
+          obj.visible = shouldBeVisible
+       }
+    })
+  }, [layerVisibility, entityRoot])
 
   useEffect(() => {
     if (renderer) {
@@ -1059,6 +1093,83 @@ const DwgRenderer: React.FC<Props> = ({
       >
         <i className="fa-solid fa-circle-info text-xs"></i>
       </button>
+
+      {/* Layers Toggle */}
+      <button 
+        onClick={() => setShowLayers(!showLayers)}
+        className={`absolute top-12 left-2 z-50 w-8 h-8 flex items-center justify-center rounded-lg transition-all border mt-2 ${
+          showLayers 
+            ? isDarkMode 
+              ? 'bg-slate-800 border-alcabama-500/50 text-alcabama-400 shadow-lg shadow-alcabama-500/10' 
+              : 'bg-alcabama-50 border-alcabama-200 text-alcabama-600 shadow-lg shadow-alcabama-500/10'
+            : isDarkMode
+              ? 'bg-slate-900/50 border-transparent text-slate-600 hover:text-slate-400 hover:bg-slate-800'
+              : 'bg-white/50 border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+        }`}
+        title="Capas"
+      >
+        <i className="fa-solid fa-layer-group text-xs"></i>
+      </button>
+
+      {/* Layers Panel */}
+      {showLayers && (
+        <div className={`absolute top-24 left-2 ${isDarkMode ? 'bg-slate-900/95 text-slate-300 border-slate-700' : 'bg-white/95 text-slate-600 border-slate-200'} backdrop-blur border p-3 rounded-xl z-50 shadow-2xl min-w-[200px] max-h-[60vh] flex flex-col`}>
+          <div className={`flex justify-between items-center border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'} pb-2 mb-2`}>
+             <span className="text-xs font-semibold uppercase tracking-wider">Capas ({layers.length})</span>
+             <div className="flex gap-2">
+               <button 
+                 onClick={() => {
+                   const newVis = { ...layerVisibility }
+                   layers.forEach(l => newVis[l] = true)
+                   setLayerVisibility(newVis)
+                 }}
+                 className="text-[10px] hover:text-alcabama-500 transition-colors"
+                 title="Ver todas"
+               >
+                 <i className="fa-solid fa-eye"></i>
+               </button>
+               <button 
+                 onClick={() => {
+                   const newVis = { ...layerVisibility }
+                   layers.forEach(l => newVis[l] = false)
+                   setLayerVisibility(newVis)
+                 }}
+                 className="text-[10px] hover:text-red-500 transition-colors"
+                 title="Ocultar todas"
+               >
+                 <i className="fa-solid fa-eye-slash"></i>
+               </button>
+             </div>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+            {layers.length === 0 ? (
+               <div className="text-[10px] italic opacity-50 text-center py-2">No se encontraron capas</div>
+            ) : (
+               <div className="space-y-1">
+                 {layers.map(layer => (
+                   <label key={layer} className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                     isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'
+                   }`}>
+                      <input 
+                        type="checkbox"
+                        checked={layerVisibility[layer] !== false}
+                        onChange={(e) => {
+                          setLayerVisibility(prev => ({
+                            ...prev,
+                            [layer]: e.target.checked
+                          }))
+                        }}
+                        className="rounded border-slate-500 text-alcabama-600 focus:ring-0 focus:ring-offset-0 w-3 h-3"
+                      />
+                      <span className="text-[10px] truncate select-none flex-1" title={layer}>{layer}</span>
+                   </label>
+                 ))}
+               </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Debug Info Overlay */}
       {showInfo && (
