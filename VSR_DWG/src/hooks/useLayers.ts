@@ -34,7 +34,7 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
     }
   }, [layerVisibility, file])
 
-  const getLayerName = (obj: THREE.Object3D): string | null => {
+  const resolveLayerName = (obj: THREE.Object3D): { name: string, isColorFallback: boolean } | null => {
     let layerName: any = null
 
     // 1. Direct userData.layer
@@ -46,16 +46,33 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
     // 3. Direct property on object
     if (!layerName && (obj as any).layer) layerName = (obj as any).layer
 
-    // 4. Sometimes layer is just the name of the parent group if the loader groups by layer
-    // But we need to be careful not to assume all parents are layers.
-    
-    // Resolve object-style layer ( {name: 'Layer1', ...} )
+    // 4. Resolve object-style layer ( {name: 'Layer1', ...} )
     if (typeof layerName === 'object' && layerName !== null) {
        if (layerName.name) layerName = layerName.name
        else if (layerName.toString) layerName = layerName.toString()
     }
 
-    return (layerName && typeof layerName === 'string') ? layerName : null
+    if (layerName && typeof layerName === 'string') {
+        return { name: layerName, isColorFallback: false }
+    }
+
+    // 5. FALLBACK: Use Color if no layer found
+    // This handles cases where layer info is missing but visual grouping is possible
+    let colorHex: string | null = null
+    if ((obj as any).material) {
+        const mat = (obj as any).material
+        if (Array.isArray(mat)) {
+            if (mat[0]?.color) colorHex = '#' + mat[0].color.getHexString()
+        } else if (mat.color) {
+            colorHex = '#' + mat.color.getHexString()
+        }
+    }
+
+    if (colorHex) {
+        return { name: `Color ${colorHex.toUpperCase()}`, isColorFallback: true }
+    }
+
+    return null
   }
 
   // Extract layers from entityRoot
@@ -67,36 +84,56 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
       let debugCount = 0
       
       entityRoot.traverse((obj) => {
+        // Resolve the layer name (either explicit or color-based)
+        const result = resolveLayerName(obj)
+        
+        // Store the resolved ID on the object for stability and performance
+        // This ensures that even if we change material colors later (e.g. contrast),
+        // the layer ID remains constant.
+        if (result) {
+            obj.userData.layerId = result.name
+        } else {
+            obj.userData.layerId = null
+        }
+
         if (debugCount < 10) {
            console.log('useLayers: object debug', { 
              type: obj.type, 
              userDataKeys: obj.userData ? Object.keys(obj.userData) : [],
              userDataEntity: obj.userData?.entity,
              layerProp: (obj as any).layer,
-             resolved: getLayerName(obj)
+             resolved: result
            })
            debugCount++
         }
-        const layerName = getLayerName(obj)
-        if (layerName) {
+
+        if (result) {
+             const layerName = result.name
              if (!layerMap.has(layerName)) {
                let color = '#ffffff'
-               // Try to find color
-               // 1. From material
-               if ((obj as any).material) {
-                 const mat = (obj as any).material
-                 if (Array.isArray(mat)) {
-                   if (mat[0]?.color) color = '#' + mat[0].color.getHexString()
-                 } else if (mat.color) {
-                   color = '#' + mat.color.getHexString()
-                 }
+               
+               // If it's a color fallback, use the color itself as the badge color
+               if (result.isColorFallback) {
+                   const hex = layerName.replace('Color ', '')
+                   if (hex.startsWith('#')) color = hex
+               } else {
+                   // Try to find color for standard layers
+                   // 1. From material
+                   if ((obj as any).material) {
+                     const mat = (obj as any).material
+                     if (Array.isArray(mat)) {
+                       if (mat[0]?.color) color = '#' + mat[0].color.getHexString()
+                     } else if (mat.color) {
+                       color = '#' + mat.color.getHexString()
+                     }
+                   }
+                   // 2. From DXF color index (sometimes in userData)
+                   if (color === '#ffffff' && obj.userData?.color) {
+                      // We could convert index to hex, but for now stick to white if not simple
+                   }
                }
-               // 2. From DXF color index (sometimes in userData)
-               if (color === '#ffffff' && obj.userData?.color) {
-                  // We could convert index to hex, but for now stick to white if not simple
-               }
-
-             layerMap.set(layerName, color)
+ 
+               layerMap.set(layerName, color)
            }
         }
       })
@@ -122,7 +159,7 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
   useEffect(() => {
     if (!entityRoot) return
     entityRoot.traverse((obj) => {
-       const layerName = getLayerName(obj)
+       const layerName = obj.userData.layerId
        if (layerName) {
           const shouldBeVisible = layerVisibility[layerName] !== false
           obj.visible = shouldBeVisible
