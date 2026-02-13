@@ -114,14 +114,7 @@ const App: React.FC = () => {
     loadRepoFiles()
   }, [])
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    if (f) {
-      setFile(f)
-      setCalibration(null)
-      setDownloadError(null)
-    }
-  }
+
 
   const loadRepoFiles = async () => {
     setIsLoadingRepo(true)
@@ -262,13 +255,7 @@ const App: React.FC = () => {
           )}
         </div>
 
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-black flex justify-center items-center">
-          {isDarkMode ? (
-            <img src="https://i.postimg.cc/Jzsm9C9n/LOGO_BIM_BLANCO_ICO.png" alt="BIM" className="h-12 object-contain" />
-          ) : (
-            <img src="https://i.postimg.cc/P5ChBnBN/LOGO_BIM_NEGRO_ICO.png" alt="BIM" className="h-12 object-contain" />
-          )}
-        </div>
+
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
@@ -397,22 +384,21 @@ const App: React.FC = () => {
             </div>
           </div>
         ) : !file ? (
-          <div className="flex-1 flex flex-col items-center justify-center bg-slate-900 border-2 border-dashed border-slate-800 m-8 rounded-3xl">
+          <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 border-2 border-dashed border-slate-200 dark:border-slate-800 m-8 rounded-3xl">
             <div className="text-center space-y-4 max-w-sm p-8">
-              <div className="w-20 h-20 bg-alcabama-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-alcabama-500/20">
-                <i className="fa-solid fa-cloud-arrow-up text-3xl text-alcabama-500 animate-pulse"></i>
+              <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-indigo-500/20">
+                <i className="fa-regular fa-folder-open text-3xl text-indigo-500 animate-pulse"></i>
               </div>
-              <h3 className="text-xl font-bold text-white uppercase tracking-tight">Cargar Plano CAD</h3>
-              <p className="text-slate-400 text-sm">Selecciona un archivo DXF. Si tienes DWG, conviértelo a DXF para visualizarlo.</p>
-              <label className="inline-block cursor-pointer bg-alcabama-600 hover:bg-alcabama-500 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 active:scale-95 shadow-lg shadow-alcabama-500/20">
-                Seleccionar Archivo DXF/DWG
-                <input 
-                  type="file" 
-                  className="hidden" 
-                  accept=".dxf,.dwg" 
-                  onChange={handleFileChange} 
-                />
-              </label>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white uppercase tracking-tight">Seleccionar Plano</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm">Explore la galería lateral para seleccionar y visualizar un plano del sistema.</p>
+              {!isSidebarOpen && (
+                <button 
+                  onClick={() => setIsSidebarOpen(true)}
+                  className="inline-block cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 active:scale-95 shadow-lg shadow-indigo-500/20"
+                >
+                  Abrir Galería
+                </button>
+              )}
             </div>
           </div>
         ) : (
