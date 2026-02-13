@@ -350,6 +350,11 @@ const DwgRenderer: React.FC<Props> = ({
           const hex = m.color.getHex()
           const hsl = { h: 0, s: 0, l: 0 }
           m.color.getHSL(hsl)
+          
+          // Debug logs for Light Mode transition
+          if (!isDarkMode && Math.random() < 0.001) {
+             console.log('EnsureContrast Sample:', { hex: hex.toString(16), h: hsl.h, s: hsl.s, l: hsl.l })
+          }
 
           if (isDarkMode) {
              // Dark Mode Logic
@@ -364,12 +369,17 @@ const DwgRenderer: React.FC<Props> = ({
           } else {
              // Light Mode Logic (White Background)
              
-             // 1. Force White/Black/Greys to Pure Black
-             // If saturation is very low (grey/white/black), make it black
-             if (hsl.s < 0.1 || hsl.l > 0.8) {
+             // 1. Aggressive White/Grey -> Black
+             // Any color with lightness > 0.6 becomes Black
+             if (hsl.l > 0.6) {
                 m.color.setHex(0x000000)
              }
-             // 2. Darken Bright Colors (Yellow, Cyan, Green)
+             // 2. Greys/Silvers -> Black
+             // Low saturation (< 0.2) and not very dark (> 0.2) -> Black
+             else if (hsl.s < 0.2 && hsl.l > 0.2) {
+                m.color.setHex(0x000000)
+             }
+             // 3. Darken Bright Colors (Yellow, Cyan, Green)
              // Standard CAD colors are L=0.5 (100% saturation). 
              // We need them darker to be visible on white.
              else if (hsl.l > 0.4) {
