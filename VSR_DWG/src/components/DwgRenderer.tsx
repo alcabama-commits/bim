@@ -1097,7 +1097,7 @@ const DwgRenderer: React.FC<Props> = ({
       {/* Layers Toggle */}
       <button 
         onClick={() => setShowLayers(!showLayers)}
-        className={`absolute top-12 left-2 z-[100] w-8 h-8 flex items-center justify-center rounded-lg transition-all border shadow-lg ${
+        className={`absolute top-2 left-12 z-50 w-8 h-8 flex items-center justify-center rounded-lg transition-all border shadow-lg ${
           showLayers 
             ? isDarkMode 
               ? 'bg-slate-800 border-alcabama-500/50 text-alcabama-400 shadow-alcabama-500/10' 
@@ -1115,7 +1115,7 @@ const DwgRenderer: React.FC<Props> = ({
 
       {/* Layers Panel */}
       {showLayers && (
-        <div className={`absolute top-24 left-2 ${isDarkMode ? 'bg-slate-900/95 text-slate-300 border-slate-700' : 'bg-white/95 text-slate-600 border-slate-200'} backdrop-blur border p-3 rounded-xl z-[100] shadow-2xl min-w-[200px] max-h-[60vh] flex flex-col`}>
+        <div className={`absolute top-12 left-2 ${isDarkMode ? 'bg-slate-900/95 text-slate-300 border-slate-700' : 'bg-white/95 text-slate-600 border-slate-200'} backdrop-blur border p-3 rounded-xl z-[100] shadow-2xl min-w-[200px] max-h-[60vh] flex flex-col`}>
           <div className={`flex justify-between items-center border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'} pb-2 mb-2`}>
              <span className="text-xs font-semibold uppercase tracking-wider">Capas ({layers.length})</span>
              <div className="flex gap-2">
