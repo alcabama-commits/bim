@@ -206,7 +206,9 @@ const DwgRenderer: React.FC<Props> = ({
 
   useEffect(() => {
     if (renderer) {
-      renderer.setClearColor(isDarkMode ? 0x181718 : 0xffffff, 1)
+      // Always use dark background (0x181718).
+      // In Light Mode, it gets inverted by CSS to appear white.
+      renderer.setClearColor(0x181718, 1)
     }
   }, [isDarkMode, renderer])
 
@@ -242,7 +244,8 @@ const DwgRenderer: React.FC<Props> = ({
     const r = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true })
     r.setPixelRatio(window.devicePixelRatio)
     r.setSize(containerRef.current?.clientWidth || 800, containerRef.current?.clientHeight || 600)
-    r.setClearColor(isDarkMode ? 0x181718 : 0xffffff, 1)
+    // Always init with Dark BG (0x181718)
+    r.setClearColor(0x181718, 1)
     setRenderer(r)
 
     camera.position.set(0, 0, 10)
@@ -351,41 +354,17 @@ const DwgRenderer: React.FC<Props> = ({
           const hsl = { h: 0, s: 0, l: 0 }
           m.color.getHSL(hsl)
           
-          // Debug logs for Light Mode transition
-          if (!isDarkMode && Math.random() < 0.001) {
-             console.log('EnsureContrast Sample:', { hex: hex.toString(16), h: hsl.h, s: hsl.s, l: hsl.l })
-          }
-
-          if (isDarkMode) {
-             // Dark Mode Logic
-             // Special case: Pure black -> White
-             if (hex === 0x000000) {
-               m.color.setHex(0xffffff)
-             } 
-             // Ensure visibility: Lighten dark colors
-             else if (hsl.l < 0.35) {
-               m.color.setHSL(hsl.h, hsl.s, 0.6)
-             }
-          } else {
-             // Light Mode Logic (White Background)
-             
-             // 1. Aggressive White/Grey -> Black
-             // Any color with lightness > 0.6 becomes Black
-             if (hsl.l > 0.6) {
-                m.color.setHex(0x000000)
-             }
-             // 2. Greys/Silvers -> Black
-             // Low saturation (< 0.2) and not very dark (> 0.2) -> Black
-             else if (hsl.s < 0.2 && hsl.l > 0.2) {
-                m.color.setHex(0x000000)
-             }
-             // 3. Darken Bright Colors (Yellow, Cyan, Green)
-             // Standard CAD colors are L=0.5 (100% saturation). 
-             // We need them darker to be visible on white.
-             else if (hsl.l > 0.4) {
-                // Keep hue, keep saturation, reduce lightness to 0.35
-                m.color.setHSL(hsl.h, hsl.s, 0.35)
-             }
+          // Since we are ALWAYS rendering on a DARK background (before inversion),
+          // we only need to ensure visibility against DARK.
+          
+          // 1. Black lines (0x000000) must be White (0xffffff)
+          // (So when inverted in Light Mode, they become Black again)
+          if (hex === 0x000000) {
+            m.color.setHex(0xffffff)
+          } 
+          // 2. Very dark colors must be lightened
+          else if (hsl.l < 0.35) {
+            m.color.setHSL(hsl.h, hsl.s, 0.6)
           }
            
           m.needsUpdate = true
@@ -399,11 +378,15 @@ const DwgRenderer: React.FC<Props> = ({
       }
     }
 
-    // Apply filter ONLY for Blueprint mode
-    if (isBlueprint) {
+    // Apply filter for Blueprint OR Light Mode
+    // Both modes rely on CSS Inversion to turn the Dark internal render into a Light visual result.
+    if (isBlueprint || !isDarkMode) {
+      // Invert: Dark BG -> White BG, White Lines -> Black Lines
+      // Hue-rotate: Fixes colors (Red -> Cyan -> Red)
       renderer.domElement.style.filter = 'invert(1) hue-rotate(180deg) brightness(1.1) contrast(1.25)'
       entityRoot.traverse(ensureContrast)
     } else {
+      // Dark Mode: No filter, standard rendering
       renderer.domElement.style.filter = ''
       entityRoot.traverse(ensureContrast)
     }
