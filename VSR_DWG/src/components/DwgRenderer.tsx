@@ -1051,7 +1051,7 @@ const DwgRenderer: React.FC<Props> = ({
       </div>
 
       {/* Top Left Tools */}
-      <div className="absolute top-2 left-2 z-50 flex gap-2">
+      <div className="absolute top-2 left-2 z-[100] flex gap-2">
         <button 
           onClick={() => setShowInfo(!showInfo)}
           className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all border ${
@@ -1079,11 +1079,9 @@ const DwgRenderer: React.FC<Props> = ({
                 ? 'bg-slate-900/80 border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                 : 'bg-white/80 border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50'
           }`}
-          title="Capas"
+          title="Panel de Capas"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-          </svg>
+          <i className="fa-solid fa-layer-group text-xs"></i>
         </button>
       </div>
 
@@ -1094,6 +1092,13 @@ const DwgRenderer: React.FC<Props> = ({
              <div className="flex justify-between items-center">
                 <span className="text-xs font-semibold uppercase tracking-wider">Capas ({layers.length})</span>
                 <div className="flex gap-1 bg-slate-100/10 rounded-lg p-0.5">
+                    <button 
+                      onClick={showAll}
+                      className={`p-1.5 rounded-md transition-all ${isDarkMode ? 'hover:bg-slate-700 text-slate-400 hover:text-alcabama-400' : 'hover:bg-slate-100 text-slate-500 hover:text-alcabama-600'}`}
+                      title="Seleccionar todas"
+                    >
+                      <i className="fa-solid fa-check-double text-xs"></i>
+                    </button>
                     <button 
                       onClick={showAll}
                       className={`p-1.5 rounded-md transition-all ${isDarkMode ? 'hover:bg-slate-700 text-slate-400 hover:text-alcabama-400' : 'hover:bg-slate-100 text-slate-500 hover:text-alcabama-600'}`}

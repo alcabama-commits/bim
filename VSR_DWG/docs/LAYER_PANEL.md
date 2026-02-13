@@ -13,6 +13,7 @@ El Panel de Control de Capas es una interfaz interactiva integrada en el compone
 ### 2. Gestión de Visibilidad
 - **Toggle Individual**: Cada capa tiene un checkbox para activar/desactivar su visibilidad.
 - **Acciones Globales**:
+  - **Seleccionar Todas**: Restaura la visibilidad de todas las capas (alias de Encender Todas).
   - **Encender Todas**: Restaura la visibilidad de todas las capas.
   - **Apagar Todas**: Oculta todas las capas, manteniendo obligatoriamente **al menos una visible** para evitar un lienzo vacío accidental.
 - **Validación**: El sistema impide desactivar la última capa visible, asegurando que el usuario siempre tenga referencia visual.
