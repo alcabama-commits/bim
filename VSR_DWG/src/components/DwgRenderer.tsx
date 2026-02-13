@@ -43,7 +43,7 @@ const DwgRenderer: React.FC<Props> = ({
   const [debugStats, setDebugStats] = useState<string>('')
   const [zoomLevel, setZoomLevel] = useState<number>(1)
   
-  const { layers, layerVisibility, setLayerVisibility, toggleLayer, showAll, hideAll } = useLayers(entityRoot, file)
+  const { layers, layerVisibility, toggleLayer, showAll, hideAll } = useLayers(entityRoot, file)
   
   const [showLayers, setShowLayers] = useState(false)
   const [layerSearch, setLayerSearch] = useState('')
