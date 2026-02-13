@@ -206,7 +206,9 @@ const DwgRenderer: React.FC<Props> = ({
 
   useEffect(() => {
     if (renderer) {
-      renderer.setClearColor(isDarkMode ? 0x181718 : 0xF9F9FA, 1)
+      // For Light Mode (!isDarkMode), we use Black background which becomes White after inversion
+      // For Dark Mode, we use the standard Dark Grey
+      renderer.setClearColor(isDarkMode ? 0x181718 : 0x000000, 1)
     }
   }, [isDarkMode, renderer])
 
@@ -242,7 +244,7 @@ const DwgRenderer: React.FC<Props> = ({
     const r = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true })
     r.setPixelRatio(window.devicePixelRatio)
     r.setSize(containerRef.current?.clientWidth || 800, containerRef.current?.clientHeight || 600)
-    r.setClearColor(isDarkMode ? 0x181718 : 0xF9F9FA, 1)
+    r.setClearColor(isDarkMode ? 0x181718 : 0x000000, 1)
     setRenderer(r)
 
     camera.position.set(0, 0, 10)
@@ -351,36 +353,18 @@ const DwgRenderer: React.FC<Props> = ({
           const hsl = { h: 0, s: 0, l: 0 }
           m.color.getHSL(hsl)
 
-          if (isDarkMode) {
-            // Dark Mode Logic
-            // Special case: Pure black -> White
-            if (hex === 0x000000) {
-              m.color.setHex(0xffffff)
-            } 
-            // Ensure visibility: Lighten dark colors
-            else if (hsl.l < 0.35) {
-              m.color.setHSL(hsl.h, hsl.s, 0.6)
-            }
-          } else {
-            // Light Mode Logic (White Background)
-            // Goal: High contrast dark lines
-            
-            // 1. Whites and very light colors (L > 0.5) -> Pure Black
-            // This catches White (L=1), Off-whites, and bright colors that need max contrast
-            // We use 0.45 as threshold to catch pure colors (L=0.5) like Yellow/Cyan if we want them Black
-            // But if we want to preserve color (e.g. Dark Yellow), we handle L=0.5 separately
-            
-            // Pure White/Greys -> Black
-            if (hsl.l > 0.8 || (hsl.l > 0.5 && hsl.s < 0.2)) {
-               m.color.setHex(0x000000)
-            }
-            // Colors (Yellow, Cyan, Green, etc.) -> Darken significantly
-            // Cap lightness at 0.3 to ensure readability on white
-            else if (hsl.l > 0.3) {
-               m.color.setHSL(hsl.h, hsl.s, 0.3)
-            }
-            // Already dark colors stay dark
+          // Always optimize for Dark Background
+          // (Light Mode is now handled via CSS Inversion of a Dark Scene)
+          
+          // Special case: Pure black -> White (so it becomes Black after inversion)
+          if (hex === 0x000000) {
+            m.color.setHex(0xffffff)
+          } 
+          // Ensure visibility: Lighten dark colors so they stand out on Dark BG
+          else if (hsl.l < 0.35) {
+            m.color.setHSL(hsl.h, hsl.s, 0.6)
           }
+          
           m.needsUpdate = true
         }
       }
@@ -392,7 +376,9 @@ const DwgRenderer: React.FC<Props> = ({
       }
     }
 
-    if (isBlueprint) {
+    // Apply filter for Blueprint OR Light Mode
+    if (isBlueprint || !isDarkMode) {
+      // Use the standard Blueprint filter for consistent "Light Theme" visualization
       renderer.domElement.style.filter = 'invert(1) hue-rotate(180deg) brightness(1.1) contrast(1.25)'
       entityRoot.traverse(ensureContrast)
     } else {
