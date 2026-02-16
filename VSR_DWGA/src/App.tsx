@@ -50,7 +50,6 @@ const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null)
   const [activeTool, setActiveTool] = useState<Tool>('hand')
   const [showGrid, setShowGrid] = useState(false)
-  const [isBlueprint, setIsBlueprint] = useState(false)
   const [calibration, setCalibration] = useState<Calibration | null>(null)
   const [snapSettings, setSnapSettings] = useState<SnapSettings>({
     enableEndpoint: true,
@@ -335,8 +334,7 @@ const App: React.FC = () => {
             </div>
 
             <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded transition ${showGrid ? 'text-alcabama-600 dark:text-alcabama-400 bg-alcabama-50 dark:bg-alcabama-500/10' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
-            <button onClick={() => setIsBlueprint(!isBlueprint)} className={`w-8 h-8 rounded transition ${isBlueprint ? 'text-alcabama-600 dark:text-alcabama-400 bg-alcabama-50 dark:bg-alcabama-500/10' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`} title="Modo Blueprint"><i className="fa-solid fa-eye-slash text-xs"></i></button>
-            
+                        
             <button 
               onClick={() => setIsDarkMode(!isDarkMode)} 
               className={`w-8 h-8 rounded transition ${isDarkMode ? 'text-alcabama-400 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'}`} 
@@ -421,7 +419,6 @@ const App: React.FC = () => {
               file={file}
               tool={activeTool}
               showGrid={showGrid}
-              isBlueprint={isBlueprint}
               calibration={calibration}
               onCalibrationComplete={onCalibrationComplete}
               snapSettings={snapSettings}
