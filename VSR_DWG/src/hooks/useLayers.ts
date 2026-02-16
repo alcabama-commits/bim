@@ -43,6 +43,11 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
     // 2. Nested in 'entity' property (dxf-parser structure)
     if (!layerName && obj.userData?.entity?.layer) layerName = obj.userData.entity.layer
 
+    // 2b. Other common DXF keys
+    if (!layerName && (obj as any).userData?.properties?.layer) layerName = (obj as any).userData.properties.layer
+    if (!layerName && (obj as any).userData?.attribs?.layer) layerName = (obj as any).userData.attribs.layer
+    if (!layerName && (obj as any).userData?.dxf?.layer) layerName = (obj as any).userData.dxf.layer
+
     // 3. Direct property on object
     if (!layerName && (obj as any).layer) layerName = (obj as any).layer
 
@@ -66,6 +71,17 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
         } else if (mat.color) {
             colorHex = '#' + mat.color.getHexString()
         }
+    }
+    // If no material color, try vertex colors from geometry
+    if (!colorHex && (obj as any).geometry?.attributes?.color) {
+      const attr = (obj as any).geometry.attributes.color
+      if (attr && attr.count >= 1 && attr.itemSize >= 3) {
+        const r = Math.max(0, Math.min(255, Math.round(attr.getX(0) * 255)))
+        const g = Math.max(0, Math.min(255, Math.round(attr.getY(0) * 255)))
+        const b = Math.max(0, Math.min(255, Math.round(attr.getZ(0) * 255)))
+        const hex = ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')
+        colorHex = '#' + hex
+      }
     }
 
     if (colorHex) {
