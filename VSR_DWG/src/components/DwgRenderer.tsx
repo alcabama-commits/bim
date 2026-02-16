@@ -12,7 +12,6 @@ interface Props {
   file: File | null
   tool: Tool
   showGrid: boolean
-  isBlueprint: boolean
   calibration: Calibration | null
   onCalibrationComplete: (c: Calibration) => void
   snapSettings: SnapSettings
@@ -20,7 +19,7 @@ interface Props {
 }
 
 const DwgRenderer: React.FC<Props> = ({
-  file, tool, showGrid, isBlueprint, calibration, onCalibrationComplete, snapSettings, isDarkMode
+  file, tool, showGrid, calibration, onCalibrationComplete, snapSettings, isDarkMode
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const controlsTargetRef = useRef<HTMLDivElement>(null)
@@ -385,9 +384,9 @@ const DwgRenderer: React.FC<Props> = ({
       }
     }
 
-    // Apply filter for Blueprint OR Light Mode
-    // Both modes rely on CSS Inversion to turn the Dark internal render into a Light visual result.
-    if (isBlueprint || !isDarkMode) {
+    // Apply filter for Light Mode
+    // Light mode relies on CSS Inversion to turn the Dark internal render into a Light visual result.
+    if (!isDarkMode) {
       // Invert: Dark BG -> White BG, White Lines -> Black Lines
       // Hue-rotate: Fixes colors (Red -> Cyan -> Red)
       renderer.domElement.style.filter = 'invert(1) hue-rotate(180deg) brightness(1.1) contrast(1.25)'
@@ -397,7 +396,7 @@ const DwgRenderer: React.FC<Props> = ({
       renderer.domElement.style.filter = ''
       entityRoot.traverse(ensureContrast)
     }
-  }, [isBlueprint, renderer, entityRoot, isDarkMode])
+  }, [renderer, entityRoot, isDarkMode])
 
   useEffect(() => {
     if (!renderer || !showGrid) return
