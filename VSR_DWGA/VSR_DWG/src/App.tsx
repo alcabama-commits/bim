@@ -257,9 +257,9 @@ const App: React.FC = () => {
 
         <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-black flex justify-center items-center">
           {isDarkMode ? (
-            <img src="https://i.postimg.cc/Jzsm9C9n/LOGO_BIM_BLANCO_ICO.png" alt="BIM" className="h-12 object-contain" />
+            <img src="https://i.postimg.cc/fJT9Jjyh/LOGO_BIM_BLANCO_ICO.png" alt="BIM" className="h-12 object-contain" />
           ) : (
-            <img src="https://i.postimg.cc/P5ChBnBN/LOGO_BIM_NEGRO_ICO.png" alt="BIM" className="h-12 object-contain" />
+            <img src="https://i.postimg.cc/Whbkh6zc/LOGO_BIM_NEGRO_ICO.png" alt="BIM" className="h-12 object-contain" />
           )}
         </div>
       </div>
@@ -277,11 +277,19 @@ const App: React.FC = () => {
               </button>
             )}
             <div className="flex items-center gap-3">
-              <img 
-                src="https://i.postimg.cc/RVp8pZwc/artis_urbano.png" 
-                alt="Artis Urbano" 
-                className="h-7 object-contain"
-              />
+              {isDarkMode ? (
+                <img 
+                  src="https://i.postimg.cc/3xdLSg9g/artis-urbano2-1.png" 
+                  alt="Artis Urbano" 
+                  className="h-7 object-contain"
+                />
+              ) : (
+                <img 
+                  src="https://i.postimg.cc/vmKVZndP/artis-urbano2.png" 
+                  alt="Artis Urbano" 
+                  className="h-7 object-contain"
+                />
+              )}
             </div>
             {file && <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mx-2"></div>}
             {file && <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate max-w-[160px]">{file.name}</span>}
