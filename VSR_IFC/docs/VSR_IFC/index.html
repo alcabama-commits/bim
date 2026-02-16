@@ -5,9 +5,42 @@
     <link rel="icon" type="image/svg+xml" href="vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VSR IFC Viewer</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="module" crossorigin src="./assets/main-Dt83JQKg.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/main-7wy5uZYK.css">
+
+    <style>
+      :root {
+        --primary-color: #d3045c;
+        --bg-white: #ffffff;
+        --bg-light-gray: #c5c0c8;
+        --bg-darker: #827e84;
+        --bg-gray: #a9afa6;
+        --text-black: #000000;
+        --text-med-gray: #a49fa6;
+        --text-dark-gray: #605e62;
+        --border-color: #c5c0c8;
+      }
+
+      .dark-mode {
+        --bg-white: #1e1e1e;
+        --bg-light-gray: #2d2d2d;
+        --bg-darker: #111111;
+        --bg-gray: #2d2d2d;
+        --text-black: #ffffff;
+        --text-med-gray: #999999;
+        --text-dark-gray: #dddddd;
+        --border-color: #444444;
+      }
+
+      .logo-img {
+        height: 40px;
+      }
+
+      .logo-bim-img {
+        height: 32px;
+      }
+    </style>
   </head>
   <body>
     <div id="app">
@@ -56,7 +89,8 @@
               <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar modelos">
                   <i class="fa-solid fa-bars"></i>
               </button>
-              <img id="logo-img" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png" alt="Alcabama" class="logo-img" style="height: 40px;">
+              <img id="logo-img" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png" alt="Alcabama" class="logo-img">
+              <img id="bim-logo-img" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png" alt="BIM" class="logo-bim-img">
           </div>
 
           <div class="top-controls" style="display: flex; align-items: center; gap: 15px;">
@@ -113,5 +147,48 @@
       </div>
 
     </div>
+
+    <script>
+      (function () {
+        const lightMainLogo = "https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png";
+        const darkMainLogo = "https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png";
+        const lightBimLogo = "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png";
+        const darkBimLogo = "https://postimg.cc/fJT9Jjyh";
+
+        const updateThemeAssets = () => {
+          const isDark = document.body.classList.contains("dark-mode");
+          const mainLogo = document.getElementById("logo-img");
+          const bimLogo = document.getElementById("bim-logo-img");
+          if (mainLogo) mainLogo.src = isDark ? darkMainLogo : lightMainLogo;
+          if (bimLogo) bimLogo.src = isDark ? darkBimLogo : lightBimLogo;
+        };
+
+        const updateBlueprintIcons = () => {
+          const icons = document.querySelectorAll(".folder-group .visibility-toggle i, .model-item .visibility-toggle i");
+          icons.forEach((icon) => {
+            icon.classList.remove("fa-eye", "fa-eye-slash");
+            icon.classList.add("fa-solid", "fa-layer-group");
+          });
+        };
+
+        document.addEventListener("DOMContentLoaded", () => {
+          updateThemeAssets();
+          updateBlueprintIcons();
+
+          const themeToggle = document.getElementById("theme-toggle");
+          if (themeToggle) {
+            themeToggle.addEventListener("click", () => {
+              setTimeout(updateThemeAssets, 0);
+            });
+          }
+
+          const sidebar = document.getElementById("sidebar") || document.body;
+          const observer = new MutationObserver(() => {
+            updateBlueprintIcons();
+          });
+          observer.observe(sidebar, { childList: true, subtree: true });
+        });
+      })();
+    </script>
   </body>
 </html>
