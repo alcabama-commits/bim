@@ -277,11 +277,11 @@ const App: React.FC = () => {
               </button>
             )}
             <div className="flex items-center gap-3">
-              {isDarkMode ? (
-                 <img src="https://i.postimg.cc/0yDgcyBp/Logo-transparente_blanco.png" alt="Alcabama" className="h-6 object-contain opacity-90" />
-              ) : (
-                 <img src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente_negro.png" alt="Alcabama" className="h-6 object-contain opacity-90" />
-              )}
+              <img 
+                src="https://i.postimg.cc/RVp8pZwc/artis_urbano.png" 
+                alt="Artis Urbano" 
+                className="h-7 object-contain"
+              />
             </div>
             {file && <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mx-2"></div>}
             {file && <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate max-w-[160px]">{file.name}</span>}

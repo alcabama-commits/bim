@@ -7,17 +7,17 @@ export default {
     extend: {
       colors: {
         alcabama: {
-          DEFAULT: '#d3045c',
-          50: '#fdf2f9',
-          100: '#fce7f3',
-          200: '#fbcfe8',
-          300: '#f9a8d4',
-          400: '#f472b6',
-          500: '#e83e8c',
-          600: '#d3045c',
-          700: '#b0034c',
-          800: '#8e023d',
-          900: '#6d022f',
+          DEFAULT: '#FFA400',
+          50: '#FFF7E6',
+          100: '#FFEBBF',
+          200: '#FFD580',
+          300: '#FFBE33',
+          400: '#FFB01A',
+          500: '#FFA400',
+          600: '#F28705',
+          700: '#CC6F00',
+          800: '#995300',
+          900: '#663700',
         },
         // Mapping provided palette to slate to override default slate usage
         slate: {

@@ -1227,10 +1227,9 @@ const DwgRenderer: React.FC<Props> = ({
       {/* Snap Marker */}
       {snap && renderer && (() => {
         const s = projectToScreen(snap.pos)
-        // Ensure s.x and s.y are valid numbers
         if (isNaN(s.x) || isNaN(s.y)) return null
         
-        const color = "#d3045c" // Alcabama
+        const color = "#FFA400"
         
         return (
           <svg className="absolute inset-0 pointer-events-none w-full h-full z-10">
@@ -1247,7 +1246,7 @@ const DwgRenderer: React.FC<Props> = ({
       {polyPoints.length > 0 && renderer && tool === 'area' && (
         <svg className="absolute inset-0 pointer-events-none w-full h-full z-10">
           {(() => {
-            const color = "#d3045c"
+            const color = "#FFA400"
             const pts = polyPoints.map(p => projectToScreen(p))
             return (
               <>
@@ -1276,10 +1275,10 @@ const DwgRenderer: React.FC<Props> = ({
             const path = spts.map(p => `${p.x},${p.y}`).join(' ')
             const cx = spts.reduce((acc, p) => acc + p.x, 0) / spts.length
             const cy = spts.reduce((acc, p) => acc + p.y, 0) / spts.length
-            const color = "#d3045c"
+            const color = "#FFA400"
             return (
               <g key={`area-${i}`}>
-                <polygon points={path} fill="rgba(211,4,92,0.15)" stroke={color} strokeWidth="2" />
+                <polygon points={path} fill="rgba(255,164,0,0.15)" stroke={color} strokeWidth="2" />
                 <g transform={`translate(${cx}, ${cy - 12})`}>
                   <rect x="-60" y="-12" width="120" height="24" rx="12" fill="#000" stroke={color} strokeWidth="2" />
                   <text fontSize="12" fontWeight="900" textAnchor="middle" fill={color} dy="5" className="font-mono">
@@ -1319,7 +1318,7 @@ const DwgRenderer: React.FC<Props> = ({
             const bHead1 = { x: b1.x + outUx * arrowLen + px * arrowWing, y: b1.y + outUy * arrowLen + py * arrowWing }
             const bHead2 = { x: b1.x + outUx * arrowLen - px * arrowWing, y: b1.y + outUy * arrowLen - py * arrowWing }
             const mid = { x: (a1.x + b1.x) / 2, y: (a1.y + b1.y) / 2 - 10 }
-            const color = "#d3045c"
+            const color = "#FFA400"
             return (
               <g key={i}>
                 <line x1={a.x} y1={a.y} x2={a1.x} y2={a1.y} stroke={color} strokeWidth="2" />
@@ -1345,7 +1344,7 @@ const DwgRenderer: React.FC<Props> = ({
         <svg className="absolute inset-0 pointer-events-none w-full h-full">
           {points.map((p, i) => {
             const s = projectToScreen(p)
-            return <circle key={i} cx={s.x} cy={s.y} r="6" fill="#d3045c" stroke="#000" strokeWidth="2" />
+            return <circle key={i} cx={s.x} cy={s.y} r="6" fill="#FFA400" stroke="#000" strokeWidth="2" />
           })}
           {points.length === 2 && (() => {
             const a = projectToScreen(points[0])
@@ -1353,10 +1352,10 @@ const DwgRenderer: React.FC<Props> = ({
             const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 20 }
             return (
               <>
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#d3045c" strokeWidth="3" strokeDasharray="6,4" />
+                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#FFA400" strokeWidth="3" strokeDasharray="6,4" />
                 <g transform={`translate(${mid.x}, ${mid.y})`}>
-                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#d3045c" strokeWidth="2" />
-                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#d3045c" dy="5" className="font-mono">
+                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#FFA400" strokeWidth="2" />
+                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#FFA400" dy="5" className="font-mono">
                     {displayDist()}
                   </text>
                 </g>
