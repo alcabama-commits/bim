@@ -3,16 +3,15 @@
   line-height: 1.5;
   font-weight: 400;
 
-  /* Color Palette - Light Mode (Default) - Alcabama */
+  /* Color Palette - Light Mode (Default) */
   --primary-color: #d3045c;
-  --bg-white: #ffffff;
-  --bg-light-gray: #c5c0c8;
-  --bg-darker: #827e84;
-  --bg-gray: #a9afa6;
+  --bg-white: #FFFFFF;
+  --bg-light-gray: #f5f5f5;
+  --bg-darker: #e0e0e0;
   --text-black: #000000;
-  --text-med-gray: #a49fa6;
-  --text-dark-gray: #605e62;
-  --border-color: #c5c0c8;
+  --text-med-gray: #A49FA6;
+  --text-dark-gray: #605E62;
+  --border-color: #e0e0e0;
   --console-bg: rgba(30, 30, 30, 0.9);
   --console-text: #0f0;
 
@@ -30,8 +29,7 @@
 .dark-mode {
   --bg-white: #1e1e1e;
   --bg-light-gray: #2d2d2d;
-  --bg-darker: #111111;
-  --bg-gray: #2d2d2d;
+  --bg-darker: #1a1a1a;
   --text-black: #ffffff;
   --text-med-gray: #999999;
   --text-dark-gray: #dddddd;
