@@ -42,18 +42,9 @@ const App: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
         <header className="h-12 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between z-30 shadow-md">
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3">
-              <img
-                src="https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png"
-                alt="Alcabama"
-                className="h-6"
-              />
-              <img
-                src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png"
-                alt="BIM"
-                className="h-5 invert"
-              />
-              <span className="text-sm font-bold tracking-tighter uppercase">ArchView <span className="text-[#D3045C] text-[10px] ml-1">BIM PRO</span></span>
+            <div className="flex items-center gap-2">
+              <i className="fa-solid fa-drafting-compass text-yellow-500"></i>
+              <span className="text-sm font-bold tracking-tighter uppercase">ArchView <span className="text-yellow-500 text-[10px] ml-1">BIM PRO</span></span>
             </div>
             {file && <div className="h-4 w-px bg-slate-700 mx-2"></div>}
             {file && <span className="text-[10px] text-slate-400 font-mono truncate max-w-[120px]">{file.name}</span>}
@@ -63,21 +54,21 @@ const App: React.FC = () => {
             <div className="flex bg-slate-800 rounded p-0.5 border border-slate-700 mr-4">
               <button 
                 onClick={() => setActiveTool('hand')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'hand' ? 'bg-[#D3045C] shadow-inner' : 'hover:bg-slate-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'hand' ? 'bg-indigo-600 shadow-inner' : 'hover:bg-slate-700'}`}
                 title="Mano (Pan)"
               >
                 <i className="fa-solid fa-hand-pointer text-xs"></i>
               </button>
               <button 
                 onClick={() => setActiveTool('measure')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'measure' ? 'bg-[#D3045C] shadow-inner' : 'hover:bg-slate-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'measure' ? 'bg-indigo-600 shadow-inner' : 'hover:bg-slate-700'}`}
                 title="Medir"
               >
                 <i className="fa-solid fa-ruler text-xs"></i>
               </button>
               <button 
                 onClick={() => setActiveTool('calibrate')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'calibrate' ? 'bg-[#D3045C] shadow-inner' : 'hover:bg-slate-700'}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'calibrate' ? 'bg-yellow-600 shadow-inner text-slate-950' : 'hover:bg-slate-700'}`}
                 title="Calibrar Escala"
               >
                 <i className="fa-solid fa-arrows-left-right-to-line text-xs"></i>
@@ -91,12 +82,12 @@ const App: React.FC = () => {
             </div>
 
             <button onClick={handleRotate} className="w-8 h-8 hover:bg-slate-800 rounded transition" title="Rotar"><i className="fa-solid fa-rotate-right text-xs"></i></button>
-            <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded transition ${showGrid ? 'text-[#D3045C] bg-[#D3045C]/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
-            <button onClick={() => setIsBlueprint(!isBlueprint)} className={`w-8 h-8 rounded transition ${isBlueprint ? 'text-[#D3045C] bg-[#D3045C]/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Modo Blueprint"><i className="fa-solid fa-circle-half-stroke text-xs"></i></button>
+            <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded transition ${showGrid ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
+            <button onClick={() => setIsBlueprint(!isBlueprint)} className={`w-8 h-8 rounded transition ${isBlueprint ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Modo Blueprint"><i className="fa-solid fa-eye-slash text-xs"></i></button>
           </div>
 
           <div className="flex items-center gap-3">
-            <label className="cursor-pointer bg-[#D3045C] hover:bg-[#c30352] text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition active:scale-95 flex items-center gap-2">
+            <label className="cursor-pointer bg-yellow-600 hover:bg-yellow-500 text-slate-950 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition active:scale-95 flex items-center gap-2">
               <i className="fa-solid fa-upload"></i>
               <span className="hidden sm:inline">Nuevo Archivo</span>
               <input type="file" className="hidden" accept=".pdf" onChange={handleFileChange} />
@@ -116,7 +107,7 @@ const App: React.FC = () => {
               </button>
             </div>
             {calibration ? (
-              <div className="flex items-center gap-2 text-[#D3045C] text-[10px] font-black animate-pulse">
+              <div className="flex items-center gap-2 text-yellow-500 text-[10px] font-black animate-pulse">
                 <i className="fa-solid fa-check-circle"></i> ESCALA CALIBRADA
               </div>
             ) : (
@@ -140,7 +131,6 @@ const App: React.FC = () => {
             onFileSelect={handleFileSelect}
             // Pass the tool setter as onToolChange prop
             onToolChange={setActiveTool}
-            onZoom={setScale}
           />
         </main>
       </div>
