@@ -237,14 +237,14 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
 
   if (!file) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-slate-900 border-2 border-dashed border-slate-800 m-8 rounded-3xl">
+      <div className="flex-1 flex flex-col items-center justify-center bg-[#C5C0C8] border-2 border-dashed border-[#A49FA6] m-8 rounded-3xl">
         <div className="text-center space-y-4 max-w-sm p-8">
-          <div className="w-20 h-20 bg-yellow-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-yellow-500/20">
-            <i className="fa-solid fa-cloud-arrow-up text-3xl text-yellow-500 animate-pulse"></i>
+          <div className="w-20 h-20 bg-[#D3045C]/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-[#D3045C]/20">
+            <i className="fa-solid fa-cloud-arrow-up text-3xl text-[#D3045C] animate-pulse"></i>
           </div>
-          <h3 className="text-xl font-bold text-white uppercase tracking-tight">Cargar Plano BIM</h3>
-          <p className="text-slate-400 text-sm">Arrastra tu archivo o selecciónalo para iniciar el visor métrico.</p>
-          <label className="inline-block cursor-pointer bg-yellow-500 hover:bg-yellow-400 text-slate-950 px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 active:scale-95 shadow-lg shadow-yellow-500/10">
+          <h3 className="text-xl font-bold text-black uppercase tracking-tight">Cargar Plano BIM</h3>
+          <p className="text-slate-700 text-sm">Arrastra tu archivo o selecciónalo para iniciar el visor métrico.</p>
+          <label className="inline-block cursor-pointer bg-[#D3045C] hover:bg-[#c30352] text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 active:scale-95 shadow-lg shadow-[#D3045C]/10">
             Seleccionar Archivo PDF
             <input 
               type="file" 
@@ -280,11 +280,11 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onWheel={handleWheel}
-      className={`relative flex-1 overflow-auto bg-slate-900 h-full no-scrollbar touch-none ${tool === 'hand' ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
+      className={`relative flex-1 overflow-auto bg-white h-full no-scrollbar touch-none ${tool === 'hand' ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
     >
       <div className="relative w-fit min-w-full min-h-full flex p-20">
         <div className={`relative transition-all duration-300 m-auto ${isBlueprint ? 'invert hue-rotate-180 brightness-110 contrast-125' : ''}`}>
-          <canvas ref={canvasRef} className="bg-white shadow-[0_0_60px_rgba(0,0,0,0.6)] border border-slate-700" />
+          <canvas ref={canvasRef} className="bg-white shadow-[0_0_60px_rgba(0,0,0,0.2)] border border-[#A49FA6]" />
           
           {showGrid && (
             <div className="absolute inset-0 pointer-events-none opacity-20" 
@@ -294,14 +294,14 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
 
           <svg className="absolute inset-0 pointer-events-none w-full h-full">
             {points.map((p, i) => (
-              <circle key={i} cx={p.x} cy={p.y} r="6" fill="#facc15" stroke="#000" strokeWidth="2" />
+              <circle key={i} cx={p.x} cy={p.y} r="6" fill="#D3045C" stroke="#000" strokeWidth="2" />
             ))}
             {points.length === 2 && (
               <>
-                <line x1={points[0].x} y1={points[0].y} x2={points[1].x} y2={points[1].y} stroke="#facc15" strokeWidth="3" strokeDasharray="6,4" />
+                <line x1={points[0].x} y1={points[0].y} x2={points[1].x} y2={points[1].y} stroke="#D3045C" strokeWidth="3" strokeDasharray="6,4" />
                 <g transform={`translate(${(points[0].x + points[1].x) / 2}, ${(points[0].y + points[1].y) / 2 - 20})`}>
-                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#facc15" strokeWidth="2" />
-                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#facc15" dy="5" className="font-mono">
+                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#D3045C" strokeWidth="2" />
+                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#D3045C" dy="5" className="font-mono">
                     {displayDist}
                   </text>
                 </g>
@@ -312,12 +312,12 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       </div>
 
       {loading && (
-        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50">
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-md flex items-center justify-center z-50">
           <div className="flex flex-col items-center gap-6">
-            <div className="w-16 h-16 border-4 border-yellow-500/20 border-t-yellow-500 animate-spin rounded-full"></div>
+            <div className="w-16 h-16 border-4 border-[#D3045C]/20 border-t-[#D3045C] animate-spin rounded-full"></div>
             <div className="text-center">
-              <span className="block text-yellow-500 font-mono text-xs tracking-widest uppercase mb-1">Cargando Render BIM</span>
-              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Calculando vectores...</span>
+              <span className="block text-[#D3045C] font-mono text-xs tracking-widest uppercase mb-1">Cargando Render BIM</span>
+              <span className="text-slate-700 text-[10px] uppercase font-bold tracking-widest">Calculando vectores...</span>
             </div>
           </div>
         </div>
