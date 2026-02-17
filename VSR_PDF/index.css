@@ -21,7 +21,8 @@
 #root { background-color: #020617; min-height: 100vh; }
 
 /* Alcabama: overrides de color (solo estética, sin tocar lógica) */
-.bg-slate-950 { background-color: #FFFFFF !important; }
+/* Fondo general oscuro para que el panel central se vea claramente */
+.bg-slate-950 { background-color: #000000 !important; }
 .text-slate-100 { color: #000000 !important; }
 .bg-slate-900 { background-color: #C5C0C8 !important; }
 .border-slate-800 { border-color: #A49FA6 !important; }
@@ -30,7 +31,7 @@
 .text-slate-500 { color: #605E62 !important; }
 .text-slate-400 { color: #A49FA6 !important; }
 .hover\:bg-slate-700:hover { background-color: #827E84 !important; }
-.bg-slate-950\/80 { background-color: rgba(255,255,255,0.8) !important; }
+.bg-slate-950\/80 { background-color: rgba(0,0,0,0.8) !important; }
 
 /* Acento: magenta corporativo en lugar de amarillo */
 .text-yellow-500 { color: #D3045C !important; }
