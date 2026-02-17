@@ -1,7 +1,6 @@
 
 import React, { useState, useCallback } from 'react';
 import PdfRenderer from './components/PdfRenderer';
-import AiSidebar from './components/AiSidebar';
 import { Calibration, Tool } from './types';
 
 const App: React.FC = () => {
@@ -16,6 +15,9 @@ const App: React.FC = () => {
   const [showGrid, setShowGrid] = useState(false);
   const [isBlueprint, setIsBlueprint] = useState(false);
   const [calibration, setCalibration] = useState<Calibration | null>(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+  const [drawings, setDrawings] = useState<Array<{name:string;filename:string;folder:string}>>([]);
 
   const handleFileSelect = (selectedFile: File) => {
     setFile(selectedFile);
@@ -37,6 +39,30 @@ const App: React.FC = () => {
   const handleRotate = () => setRotation(prev => (prev + 90) % 360);
   const handleZoom = (delta: number) => setScale(prev => Math.max(0.1, Math.min(10, prev + delta)));
 
+  const toggleGallery = () => {
+    setGalleryOpen((prev) => !prev);
+    if (!galleryOpen && drawings.length === 0) {
+      setGalleryLoading(true);
+      setTimeout(() => {
+        setDrawings([]);
+        setGalleryLoading(false);
+      }, 400);
+    }
+  };
+
+  const handleOpenDrawing = async (d: {name:string;filename:string;folder:string}) => {
+    try {
+      const url = `${d.folder}/${d.filename}`;
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const f = new File([blob], d.filename, { type: 'application/pdf' });
+      handleFileSelect(f);
+      setGalleryOpen(false);
+    } catch (err) {
+      console.error('No se pudo abrir el plano desde la galería:', err);
+    }
+  };
+
   return (
     <div className="flex h-screen w-full bg-[#000000] text-[#FFFFFF] overflow-hidden select-none">
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
@@ -51,6 +77,9 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1">
+            <button onClick={toggleGallery} className="w-8 h-8 rounded transition text-[#FFFFFF] hover:bg-[#605E62]" title="Galería de Planos">
+              <i className="fa-solid fa-images text-xs"></i>
+            </button>
             <div className="flex bg-[#827E84] rounded p-0.5 border border-[#A49FA6] mr-4">
               <button 
                 onClick={() => setActiveTool('hand')}
@@ -95,6 +124,37 @@ const App: React.FC = () => {
           </div>
         </header>
 
+        {galleryOpen && (
+          <aside className="absolute left-0 top-12 bottom-0 w-72 bg-[#605E62] border-r border-[#827E84] z-40 overflow-y-auto no-scrollbar">
+            <div className="p-3 border-b border-[#827E84] flex items-center justify-between sticky top-0 bg-[#605E62]">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#C5C0C8]">Galería de Planos</span>
+              <button onClick={toggleGallery} className="text-[#A49FA6] hover:text-[#D3045C]">
+                <i className="fa-solid fa-times"></i>
+              </button>
+            </div>
+            {galleryLoading ? (
+              <div className="p-4 text-[#A49FA6] text-xs">Cargando lista...</div>
+            ) : drawings.length === 0 ? (
+              <div className="p-4 text-[#A49FA6] text-xs">No hay elementos en la galería.</div>
+            ) : (
+              <ul className="p-2 space-y-1">
+                {drawings.map((d, idx) => (
+                  <li key={`${d.folder}-${d.filename}-${idx}`}>
+                    <button
+                      onClick={() => handleOpenDrawing(d)}
+                      className="w-full text-left px-3 py-2 rounded hover:bg-[#827E84] transition flex items-center gap-2"
+                      title={d.name}
+                    >
+                      <i className="fa-solid fa-file-pdf text-[#D3045C]"></i>
+                      <span className="text-[11px] text-[#FFFFFF] truncate">{d.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </aside>
+        )}
+
         {file && (
           <div className="absolute bottom-6 left-6 bg-[rgba(0,0,0,0.9)] backdrop-blur border border-[#827E84] px-4 py-2 rounded-xl flex items-center gap-6 z-40 shadow-2xl">
             <div className="flex items-center gap-3 border-r border-[#827E84] pr-4">
@@ -134,11 +194,6 @@ const App: React.FC = () => {
           />
         </main>
       </div>
-
-      <AiSidebar 
-        isPdfLoaded={!!file} 
-        documentText={documentText}
-      />
     </div>
   );
 };
