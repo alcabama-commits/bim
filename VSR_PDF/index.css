@@ -2,6 +2,65 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --alcabama-bg: #FFFFFF;
+  --alcabama-text: #000000;
+  --alcabama-muted: #605E62;
+  --alcabama-panel: #C5C0C8;
+  --alcabama-border: #A49FA6;
+  --alcabama-dark-1: #827E84;
+  --alcabama-accent: #D3045C;
+}
+
+.dark-theme {
+  --alcabama-bg: #000000;
+  --alcabama-text: #FFFFFF;
+  --alcabama-muted: #A49FA6;
+  --alcabama-panel: #605E62;
+  --alcabama-border: #827E84;
+  --alcabama-dark-1: #605E62;
+  --alcabama-accent: #D3045C;
+}
+
+/* App shell */
+.alcabama-app {
+  background-color: var(--alcabama-bg);
+  color: var(--alcabama-text);
+}
+.alcabama-header {
+  background-color: var(--alcabama-panel);
+  border-bottom: 1px solid var(--alcabama-border);
+}
+.alcabama-divider {
+  background-color: var(--alcabama-border);
+}
+.alcabama-tooltip {
+  color: var(--alcabama-muted);
+}
+.alcabama-btn {
+  color: var(--alcabama-text);
+}
+.alcabama-btn:hover {
+  background-color: var(--alcabama-dark-1);
+  color: var(--alcabama-text);
+}
+.alcabama-btn-active {
+  background-color: var(--alcabama-accent);
+  color: #FFFFFF;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1);
+}
+.alcabama-upload {
+  background-color: var(--alcabama-accent);
+  color: #FFFFFF;
+}
+.alcabama-upload:hover {
+  filter: brightness(1.05);
+}
+.brand-logo-light { display: block; }
+.brand-logo-dark { display: none; }
+.dark-theme .brand-logo-light { display: none; }
+.dark-theme .brand-logo-dark { display: block; }
+
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {
     display: none;
@@ -14,8 +73,8 @@
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: #0f172a; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: #facc15; }
+::-webkit-scrollbar-track { background: var(--alcabama-panel); }
+::-webkit-scrollbar-thumb { background: var(--alcabama-dark-1); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--alcabama-accent); }
 
-#root { background-color: #020617; min-height: 100vh; }
+#root { background-color: var(--alcabama-bg); min-height: 100vh; }
