@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import PdfRenderer from './components/PdfRenderer';
 import AiSidebar from './components/AiSidebar';
 import { Calibration, Tool } from './types';
@@ -37,6 +37,10 @@ const App: React.FC = () => {
   const handleRotate = () => setRotation(prev => (prev + 90) % 360);
   const handleZoom = (delta: number) => setScale(prev => Math.max(0.1, Math.min(10, prev + delta)));
 
+  useEffect(() => {
+    console.log("%c ALCABAMA BIM v2.1 CARGADO ", "background: #D3045C; color: #fff; font-size: 20px; padding: 10px;");
+  }, []);
+
   return (
     <div className="flex h-screen w-full bg-[#000000] text-[#FFFFFF] overflow-hidden select-none">
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
@@ -44,7 +48,7 @@ const App: React.FC = () => {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <i className="fa-solid fa-drafting-compass text-[#D3045C]"></i>
-              <span className="text-sm font-bold tracking-tighter uppercase">ArchView <span className="text-[#D3045C] text-[10px] ml-1">BIM PRO v2.0</span></span>
+              <span className="text-sm font-bold tracking-tighter uppercase">ArchView <span className="text-[#D3045C] text-[10px] ml-1">BIM PRO v2.1</span></span>
             </div>
             {file && <div className="h-4 w-px bg-[#605E62] mx-2"></div>}
             {file && <span className="text-[10px] text-[#A49FA6] font-mono truncate max-w-[120px]">{file.name}</span>}
