@@ -66,36 +66,36 @@ const AiSidebar: React.FC<AiSidebarProps> = ({ documentText, isPdfLoaded, onClos
   };
 
   return (
-    <div className="w-96 border-l border-[#C5C0C8] bg-[#FFFFFF] flex flex-col h-full shadow-xl">
-      <div className="p-4 border-b border-[#A49FA6] flex items-center justify-between">
+    <div className="w-96 border-l border-slate-200 bg-white flex flex-col h-full shadow-xl">
+      <div className="p-4 border-b border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-bold text-[#605E62] flex items-center gap-2">
-            <i className="fa-solid fa-wand-magic-sparkles text-[#D3045C]"></i>
+          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <i className="fa-solid fa-wand-magic-sparkles text-indigo-600"></i>
             Asistente AI
           </h2>
           {onClose && (
-            <button onClick={onClose} className="text-[#A49FA6] hover:text-[#605E62] sm:hidden">
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 sm:hidden">
               <i className="fa-solid fa-times"></i>
             </button>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex bg-[#C5C0C8] p-1 rounded-lg">
+          <div className="flex bg-slate-100 p-1 rounded-lg">
             <button 
               onClick={() => setActiveTab('chat')}
-              className={`px-3 py-1 text-sm rounded-md transition ${activeTab === 'chat' ? 'bg-white shadow-sm text-[#D3045C] font-medium' : 'text-[#827E84] hover:text-[#605E62]'}`}
+              className={`px-3 py-1 text-sm rounded-md transition ${activeTab === 'chat' ? 'bg-white shadow-sm text-indigo-600 font-medium' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Chat
             </button>
             <button 
               onClick={() => setActiveTab('summary')}
-              className={`px-3 py-1 text-sm rounded-md transition ${activeTab === 'summary' ? 'bg-white shadow-sm text-[#D3045C] font-medium' : 'text-[#827E84] hover:text-[#605E62]'}`}
+              className={`px-3 py-1 text-sm rounded-md transition ${activeTab === 'summary' ? 'bg-white shadow-sm text-indigo-600 font-medium' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Resumen
             </button>
           </div>
           {onClose && (
-            <button onClick={onClose} className="ml-2 text-[#A49FA6] hover:text-[#D3045C] hidden sm:block">
+            <button onClick={onClose} className="ml-2 text-slate-400 hover:text-red-500 hidden sm:block">
               <i className="fa-solid fa-times"></i>
             </button>
           )}
@@ -104,14 +104,14 @@ const AiSidebar: React.FC<AiSidebarProps> = ({ documentText, isPdfLoaded, onClos
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar" ref={scrollRef}>
         {!isPdfLoaded ? (
-          <div className="flex flex-col items-center justify-center h-full text-[#A49FA6] text-center space-y-2">
+          <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center space-y-2">
             <i className="fa-solid fa-robot text-3xl opacity-20"></i>
             <p className="text-sm">Sube un PDF para habilitar la IA</p>
           </div>
         ) : activeTab === 'chat' ? (
           <>
             {messages.length === 0 && (
-              <div className="bg-[rgba(211,4,92,0.04)] border border-[rgba(211,4,92,0.16)] rounded-xl p-4 text-sm text-[#605E62]">
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-sm text-indigo-800">
                 <p className="font-semibold mb-1">¡Hola! Soy tu asistente de documentos.</p>
                 <p>Puedes preguntarme sobre el contenido del PDF, pedirme aclaraciones o solicitar puntos clave.</p>
               </div>
@@ -120,8 +120,8 @@ const AiSidebar: React.FC<AiSidebarProps> = ({ documentText, isPdfLoaded, onClos
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${
                   msg.role === 'user' 
-                    ? 'bg-[#D3045C] text-[#FFFFFF] rounded-tr-none' 
-                    : 'bg-[#C5C0C8] text-[#605E62] rounded-tl-none'
+                    ? 'bg-indigo-600 text-white rounded-tr-none' 
+                    : 'bg-slate-100 text-slate-800 rounded-tl-none'
                 }`}>
                   {msg.content}
                 </div>
@@ -129,10 +129,10 @@ const AiSidebar: React.FC<AiSidebarProps> = ({ documentText, isPdfLoaded, onClos
             ))}
             {isLoading && (
               <div className="flex justify-start">
-                <div className="bg-[#C5C0C8] p-3 rounded-2xl rounded-tl-none flex space-x-1">
-                  <div className="w-1.5 h-1.5 bg-[#827E84] rounded-full animate-bounce"></div>
-                  <div className="w-1.5 h-1.5 bg-[#827E84] rounded-full animate-bounce delay-75"></div>
-                  <div className="w-1.5 h-1.5 bg-[#827E84] rounded-full animate-bounce delay-150"></div>
+                <div className="bg-slate-100 p-3 rounded-2xl rounded-tl-none flex space-x-1">
+                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></div>
+                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-75"></div>
+                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-150"></div>
                 </div>
               </div>
             )}
@@ -143,20 +143,20 @@ const AiSidebar: React.FC<AiSidebarProps> = ({ documentText, isPdfLoaded, onClos
               <div className="flex flex-col items-center justify-center py-10">
                 <button 
                   onClick={handleGenerateSummary}
-                  className="bg-[#D3045C] text-[#FFFFFF] px-6 py-2 rounded-full text-sm font-medium hover:bg-[#D3045C] transition flex items-center gap-2"
+                  className="bg-indigo-600 text-white px-6 py-2 rounded-full text-sm font-medium hover:bg-indigo-700 transition flex items-center gap-2"
                 >
                   <i className="fa-solid fa-bolt"></i>
                   Generar Resumen
                 </button>
-                <p className="text-xs text-[#A49FA6] mt-3 text-center px-6">
+                <p className="text-xs text-slate-400 mt-3 text-center px-6">
                   Analizaré el documento completo para extraerte lo más importante.
                 </p>
               </div>
             ) : (
-              <div className="bg-[#FFFFFF] border border-[#C5C0C8] rounded-xl p-4 text-sm text-[#605E62] leading-relaxed shadow-sm">
+              <div className="bg-white border border-slate-200 rounded-xl p-4 text-sm text-slate-700 leading-relaxed shadow-sm">
                 <div className="flex justify-between items-start mb-3">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#D3045C]">Resumen Ejecutivo</span>
-                  <button onClick={() => setSummary(null)} className="text-[#A49FA6] hover:text-[#D3045C]">
+                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Resumen Ejecutivo</span>
+                  <button onClick={() => setSummary(null)} className="text-slate-400 hover:text-red-500">
                     <i className="fa-solid fa-rotate-right"></i>
                   </button>
                 </div>
@@ -168,7 +168,7 @@ const AiSidebar: React.FC<AiSidebarProps> = ({ documentText, isPdfLoaded, onClos
       </div>
 
       {activeTab === 'chat' && (
-        <div className="p-4 border-t border-[#C5C0C8]">
+        <div className="p-4 border-t border-slate-100">
           <form onSubmit={handleSendMessage} className="relative">
             <input 
               type="text"
@@ -176,12 +176,12 @@ const AiSidebar: React.FC<AiSidebarProps> = ({ documentText, isPdfLoaded, onClos
               onChange={(e) => setInput(e.target.value)}
               placeholder={isPdfLoaded ? "Escribe tu pregunta..." : "Sube un archivo primero"}
               disabled={!isPdfLoaded || isLoading}
-              className="w-full pl-4 pr-12 py-3 bg-[#C5C0C8] border-none rounded-xl text-sm focus:ring-2 focus:ring-[rgba(211,4,92,0.7)] outline-none disabled:opacity-50 transition-all"
+              className="w-full pl-4 pr-12 py-3 bg-slate-100 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50 transition-all"
             />
             <button 
               type="submit"
               disabled={!isPdfLoaded || isLoading || !input.trim()}
-              className="absolute right-2 top-1.5 w-9 h-9 bg-[#D3045C] text-[#FFFFFF] rounded-lg flex items-center justify-center hover:bg-[#D3045C] disabled:opacity-50 transition-colors"
+              className="absolute right-2 top-1.5 w-9 h-9 bg-indigo-600 text-white rounded-lg flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 transition-colors"
             >
               <i className="fa-solid fa-paper-plane text-xs"></i>
             </button>
