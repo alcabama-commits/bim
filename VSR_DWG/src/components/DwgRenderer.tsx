@@ -6,20 +6,19 @@ import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js'
 import { DXFLoader } from 'three-dxf-loader'
 import { LibreDwg, Dwg_File_Type } from '@mlightcad/libredwg-web'
 
-import { useLayers } from '../hooks/useLayers'
-
 interface Props {
   file: File | null
   tool: Tool
   showGrid: boolean
+  isBlueprint: boolean
   calibration: Calibration | null
   onCalibrationComplete: (c: Calibration) => void
+  onDocInfo: (info: string) => void
   snapSettings: SnapSettings
-  isDarkMode: boolean
 }
 
 const DwgRenderer: React.FC<Props> = ({
-  file, tool, showGrid, calibration, onCalibrationComplete, snapSettings, isDarkMode
+  file, tool, showGrid, isBlueprint, calibration, onCalibrationComplete, onDocInfo, snapSettings
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const controlsTargetRef = useRef<HTMLDivElement>(null)
@@ -41,11 +40,6 @@ const DwgRenderer: React.FC<Props> = ({
   const [areas, setAreas] = useState<AreaItem[]>([])
   const [debugStats, setDebugStats] = useState<string>('')
   const [zoomLevel, setZoomLevel] = useState<number>(1)
-  
-  const { layers, layerVisibility, toggleLayer, showAll, hideAll } = useLayers(entityRoot, file)
-  
-  const [showLayers, setShowLayers] = useState(false)
-  const [layerSearch, setLayerSearch] = useState('')
 
   const extractSnapPoints = (root: THREE.Object3D) => {
     root.updateMatrixWorld(true)
@@ -211,47 +205,11 @@ const DwgRenderer: React.FC<Props> = ({
   }, [entityRoot])
 
   useEffect(() => {
-    if (renderer) {
-      // Always use dark background (0x181718).
-      // In Light Mode, it gets inverted by CSS to appear white.
-      renderer.setClearColor(0x181718, 1)
-    }
-  }, [isDarkMode, renderer])
-
-  useEffect(() => {
-    if (!containerRef.current || !renderer) return
-
-    const resizeObserver = new ResizeObserver(() => {
-      const w = containerRef.current?.clientWidth || 800
-      const h = containerRef.current?.clientHeight || 600
-      renderer.setSize(w, h)
-      
-      const aspect = w / h
-      const frustumHeight = camera.top - camera.bottom
-      const frustumWidth = frustumHeight * aspect
-      
-      const cy = (camera.top + camera.bottom) / 2
-      const cx = (camera.left + camera.right) / 2
-      
-      camera.left = cx - frustumWidth / 2
-      camera.right = cx + frustumWidth / 2
-      camera.top = cy + frustumHeight / 2
-      camera.bottom = cy - frustumHeight / 2
-      
-      camera.updateProjectionMatrix()
-    })
-
-    resizeObserver.observe(containerRef.current)
-    return () => resizeObserver.disconnect()
-  }, [renderer, camera])
-
-  useEffect(() => {
     if (!canvasRef.current || renderer) return
     const r = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true })
     r.setPixelRatio(window.devicePixelRatio)
     r.setSize(containerRef.current?.clientWidth || 800, containerRef.current?.clientHeight || 600)
-    // Always init with Dark BG (0x181718)
-    r.setClearColor(0x181718, 1)
+    r.setClearColor(0x0b1220, 1)
     setRenderer(r)
 
     camera.position.set(0, 0, 10)
@@ -356,24 +314,22 @@ const DwgRenderer: React.FC<Props> = ({
 
       const updateMat = (m: any) => {
         if (m.color) {
-          const hex = m.color.getHex()
+          // Special case: Pure black -> White
+          if (m.color.getHex() === 0x000000) {
+            m.color.setHex(0xffffff)
+            return
+          }
+
+          // Ensure visibility: Lighten dark colors
           const hsl = { h: 0, s: 0, l: 0 }
           m.color.getHSL(hsl)
           
-          // Since we are ALWAYS rendering on a DARK background (before inversion),
-          // we only need to ensure visibility against DARK.
-          
-          // 1. Black lines (0x000000) must be White (0xffffff)
-          // (So when inverted in Light Mode, they become Black again)
-          if (hex === 0x000000) {
-            m.color.setHex(0xffffff)
-          } 
-          // 2. Very dark colors must be lightened
-          else if (hsl.l < 0.35) {
+          // If lightness is too low (dark), boost it significantly
+          // This ensures visibility on dark background (original)
+          // AND visibility on white background (inverted) because inverted light = dark
+          if (hsl.l < 0.35) {
             m.color.setHSL(hsl.h, hsl.s, 0.6)
           }
-           
-          m.needsUpdate = true
         }
       }
 
@@ -384,19 +340,14 @@ const DwgRenderer: React.FC<Props> = ({
       }
     }
 
-    // Apply filter for Light Mode
-    // Light mode relies on CSS Inversion to turn the Dark internal render into a Light visual result.
-    if (!isDarkMode) {
-      // Invert: Dark BG -> White BG, White Lines -> Black Lines
-      // Hue-rotate: Fixes colors (Red -> Cyan -> Red)
+    if (isBlueprint) {
       renderer.domElement.style.filter = 'invert(1) hue-rotate(180deg) brightness(1.1) contrast(1.25)'
       entityRoot.traverse(ensureContrast)
     } else {
-      // Dark Mode: No filter, standard rendering
       renderer.domElement.style.filter = ''
       entityRoot.traverse(ensureContrast)
     }
-  }, [renderer, entityRoot, isDarkMode])
+  }, [isBlueprint, renderer, entityRoot])
 
   useEffect(() => {
     if (!renderer || !showGrid) return
@@ -595,6 +546,7 @@ const DwgRenderer: React.FC<Props> = ({
               camera.updateProjectionMatrix()
               controls?.target.set(center.x, center.y, 0)
               controls?.update()
+              onDocInfo(`DWG cargado. Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
             })(),
             new Promise((_, reject) => {
               loadTimeoutRef.current = window.setTimeout(() => reject(new Error('DWG_TIMEOUT')), 20000)
@@ -669,6 +621,7 @@ const DwgRenderer: React.FC<Props> = ({
               camera.updateProjectionMatrix()
               controls?.target.set(center.x, center.y, 0)
               controls?.update()
+              onDocInfo(`DXF cargado. Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
             }
           } else {
             console.error('No entity found in DXF data')
@@ -707,6 +660,7 @@ const DwgRenderer: React.FC<Props> = ({
               controls?.target.set(center.x, center.y, 0)
               controls?.update()
               setErrorMsg(null)
+              onDocInfo(`DXF cargado (viewer). Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
             }
           } catch (e) {
             console.error('Viewer loader failed', e)
@@ -750,6 +704,7 @@ const DwgRenderer: React.FC<Props> = ({
             controls?.target.set(center.x, center.y, 0)
             controls?.update()
             setErrorMsg(null)
+            onDocInfo(`DXF cargado (viewer). Tamaño: ${size.x.toFixed(2)} x ${size.y.toFixed(2)} unidades`)
             setLoading(false)
             URL.revokeObjectURL(url)
           } else {
@@ -902,7 +857,7 @@ const DwgRenderer: React.FC<Props> = ({
             }
           } else if (tool === 'dimension') {
             const d = next[0].distanceTo(next[1])
-            const text = calibration ? `${((d / calibration.world) * calibration.realValue).toFixed(2)} ${calibration.unit}` : `${d.toFixed(2)} m`
+            const text = calibration ? `${((d / calibration.world) * calibration.realValue).toFixed(3)} ${calibration.unit}` : `${d.toFixed(3)} u`
             const item: DimensionItem = { ax: next[0].x, ay: next[0].y, bx: next[1].x, by: next[1].y, text }
             setDimensions(prev => [...prev, item])
             setPoints([])
@@ -927,8 +882,8 @@ const DwgRenderer: React.FC<Props> = ({
     })()
     const factor = calibration ? (calibration.realValue / calibration.world) : null
     const text = factor
-      ? `${(areaWorld * factor * factor).toFixed(2)} ${calibration!.unit}²`
-      : `${areaWorld.toFixed(2)} m²`
+      ? `${(areaWorld * factor * factor).toFixed(3)} ${calibration!.unit}²`
+      : `${areaWorld.toFixed(3)} u²`
     const item: AreaItem = {
       pts: polyPoints.map(p => ({ x: p.x, y: p.y })),
       text
@@ -950,9 +905,9 @@ const DwgRenderer: React.FC<Props> = ({
     const d = points[0].distanceTo(points[1])
     if (calibration) {
       const real = (d / calibration.world) * calibration.realValue
-      return `${real.toFixed(2)} ${calibration.unit}`
+      return `${real.toFixed(3)} ${calibration.unit}`
     }
-    return `${d.toFixed(2)} m`
+    return `${d.toFixed(3)} u`
   }
 
   const handleManualZoom = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1010,12 +965,12 @@ const DwgRenderer: React.FC<Props> = ({
   return (
     <div
       ref={containerRef}
-      className={`relative flex-1 overflow-hidden ${isDarkMode ? 'bg-slate-950' : 'bg-slate-50'} h-full ${tool === 'hand' ? 'cursor-grab' : 'cursor-crosshair'}`}
+      className={`relative flex-1 overflow-hidden bg-slate-900 h-full ${tool === 'hand' ? 'cursor-grab' : 'cursor-crosshair'}`}
     >
       {/* Fit to View Button */}
       <button 
         onClick={fitToView}
-        className={`absolute top-2 right-2 ${isDarkMode ? 'bg-alcabama-600 hover:bg-alcabama-500' : 'bg-alcabama-600 hover:bg-alcabama-700'} text-white px-3 py-1.5 rounded shadow-lg text-sm font-medium z-50 flex items-center gap-2 transition-colors`}
+        className="absolute top-2 right-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded shadow-lg text-sm font-medium z-50 flex items-center gap-2"
         title="Centrar dibujo"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1032,7 +987,7 @@ const DwgRenderer: React.FC<Props> = ({
               type="number" 
               value={Math.round(zoomLevel * 100)} 
               onChange={handleZoomInput}
-              className="w-12 bg-slate-900 text-white text-xs text-center rounded border border-slate-600 py-1 focus:border-alcabama-500 outline-none"
+              className="w-12 bg-slate-900 text-white text-xs text-center rounded border border-slate-600 py-1 focus:border-blue-500 outline-none"
             />
             <span className="text-xs text-slate-400">%</span>
          </div>
@@ -1049,162 +1004,46 @@ const DwgRenderer: React.FC<Props> = ({
          />
       </div>
 
-      {/* Top Left Tools */}
-      <div className="absolute top-2 left-2 z-[100] flex gap-2">
-        <button 
-          onClick={() => setShowInfo(!showInfo)}
-          className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all border ${
-            showInfo 
-              ? isDarkMode 
-                ? 'bg-slate-800 border-alcabama-500/50 text-alcabama-400 shadow-lg shadow-alcabama-500/10' 
-                : 'bg-alcabama-50 border-alcabama-200 text-alcabama-600 shadow-lg shadow-alcabama-500/10'
-              : isDarkMode
-                ? 'bg-slate-900/50 border-transparent text-slate-600 hover:text-slate-400 hover:bg-slate-800'
-                : 'bg-white/50 border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-          }`}
-          title="Información Técnica"
-        >
-          <i className="fa-solid fa-circle-info text-xs"></i>
-        </button>
-
-        <button 
-          onClick={() => setShowLayers(!showLayers)}
-          className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all border shadow-lg ${
-            showLayers 
-              ? isDarkMode 
-                ? 'bg-slate-800 border-alcabama-500/50 text-alcabama-400 shadow-alcabama-500/10' 
-                : 'bg-alcabama-50 border-alcabama-200 text-alcabama-600 shadow-alcabama-500/10'
-              : isDarkMode
-                ? 'bg-slate-900/80 border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                : 'bg-white/80 border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-          }`}
-          title="Panel de Capas"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-            <polyline points="2 17 12 22 22 17"></polyline>
-            <polyline points="2 12 12 17 22 12"></polyline>
-          </svg>
-        </button>
-      </div>
-
-      {/* Layers Panel */}
-      {showLayers && (
-        <div className={`absolute top-12 left-2 ${isDarkMode ? 'bg-slate-900/95 text-slate-300 border-slate-700' : 'bg-white/95 text-slate-600 border-slate-200'} backdrop-blur border p-3 rounded-xl z-[100] shadow-2xl min-w-[240px] max-w-[300px] max-h-[60vh] flex flex-col transition-all duration-200`}>
-          <div className={`flex flex-col gap-2 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'} pb-3 mb-2`}>
-             <div className="flex justify-between items-center">
-                <span className="text-xs font-semibold uppercase tracking-wider">Capas ({layers.length})</span>
-                <div className="flex gap-1 bg-slate-100/10 rounded-lg p-0.5">
-                    <button 
-                      onClick={showAll}
-                      className={`p-1.5 rounded-md transition-all ${isDarkMode ? 'hover:bg-slate-700 text-slate-400 hover:text-alcabama-400' : 'hover:bg-slate-100 text-slate-500 hover:text-alcabama-600'}`}
-                      title="Seleccionar todas"
-                    >
-                      <i className="fa-solid fa-check-double text-xs"></i>
-                    </button>
-                    <button 
-                      onClick={showAll}
-                      className={`p-1.5 rounded-md transition-all ${isDarkMode ? 'hover:bg-slate-700 text-slate-400 hover:text-alcabama-400' : 'hover:bg-slate-100 text-slate-500 hover:text-alcabama-600'}`}
-                      title="Encender todas"
-                    >
-                      <i className="fa-solid fa-eye text-xs"></i>
-                    </button>
-                    <button 
-                      onClick={hideAll}
-                      className={`p-1.5 rounded-md transition-all ${isDarkMode ? 'hover:bg-slate-700 text-slate-400 hover:text-red-400' : 'hover:bg-slate-100 text-slate-500 hover:text-red-600'}`}
-                      title="Apagar todas (mantiene 1)"
-                    >
-                      <i className="fa-solid fa-eye-slash text-xs"></i>
-                    </button>
-                 </div>
-             </div>
-             
-             {/* Search Input */}
-             <div className="relative">
-                <input 
-                  type="text" 
-                  placeholder="Buscar capa..." 
-                  value={layerSearch}
-                  onChange={e => setLayerSearch(e.target.value)}
-                  className={`w-full text-xs px-2 py-1.5 pl-7 rounded-lg border outline-none transition-colors ${
-                    isDarkMode 
-                      ? 'bg-slate-950 border-slate-700 focus:border-alcabama-500 text-slate-200 placeholder-slate-600' 
-                      : 'bg-slate-50 border-slate-200 focus:border-alcabama-500 text-slate-700 placeholder-slate-400'
-                  }`}
-                />
-                <i className={`fa-solid fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] ${isDarkMode ? 'text-slate-600' : 'text-slate-400'}`}></i>
-             </div>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar space-y-0.5">
-            {layers.filter(l => l.name.toLowerCase().includes(layerSearch.toLowerCase())).length === 0 ? (
-               <div className="text-[10px] italic opacity-50 text-center py-4">
-                 {layers.length === 0 ? 'No hay capas' : 'No se encontraron resultados'}
-               </div>
-            ) : (
-               layers
-                 .filter(l => l.name.toLowerCase().includes(layerSearch.toLowerCase()))
-                 .map(layer => (
-                   <label key={layer.name} className={`group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${
-                     isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-50'
-                   }`}>
-                      <div className="relative flex items-center">
-                        <input 
-                          type="checkbox"
-                          checked={layerVisibility[layer.name] !== false}
-                          onChange={(e) => toggleLayer(layer.name, e.target.checked)}
-                          className={`rounded border-slate-500 text-alcabama-600 focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5 cursor-pointer ${isDarkMode ? 'bg-slate-700 border-slate-600' : 'bg-white'}`}
-                        />
-                      </div>
-                      
-                      {/* Color Indicator */}
-                      <div 
-                        className="w-2.5 h-2.5 rounded-full shadow-sm border border-white/10 shrink-0" 
-                        style={{backgroundColor: layer.color}}
-                        title={`Color: ${layer.color}`}
-                      ></div>
-                      
-                      <span className={`text-[11px] truncate select-none flex-1 transition-opacity ${
-                        layerVisibility[layer.name] !== false 
-                          ? (isDarkMode ? 'text-slate-200' : 'text-slate-700') 
-                          : (isDarkMode ? 'text-slate-600' : 'text-slate-400')
-                      }`} title={layer.name}>
-                        {layer.name}
-                      </span>
-                   </label>
-                 ))
-            )}
-          </div>
-        </div>
-      )}
+      {/* Debug Info Toggle */}
+      <button 
+        onClick={() => setShowInfo(!showInfo)}
+        className={`absolute top-2 left-2 z-50 w-8 h-8 flex items-center justify-center rounded-lg transition-all border ${
+          showInfo 
+            ? 'bg-slate-800 border-yellow-500/50 text-yellow-500 shadow-lg shadow-yellow-500/10' 
+            : 'bg-slate-900/50 border-transparent text-slate-600 hover:text-slate-400 hover:bg-slate-800'
+        }`}
+        title="Información Técnica"
+      >
+        <i className="fa-solid fa-circle-info text-xs"></i>
+      </button>
 
       {/* Debug Info Overlay */}
       {showInfo && (
-        <div className={`absolute top-12 left-2 ${isDarkMode ? 'bg-slate-900/90 text-slate-300 border-slate-700' : 'bg-white/90 text-slate-600 border-slate-200'} backdrop-blur border p-3 text-[10px] rounded-xl pointer-events-none z-50 shadow-2xl font-mono min-w-[180px]`}>
+        <div className="absolute top-12 left-2 bg-slate-900/90 backdrop-blur border border-slate-700 text-slate-300 p-3 text-[10px] rounded-xl pointer-events-none z-50 shadow-2xl font-mono min-w-[180px]">
           <div className="space-y-1">
-            <div className={`flex justify-between border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'} pb-1 mb-1`}>
-              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Pos</span>
-              <span className={isDarkMode ? 'text-white' : 'text-slate-900'}>{debugInfo.pos || '0.00, 0.00'}</span>
+            <div className="flex justify-between border-b border-slate-800 pb-1 mb-1">
+              <span className="text-slate-500">Pos</span>
+              <span className="text-white">{debugInfo.pos || '0.00, 0.00'}</span>
             </div>
             <div className="flex justify-between">
-              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Zoom</span>
-              <span className="text-alcabama-500">{debugInfo.zoom}x</span>
+              <span className="text-slate-500">Zoom</span>
+              <span className="text-yellow-500">{debugInfo.zoom}x</span>
             </div>
             <div className="flex justify-between">
-              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Snaps</span>
+              <span className="text-slate-500">Snaps</span>
               <span>{debugInfo.candidates} pts</span>
             </div>
             <div className="flex justify-between items-start gap-2">
-              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Objs</span>
+              <span className="text-slate-500 shrink-0">Objs</span>
               <span className="text-right leading-tight opacity-70 break-all">{debugStats || '-'}</span>
             </div>
-            <div className={`flex justify-between border-t ${isDarkMode ? 'border-slate-800' : 'border-slate-100'} pt-1 mt-1`}>
-              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Tool</span>
-              <span className="uppercase font-bold text-alcabama-500">{tool}</span>
+            <div className="flex justify-between border-t border-slate-800 pt-1 mt-1">
+              <span className="text-slate-500">Tool</span>
+              <span className="uppercase font-bold text-indigo-400">{tool}</span>
             </div>
             <div className="flex justify-between">
-              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-400'}>Status</span>
-              <span className={`${snap ? 'text-alcabama-500' : isDarkMode ? 'text-slate-600' : 'text-slate-300'}`}>
+              <span className="text-slate-500">Status</span>
+              <span className={`${snap ? 'text-green-400' : 'text-slate-600'}`}>
                 {snap ? snap.type.toUpperCase() : 'IDLE'}
               </span>
             </div>
@@ -1229,7 +1068,7 @@ const DwgRenderer: React.FC<Props> = ({
         // Ensure s.x and s.y are valid numbers
         if (isNaN(s.x) || isNaN(s.y)) return null
         
-        const color = "#d3045c" // Alcabama
+        const color = "#facc15" // Yellow-400
         
         return (
           <svg className="absolute inset-0 pointer-events-none w-full h-full z-10">
@@ -1246,7 +1085,7 @@ const DwgRenderer: React.FC<Props> = ({
       {polyPoints.length > 0 && renderer && tool === 'area' && (
         <svg className="absolute inset-0 pointer-events-none w-full h-full z-10">
           {(() => {
-            const color = "#d3045c"
+            const color = "#22c55e"
             const pts = polyPoints.map(p => projectToScreen(p))
             return (
               <>
@@ -1275,10 +1114,10 @@ const DwgRenderer: React.FC<Props> = ({
             const path = spts.map(p => `${p.x},${p.y}`).join(' ')
             const cx = spts.reduce((acc, p) => acc + p.x, 0) / spts.length
             const cy = spts.reduce((acc, p) => acc + p.y, 0) / spts.length
-            const color = "#d3045c"
+            const color = "#22c55e"
             return (
               <g key={`area-${i}`}>
-                <polygon points={path} fill="rgba(211,4,92,0.15)" stroke={color} strokeWidth="2" />
+                <polygon points={path} fill="rgba(34,197,94,0.15)" stroke={color} strokeWidth="2" />
                 <g transform={`translate(${cx}, ${cy - 12})`}>
                   <rect x="-60" y="-12" width="120" height="24" rx="12" fill="#000" stroke={color} strokeWidth="2" />
                   <text fontSize="12" fontWeight="900" textAnchor="middle" fill={color} dy="5" className="font-mono">
@@ -1318,7 +1157,7 @@ const DwgRenderer: React.FC<Props> = ({
             const bHead1 = { x: b1.x + outUx * arrowLen + px * arrowWing, y: b1.y + outUy * arrowLen + py * arrowWing }
             const bHead2 = { x: b1.x + outUx * arrowLen - px * arrowWing, y: b1.y + outUy * arrowLen - py * arrowWing }
             const mid = { x: (a1.x + b1.x) / 2, y: (a1.y + b1.y) / 2 - 10 }
-            const color = "#d3045c"
+            const color = "#facc15"
             return (
               <g key={i}>
                 <line x1={a.x} y1={a.y} x2={a1.x} y2={a1.y} stroke={color} strokeWidth="2" />
@@ -1344,7 +1183,7 @@ const DwgRenderer: React.FC<Props> = ({
         <svg className="absolute inset-0 pointer-events-none w-full h-full">
           {points.map((p, i) => {
             const s = projectToScreen(p)
-            return <circle key={i} cx={s.x} cy={s.y} r="6" fill="#d3045c" stroke="#000" strokeWidth="2" />
+            return <circle key={i} cx={s.x} cy={s.y} r="6" fill="#facc15" stroke="#000" strokeWidth="2" />
           })}
           {points.length === 2 && (() => {
             const a = projectToScreen(points[0])
@@ -1352,10 +1191,10 @@ const DwgRenderer: React.FC<Props> = ({
             const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 20 }
             return (
               <>
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#d3045c" strokeWidth="3" strokeDasharray="6,4" />
+                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#facc15" strokeWidth="3" strokeDasharray="6,4" />
                 <g transform={`translate(${mid.x}, ${mid.y})`}>
-                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#d3045c" strokeWidth="2" />
-                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#d3045c" dy="5" className="font-mono">
+                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#facc15" strokeWidth="2" />
+                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#facc15" dy="5" className="font-mono">
                     {displayDist()}
                   </text>
                 </g>
@@ -1396,11 +1235,11 @@ const DwgRenderer: React.FC<Props> = ({
         )}
       </div>
       {loading && (
-        <div className={`absolute inset-0 ${isDarkMode ? 'bg-slate-950/80' : 'bg-white/80'} backdrop-blur-md flex items-center justify-center z-50`}>
+        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50">
           <div className="flex flex-col items-center gap-6">
-            <div className="w-16 h-16 border-4 border-alcabama-500/30 border-t-alcabama-500 animate-spin rounded-full"></div>
+            <div className="w-16 h-16 border-4 border-yellow-500/30 border-t-yellow-500 animate-spin rounded-full"></div>
             <div className="text-center">
-              <span className="block text-alcabama-500 font-mono text-xs tracking-widest uppercase mb-1">{loadingText}</span>
+              <span className="block text-yellow-500 font-mono text-xs tracking-widest uppercase mb-1">{loadingText}</span>
               <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Preparando geometría...</span>
             </div>
           </div>
