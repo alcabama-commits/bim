@@ -74,7 +74,7 @@ const AiSidebar: React.FC<AiSidebarProps> = ({ documentText, isPdfLoaded, onClos
             Asistente AI
           </h2>
           {onClose && (
-            <button onClick={onClose} className="text-[#A49FA6] hover:text-[#605E62] sm:hidden">
+            <button onClick={onClose} className="text-[#A49FA6] hover:text-[#D3045C] sm:hidden transition-colors">
               <i className="fa-solid fa-times"></i>
             </button>
           )}
@@ -83,19 +83,19 @@ const AiSidebar: React.FC<AiSidebarProps> = ({ documentText, isPdfLoaded, onClos
           <div className="flex bg-[#C5C0C8]/20 p-1 rounded-lg">
             <button 
               onClick={() => setActiveTab('chat')}
-              className={`px-3 py-1 text-sm rounded-md transition ${activeTab === 'chat' ? 'bg-white shadow-sm text-[#D3045C] font-medium' : 'text-[#827E84] hover:text-[#605E62]'}`}
+              className={`px-3 py-1 text-sm rounded-md transition focus:outline-none focus:ring-2 focus:ring-[#D3045C] ${activeTab === 'chat' ? 'bg-white shadow-sm text-[#D3045C] font-medium' : 'text-[#827E84] hover:text-[#605E62]'}`}
             >
               Chat
             </button>
             <button 
               onClick={() => setActiveTab('summary')}
-              className={`px-3 py-1 text-sm rounded-md transition ${activeTab === 'summary' ? 'bg-white shadow-sm text-[#D3045C] font-medium' : 'text-[#827E84] hover:text-[#605E62]'}`}
+              className={`px-3 py-1 text-sm rounded-md transition focus:outline-none focus:ring-2 focus:ring-[#D3045C] ${activeTab === 'summary' ? 'bg-white shadow-sm text-[#D3045C] font-medium' : 'text-[#827E84] hover:text-[#605E62]'}`}
             >
               Resumen
             </button>
           </div>
           {onClose && (
-            <button onClick={onClose} className="ml-2 text-[#A49FA6] hover:text-[#D3045C] hidden sm:block">
+            <button onClick={onClose} className="ml-2 text-[#A49FA6] hover:text-[#D3045C] hidden sm:block transition-colors focus:outline-none focus:ring-2 focus:ring-[#D3045C] rounded">
               <i className="fa-solid fa-times"></i>
             </button>
           )}
@@ -181,7 +181,7 @@ const AiSidebar: React.FC<AiSidebarProps> = ({ documentText, isPdfLoaded, onClos
             <button 
               type="submit"
               disabled={!isPdfLoaded || isLoading || !input.trim()}
-              className="absolute right-2 top-1.5 w-9 h-9 bg-[#D3045C] text-white rounded-lg flex items-center justify-center hover:bg-[#D3045C]/90 disabled:opacity-50 transition-colors"
+              className="absolute right-2 top-1.5 w-9 h-9 bg-[#D3045C] text-white rounded-lg flex items-center justify-center hover:bg-[#D3045C]/90 disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-[#D3045C] focus:ring-offset-1"
             >
               <i className="fa-solid fa-paper-plane text-xs"></i>
             </button>
