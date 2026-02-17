@@ -38,39 +38,37 @@ const App: React.FC = () => {
   const handleZoom = (delta: number) => setScale(prev => Math.max(0.1, Math.min(10, prev + delta)));
 
   return (
-    <div className="flex h-screen w-full alcabama-app overflow-hidden select-none">
+    <div className="flex h-screen w-full bg-slate-950 text-slate-100 overflow-hidden select-none">
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
-        <header className="h-12 alcabama-header px-4 flex items-center justify-between z-30 shadow-md">
+        <header className="h-12 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between z-30 shadow-md">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <img src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png" alt="Alcabama" className="brand-logo-light h-6" />
-              <img src="https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png" alt="Alcabama" className="brand-logo-dark h-6" />
-              <span className="text-sm font-bold tracking-tighter uppercase">ArchView <span className="text-[10px] ml-1" style={{ color: 'var(--alcabama-accent)' }}>BIM PRO</span></span>
-              <img src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png" alt="BIM" className="h-5 ml-3 brand-logo-light" />
+              <i className="fa-solid fa-drafting-compass text-yellow-500"></i>
+              <span className="text-sm font-bold tracking-tighter uppercase">ArchView <span className="text-yellow-500 text-[10px] ml-1">BIM PRO</span></span>
             </div>
-            {file && <div className="h-4 w-px alcabama-divider mx-2"></div>}
-            {file && <span className="text-[10px] font-mono truncate max-w-[120px] alcabama-tooltip">{file.name}</span>}
+            {file && <div className="h-4 w-px bg-slate-700 mx-2"></div>}
+            {file && <span className="text-[10px] text-slate-400 font-mono truncate max-w-[120px]">{file.name}</span>}
           </div>
 
           <div className="flex items-center gap-1">
-            <div className="flex rounded p-0.5 border mr-4" style={{ backgroundColor: 'var(--alcabama-panel)', borderColor: 'var(--alcabama-border)' }}>
+            <div className="flex bg-slate-800 rounded p-0.5 border border-slate-700 mr-4">
               <button 
                 onClick={() => setActiveTool('hand')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition alcabama-btn ${activeTool === 'hand' ? 'alcabama-btn-active' : ''}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'hand' ? 'bg-indigo-600 shadow-inner' : 'hover:bg-slate-700'}`}
                 title="Mano (Pan)"
               >
                 <i className="fa-solid fa-hand-pointer text-xs"></i>
               </button>
               <button 
                 onClick={() => setActiveTool('measure')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition alcabama-btn ${activeTool === 'measure' ? 'alcabama-btn-active' : ''}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'measure' ? 'bg-indigo-600 shadow-inner' : 'hover:bg-slate-700'}`}
                 title="Medir"
               >
                 <i className="fa-solid fa-ruler text-xs"></i>
               </button>
               <button 
                 onClick={() => setActiveTool('calibrate')}
-                className={`w-8 h-8 flex items-center justify-center rounded transition alcabama-btn ${activeTool === 'calibrate' ? 'alcabama-btn-active' : ''}`}
+                className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'calibrate' ? 'bg-yellow-600 shadow-inner text-slate-950' : 'hover:bg-slate-700'}`}
                 title="Calibrar Escala"
               >
                 <i className="fa-solid fa-arrows-left-right-to-line text-xs"></i>
@@ -78,18 +76,18 @@ const App: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 mr-4">
-              <button onClick={() => handleZoom(-0.2)} className="w-6 h-6 flex items-center justify-center rounded transition alcabama-btn"><i className="fa-solid fa-minus text-[10px]"></i></button>
-              <span className="text-[10px] font-mono w-12 text-center alcabama-tooltip">{Math.round(scale * 100)}%</span>
-              <button onClick={() => handleZoom(0.2)} className="w-6 h-6 flex items-center justify-center rounded transition alcabama-btn"><i className="fa-solid fa-plus text-[10px]"></i></button>
+              <button onClick={() => handleZoom(-0.2)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-800 rounded transition"><i className="fa-solid fa-minus text-[10px]"></i></button>
+              <span className="text-[10px] font-mono w-12 text-center text-slate-400">{Math.round(scale * 100)}%</span>
+              <button onClick={() => handleZoom(0.2)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-800 rounded transition"><i className="fa-solid fa-plus text-[10px]"></i></button>
             </div>
 
-            <button onClick={handleRotate} className="w-8 h-8 rounded transition alcabama-btn" title="Rotar"><i className="fa-solid fa-rotate-right text-xs"></i></button>
-            <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded transition ${showGrid ? 'alcabama-btn-active' : 'alcabama-btn'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
-            <button onClick={() => setIsBlueprint(!isBlueprint)} className={`w-8 h-8 rounded transition ${isBlueprint ? 'alcabama-btn-active' : 'alcabama-btn'}`} title="Modo Plano (Blueprint)"><i className="fa-solid fa-scroll text-xs"></i></button>
+            <button onClick={handleRotate} className="w-8 h-8 hover:bg-slate-800 rounded transition" title="Rotar"><i className="fa-solid fa-rotate-right text-xs"></i></button>
+            <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded transition ${showGrid ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
+            <button onClick={() => setIsBlueprint(!isBlueprint)} className={`w-8 h-8 rounded transition ${isBlueprint ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Modo Blueprint"><i className="fa-solid fa-eye-slash text-xs"></i></button>
           </div>
 
           <div className="flex items-center gap-3">
-            <label className="cursor-pointer alcabama-upload px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition active:scale-95 flex items-center gap-2">
+            <label className="cursor-pointer bg-yellow-600 hover:bg-yellow-500 text-slate-950 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition active:scale-95 flex items-center gap-2">
               <i className="fa-solid fa-upload"></i>
               <span className="hidden sm:inline">Nuevo Archivo</span>
               <input type="file" className="hidden" accept=".pdf" onChange={handleFileChange} />
