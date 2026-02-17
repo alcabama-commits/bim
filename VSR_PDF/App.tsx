@@ -44,7 +44,7 @@ const App: React.FC = () => {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <i className="fa-solid fa-drafting-compass text-[#D3045C]"></i>
-              <span className="text-sm font-bold tracking-tighter uppercase">ArchView <span className="text-[#D3045C] text-[10px] ml-1">BIM PRO</span></span>
+              <span className="text-sm font-bold tracking-tighter uppercase">ArchView <span className="text-[#D3045C] text-[10px] ml-1">BIM PRO v2.0</span></span>
             </div>
             {file && <div className="h-4 w-px bg-[#605E62] mx-2"></div>}
             {file && <span className="text-[10px] text-[#A49FA6] font-mono truncate max-w-[120px]">{file.name}</span>}
