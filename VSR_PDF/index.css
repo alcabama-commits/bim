@@ -12,10 +12,47 @@
   }
 }
 
-/* Custom Scrollbar */
+/* Custom Scrollbar (Alcabama) */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: #0f172a; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: #facc15; }
+::-webkit-scrollbar-track { background: #000000; }
+::-webkit-scrollbar-thumb { background: #605E62; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #D3045C; }
 
-#root { background-color: #020617; min-height: 100vh; }
+#root { background-color: #000000; min-height: 100vh; }
+
+/* ===========================
+   Alcabama palette overrides
+   (solo colores, misma estructura)
+   =========================== */
+/* Fondo general muy oscuro */
+.bg-slate-950 { background-color: #000000 !important; }
+
+/* Paneles principales / superficies */
+.bg-slate-900 { background-color: #605E62 !important; }
+.bg-slate-900\/90 { background-color: rgba(96, 94, 98, 0.9) !important; }
+.bg-slate-800 { background-color: #827E84 !important; }
+
+/* Bordes */
+.border-slate-800 { border-color: #A49FA6 !important; }
+.border-slate-700 { border-color: #A49FA6 !important; }
+
+/* Texto */
+.text-slate-100 { color: #FFFFFF !important; }
+.text-slate-500 { color: #827E84 !important; }
+.text-slate-400 { color: #A49FA6 !important; }
+.text-slate-300 { color: #C5C0C8 !important; }
+
+/* Hover oscuros */
+.hover\:bg-slate-800:hover { background-color: #605E62 !important; }
+.hover\:bg-slate-700:hover { background-color: #827E84 !important; }
+
+/* Overlays */
+.bg-slate-950\/80 { background-color: rgba(0, 0, 0, 0.8) !important; }
+
+/* Acento magenta corporativo en lugar del amarillo */
+.text-yellow-500 { color: #D3045C !important; }
+.bg-yellow-500 { background-color: #D3045C !important; }
+.bg-yellow-600 { background-color: #D3045C !important; }
+.border-yellow-500 { border-color: #D3045C !important; }
+.bg-yellow-500\/10 { background-color: rgba(211, 4, 92, 0.1) !important; }
+.border-yellow-500\/20 { border-color: rgba(211, 4, 92, 0.2) !important; }
