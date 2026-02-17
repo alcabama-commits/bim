@@ -43,6 +43,11 @@ const App: React.FC = () => {
         <header className="h-12 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between z-30 shadow-md">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
+              <img
+                src="https://i.postimg.cc/fJT9Jjyh/LOGO-BIM-BLANCO-ICO.png"
+                alt="BIM"
+                className="h-5"
+              />
               <i className="fa-solid fa-drafting-compass text-yellow-500"></i>
               <span className="text-sm font-bold tracking-tighter uppercase">ArchView <span className="text-yellow-500 text-[10px] ml-1">BIM PRO</span></span>
             </div>
