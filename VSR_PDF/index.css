@@ -19,3 +19,23 @@
 ::-webkit-scrollbar-thumb:hover { background: #facc15; }
 
 #root { background-color: #020617; min-height: 100vh; }
+
+/* Alcabama: overrides de color (solo estética, sin tocar lógica) */
+.bg-slate-950 { background-color: #FFFFFF !important; }
+.text-slate-100 { color: #000000 !important; }
+.bg-slate-900 { background-color: #C5C0C8 !important; }
+.border-slate-800 { border-color: #A49FA6 !important; }
+.bg-slate-800 { background-color: #C5C0C8 !important; }
+.border-slate-700 { border-color: #A49FA6 !important; }
+.text-slate-500 { color: #605E62 !important; }
+.text-slate-400 { color: #A49FA6 !important; }
+.hover\:bg-slate-700:hover { background-color: #827E84 !important; }
+.bg-slate-950\/80 { background-color: rgba(255,255,255,0.8) !important; }
+
+/* Acento: magenta corporativo en lugar de amarillo */
+.text-yellow-500 { color: #D3045C !important; }
+.bg-yellow-500 { background-color: #D3045C !important; }
+.bg-yellow-600 { background-color: #D3045C !important; }
+.border-yellow-500 { border-color: #D3045C !important; }
+.bg-yellow-500\/10 { background-color: rgba(211,4,92,0.1) !important; }
+.border-yellow-500\/20 { border-color: rgba(211,4,92,0.2) !important; }
