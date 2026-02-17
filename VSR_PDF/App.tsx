@@ -16,6 +16,10 @@ const App: React.FC = () => {
   const [showGrid, setShowGrid] = useState(false);
   const [isBlueprint, setIsBlueprint] = useState(false);
   const [calibration, setCalibration] = useState<Calibration | null>(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+  const [drawings, setDrawings] = useState<Array<{name:string;filename:string;folder:string}>>([]);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   const handleFileSelect = (selectedFile: File) => {
     setFile(selectedFile);
@@ -36,6 +40,35 @@ const App: React.FC = () => {
 
   const handleRotate = () => setRotation(prev => (prev + 90) % 360);
   const handleZoom = (delta: number) => setScale(prev => Math.max(0.1, Math.min(10, prev + delta)));
+
+  const toggleGallery = async () => {
+    const opening = !galleryOpen;
+    setGalleryOpen(opening);
+    if (opening && drawings.length === 0) {
+      try {
+        setGalleryLoading(true);
+        const res = await fetch('/Drawing/list.json');
+        const data = await res.json();
+        setDrawings(Array.isArray(data) ? data : []);
+      } catch (e) {
+        console.error('Error cargando la galería:', e);
+      } finally {
+        setGalleryLoading(false);
+      }
+    }
+  };
+
+  const handleOpenDrawing = async (item: {name:string;filename:string}) => {
+    try {
+      const res = await fetch(`/Drawing/${item.filename}`);
+      const blob = await res.blob();
+      const safeName = item.filename.split('/').pop() || item.name || 'Plano.pdf';
+      const fileObj = new File([blob], safeName, { type: 'application/pdf' });
+      handleFileSelect(fileObj);
+    } catch (e) {
+      console.error('No se pudo abrir el plano:', e);
+    }
+  };
 
   return (
     <div className="flex h-screen w-full bg-slate-950 text-slate-100 overflow-hidden select-none">
@@ -80,6 +113,11 @@ const App: React.FC = () => {
               </button>
             </div>
 
+            <button onClick={toggleGallery} className={`w-auto px-3 h-8 rounded transition ${galleryOpen ? 'text-[#D3045C] bg-[#D3045C]/10' : 'text-slate-300 hover:bg-slate-800'}`} title="Galería">
+              <i className="fa-solid fa-images text-xs mr-2"></i>
+              <span className="text-[10px] font-bold uppercase">Galería</span>
+            </button>
+
             <div className="flex items-center gap-2 mr-4">
               <button onClick={() => handleZoom(-0.2)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-800 rounded transition"><i className="fa-solid fa-minus text-[10px]"></i></button>
               <span className="text-[10px] font-mono w-12 text-center text-slate-400">{Math.round(scale * 100)}%</span>
@@ -99,6 +137,59 @@ const App: React.FC = () => {
             </label>
           </div>
         </header>
+
+        {galleryOpen && (
+          <aside className="absolute left-0 top-12 bottom-0 w-72 bg-slate-900 border-r border-slate-800 z-40 overflow-y-auto no-scrollbar">
+            <div className="p-3 border-b border-slate-800 flex items-center justify-between sticky top-0 bg-slate-900">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Galería de Planos</span>
+              <button onClick={toggleGallery} className="text-slate-400 hover:text-red-500">
+                <i className="fa-solid fa-times"></i>
+              </button>
+            </div>
+            {galleryLoading ? (
+              <div className="p-4 text-slate-400 text-xs">Cargando lista...</div>
+            ) : drawings.length === 0 ? (
+              <div className="p-4 text-slate-500 text-xs">No hay elementos en la galería.</div>
+            ) : (
+              <>
+                {Object.keys(drawings.reduce((acc: Record<string, {name:string;filename:string;folder:string}[]>, d) => {
+                  (acc[d.folder] ??= []).push(d);
+                  return acc;
+                }, {}))
+                  .sort((a, b) => Number(a) - Number(b))
+                  .map((folderKey) => {
+                    const groupItems = drawings.filter(d => d.folder === folderKey);
+                    const isCollapsed = !!collapsedGroups[folderKey];
+                    const toggle = () => setCollapsedGroups(prev => ({ ...prev, [folderKey]: !prev[folderKey] }));
+                    return (
+                      <div key={`group-${folderKey}`} className="px-2 pt-2">
+                        <button onClick={toggle} className="w-full px-3 py-2 rounded bg-slate-800/60 hover:bg-slate-800 transition flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-200 uppercase tracking-wider">Carpeta {folderKey}</span>
+                          <i className={`fa-solid ${isCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'} text-[10px] text-slate-400`}></i>
+                        </button>
+                        {!isCollapsed && (
+                          <ul className="mt-1 space-y-1">
+                            {groupItems.map((d, idx) => (
+                              <li key={`${d.folder}-${d.filename}-${idx}`}>
+                                <button
+                                  onClick={() => handleOpenDrawing(d)}
+                                  className="w-full text-left px-3 py-2 rounded hover:bg-slate-800 transition flex items-center gap-2"
+                                  title={d.name}
+                                >
+                                  <i className="fa-solid fa-file-pdf text-[#D3045C]"></i>
+                                  <span className="text-[11px] text-slate-200 truncate">{d.name}</span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })}
+              </>
+            )}
+          </aside>
+        )}
 
         {file && (
           <div className="absolute bottom-6 left-6 bg-slate-900/90 backdrop-blur border border-slate-700 px-4 py-2 rounded-xl flex items-center gap-6 z-40 shadow-2xl">
