@@ -58,25 +58,18 @@
       const hideUploadFromDevice = () => {
         const header = document.querySelector('header');
         if (header) {
-          header.querySelectorAll('label,button').forEach(el => {
-            const txt = (el.textContent || '').toUpperCase();
-            if (txt.includes('NUEVO ARCHIVO') || txt.includes('SELECCIONAR ARCHIVO PDF')) {
-              const parent = el.closest('div');
-              if (parent) parent.style.display = 'none';
-              el.style.display = 'none';
+          header.querySelectorAll('label').forEach(lbl => {
+            const txt = (lbl.textContent || '').toUpperCase();
+            if (txt.includes('NUEVO ARCHIVO')) {
+              lbl.style.display = 'none';
             }
           });
         }
-        const killTexts = ['CARGAR PLANO BIM', 'SELECCIONAR ARCHIVO PDF', 'ARRASTRA TU ARCHIVO'];
-        document.querySelectorAll('div, p, h1, h2, h3, span, label, button').forEach(el => {
-          const txt = (el.textContent || '').toUpperCase();
-          if (killTexts.some(k => txt.includes(k))) {
-            const card = el.closest('div');
-            if (card) {
-              card.style.display = 'none';
-            } else {
-              el.style.display = 'none';
-            }
+        document.querySelectorAll('button').forEach(btn => {
+          const txt = (btn.textContent || '').toUpperCase();
+          if (txt.includes('SELECCIONAR ARCHIVO PDF')) {
+            const container = btn.closest('div');
+            if (container) container.style.display = 'none';
           }
         });
       };
