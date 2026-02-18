@@ -36,7 +36,12 @@
 .text-slate-900 { color: #000000 !important; }
 
 /* Primary accent (Magenta) */
-.bg-yellow-600, .bg-indigo-600, .bg-pink-600 { background-color: #D3045C !important; }
+.bg-yellow-500,
+.bg-yellow-600,
+.bg-yellow-400,
+.bg-indigo-600,
+.bg-pink-600 { background-color: #D3045C !important; }
+.hover\:bg-yellow-400:hover { background-color: #D3045C !important; }
 .hover\:bg-slate-800:hover { background-color: #827E84 !important; }
 .text-yellow-500, .text-indigo-500, .text-pink-500 { color: #D3045C !important; }
 .text-indigo-600 { color: #D3045C !important; }
