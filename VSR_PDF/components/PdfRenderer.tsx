@@ -237,22 +237,13 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
 
   if (!file) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-[#000000] border-2 border-dashed border-[#605E62] m-8 rounded-3xl">
+      <div className="flex-1 flex flex-col items-center justify-center bg-[#000000] m-8 rounded-3xl">
         <div className="text-center space-y-4 max-w-sm p-8">
           <div className="w-20 h-20 bg-[#D3045C]/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-[#D3045C]/20">
-            <i className="fa-solid fa-cloud-arrow-up text-3xl text-[#D3045C] animate-pulse"></i>
+            <i className="fa-solid fa-layer-group text-3xl text-[#D3045C]"></i>
           </div>
-          <h3 className="text-xl font-bold text-white uppercase tracking-tight">Cargar Plano BIM</h3>
-          <p className="text-[#C5C0C8] text-sm">Arrastra tu archivo o selecciónalo para iniciar el visor métrico.</p>
-          <label className="inline-block cursor-pointer bg-[#D3045C] hover:bg-[#D3045C]/90 text-white px-8 py-3 rounded-xl font-bold transition-all transform hover:scale-105 active:scale-95 shadow-lg shadow-[#D3045C]/10">
-            Seleccionar Archivo PDF
-            <input 
-              type="file" 
-              className="hidden" 
-              accept=".pdf" 
-              onChange={(e) => e.target.files?.[0] && onFileSelect(e.target.files[0])} 
-            />
-          </label>
+          <h3 className="text-xl font-bold text-white uppercase tracking-tight">Selecciona un plano</h3>
+          <p className="text-[#C5C0C8] text-sm">Elige un plano desde la galería lateral para iniciar el visor.</p>
         </div>
       </div>
     );

@@ -12,7 +12,6 @@ interface ToolbarProps {
   onRotate: () => void;
   onShowGridToggle: () => void;
   onBlueprintToggle: () => void;
-  onFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   theme: 'light' | 'dark';
   onThemeToggle: () => void;
 }
@@ -28,7 +27,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onRotate,
   onShowGridToggle,
   onBlueprintToggle,
-  onFileChange,
   theme,
   onThemeToggle,
 }) => {
@@ -74,13 +72,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
         </button>
       </div>
 
-      <div className="flex items-center gap-3">
-        <label className="cursor-pointer bg-yellow-600 hover:bg-yellow-400 text-slate-950 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition active:scale-95 flex items-center gap-2">
-          <i className="fa-solid fa-upload"></i>
-          <span className="hidden sm:inline">Nuevo Archivo</span>
-          <input type="file" className="hidden" accept=".pdf" onChange={onFileChange} />
-        </label>
-      </div>
+      <div className="flex items-center gap-3" />
     </header>
   );
 };

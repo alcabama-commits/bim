@@ -41,7 +41,7 @@
         const rect = header ? header.getBoundingClientRect() : {left:10, right:window.innerWidth-10, top:0, height:48};
         logo.style.left = (rect.left + 12) + 'px';
         logo.style.top = (rect.top + 12) + 'px';
-        toggle.style.right = (window.innerWidth - rect.right + 60) + 'px';
+        toggle.style.right = '60px';
         toggle.style.top = (rect.top + 6) + 'px';
         bim.style.left = (rect.left + 12) + 'px';
       };
@@ -52,6 +52,24 @@
           const text = (span.textContent || '').toUpperCase();
           if (text.includes('ARCHVIEW') || text.includes('BIM PRO')) {
             span.style.display = 'none';
+          }
+        });
+      };
+      const hideUploadFromDevice = () => {
+        const header = document.querySelector('header');
+        if (header) {
+          header.querySelectorAll('label').forEach(lbl => {
+            const txt = (lbl.textContent || '').toUpperCase();
+            if (txt.includes('NUEVO ARCHIVO')) {
+              lbl.style.display = 'none';
+            }
+          });
+        }
+        document.querySelectorAll('button').forEach(btn => {
+          const txt = (btn.textContent || '').toUpperCase();
+          if (txt.includes('SELECCIONAR ARCHIVO PDF')) {
+            const container = btn.closest('div');
+            if (container) container.style.display = 'none';
           }
         });
       };
@@ -78,9 +96,14 @@
         setTheme(mode);
       });
       window.addEventListener('resize', positionUI);
-      const mo = new MutationObserver(positionUI);
+      const updateUI = () => {
+        positionUI();
+        hideArchViewBrand();
+        hideUploadFromDevice();
+      };
+      const mo = new MutationObserver(updateUI);
       mo.observe(document.getElementById('root'), {childList:true, subtree:true});
-      hideArchViewBrand();
+      updateUI();
     })();
   </script>
 

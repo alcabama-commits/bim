@@ -26,11 +26,6 @@ const App: React.FC = () => {
     setDocumentText("");
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) handleFileSelect(selectedFile);
-  };
-
   const onDocumentLoad = useCallback((pages: number, text: string) => {
     setTotalPages(pages);
     setDocumentText(text);
@@ -57,7 +52,6 @@ const App: React.FC = () => {
           onRotate={handleRotate}
           onShowGridToggle={() => setShowGrid(!showGrid)}
           onBlueprintToggle={() => setIsBlueprint(!isBlueprint)}
-          onFileChange={handleFileChange}
           theme={theme}
           onThemeToggle={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
         />
