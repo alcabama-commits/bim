@@ -12,6 +12,7 @@ const App: React.FC = () => {
   const [scale, setScale] = useState(0.8);
   const [rotation, setRotation] = useState(0);
   const [documentText, setDocumentText] = useState("");
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
   
   const [activeTool, setActiveTool] = useState<Tool>('hand');
   const [showGrid, setShowGrid] = useState(false);
@@ -43,7 +44,7 @@ const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex h-screen w-full bg-[#000000] text-[#FFFFFF] overflow-hidden select-none">
+    <div className={`flex h-screen w-full overflow-hidden select-none ${theme === 'dark' ? 'theme-dark' : 'theme-light'}`}>
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
         <Toolbar
           file={file}
@@ -57,6 +58,8 @@ const App: React.FC = () => {
           onShowGridToggle={() => setShowGrid(!showGrid)}
           onBlueprintToggle={() => setIsBlueprint(!isBlueprint)}
           onFileChange={handleFileChange}
+          theme={theme}
+          onThemeToggle={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
         />
 
         {file && (
@@ -96,6 +99,14 @@ const App: React.FC = () => {
             // Pass the tool setter as onToolChange prop
             onToolChange={setActiveTool}
           />
+          <div className="pointer-events-none fixed left-3 bottom-3 opacity-70">
+            <img 
+              src={theme === 'dark' ? 'https://i.postimg.cc/yY0XpLzW/LOGO_BIM_BLANCO_ICO.png' : 'https://i.postimg.cc/jdyQ3Mr2/LOGO_BIM_NEGRO_ICO.png'} 
+              alt="BIM" 
+              className="h-8"
+              draggable={false}
+            />
+          </div>
         </main>
       </div>
 

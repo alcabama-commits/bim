@@ -60,3 +60,29 @@
 .bg-indigo-50 { background-color: rgba(211,4,92,0.06) !important; }
 .border-indigo-100 { border-color: rgba(211,4,92,0.15) !important; }
 .bg-indigo-700 { background-color: #A10444 !important; }
+.text-indigo-800 { color: #7A0333 !important; }
+
+/* Theme-scoped overrides */
+.theme-dark {
+  color: #FFFFFF !important;
+  background-color: #000000 !important;
+}
+.theme-dark .bg-slate-950 { background-color: #000000 !important; }
+.theme-dark .bg-slate-900 { background-color: #111111 !important; }
+.theme-dark .bg-slate-800 { background-color: #1A1A1A !important; }
+.theme-dark .bg-slate-700 { background-color: #222222 !important; }
+.theme-dark .text-slate-400 { color: #A49FA6 !important; }
+.theme-dark .border-slate-800 { border-color: #333333 !important; }
+.theme-dark .border-slate-700 { border-color: #2A2A2A !important; }
+
+.theme-light {
+  color: #000000 !important;
+  background-color: #FFFFFF !important;
+}
+.theme-light .bg-slate-950 { background-color: #FFFFFF !important; }
+.theme-light .bg-slate-900 { background-color: #F5F5F5 !important; }
+.theme-light .bg-slate-800 { background-color: #EEEEEE !important; }
+.theme-light .bg-slate-700 { background-color: #E4E4E4 !important; }
+.theme-light .text-slate-400 { color: #605E62 !important; }
+.theme-light .border-slate-800 { border-color: #DDDDDD !important; }
+.theme-light .border-slate-700 { border-color: #D0D0D0 !important; }
