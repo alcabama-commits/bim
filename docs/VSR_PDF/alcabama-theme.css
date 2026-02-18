@@ -109,12 +109,20 @@ i.fa-drafting-compass { display: none !important; }
   top: 6px;  /* se recalcula por JS */
   right: 150px; /* margen para no pisar 'Nuevo Archivo' */
   pointer-events: auto;
-  background: rgba(0,0,0,0.1);
+  background: transparent;
   border: 1px solid #A49FA6;
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 10px;
+  border-radius: 9999px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 14px;
   color: #605E62;
+}
+.alcabama-ui .top-right-toggle i {
+  pointer-events: none;
 }
 .alcabama-ui .bottom-left-logo {
   position: fixed;
