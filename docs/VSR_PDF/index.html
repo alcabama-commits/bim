@@ -36,6 +36,15 @@
       const toggle = document.getElementById('theme-toggle');
       const logo = document.getElementById('alcabama-logo');
       const bim = document.getElementById('bim-logo');
+      const positionUI = () => {
+        const header = document.querySelector('header');
+        const rect = header ? header.getBoundingClientRect() : {left:10, right:window.innerWidth-10, top:0, height:48};
+        logo.style.left = (rect.left + 12) + 'px';
+        logo.style.top = (rect.top + 12) + 'px';
+        toggle.style.right = (window.innerWidth - rect.right + 150) + 'px';
+        toggle.style.top = (rect.top + 6) + 'px';
+        bim.style.left = (rect.left + 12) + 'px';
+      };
       function setTheme(t){
         body.classList.remove('theme-light','theme-dark');
         body.classList.add(t === 'dark' ? 'theme-dark' : 'theme-light');
@@ -46,6 +55,7 @@
         bim.src = t === 'dark'
           ? 'https://i.postimg.cc/yY0XpLzW/LOGO_BIM_BLANCO_ICO.png'
           : 'https://i.postimg.cc/jdyQ3Mr2/LOGO_BIM_NEGRO_ICO.png';
+        positionUI();
       }
       let mode = 'light';
       setTheme(mode);
@@ -53,6 +63,9 @@
         mode = (mode === 'light') ? 'dark' : 'light';
         setTheme(mode);
       });
+      window.addEventListener('resize', positionUI);
+      const mo = new MutationObserver(positionUI);
+      mo.observe(document.getElementById('root'), {childList:true, subtree:true});
     })();
   </script>
 
