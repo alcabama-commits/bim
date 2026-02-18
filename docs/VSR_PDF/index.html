@@ -23,7 +23,37 @@
   <link rel="stylesheet" crossorigin href="./assets/index-Dwr82UEu.css">
   <link rel="stylesheet" href="./alcabama-theme.css">
 </head>
-<body class="bg-slate-950">
-  <div id="root"></div>
+<body class="bg-slate-950 theme-light">
+  <div id="root"></div>
+  <div class="alcabama-ui">
+    <img id="alcabama-logo" class="top-left-logo" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente_negro.png" alt="Alcabama" />
+    <button id="theme-toggle" class="top-right-toggle">Modo: Claro</button>
+    <img id="bim-logo" class="bottom-left-logo" src="https://i.postimg.cc/jdyQ3Mr2/LOGO_BIM_NEGRO_ICO.png" alt="BIM" />
+  </div>
+  <script>
+    (function(){
+      const body = document.body;
+      const toggle = document.getElementById('theme-toggle');
+      const logo = document.getElementById('alcabama-logo');
+      const bim = document.getElementById('bim-logo');
+      function setTheme(t){
+        body.classList.remove('theme-light','theme-dark');
+        body.classList.add(t === 'dark' ? 'theme-dark' : 'theme-light');
+        toggle.textContent = 'Modo: ' + (t === 'dark' ? 'Oscuro' : 'Claro');
+        logo.src = t === 'dark' 
+          ? 'https://i.postimg.cc/0yDgcyBp/Logo-transparente_blanco.png'
+          : 'https://i.postimg.cc/GmWLmfZZ/Logo-transparente_negro.png';
+        bim.src = t === 'dark'
+          ? 'https://i.postimg.cc/yY0XpLzW/LOGO_BIM_BLANCO_ICO.png'
+          : 'https://i.postimg.cc/jdyQ3Mr2/LOGO_BIM_NEGRO_ICO.png';
+      }
+      let mode = 'light';
+      setTheme(mode);
+      toggle.addEventListener('click', function(){
+        mode = (mode === 'light') ? 'dark' : 'light';
+        setTheme(mode);
+      });
+    })();
+  </script>
+
 </body>
-</html>

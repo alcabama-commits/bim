@@ -86,3 +86,41 @@ body,
   color: #7A0333 !important;
 }
 
+/* Ocultar marca antigua basada en ícono */
+i.fa-drafting-compass { display: none !important; }
+
+/* UI overlay (logos y toggle) */
+.alcabama-ui {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 10000;
+}
+.alcabama-ui .top-left-logo {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  height: 20px;
+  pointer-events: none;
+}
+.alcabama-ui .top-right-toggle {
+  position: fixed;
+  top: 6px;
+  right: 10px;
+  pointer-events: auto;
+  background: rgba(0,0,0,0.1);
+  border: 1px solid #A49FA6;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 10px;
+  color: #605E62;
+}
+.alcabama-ui .bottom-left-logo {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  height: 32px;
+  opacity: 0.8;
+  pointer-events: none;
+}
