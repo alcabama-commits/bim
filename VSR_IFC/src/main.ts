@@ -206,6 +206,24 @@ interface SnapCandidate {
     intersection: THREE.Intersection;
 }
 
+const getWorldUnitsPerPixel = (distanceToTarget: number) => {
+    const renderer = world.renderer?.three as THREE.WebGLRenderer | undefined;
+    const canvas = renderer?.domElement;
+    const viewportHeight = Math.max(1, canvas?.clientHeight || window.innerHeight || 1);
+    const camera = world.camera.three as THREE.PerspectiveCamera | THREE.OrthographicCamera;
+
+    if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+        const perspective = camera as THREE.PerspectiveCamera;
+        const fovRad = THREE.MathUtils.degToRad(perspective.fov);
+        const viewHeight = 2 * Math.tan(fovRad / 2) * Math.max(distanceToTarget, 0.001);
+        return viewHeight / viewportHeight;
+    }
+
+    const ortho = camera as THREE.OrthographicCamera;
+    const viewHeight = (ortho.top - ortho.bottom) / Math.max(ortho.zoom, 0.001);
+    return viewHeight / viewportHeight;
+};
+
 const computeDistanceToRay = (ray: THREE.Ray, point: THREE.Vector3) => {
     const toPoint = point.clone().sub(ray.origin);
     const proj = toPoint.dot(ray.direction);
@@ -369,8 +387,9 @@ const findBestSnap = (intersections: THREE.Intersection[]) => {
     ray.direction.copy(firstHit.point).sub(ray.origin).normalize();
 
     const camDist = firstHit.distance;
-    const WORLD_UNITS_THRESHOLD = THREE.MathUtils.clamp(camDist * 0.003, 0.001, 0.03);
-    const STICKY_THRESHOLD = WORLD_UNITS_THRESHOLD * 0.6;
+    const worldUnitsPerPixel = getWorldUnitsPerPixel(camDist);
+    const WORLD_UNITS_THRESHOLD = THREE.MathUtils.clamp(worldUnitsPerPixel * 12, 0.0006, 0.03);
+    const STICKY_THRESHOLD = WORLD_UNITS_THRESHOLD * 0.45;
 
     const candidates: SnapCandidate[] = [];
     const depthWindow = THREE.MathUtils.clamp(camDist * 0.01, 0.03, 0.25);
@@ -385,45 +404,52 @@ const findBestSnap = (intersections: THREE.Intersection[]) => {
 
     if (candidates.length === 0) return firstHit;
 
-    if (lastSnapped) {
-        const distToRay = computeDistanceToRay(ray, lastSnapped.point);
-        if (distToRay < STICKY_THRESHOLD) {
-            createSnapMarker();
-            if (snapMarker) {
-                snapMarker.position.copy(lastSnapped.point);
-                snapMarker.visible = true;
-            }
-            if (snapLine && cursorMesh) {
-                snapLine.geometry.setFromPoints([cursorMesh.position, lastSnapped.point]);
-                snapLine.visible = true;
-            }
-            document.body.style.cursor = 'crosshair';
-            return {
-                ...firstHit,
-                point: lastSnapped.point.clone(),
-                object: lastSnapped.object,
-                // @ts-ignore
-                isSnapped: true
-            };
-        }
-    }
-
     let bestCandidate: SnapCandidate | null = null;
     let bestScore = Infinity;
+    let bestMainScore = Infinity;
 
     for (const c of candidates) {
         if (c.distanceToRay > WORLD_UNITS_THRESHOLD) continue;
 
         let score = c.distanceToRay;
-        if (c.type === 'intersection') score *= 0.2;
-        if (c.type === 'vertex') score *= 0.35;
-        if (c.type === 'edge') score *= 0.75;
-        if (c.type === 'face') score *= 1.25;
+        if (c.type === 'intersection') score *= 0.15;
+        if (c.type === 'vertex') score *= 0.25;
+        if (c.type === 'edge') score *= 0.85;
+        if (c.type === 'face') score *= 1.4;
         score += c.distanceToCamera * 0.0001;
+        const mainScore = c.distanceToRay * (c.type === 'intersection' ? 0.6 : c.type === 'vertex' ? 0.75 : c.type === 'edge' ? 1 : 1.3);
 
-        if (score < bestScore) {
+        if (mainScore < bestMainScore || (mainScore === bestMainScore && score < bestScore)) {
+            bestMainScore = mainScore;
             bestScore = score;
             bestCandidate = c;
+        }
+    }
+
+    if (lastSnapped) {
+        const stickyDistanceToRay = computeDistanceToRay(ray, lastSnapped.point);
+        if (stickyDistanceToRay < STICKY_THRESHOLD) {
+            const stickyScore = stickyDistanceToRay * 0.95;
+            const shouldKeepSticky = !bestCandidate || stickyScore <= bestMainScore * 0.7;
+            if (shouldKeepSticky) {
+                createSnapMarker();
+                if (snapMarker) {
+                    snapMarker.position.copy(lastSnapped.point);
+                    snapMarker.visible = true;
+                }
+                if (snapLine && cursorMesh) {
+                    snapLine.geometry.setFromPoints([cursorMesh.position, lastSnapped.point]);
+                    snapLine.visible = true;
+                }
+                document.body.style.cursor = 'crosshair';
+                return {
+                    ...firstHit,
+                    point: lastSnapped.point.clone(),
+                    object: lastSnapped.object,
+                    // @ts-ignore
+                    isSnapped: true
+                };
+            }
         }
     }
 
@@ -717,20 +743,31 @@ const pointHandler = (event: MouseEvent) => {
 };
 
 // --- TOOL BUTTONS ---
-document.getElementById('btn-point')?.addEventListener('click', () => {
+document.getElementById('btn-measure-point')?.addEventListener('click', () => {
     activeTool = 'point';
     logToScreen('Point tool activated');
     container.addEventListener('click', pointHandler);
 });
 
-document.getElementById('btn-angle')?.addEventListener('click', () => {
+document.getElementById('btn-measure-angle')?.addEventListener('click', () => {
     activeTool = 'angle';
     logToScreen('Angle tool activated');
 });
 
-document.getElementById('btn-slope')?.addEventListener('click', () => {
+document.getElementById('btn-measure-slope')?.addEventListener('click', () => {
     activeTool = 'slope';
     logToScreen('Slope tool activated');
+});
+
+document.getElementById('btn-measure-area')?.addEventListener('click', () => {
+    if (area.enabled) {
+        area.enabled = false;
+        logToScreen('Area tool deactivated');
+    } else {
+        area.enabled = true;
+        area.create();
+        logToScreen('Area tool activated');
+    }
 });
 
 document.getElementById('btn-none')?.addEventListener('click', () => {
@@ -738,6 +775,104 @@ document.getElementById('btn-none')?.addEventListener('click', () => {
     logToScreen('Tools deactivated');
     container.removeEventListener('click', pointHandler);
 });
+
+// --- ZOOM TO FIT ---
+async function zoomToFit() {
+    if (components.meshes && components.meshes.length > 0) {
+         const bbox = new THREE.Box3();
+         for(const mesh of components.meshes) {
+             if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
+                 if(mesh.geometry) {
+                     if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+                     if(mesh.geometry.boundingBox) {
+                        const meshBox = mesh.geometry.boundingBox.clone();
+                        meshBox.applyMatrix4(mesh.matrixWorld);
+                        bbox.union(meshBox);
+                     }
+                 }
+             }
+         }
+         if(!bbox.isEmpty()) {
+            const sphere = new THREE.Sphere();
+            bbox.getBoundingSphere(sphere);
+            await world.camera.controls.fitToSphere(sphere, true);
+            logToScreen('Zoom Extents');
+         }
+    }
+}
+
+// --- SIDEBAR POPULATION ---
+async function loadModelList() {
+    const modelList = document.getElementById('model-list');
+    if (!modelList) return;
+
+    try {
+        const response = await fetch(`${baseUrl}models.json`);
+        if (!response.ok) throw new Error('Failed to load models.json');
+        
+        const models = await response.json();
+        modelList.innerHTML = ''; // Clear existing
+
+        if (models.length === 0) {
+            modelList.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">No hay modelos disponibles</div>';
+            return;
+        }
+
+        models.forEach((model: any) => {
+            const btn = document.createElement('button');
+            btn.className = 'model-btn';
+            btn.style.display = 'block';
+            btn.style.width = '100%';
+            btn.style.padding = '10px';
+            btn.style.marginBottom = '5px';
+            btn.style.textAlign = 'left';
+            btn.style.background = 'rgba(255, 255, 255, 0.1)';
+            btn.style.border = 'none';
+            btn.style.color = 'white';
+            btn.style.cursor = 'pointer';
+            
+            btn.innerHTML = `<i class="fa-solid fa-cube"></i> ${model.name}`;
+            
+            btn.addEventListener('click', async () => {
+                // Visual feedback
+                document.querySelectorAll('.model-btn').forEach(b => b.style.background = 'rgba(255, 255, 255, 0.1)');
+                btn.style.background = 'rgba(0, 255, 0, 0.2)';
+                
+                try {
+                   logToScreen(`Cargando ${model.name}...`);
+                   const fragmentsManager = components.get(OBC.FragmentsManager);
+                   
+                   const fileResponse = await fetch(`${baseUrl}${model.path}`);
+                   const buffer = await fileResponse.arrayBuffer();
+                   const fragment = await fragmentsManager.load(buffer);
+                   
+                   if (!components.meshes) components.meshes = [];
+                   const root = fragment.mesh || fragment.object;
+                   if (root) {
+                        root.traverse((child: any) => {
+                            if ((child.isMesh || child.isInstancedMesh) && child.visible) {
+                                components.meshes.push(child);
+                            }
+                        });
+                   }
+                   
+                   logToScreen(`Modelo cargado: ${model.name}`);
+                   await zoomToFit();
+                   
+                } catch (e) {
+                    console.error("Error loading model", e);
+                    logToScreen("Error al cargar modelo");
+                }
+            });
+            
+            modelList.appendChild(btn);
+        });
+
+    } catch (error) {
+        console.error("Error loading model list:", error);
+        modelList.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">Error al cargar lista de modelos</div>';
+    }
+}
 
 // --- MODEL LOADING ---
 const loadModel = async (fragmentsFile: File) => {
@@ -758,6 +893,7 @@ const loadModel = async (fragmentsFile: File) => {
     }
     
     logToScreen(`Model loaded: ${fragmentsFile.name}`);
+    await zoomToFit();
 };
 
 // --- UI CONTROLS ---
@@ -773,11 +909,11 @@ document.getElementById('file-input')?.addEventListener('change', async (e) => {
 });
 
 // --- MEASUREMENT MODE TOGGLE ---
-document.getElementById('btn-measure')?.addEventListener('click', () => {
-    const btn = document.getElementById('btn-measure')!;
+document.getElementById('btn-measure-length')?.addEventListener('click', () => {
+    const btn = document.getElementById('btn-measure-length')!;
     if (measurementMode) {
         measurementMode = null;
-        btn.textContent = 'Medir';
+        // btn.textContent = 'Medir'; // REMOVED: Don't overwrite icon
         btn.classList.remove('active');
         
         // Clean up
@@ -803,7 +939,7 @@ document.getElementById('btn-measure')?.addEventListener('click', () => {
         logToScreen('Measurement mode deactivated');
     } else {
         measurementMode = 'length';
-        btn.textContent = 'Detener';
+        // btn.textContent = 'Detener'; // REMOVED: Don't overwrite icon
         btn.classList.add('active');
         
         // Create snapping cursor
@@ -973,8 +1109,169 @@ async function onMeasureClick(event: MouseEvent) {
 // Add any additional UI controls here...
 
 // --- Initialize ---
-logToScreen('VSR IFC Viewer Ready - Snapping 3D Mejorado con Visualización');
+// --- Initialize ---
+const area = components.get(OBF.AreaMeasurement);
+area.world = world;
+area.enabled = false;
+
+// Force Focus on Container to ensure keys are captured
+if (container) {
+    container.tabIndex = 0; // Make focusable
+    container.focus();
+    container.style.outline = 'none'; // Remove ugly outline
+    
+    // Refocus on click
+    container.addEventListener('click', () => {
+        container.focus();
+    });
+}
+
+const grids = components.get(OBC.Grids);
+// grids.world = world; // Grids usually auto-init or need create
+// components.get(OBC.Grids).create(world); // We might need to create a grid first
+
+// Initialize Clipper (Already done above, but ensure access)
+
+// ==================================================================== 
+// MÓDULO DE ATAJOS DE TECLADO (Funciona en modo Capture) 
+// ==================================================================== 
+
+// 1. Función auxiliar para limpiar herramientas (necesaria para la tecla ESC) 
+function deactivateAllTools() { 
+    // Si tienes variables globales para herramientas, resetealas aquí 
+    if (typeof activeTool !== 'undefined') activeTool = 'none'; 
+    if (typeof measurementMode !== 'undefined') measurementMode = null; 
+    if (typeof snappingCursor !== 'undefined' && snappingCursor) snappingCursor.visible = false; 
+    
+    // Limpiar selección del Highlighter de OBC 
+    if (typeof components !== 'undefined') { 
+        try { 
+            // Asegúrate de importar OBF o usar la referencia correcta a Highlighter 
+            // const highlighter = components.get(OBF.Highlighter); 
+            // highlighter.clear('select'); 
+        } catch(e) { console.log("No se pudo limpiar highlighter", e); } 
+    } 
+    
+    // Limpiar líneas temporales de medición si existen 
+    if (typeof tempMeasurementLine !== 'undefined' && tempMeasurementLine) { 
+        if (typeof world !== 'undefined') world.scene.three.remove(tempMeasurementLine); 
+        tempMeasurementLine = null; 
+    } 
+    if (typeof measurementPoints !== 'undefined') measurementPoints = []; 
+    
+    console.log("Herramientas desactivadas"); 
+} 
+
+// 2. El Listener Maestro 
+window.addEventListener('keydown', async (e) => { 
+    // A. Ignorar si el usuario escribe en un input (importante para no activar atajos escribiendo nombres) 
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return; 
+    
+    // B. Ignorar combinaciones con Ctrl/Alt/Meta para no bloquear atajos del navegador 
+    if (e.ctrlKey || e.altKey || e.metaKey) return; 
+
+    // C. Verificar que el visor esté listo (ajusta 'world' o 'components' según tu versión estable) 
+    if (typeof world === 'undefined' || typeof components === 'undefined') return; 
+
+    try { 
+        switch (e.code) { 
+            case 'KeyP': // P: Perspectiva/Ortogonal 
+                const camera = world.camera; 
+                // Ajusta esta lógica según cómo tu versión estable maneje la proyección 
+                const next = camera.projection.current === 'Perspective' ? 'Orthographic' : 'Perspective'; 
+                await camera.projection.set(next); 
+                break; 
+
+            case 'KeyZ': // Z: Zoom Extents (Ajustar a pantalla) 
+                // Lógica de zoom robusta 
+                if ((components as any).meshes && (components as any).meshes.length > 0) { 
+                     const bbox = new THREE.Box3(); 
+                     for(const mesh of (components as any).meshes) { 
+                         if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) { 
+                             if(mesh.geometry) { 
+                                 if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox(); 
+                                 if(mesh.geometry.boundingBox) { 
+                                    const meshBox = mesh.geometry.boundingBox.clone(); 
+                                    meshBox.applyMatrix4(mesh.matrixWorld); 
+                                    bbox.union(meshBox); 
+                                 } 
+                             } 
+                         } 
+                     } 
+                     if(!bbox.isEmpty()) { 
+                        const sphere = new THREE.Sphere(); 
+                        bbox.getBoundingSphere(sphere); 
+                        await world.camera.controls.fitToSphere(sphere, true); 
+                     } 
+                } 
+                break; 
+
+            case 'KeyH': // H: Ocultar selección 
+                // Simular clic en botón ocultar o llamar función directa 
+                const btnHide = document.getElementById('btn-hide'); // Asume que tienes este ID 
+                if (btnHide) btnHide.click(); 
+                break; 
+
+            case 'KeyI': // I: Aislar selección 
+                const btnIsolate = document.getElementById('btn-isolate'); 
+                if (btnIsolate) btnIsolate.click(); 
+                break; 
+
+            case 'KeyR': // R: Mostrar todo (Reset) 
+                const btnShow = document.getElementById('btn-show-all'); 
+                if (btnShow) btnShow.click(); 
+                break; 
+            
+            case 'Escape': // Escape: Cancelar todo 
+                deactivateAllTools(); 
+                break; 
+                
+            // Atajos directos a botones de herramientas (Simulación de Clic) 
+            // Esto es MUY seguro porque usa la lógica que YA funciona en tus botones 
+            case 'KeyL': document.getElementById('btn-measure-length')?.click(); break; 
+            case 'KeyA': document.getElementById('btn-measure-area')?.click(); break; 
+            case 'KeyG': document.getElementById('btn-measure-angle')?.click(); break; 
+            case 'KeyS': document.getElementById('btn-measure-slope')?.click(); break; 
+            case 'KeyC': document.getElementById('btn-measure-point')?.click(); break; 
+        } 
+    } catch (err) { 
+        console.error("Error en atajo:", err); 
+    } 
+}, { capture: true }); // <--- ESTO ES LO VITAL: { capture: true }
+
+window.addEventListener('mousedown', async (e) => {
+    if (e.button === 1 && e.detail === 2) { // Middle button (1) + Double click (detail 2)
+        e.preventDefault(); // Prevent default scroll/zoom behavior if any
+        if (components.meshes && components.meshes.length > 0) {
+             const bbox = new THREE.Box3();
+             for(const mesh of components.meshes) {
+                 if(mesh instanceof THREE.Mesh || mesh instanceof THREE.InstancedMesh) {
+                     if(mesh.geometry) {
+                         if(!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+                         if(mesh.geometry.boundingBox) {
+                            const meshBox = mesh.geometry.boundingBox.clone();
+                            meshBox.applyMatrix4(mesh.matrixWorld);
+                            bbox.union(meshBox);
+                         }
+                     }
+                 }
+             }
+             
+             if(!bbox.isEmpty()) {
+                const sphere = new THREE.Sphere();
+                bbox.getBoundingSphere(sphere);
+                await world.camera.controls.fitToSphere(sphere, true);
+                logToScreen('Ajustado a pantalla (Mouse)');
+             }
+        }
+    }
+});
+
+logToScreen('VSR IFC Viewer Ready - v38-Stable-Shortcuts');
 
 // Export for global access
 (window as any).components = components;
 (window as any).world = world;
+
+// Init sidebar
+loadModelList();
