@@ -19,92 +19,10 @@
     }
     .font-mono { font-family: 'JetBrains Mono', monospace; }
   </style>
-  <script type="module" crossorigin src="./assets/index-gq3Aee5y.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-Dwr82UEu.css">
-  <link rel="stylesheet" href="./alcabama-theme.css">
+  <script type="module" crossorigin src="./assets/index-CbPSRr9V.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-DrQT_K8O.css">
 </head>
-<body class="bg-slate-950 theme-light">
-  <div id="root"></div>
-  <div class="alcabama-ui">
-    <img id="alcabama-logo" class="top-left-logo" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente_negro.png" alt="Alcabama" />
-    <button id="theme-toggle" class="top-right-toggle"><i class="fa-solid fa-sun"></i></button>
-    <img id="bim-logo" class="bottom-left-logo" src="https://i.postimg.cc/jdyQ3Mr2/LOGO_BIM_NEGRO_ICO.png" alt="BIM" />
-  </div>
-  <script>
-    (function(){
-      const body = document.body;
-      const toggle = document.getElementById('theme-toggle');
-      const logo = document.getElementById('alcabama-logo');
-      const bim = document.getElementById('bim-logo');
-      const positionUI = () => {
-        const header = document.querySelector('header');
-        const rect = header ? header.getBoundingClientRect() : {left:10, right:window.innerWidth-10, top:0, height:48};
-        logo.style.left = (rect.left + 12) + 'px';
-        logo.style.top = (rect.top + 12) + 'px';
-        toggle.style.right = '60px';
-        toggle.style.top = (rect.top + 6) + 'px';
-        bim.style.left = (rect.left + 12) + 'px';
-      };
-      const hideArchViewBrand = () => {
-        const header = document.querySelector('header');
-        if (!header) return;
-        header.querySelectorAll('span').forEach(span => {
-          const text = (span.textContent || '').toUpperCase();
-          if (text.includes('ARCHVIEW') || text.includes('BIM PRO')) {
-            span.style.display = 'none';
-          }
-        });
-      };
-      const hideUploadFromDevice = () => {
-        const header = document.querySelector('header');
-        if (header) {
-          header.querySelectorAll('label').forEach(lbl => {
-            const txt = (lbl.textContent || '').toUpperCase();
-            if (txt.includes('NUEVO ARCHIVO')) {
-              lbl.style.display = 'none';
-            }
-          });
-        }
-        document.querySelectorAll('button').forEach(btn => {
-          const txt = (btn.textContent || '').toUpperCase();
-          if (txt.includes('SELECCIONAR ARCHIVO PDF')) {
-            const container = btn.closest('div');
-            if (container) container.style.display = 'none';
-          }
-        });
-      };
-      const setToggleIcon = (t) => {
-        const cls = t === 'dark' ? 'fa-moon' : 'fa-sun';
-        toggle.innerHTML = '<i class="fa-solid ' + cls + '"></i>';
-      };
-      function setTheme(t){
-        body.classList.remove('theme-light','theme-dark');
-        body.classList.add(t === 'dark' ? 'theme-dark' : 'theme-light');
-        setToggleIcon(t);
-        logo.src = t === 'dark' 
-          ? 'https://i.postimg.cc/0yDgcyBp/Logo-transparente_blanco.png'
-          : 'https://i.postimg.cc/GmWLmfZZ/Logo-transparente_negro.png';
-        bim.src = t === 'dark'
-          ? 'https://i.postimg.cc/yY0XpLzW/LOGO_BIM_BLANCO_ICO.png'
-          : 'https://i.postimg.cc/jdyQ3Mr2/LOGO_BIM_NEGRO_ICO.png';
-        positionUI();
-      }
-      let mode = 'light';
-      setTheme(mode);
-      toggle.addEventListener('click', function(){
-        mode = (mode === 'light') ? 'dark' : 'light';
-        setTheme(mode);
-      });
-      window.addEventListener('resize', positionUI);
-      const updateUI = () => {
-        positionUI();
-        hideArchViewBrand();
-        hideUploadFromDevice();
-      };
-      const mo = new MutationObserver(updateUI);
-      mo.observe(document.getElementById('root'), {childList:true, subtree:true});
-      updateUI();
-    })();
-  </script>
-
+<body class="bg-[#000000]">
+  <div id="root"></div>
 </body>
+</html>

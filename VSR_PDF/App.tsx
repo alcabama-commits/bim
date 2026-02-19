@@ -5,6 +5,12 @@ import AiSidebar from './components/AiSidebar';
 import Toolbar from './components/Toolbar';
 import { Calibration, Tool } from './types';
 
+interface DrawingItem {
+  name: string;
+  filename: string;
+  folder: string;
+}
+
 const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [totalPages, setTotalPages] = useState(0);
@@ -18,6 +24,8 @@ const App: React.FC = () => {
   const [showGrid, setShowGrid] = useState(false);
   const [isBlueprint, setIsBlueprint] = useState(false);
   const [calibration, setCalibration] = useState<Calibration | null>(null);
+  const [drawings, setDrawings] = useState<DrawingItem[]>([]);
+  const [isLoadingDrawing, setIsLoadingDrawing] = useState(false);
 
   const handleFileSelect = (selectedFile: File) => {
     setFile(selectedFile);
@@ -37,6 +45,34 @@ const App: React.FC = () => {
   useEffect(() => {
     console.log(`%c ALCABAMA BIM v2.4 - ${new Date().toLocaleTimeString()} `, "background: #D3045C; color: #fff; font-size: 20px; padding: 10px;");
   }, []);
+
+  useEffect(() => {
+    const loadDrawings = async () => {
+      try {
+        const response = await fetch('/Drawing/list.json');
+        if (!response.ok) return;
+        const data: DrawingItem[] = await response.json();
+        setDrawings(data);
+      } catch {
+      }
+    };
+    loadDrawings();
+  }, []);
+
+  const handleSelectDrawing = async (drawing: DrawingItem) => {
+    setIsLoadingDrawing(true);
+    try {
+      const pdfPath = `/Drawing/${drawing.filename}`;
+      const response = await fetch(pdfPath);
+      if (!response.ok) return;
+      const blob = await response.blob();
+      const fileFromServer = new File([blob], `${drawing.name}.pdf`, { type: 'application/pdf' });
+      handleFileSelect(fileFromServer);
+    } catch {
+    } finally {
+      setIsLoadingDrawing(false);
+    }
+  };
 
   return (
     <div className={`flex h-screen w-full overflow-hidden select-none ${theme === 'dark' ? 'theme-dark' : 'theme-light'}`}>
@@ -77,29 +113,61 @@ const App: React.FC = () => {
           </div>
         )}
 
-        <main className="flex-1 relative overflow-hidden flex flex-col">
-          <PdfRenderer 
-            file={file} 
-            currentPage={currentPage} 
-            scale={scale} 
-            rotation={rotation}
-            tool={activeTool}
-            showGrid={showGrid}
-            isBlueprint={isBlueprint}
-            calibration={calibration}
-            onCalibrationComplete={setCalibration}
-            onDocumentLoad={onDocumentLoad}
-            onFileSelect={handleFileSelect}
-            // Pass the tool setter as onToolChange prop
-            onToolChange={setActiveTool}
-          />
-          <div className="pointer-events-none fixed left-3 bottom-3 opacity-70">
-            <img 
-              src={theme === 'dark' ? 'https://i.postimg.cc/yY0XpLzW/LOGO_BIM_BLANCO_ICO.png' : 'https://i.postimg.cc/jdyQ3Mr2/LOGO_BIM_NEGRO_ICO.png'} 
-              alt="BIM" 
-              className="h-8"
-              draggable={false}
+        <main className="flex-1 relative overflow-hidden flex">
+          <aside className="w-64 bg-[#05050A] border-r border-[#1E1B22] flex-shrink-0 flex flex-col">
+            <div className="px-4 py-3 border-b border-[#1E1B22]">
+              <h2 className="text-[11px] font-black text-[#C5C0C8] tracking-[0.18em] uppercase">Planos BIM</h2>
+              <p className="text-[10px] text-[#827E84] mt-1">Selecciona un plano de la galería.</p>
+            </div>
+            <div className="flex-1 overflow-y-auto py-2 px-2 space-y-1">
+              {drawings.map(drawing => (
+                <button
+                  key={`${drawing.folder}-${drawing.filename}`}
+                  onClick={() => handleSelectDrawing(drawing)}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-[11px] font-medium transition border border-transparent ${
+                    file && file.name.startsWith(drawing.name)
+                      ? 'bg-[#D3045C]/15 border-[#D3045C]/40 text-white'
+                      : 'bg-[#15121A] hover:bg-[#211C2A] text-[#C5C0C8]'
+                  }`}
+                >
+                  <span className="block truncate">{drawing.name}</span>
+                  <span className="block text-[9px] text-[#827E84] mt-0.5">Carpeta {drawing.folder}</span>
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          <div className="flex-1 relative flex flex-col">
+            <PdfRenderer 
+              file={file} 
+              currentPage={currentPage} 
+              scale={scale} 
+              rotation={rotation}
+              tool={activeTool}
+              showGrid={showGrid}
+              isBlueprint={isBlueprint}
+              calibration={calibration}
+              onCalibrationComplete={setCalibration}
+              onDocumentLoad={onDocumentLoad}
+              onFileSelect={handleFileSelect}
+              onToolChange={setActiveTool}
             />
+            <div className="pointer-events-none fixed left-3 bottom-3 opacity-70">
+              <img 
+                src={theme === 'dark' ? 'https://i.postimg.cc/yY0XpLzW/LOGO_BIM_BLANCO_ICO.png' : 'https://i.postimg.cc/jdyQ3Mr2/LOGO_BIM_NEGRO_ICO.png'} 
+                alt="BIM" 
+                className="h-8"
+                draggable={false}
+              />
+            </div>
+            {isLoadingDrawing && (
+              <div className="absolute inset-0 bg-[#000000]/70 flex items-center justify-center z-40">
+                <div className="px-4 py-3 rounded-xl bg-[#0B0B0F] border border-[#605E62]/60 shadow-2xl flex items-center gap-3">
+                  <div className="w-6 h-6 border-2 border-[#D3045C]/20 border-t-[#D3045C] rounded-full animate-spin" />
+                  <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-[#C5C0C8]">Cargando plano desde galería...</span>
+                </div>
+              </div>
+            )}
           </div>
         </main>
       </div>
