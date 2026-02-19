@@ -49,8 +49,9 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   const [scrollTop, setScrollTop] = useState(0);
 
   const [points, setPoints] = useState<{x: number, y: number}[]>([]);
-  const [panX, setPanX] = useState(0);
-  const [panY, setPanY] = useState(0);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const panXRef = useRef(0);
+  const panYRef = useRef(0);
 
   // Verificar que la librería esté lista
   useEffect(() => {
@@ -127,8 +128,11 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   useEffect(() => {
     if (pdfDoc) renderPage(currentPage);
     setPoints([]);
-    setPanX(0);
-    setPanY(0);
+    panXRef.current = 0;
+    panYRef.current = 0;
+    if (canvasContainerRef.current) {
+      canvasContainerRef.current.style.transform = 'translate(0px, 0px)';
+    }
   }, [pdfDoc, currentPage, scale, rotation, renderPage]);
 
   useEffect(() => {
@@ -159,8 +163,8 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       if (containerRef.current) {
         setStartX(e.clientX);
         setStartY(e.clientY);
-        setScrollLeft(panX);
-        setScrollTop(panY);
+        setScrollLeft(panXRef.current);
+        setScrollTop(panYRef.current);
       }
     } else if ((tool === 'measure' || tool === 'calibrate') && canvasRef.current && e.button === 0) {
       const rect = canvasRef.current.getBoundingClientRect();
@@ -202,8 +206,13 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
     const y = e.clientY;
     const dx = x - startX;
     const dy = y - startY;
-    setPanX(scrollLeft + dx);
-    setPanY(scrollTop + dy);
+    const nextX = scrollLeft + dx;
+    const nextY = scrollTop + dy;
+    panXRef.current = nextX;
+    panYRef.current = nextY;
+    if (canvasContainerRef.current) {
+      canvasContainerRef.current.style.transform = `translate(${nextX}px, ${nextY}px)`;
+    }
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -283,8 +292,8 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
     >
       <div className="relative w-fit min-w-full min-h-full flex p-20">
         <div 
+          ref={canvasContainerRef}
           className={`relative transition-all duration-300 m-auto ${isBlueprint ? 'invert hue-rotate-180 brightness-110 contrast-125' : ''}`}
-          style={{ transform: `translate(${panX}px, ${panY}px)` }}
         >
           <canvas ref={canvasRef} className="bg-white shadow-[0_0_60px_rgba(0,0,0,0.6)] border border-[#605E62]" />
           
