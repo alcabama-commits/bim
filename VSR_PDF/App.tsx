@@ -64,7 +64,14 @@ const App: React.FC = () => {
   const handleSelectDrawing = async (drawing: DrawingItem) => {
     setIsLoadingDrawing(true);
     try {
-      const pdfPath = `${DRAWING_BASE_URL}/${drawing.filename}`;
+      const relativePath = drawing.filename.includes('/')
+        ? drawing.filename
+        : (drawing.folder ? `${drawing.folder}/${drawing.filename}` : drawing.filename);
+      const encodedPath = relativePath
+        .split('/')
+        .map(segment => encodeURIComponent(segment))
+        .join('/');
+      const pdfPath = `${DRAWING_BASE_URL}/${encodedPath}`;
       const response = await fetch(pdfPath);
       if (!response.ok) return;
       const blob = await response.blob();
