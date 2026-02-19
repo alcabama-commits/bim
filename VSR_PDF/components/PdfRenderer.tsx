@@ -145,7 +145,11 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!file) return;
-    if (tool === 'hand') {
+    const isPanButton = e.button === 1 || e.button === 2;
+    if (tool === 'hand' || isPanButton) {
+      if (isPanButton) {
+        e.preventDefault();
+      }
       setIsDragging(true);
       e.currentTarget.setPointerCapture(e.pointerId);
       if (containerRef.current) {
@@ -155,7 +159,7 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
         setScrollLeft(containerRef.current.scrollLeft);
         setScrollTop(containerRef.current.scrollTop);
       }
-    } else if ((tool === 'measure' || tool === 'calibrate') && canvasRef.current) {
+    } else if ((tool === 'measure' || tool === 'calibrate') && canvasRef.current && e.button === 0) {
       const rect = canvasRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
@@ -190,7 +194,7 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDragging || tool !== 'hand' || !containerRef.current) return;
+    if (!isDragging || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
