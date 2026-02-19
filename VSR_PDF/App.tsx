@@ -173,7 +173,7 @@ const App: React.FC = () => {
               {groupedDrawings.map(group => (
                 <div key={group.folder} className="mb-2">
                   <div className="px-1 py-1 text-[9px] text-[#827E84] font-bold uppercase tracking-[0.16em] flex items-center justify-between">
-                    <span>Carpeta {group.folder}</span>
+                    <span>{group.folder}</span>
                     <button onClick={() => toggleFolder(group.folder)} className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#211C2A] text-[#C5C0C8]">
                       <i className={`fa-solid ${expandedFolders[group.folder] ? 'fa-chevron-down' : 'fa-chevron-right'} text-xs`}></i>
                     </button>
@@ -191,7 +191,7 @@ const App: React.FC = () => {
                           }`}
                         >
                           <span className="block truncate">{drawing.name}</span>
-                          <span className="block text-[9px] text-[#827E84] mt-0.5">Plano BIM</span>
+                          <span className="block text-[9px] text-[#827E84] mt-0.5">{drawing.folder}</span>
                         </button>
                       ))}
                     </>
