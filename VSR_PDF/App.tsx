@@ -94,7 +94,7 @@ const App: React.FC = () => {
         />
 
         {file && (
-          <div className="absolute bottom-6 left-6 bg-[#000000]/90 backdrop-blur border border-[#605E62] px-4 py-2 rounded-xl flex items-center gap-6 z-40 shadow-2xl">
+          <div className="absolute bottom-6 right-6 bg-[#000000]/90 backdrop-blur border border-[#605E62] px-4 py-2 rounded-xl flex items-center gap-6 z-40 shadow-2xl">
             <div className="flex items-center gap-3 border-r border-[#605E62] pr-4">
               <button onClick={() => currentPage > 1 && setCurrentPage(p => p - 1)} disabled={currentPage <= 1} className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#605E62] disabled:opacity-20 transition">
                 <i className="fa-solid fa-chevron-left text-xs"></i>
