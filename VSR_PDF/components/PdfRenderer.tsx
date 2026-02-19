@@ -259,7 +259,7 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
 
   if (!file) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-[#000000] m-8 rounded-3xl">
+      <div className="flex-1 flex flex-col items-center justify-center viewer-panel m-8 rounded-3xl">
         <div className="text-center space-y-4 max-w-sm p-8">
           <div className="w-20 h-20 bg-[#D3045C]/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-[#D3045C]/20">
             <i className="fa-solid fa-layer-group text-3xl text-[#D3045C]"></i>
@@ -293,7 +293,7 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onWheel={handleWheel}
-      className={`relative flex-1 overflow-hidden bg-[#000000] h-full no-scrollbar touch-none ${tool === 'hand' ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
+      className={`relative flex-1 overflow-hidden viewer-panel h-full no-scrollbar touch-none ${tool === 'hand' ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
     >
       <div className="relative w-fit min-w-full min-h-full flex p-20">
         <div 

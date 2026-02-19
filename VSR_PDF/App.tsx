@@ -167,7 +167,7 @@ const App: React.FC = () => {
         )}
 
         <main className="flex-1 relative overflow-hidden flex">
-          <aside className="w-64 bg-[#05050A] border-r border-[#1E1B22] flex-shrink-0 flex flex-col pb-16">
+          <aside className="w-64 sidebar-panel border-r border-[#1E1B22] flex-shrink-0 flex flex-col pb-16">
             <div className="px-4 py-3 border-b border-[#1E1B22]">
               <h2 className="text-[11px] font-black text-[#C5C0C8] tracking-[0.18em] uppercase">Planos BIM</h2>
               <p className="text-[10px] text-[#827E84] mt-1">Selecciona un plano de la galería.</p>

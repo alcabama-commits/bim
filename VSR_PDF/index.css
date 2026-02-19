@@ -20,6 +20,20 @@
 
 #root { background-color: #000000; min-height: 100vh; }
 
+.sidebar-panel {
+  background-color: #05050A;
+}
+.theme-light .sidebar-panel {
+  background-color: #FFFFFF;
+}
+
+.viewer-panel {
+  background-color: #000000;
+}
+.theme-light .viewer-panel {
+  background-color: #F5F5F5;
+}
+
 /* Alcabama Palette Overrides (Tailwind class skins) */
 /* Base grays */
 .bg-slate-950 { background-color: #000000 !important; }
