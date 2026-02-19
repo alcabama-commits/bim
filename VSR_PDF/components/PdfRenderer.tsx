@@ -153,9 +153,8 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       setIsDragging(true);
       e.currentTarget.setPointerCapture(e.pointerId);
       if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        setStartX(e.clientX - rect.left);
-        setStartY(e.clientY - rect.top);
+        setStartX(e.clientX);
+        setStartY(e.clientY);
         setScrollLeft(containerRef.current.scrollLeft);
         setScrollTop(containerRef.current.scrollTop);
       }
@@ -195,9 +194,8 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!isDragging || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const x = e.clientX;
+    const y = e.clientY;
     containerRef.current.scrollLeft = scrollLeft - (x - startX);
     containerRef.current.scrollTop = scrollTop - (y - startY);
   };
