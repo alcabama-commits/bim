@@ -49,6 +49,8 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   const [scrollTop, setScrollTop] = useState(0);
 
   const [points, setPoints] = useState<{x: number, y: number}[]>([]);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
 
   // Verificar que la librería esté lista
   useEffect(() => {
@@ -125,6 +127,8 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   useEffect(() => {
     if (pdfDoc) renderPage(currentPage);
     setPoints([]);
+    setPanX(0);
+    setPanY(0);
   }, [pdfDoc, currentPage, scale, rotation, renderPage]);
 
   useEffect(() => {
@@ -155,8 +159,8 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       if (containerRef.current) {
         setStartX(e.clientX);
         setStartY(e.clientY);
-        setScrollLeft(containerRef.current.scrollLeft);
-        setScrollTop(containerRef.current.scrollTop);
+        setScrollLeft(panX);
+        setScrollTop(panY);
       }
     } else if ((tool === 'measure' || tool === 'calibrate') && canvasRef.current && e.button === 0) {
       const rect = canvasRef.current.getBoundingClientRect();
@@ -196,8 +200,10 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
     if (!isDragging || !containerRef.current) return;
     const x = e.clientX;
     const y = e.clientY;
-    containerRef.current.scrollLeft = scrollLeft - (x - startX);
-    containerRef.current.scrollTop = scrollTop - (y - startY);
+    const dx = x - startX;
+    const dy = y - startY;
+    setPanX(scrollLeft + dx);
+    setPanY(scrollTop + dy);
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -273,10 +279,13 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onWheel={handleWheel}
-      className={`relative flex-1 overflow-auto bg-[#000000] h-full no-scrollbar touch-none ${tool === 'hand' ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
+      className={`relative flex-1 overflow-hidden bg-[#000000] h-full no-scrollbar touch-none ${tool === 'hand' ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
     >
       <div className="relative w-fit min-w-full min-h-full flex p-20">
-        <div className={`relative transition-all duration-300 m-auto ${isBlueprint ? 'invert hue-rotate-180 brightness-110 contrast-125' : ''}`}>
+        <div 
+          className={`relative transition-all duration-300 m-auto ${isBlueprint ? 'invert hue-rotate-180 brightness-110 contrast-125' : ''}`}
+          style={{ transform: `translate(${panX}px, ${panY}px)` }}
+        >
           <canvas ref={canvasRef} className="bg-white shadow-[0_0_60px_rgba(0,0,0,0.6)] border border-[#605E62]" />
           
           {showGrid && (
