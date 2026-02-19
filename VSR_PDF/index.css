@@ -34,6 +34,16 @@
   background-color: #F5F5F5;
 }
 
+.theme-light .sidebar-panel,
+.theme-light .viewer-panel {
+  color: #605E62;
+}
+
+.theme-light .viewer-panel h3,
+.theme-light .viewer-panel p {
+  color: #605E62;
+}
+
 /* Alcabama Palette Overrides (Tailwind class skins) */
 /* Base grays */
 .bg-slate-950 { background-color: #000000 !important; }

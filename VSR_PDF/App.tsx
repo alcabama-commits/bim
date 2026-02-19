@@ -173,15 +173,40 @@ const App: React.FC = () => {
               <p className="text-[10px] text-[#827E84] mt-1">Selecciona un plano de la galería.</p>
             </div>
             <div className="px-4 py-2 border-b border-[#1E1B22] flex items-center gap-2">
-              <button onClick={expandAll} className="text-[10px] px-2 py-1 rounded bg-[#15121A] hover:bg-[#211C2A] text-[#C5C0C8]">Expandir todo</button>
-              <button onClick={collapseAll} className="text-[10px] px-2 py-1 rounded bg-[#15121A] hover:bg-[#211C2A] text-[#C5C0C8]">Contraer todo</button>
+              <button 
+                onClick={expandAll} 
+                className={`text-[10px] px-2 py-1 rounded border transition ${
+                  theme === 'dark' 
+                    ? 'bg-[#15121A] hover:bg-[#211C2A] text-[#C5C0C8] border-transparent' 
+                    : 'bg-[#FFFFFF] hover:bg-[#F3F3F3] text-[#605E62] border-[#C5C0C8]'
+                }`}
+              >
+                Expandir todo
+              </button>
+              <button 
+                onClick={collapseAll} 
+                className={`text-[10px] px-2 py-1 rounded border transition ${
+                  theme === 'dark' 
+                    ? 'bg-[#15121A] hover:bg-[#211C2A] text-[#C5C0C8] border-transparent' 
+                    : 'bg-[#FFFFFF] hover:bg-[#F3F3F3] text-[#605E62] border-[#C5C0C8]'
+                }`}
+              >
+                Contraer todo
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto py-2 px-2 pb-16 space-y-1">
               {groupedDrawings.map(group => (
                 <div key={group.folder} className="mb-2">
                   <div className="px-1 py-1 text-[9px] text-[#827E84] font-bold uppercase tracking-[0.16em] flex items-center justify-between">
                     <span>{group.folder}</span>
-                    <button onClick={() => toggleFolder(group.folder)} className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#211C2A] text-[#C5C0C8]">
+                      <button 
+                        onClick={() => toggleFolder(group.folder)} 
+                        className={`w-6 h-6 flex items-center justify-center rounded transition ${
+                          theme === 'dark' 
+                            ? 'hover:bg-[#211C2A] text-[#C5C0C8]' 
+                            : 'hover:bg-[#F3F3F3] text-[#605E62]'
+                        }`}
+                      >
                       <i className={`fa-solid ${expandedFolders[group.folder] ? 'fa-chevron-down' : 'fa-chevron-right'} text-xs`}></i>
                     </button>
                   </div>
@@ -191,10 +216,18 @@ const App: React.FC = () => {
                         <button
                           key={`${group.folder}-${drawing.filename}`}
                           onClick={() => handleSelectDrawing(drawing)}
-                          className={`w-full text-left px-3 py-2 rounded-lg text-[11px] font-medium transition border border-transparent ${
+                          className={`w-full text-left px-3 py-2 rounded-lg text-[11px] font-medium transition border ${
                             file && file.name.startsWith(drawing.name)
-                              ? 'bg-[#D3045C]/15 border-[#D3045C]/40 text-white'
-                              : 'bg-[#15121A] hover:bg-[#211C2A] text-[#C5C0C8]'
+                              ? (
+                                  theme === 'dark'
+                                    ? 'bg-[#D3045C]/15 border-[#D3045C]/40 text-white'
+                                    : 'bg-[#D3045C]/10 border-[#D3045C] text-[#000000]'
+                                )
+                              : (
+                                  theme === 'dark'
+                                    ? 'bg-[#15121A] hover:bg-[#211C2A] text-[#C5C0C8] border-transparent'
+                                    : 'bg-[#FFFFFF] hover:bg-[#F3F3F3] text-[#605E62] border-[#E0E0E0]'
+                                )
                           }`}
                         >
                           <span className="block truncate">{drawing.name}</span>
