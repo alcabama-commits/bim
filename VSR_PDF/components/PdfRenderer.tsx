@@ -131,7 +131,9 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
     panXRef.current = 0;
     panYRef.current = 0;
     if (canvasContainerRef.current) {
-      canvasContainerRef.current.style.transform = 'translate(0px, 0px)';
+      canvasContainerRef.current.style.willChange = 'transform';
+      canvasContainerRef.current.style.transition = 'none';
+      canvasContainerRef.current.style.transform = 'translate3d(0px, 0px, 0)';
     }
   }, [pdfDoc, currentPage, scale, rotation, renderPage]);
 
@@ -230,8 +232,8 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
         x: e.clientX - rect.left,
         y: e.clientY - rect.top,
         oldScale: scale,
-        scrollLeft: containerRef.current.scrollLeft,
-        scrollTop: containerRef.current.scrollTop
+        scrollLeft: panXRef.current,
+        scrollTop: panYRef.current
       };
     }
     onZoom(newScale);
@@ -242,11 +244,14 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       const { x, y, oldScale, scrollLeft: oldScrollLeft, scrollTop: oldScrollTop } = zoomPoint.current;
       const scaleRatio = scale / oldScale;
       
-      const newScrollLeft = (oldScrollLeft + x) * scaleRatio - x;
-      const newScrollTop = (oldScrollTop + y) * scaleRatio - y;
+      const newPanX = (oldScrollLeft + x) * scaleRatio - x;
+      const newPanY = (oldScrollTop + y) * scaleRatio - y;
       
-      containerRef.current.scrollLeft = newScrollLeft;
-      containerRef.current.scrollTop = newScrollTop;
+      panXRef.current = newPanX;
+      panYRef.current = newPanY;
+      if (canvasContainerRef.current) {
+        canvasContainerRef.current.style.transform = `translate3d(${newPanX}px, ${newPanY}px, 0)`;
+      }
       
       zoomPoint.current = null;
     }
@@ -293,7 +298,7 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       <div className="relative w-fit min-w-full min-h-full flex p-20">
         <div 
           ref={canvasContainerRef}
-          className={`relative transition-all duration-300 m-auto ${isBlueprint ? 'invert hue-rotate-180 brightness-110 contrast-125' : ''}`}
+          className={`relative m-auto ${isBlueprint ? 'invert hue-rotate-180 brightness-110 contrast-125' : ''}`}
         >
           <canvas ref={canvasRef} className="bg-white shadow-[0_0_60px_rgba(0,0,0,0.6)] border border-[#605E62]" />
           
