@@ -1,7 +1,6 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import PdfRenderer from './components/PdfRenderer';
-import AiSidebar from './components/AiSidebar';
 import Toolbar from './components/Toolbar';
 import { Calibration, Tool } from './types';
 
@@ -10,6 +9,8 @@ interface DrawingItem {
   filename: string;
   folder: string;
 }
+
+const DRAWING_BASE_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/VSR_PDF/public/Drawing';
 
 const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -49,7 +50,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadDrawings = async () => {
       try {
-        const response = await fetch('/Drawing/list.json');
+        const response = await fetch(`${DRAWING_BASE_URL}/list.json`);
         if (!response.ok) return;
         const data: DrawingItem[] = await response.json();
         setDrawings(data);
@@ -62,7 +63,7 @@ const App: React.FC = () => {
   const handleSelectDrawing = async (drawing: DrawingItem) => {
     setIsLoadingDrawing(true);
     try {
-      const pdfPath = `/Drawing/${drawing.filename}`;
+      const pdfPath = `${DRAWING_BASE_URL}/${drawing.filename}`;
       const response = await fetch(pdfPath);
       if (!response.ok) return;
       const blob = await response.blob();
@@ -171,11 +172,6 @@ const App: React.FC = () => {
           </div>
         </main>
       </div>
-
-      <AiSidebar 
-        isPdfLoaded={!!file} 
-        documentText={documentText}
-      />
     </div>
   );
 };
