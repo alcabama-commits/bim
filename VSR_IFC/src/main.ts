@@ -1114,13 +1114,9 @@ async function onMeasureClick(event: MouseEvent) {
 const anglePoints: THREE.Vector3[] = [];
 const angleHandler = async (event: MouseEvent) => {
     if (activeTool !== 'angle') return;
-    const rect = container.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    lastPointerNDC = new THREE.Vector2(x, y);
-    const result = await simpleRaycaster.castRay();
-    if (!result || !result.point) return;
-    const p = result.point.clone();
+    const hit = getIntersection(event);
+    if (!hit) return;
+    const p = hit.point.clone();
     anglePoints.push(p);
     createMarker(p, 0x00ff00);
     if (anglePoints.length === 3) {
@@ -1141,13 +1137,9 @@ const angleHandler = async (event: MouseEvent) => {
 const slopePoints: THREE.Vector3[] = [];
 const slopeHandler = async (event: MouseEvent) => {
     if (activeTool !== 'slope') return;
-    const rect = container.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    lastPointerNDC = new THREE.Vector2(x, y);
-    const result = await simpleRaycaster.castRay();
-    if (!result || !result.point) return;
-    const p = result.point.clone();
+    const hit = getIntersection(event);
+    if (!hit) return;
+    const p = hit.point.clone();
     slopePoints.push(p);
     createMarker(p, 0x00ff00);
     if (slopePoints.length === 2) {
