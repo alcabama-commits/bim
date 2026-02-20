@@ -68,8 +68,17 @@ const Toolbar: React.FC<ToolbarProps> = ({
           <button onClick={() => onZoom(0.2)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-800 rounded transition"><i className="fa-solid fa-plus text-[10px]"></i></button>
         </div>
 
-        <button onClick={onSidebarToggle} className={`w-8 h-8 rounded transition ${sidebarVisible ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title={sidebarVisible ? 'Ocultar panel de planos' : 'Mostrar panel de planos'}>
+        <button
+          onClick={onSidebarToggle}
+          className={`hidden sm:inline-flex items-center gap-1 px-3 h-8 rounded border text-[10px] uppercase tracking-[0.16em] transition ${
+            sidebarVisible
+              ? 'border-yellow-500 text-yellow-500 bg-yellow-500/10'
+              : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+          }`}
+          title={sidebarVisible ? 'Ocultar panel de planos' : 'Mostrar panel de planos'}
+        >
           <i className="fa-solid fa-table-columns text-xs"></i>
+          <span>{sidebarVisible ? 'Ocultar panel' : 'Mostrar panel'}</span>
         </button>
         <button onClick={onRotate} className="w-8 h-8 hover:bg-slate-800 rounded transition" title="Rotar"><i className="fa-solid fa-rotate-right text-xs"></i></button>
         <button onClick={onShowGridToggle} className={`w-8 h-8 rounded transition ${showGrid ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
