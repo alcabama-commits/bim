@@ -31,6 +31,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onBlueprintToggle,
   theme,
   onThemeToggle,
+  sidebarVisible,
+  onSidebarToggle,
 }) => {
   return (
     <header className="h-12 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between z-30 shadow-md">
