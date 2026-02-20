@@ -28,6 +28,7 @@ const App: React.FC = () => {
   const [drawings, setDrawings] = useState<DrawingItem[]>([]);
   const [isLoadingDrawing, setIsLoadingDrawing] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
   const handleFileSelect = (selectedFile: File) => {
     setFile(selectedFile);
@@ -143,6 +144,8 @@ const App: React.FC = () => {
           onBlueprintToggle={() => setIsBlueprint(!isBlueprint)}
           theme={theme}
           onThemeToggle={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+          isSidebarVisible={isSidebarVisible}
+          onToggleSidebar={() => setIsSidebarVisible(v => !v)}
         />
 
         {file && (
@@ -205,6 +208,7 @@ const App: React.FC = () => {
         )}
 
         <main className="flex-1 relative overflow-hidden flex">
+          {isSidebarVisible && (
           <aside className="w-64 sidebar-panel border-r border-[#1E1B22] flex-shrink-0 flex flex-col pb-16">
             <div className="px-4 py-3 border-b border-[#1E1B22]">
               <h2
@@ -294,6 +298,7 @@ const App: React.FC = () => {
               ))}
             </div>
           </aside>
+          )}
 
           <div className="flex-1 relative flex flex-col">
             <PdfRenderer 

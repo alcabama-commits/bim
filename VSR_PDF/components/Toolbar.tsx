@@ -14,6 +14,8 @@ interface ToolbarProps {
   onBlueprintToggle: () => void;
   theme: 'light' | 'dark';
   onThemeToggle: () => void;
+  isSidebarVisible: boolean;
+  onToggleSidebar: () => void;
 }
 
 const Toolbar: React.FC<ToolbarProps> = ({
@@ -29,6 +31,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onBlueprintToggle,
   theme,
   onThemeToggle,
+  isSidebarVisible,
+  onToggleSidebar,
 }) => {
   return (
     <header className="h-12 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between z-30 shadow-md">
@@ -74,6 +78,17 @@ const Toolbar: React.FC<ToolbarProps> = ({
           title="Modo plano (alto contraste)"
         >
           <i className="fa-solid fa-file-lines text-xs"></i>
+        </button>
+        <button 
+          onClick={onToggleSidebar} 
+          className={`w-8 h-8 rounded border transition ${
+            isSidebarVisible 
+              ? 'border-[#D3045C] text-[#D3045C] bg-[#D3045C]/10' 
+              : 'border-slate-700 text-slate-500 hover:bg-slate-800'
+          }`} 
+          title={isSidebarVisible ? 'Ocultar galería de Planos BIM' : 'Mostrar galería de Planos BIM'}
+        >
+          <i className="fa-solid fa-table-columns text-xs"></i>
         </button>
         <button onClick={onThemeToggle} className={`w-8 h-8 rounded transition ${theme === 'dark' ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}>
           <i className={`fa-solid ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-xs`}></i>
