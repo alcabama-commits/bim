@@ -743,26 +743,45 @@ const pointHandler = (event: MouseEvent) => {
 };
 
 // --- TOOL BUTTONS ---
+const measureButtonIds = [
+    'btn-measure-length',
+    'btn-measure-area',
+    'btn-measure-angle',
+    'btn-measure-slope',
+    'btn-measure-point'
+] as const;
+
+function setActiveMeasureButton(id: string | null) {
+    for (const buttonId of measureButtonIds) {
+        const el = document.getElementById(buttonId);
+        if (!el) continue;
+        if (id && buttonId === id) el.classList.add('active');
+        else el.classList.remove('active');
+    }
+}
+
 document.getElementById('btn-measure-point')?.addEventListener('click', () => {
+    deactivateAllTools();
     activeTool = 'point';
+    setActiveMeasureButton('btn-measure-point');
     logToScreen('Point tool activated');
-    container.addEventListener('click', pointHandler);
+    container.addEventListener('click', pointHandler, { capture: true });
 });
 
 document.getElementById('btn-measure-angle')?.addEventListener('click', () => {
+    deactivateAllTools();
     activeTool = 'angle';
+    setActiveMeasureButton('btn-measure-angle');
     logToScreen('Angle tool activated');
-    container.removeEventListener('click', pointHandler);
-    container.removeEventListener('click', slopeHandler as any);
     container.addEventListener('click', angleHandler as any, { capture: true });
     container.addEventListener('pointerdown', angleHandler as any, { capture: true });
 });
 
 document.getElementById('btn-measure-slope')?.addEventListener('click', () => {
+    deactivateAllTools();
     activeTool = 'slope';
+    setActiveMeasureButton('btn-measure-slope');
     logToScreen('Slope tool activated');
-    container.removeEventListener('click', pointHandler);
-    container.removeEventListener('click', angleHandler as any);
     container.addEventListener('click', slopeHandler as any, { capture: true });
     container.addEventListener('pointerdown', slopeHandler as any, { capture: true });
 });
@@ -770,22 +789,21 @@ document.getElementById('btn-measure-slope')?.addEventListener('click', () => {
 document.getElementById('btn-measure-area')?.addEventListener('click', () => {
     if (area.enabled) {
         area.enabled = false;
+        setActiveMeasureButton(null);
         logToScreen('Area tool deactivated');
     } else {
+        deactivateAllTools();
         area.enabled = true;
         area.create();
+        setActiveMeasureButton('btn-measure-area');
         logToScreen('Area tool activated');
     }
 });
 
 document.getElementById('btn-none')?.addEventListener('click', () => {
-    activeTool = 'none';
+    deactivateAllTools();
+    setActiveMeasureButton(null);
     logToScreen('Tools deactivated');
-    container.removeEventListener('click', pointHandler);
-    container.removeEventListener('click', angleHandler as any);
-    container.removeEventListener('click', slopeHandler as any);
-    container.removeEventListener('pointerdown', angleHandler as any);
-    container.removeEventListener('pointerdown', slopeHandler as any);
 });
 
 // --- ZOOM TO FIT ---
@@ -924,50 +942,27 @@ document.getElementById('file-input')?.addEventListener('change', async (e) => {
 
 // --- MEASUREMENT MODE TOGGLE ---
 document.getElementById('btn-measure-length')?.addEventListener('click', () => {
-    const btn = document.getElementById('btn-measure-length')!;
-    if (measurementMode) {
-        measurementMode = null;
-        // btn.textContent = 'Medir'; // REMOVED: Don't overwrite icon
-        btn.classList.remove('active');
-        
-        // Clean up
-        measurementPoints = [];
-        measurementMarkers.forEach(m => world.scene.three.remove(m));
-        measurementLabels.forEach(l => l.remove());
-        measurementMarkers.length = 0;
-        measurementLabels.length = 0;
-        
-        if (tempMeasurementLine) {
-            world.scene.three.remove(tempMeasurementLine);
-            tempMeasurementLine = null;
-        }
-        
-        if (snappingCursor) {
-            world.scene.three.remove(snappingCursor);
-            snappingCursor = null;
-        }
-        
-        container.removeEventListener('click', onMeasureClick);
-        container.removeEventListener('mousemove', onMeasureMouseMove);
-        
+    const wasLength = measurementMode === 'length';
+    deactivateAllTools();
+    if (wasLength) {
+        setActiveMeasureButton(null);
         logToScreen('Measurement mode deactivated');
-    } else {
-        measurementMode = 'length';
-        // btn.textContent = 'Detener'; // REMOVED: Don't overwrite icon
-        btn.classList.add('active');
-        
-        // Create snapping cursor
-        const cursorGeometry = new THREE.SphereGeometry(0.2, 16, 16);
-        const cursorMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
-        snappingCursor = new THREE.Mesh(cursorGeometry, cursorMaterial);
-        snappingCursor.visible = false;
-        world.scene.three.add(snappingCursor);
-        
-        container.addEventListener('click', onMeasureClick);
-        container.addEventListener('mousemove', onMeasureMouseMove);
-        
-        logToScreen('Measurement mode activated');
+        return;
     }
+
+    measurementMode = 'length';
+    setActiveMeasureButton('btn-measure-length');
+    
+    const cursorGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+    const cursorMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
+    snappingCursor = new THREE.Mesh(cursorGeometry, cursorMaterial);
+    snappingCursor.visible = false;
+    world.scene.three.add(snappingCursor);
+    
+    container.addEventListener('click', onMeasureClick);
+    container.addEventListener('mousemove', onMeasureMouseMove);
+    
+    logToScreen('Measurement mode activated');
 });
 
 // --- MEASUREMENT FUNCTIONS ---
@@ -1211,6 +1206,16 @@ function deactivateAllTools() {
     if (typeof activeTool !== 'undefined') activeTool = 'none'; 
     if (typeof measurementMode !== 'undefined') measurementMode = null; 
     if (typeof snappingCursor !== 'undefined' && snappingCursor) snappingCursor.visible = false; 
+    
+    if (typeof container !== 'undefined' && container) {
+        container.removeEventListener('click', onMeasureClick);
+        container.removeEventListener('mousemove', onMeasureMouseMove);
+        container.removeEventListener('click', pointHandler as any);
+        container.removeEventListener('click', angleHandler as any, { capture: true });
+        container.removeEventListener('pointerdown', angleHandler as any, { capture: true });
+        container.removeEventListener('click', slopeHandler as any, { capture: true });
+        container.removeEventListener('pointerdown', slopeHandler as any, { capture: true });
+    }
     
     // Limpiar selección del Highlighter de OBC 
     if (typeof components !== 'undefined') { 
