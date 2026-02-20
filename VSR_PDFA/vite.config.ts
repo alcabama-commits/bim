@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   base: './',
   build: {
-    outDir: '../docs/VSR_PDF',
+    outDir: '../docs/VSR_PDFA',
     emptyOutDir: true
   },
   server: {
