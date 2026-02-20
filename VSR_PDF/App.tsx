@@ -146,13 +146,45 @@ const App: React.FC = () => {
         />
 
         {file && (
-          <div className="absolute bottom-6 right-6 bg-[#000000]/90 backdrop-blur border border-[#605E62] px-4 py-2 rounded-xl flex items-center gap-6 z-40 shadow-2xl">
-            <div className="flex items-center gap-3 border-r border-[#605E62] pr-4">
-              <button onClick={() => currentPage > 1 && setCurrentPage(p => p - 1)} disabled={currentPage <= 1} className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#605E62] disabled:opacity-20 transition">
+          <div
+            className={`absolute bottom-6 right-6 px-4 py-2 rounded-xl flex items-center gap-6 z-40 shadow-2xl border ${
+              theme === 'dark'
+                ? 'bg-[#000000]/90 border-[#605E62]'
+                : 'bg-[#FFFFFF] border-[#C5C0C8]'
+            }`}
+          >
+            <div
+              className={`flex items-center gap-3 pr-4 border-r ${
+                theme === 'dark' ? 'border-[#605E62]' : 'border-[#C5C0C8]'
+              }`}
+            >
+              <button
+                onClick={() => currentPage > 1 && setCurrentPage(p => p - 1)}
+                disabled={currentPage <= 1}
+                className={`w-8 h-8 flex items-center justify-center rounded disabled:opacity-20 transition ${
+                  theme === 'dark'
+                    ? 'hover:bg-[#605E62] text-[#C5C0C8]'
+                    : 'hover:bg-[#F3F3F3] text-[#605E62]'
+                }`}
+              >
                 <i className="fa-solid fa-chevron-left text-xs"></i>
               </button>
-              <span className="text-[10px] font-bold text-[#C5C0C8] min-w-[80px] text-center uppercase tracking-widest">PLANO {currentPage} / {totalPages}</span>
-              <button onClick={() => currentPage < totalPages && setCurrentPage(p => p + 1)} disabled={currentPage >= totalPages} className="w-8 h-8 flex items-center justify-center rounded hover:bg-[#605E62] disabled:opacity-20 transition">
+              <span
+                className={`text-[10px] font-bold min-w-[80px] text-center uppercase tracking-widest ${
+                  theme === 'dark' ? 'text-[#C5C0C8]' : 'text-[#605E62]'
+                }`}
+              >
+                PLANO {currentPage} / {totalPages}
+              </span>
+              <button
+                onClick={() => currentPage < totalPages && setCurrentPage(p => p + 1)}
+                disabled={currentPage >= totalPages}
+                className={`w-8 h-8 flex items-center justify-center rounded disabled:opacity-20 transition ${
+                  theme === 'dark'
+                    ? 'hover:bg-[#605E62] text-[#C5C0C8]'
+                    : 'hover:bg-[#F3F3F3] text-[#605E62]'
+                }`}
+              >
                 <i className="fa-solid fa-chevron-right text-xs"></i>
               </button>
             </div>
@@ -161,7 +193,13 @@ const App: React.FC = () => {
                 <i className="fa-solid fa-check-circle"></i> ESCALA CALIBRADA
               </div>
             ) : (
-              <div className="text-[#827E84] text-[9px] font-bold uppercase">Escala no definida</div>
+              <div
+                className={`text-[9px] font-bold uppercase ${
+                  theme === 'dark' ? 'text-[#827E84]' : 'text-[#605E62]'
+                }`}
+              >
+                Escala no definida
+              </div>
             )}
           </div>
         )}
