@@ -151,8 +151,8 @@ let snapLine: THREE.Line | null = null;
 function createSnapMarker() {
     if (snapMarker) return;
     
-    // Marcador más preciso (esfera más pequeña)
-    const geometry = new THREE.SphereGeometry(0.05, 16, 16);
+    // Marcador más visible para que el snap se sienta más "magnético"
+    const geometry = new THREE.SphereGeometry(0.09, 16, 16);
     const material = new THREE.MeshBasicMaterial({ 
         color: 0x00FF00, 
         depthTest: false, 
@@ -388,8 +388,8 @@ const findBestSnap = (intersections: THREE.Intersection[]) => {
 
     const camDist = firstHit.distance;
     const worldUnitsPerPixel = getWorldUnitsPerPixel(camDist);
-    const WORLD_UNITS_THRESHOLD = THREE.MathUtils.clamp(worldUnitsPerPixel * 12, 0.0006, 0.03);
-    const STICKY_THRESHOLD = WORLD_UNITS_THRESHOLD * 0.45;
+    const WORLD_UNITS_THRESHOLD = THREE.MathUtils.clamp(worldUnitsPerPixel * 20, 0.0006, 0.06);
+    const STICKY_THRESHOLD = WORLD_UNITS_THRESHOLD * 0.8;
 
     const candidates: SnapCandidate[] = [];
     const depthWindow = THREE.MathUtils.clamp(camDist * 0.01, 0.03, 0.25);
@@ -412,12 +412,12 @@ const findBestSnap = (intersections: THREE.Intersection[]) => {
         if (c.distanceToRay > WORLD_UNITS_THRESHOLD) continue;
 
         let score = c.distanceToRay;
-        if (c.type === 'intersection') score *= 0.15;
-        if (c.type === 'vertex') score *= 0.25;
-        if (c.type === 'edge') score *= 0.85;
-        if (c.type === 'face') score *= 1.4;
+        if (c.type === 'vertex') score *= 0.15;
+        if (c.type === 'intersection') score *= 0.25;
+        if (c.type === 'edge') score *= 0.9;
+        if (c.type === 'face') score *= 1.6;
         score += c.distanceToCamera * 0.0001;
-        const mainScore = c.distanceToRay * (c.type === 'intersection' ? 0.6 : c.type === 'vertex' ? 0.75 : c.type === 'edge' ? 1 : 1.3);
+        const mainScore = c.distanceToRay * (c.type === 'vertex' ? 0.6 : c.type === 'intersection' ? 0.75 : c.type === 'edge' ? 1 : 1.4);
 
         if (mainScore < bestMainScore || (mainScore === bestMainScore && score < bestScore)) {
             bestMainScore = mainScore;
