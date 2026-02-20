@@ -47,6 +47,17 @@ const Toolbar: React.FC<ToolbarProps> = ({
         </div>
         {file && <div className="h-4 w-px bg-slate-700 mx-2"></div>}
         {file && <span className="text-[10px] text-slate-400 font-mono truncate max-w-[120px]">{file.name}</span>}
+        <button 
+          onClick={onToggleSidebar} 
+          className={`ml-2 w-8 h-8 rounded border transition ${
+            isSidebarVisible 
+              ? 'border-[#D3045C] text-[#D3045C] bg-[#D3045C]/10' 
+              : 'border-slate-700 text-slate-500 hover:bg-slate-800'
+          }`} 
+          title={isSidebarVisible ? 'Ocultar galería de Planos BIM' : 'Mostrar galería de Planos BIM'}
+        >
+          <i className="fa-solid fa-table-columns text-xs"></i>
+        </button>
       </div>
 
       <div className="flex items-center gap-1">
@@ -78,17 +89,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
           title="Modo plano (alto contraste)"
         >
           <i className="fa-solid fa-file-lines text-xs"></i>
-        </button>
-        <button 
-          onClick={onToggleSidebar} 
-          className={`w-8 h-8 rounded border transition ${
-            isSidebarVisible 
-              ? 'border-[#D3045C] text-[#D3045C] bg-[#D3045C]/10' 
-              : 'border-slate-700 text-slate-500 hover:bg-slate-800'
-          }`} 
-          title={isSidebarVisible ? 'Ocultar galería de Planos BIM' : 'Mostrar galería de Planos BIM'}
-        >
-          <i className="fa-solid fa-table-columns text-xs"></i>
         </button>
         <button onClick={onThemeToggle} className={`w-8 h-8 rounded transition ${theme === 'dark' ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}>
           <i className={`fa-solid ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-xs`}></i>
