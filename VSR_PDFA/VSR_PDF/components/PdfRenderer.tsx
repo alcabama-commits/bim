@@ -1,0 +1,345 @@
+
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Calibration, Tool } from '../types';
+
+declare const window: any;
+
+interface PdfRendererProps {
+  file: File | null;
+  currentPage: number;
+  scale: number;
+  rotation: number;
+  tool: Tool;
+  showGrid: boolean;
+  isBlueprint: boolean;
+  calibration: Calibration | null;
+  onCalibrationComplete: (c: Calibration) => void;
+  onDocumentLoad: (totalPages: number, fullText: string) => void;
+  onFileSelect: (file: File) => void;
+  onToolChange?: (tool: Tool) => void;
+  onZoom?: (scale: number) => void;
+}
+
+const PdfRenderer: React.FC<PdfRendererProps> = ({ 
+  file, 
+  currentPage, 
+  scale, 
+  rotation,
+  tool,
+  showGrid,
+  isBlueprint,
+  calibration,
+  onCalibrationComplete,
+  onDocumentLoad,
+  onFileSelect,
+  onToolChange,
+  onZoom
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const zoomPoint = useRef<{x: number, y: number, oldScale: number, scrollLeft: number, scrollTop: number} | null>(null);
+  const [pdfDoc, setPdfDoc] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [libReady, setLibReady] = useState(false);
+  
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [startY, setStartY] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [scrollTop, setScrollTop] = useState(0);
+
+  const [points, setPoints] = useState<{x: number, y: number}[]>([]);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const panXRef = useRef(0);
+  const panYRef = useRef(0);
+
+  // Verificar que la librería esté lista
+  useEffect(() => {
+    const checkLib = () => {
+      if (window.pdfjsLib) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        setLibReady(true);
+      } else {
+        setTimeout(checkLib, 100);
+      }
+    };
+    checkLib();
+  }, []);
+
+  useEffect(() => {
+    if (!file || !libReady) {
+      setPdfDoc(null);
+      return;
+    }
+    
+    let isMounted = true;
+    const loadPdf = async () => {
+      setLoading(true);
+      try {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          if (!isMounted) return;
+          const typedarray = new Uint8Array(e.target?.result as ArrayBuffer);
+          try {
+            const pdf = await window.pdfjsLib.getDocument(typedarray).promise;
+            if (isMounted) {
+              setPdfDoc(pdf);
+              let fullText = "";
+              const maxPagesToScan = Math.min(pdf.numPages, 3);
+              for (let i = 1; i <= maxPagesToScan; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                fullText += content.items.map((item: any) => item.str).join(" ") + " ";
+              }
+              onDocumentLoad(pdf.numPages, fullText);
+            }
+          } catch (err) {
+            console.error("Error parsing PDF document:", err);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      } catch (error) {
+        console.error("Error loading PDF file:", error);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+    loadPdf();
+    return () => { isMounted = false; };
+  }, [file, libReady, onDocumentLoad]);
+
+  const renderPage = useCallback(async (pageNum: number) => {
+    if (!pdfDoc || !canvasRef.current) return;
+    try {
+      const page = await pdfDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale, rotation });
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+      if (context) {
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        await page.render({ canvasContext: context, viewport: viewport }).promise;
+      }
+    } catch (error) {
+      console.error("Error rendering page:", error);
+    }
+  }, [pdfDoc, scale, rotation]);
+
+  useEffect(() => {
+    if (pdfDoc) renderPage(currentPage);
+    setPoints([]);
+    panXRef.current = 0;
+    panYRef.current = 0;
+    if (canvasContainerRef.current) {
+      canvasContainerRef.current.style.willChange = 'transform';
+      canvasContainerRef.current.style.transition = 'none';
+      canvasContainerRef.current.style.transform = 'translate3d(0px, 0px, 0)';
+    }
+  }, [pdfDoc, currentPage, scale, rotation, renderPage]);
+
+  useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      if (isDragging) {
+        setIsDragging(false);
+      }
+    };
+    
+    if (isDragging) {
+      window.addEventListener('pointerup', handleGlobalPointerUp);
+    }
+    
+    return () => {
+      window.removeEventListener('pointerup', handleGlobalPointerUp);
+    };
+  }, [isDragging]);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!file) return;
+    const isPanButton = e.button === 1 || e.button === 2;
+    if (tool === 'hand' || isPanButton) {
+      if (isPanButton) {
+        e.preventDefault();
+      }
+      setIsDragging(true);
+      e.currentTarget.setPointerCapture(e.pointerId);
+      if (containerRef.current) {
+        setStartX(e.clientX);
+        setStartY(e.clientY);
+        setScrollLeft(panXRef.current);
+        setScrollTop(panYRef.current);
+      }
+    } else if ((tool === 'measure' || tool === 'calibrate') && canvasRef.current && e.button === 0) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      if (points.length >= 2) {
+        setPoints([{x, y}]);
+      } else {
+        const newPoints = [...points, {x, y}];
+        setPoints(newPoints);
+        
+        if (newPoints.length === 2 && tool === 'calibrate') {
+          const dx = newPoints[1].x - newPoints[0].x;
+          const dy = newPoints[1].y - newPoints[0].y;
+          const pixelDist = Math.sqrt(dx * dx + dy * dy);
+          const val = prompt("Establecer escala: ¿Cuántos metros mide esta línea en la realidad?", "1.0");
+          if (val) {
+            onCalibrationComplete({
+              pixels: pixelDist,
+              realValue: parseFloat(val),
+              unit: 'm'
+            });
+            onToolChange?.('measure');
+          }
+        }
+      }
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    setIsDragging(false);
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging || !containerRef.current) return;
+    const x = e.clientX;
+    const y = e.clientY;
+    const dx = x - startX;
+    const dy = y - startY;
+    const nextX = scrollLeft + dx;
+    const nextY = scrollTop + dy;
+    panXRef.current = nextX;
+    panYRef.current = nextY;
+    if (canvasContainerRef.current) {
+      canvasContainerRef.current.style.transform = `translate(${nextX}px, ${nextY}px)`;
+    }
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    if (!onZoom) return;
+    const delta = -Math.sign(e.deltaY);
+    const zoomStep = 0.1;
+    let newScale = scale + delta * zoomStep;
+    newScale = Math.max(0.1, Math.min(5.0, parseFloat(newScale.toFixed(2))));
+    
+    if (newScale === scale) return;
+
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      zoomPoint.current = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+        oldScale: scale,
+        scrollLeft: panXRef.current,
+        scrollTop: panYRef.current
+      };
+    }
+    onZoom(newScale);
+  };
+
+  useEffect(() => {
+    if (zoomPoint.current && containerRef.current) {
+      const { x, y, oldScale, scrollLeft: oldScrollLeft, scrollTop: oldScrollTop } = zoomPoint.current;
+      const scaleRatio = scale / oldScale;
+      
+      const newPanX = (oldScrollLeft + x) * scaleRatio - x;
+      const newPanY = (oldScrollTop + y) * scaleRatio - y;
+      
+      panXRef.current = newPanX;
+      panYRef.current = newPanY;
+      if (canvasContainerRef.current) {
+        canvasContainerRef.current.style.transform = `translate3d(${newPanX}px, ${newPanY}px, 0)`;
+      }
+      
+      zoomPoint.current = null;
+    }
+  }, [scale]);
+
+  if (!file) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center viewer-panel m-8 rounded-3xl">
+        <div className="text-center space-y-4 max-w-sm p-8">
+          <div className="w-20 h-20 bg-[#D3045C]/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-[#D3045C]/20">
+            <i className="fa-solid fa-layer-group text-3xl text-[#D3045C]"></i>
+          </div>
+          <h3 className="text-xl font-bold text-white uppercase tracking-tight">Selecciona un plano</h3>
+          <p className="text-[#C5C0C8] text-sm">Elige un plano desde la galería lateral para iniciar el visor.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const calculateFormattedDistance = () => {
+    if (points.length !== 2) return null;
+    const dx = points[1].x - points[0].x;
+    const dy = points[1].y - points[0].y;
+    const pixels = Math.sqrt(dx * dx + dy * dy);
+    
+    if (calibration) {
+      const realDist = (pixels / calibration.pixels) * calibration.realValue;
+      return `${realDist.toFixed(3)} ${calibration.unit}`;
+    }
+    return `${(pixels / scale).toFixed(1)} px`;
+  };
+
+  const displayDist = calculateFormattedDistance();
+
+  return (
+    <div 
+      ref={containerRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onWheel={handleWheel}
+      className={`relative flex-1 overflow-hidden viewer-panel h-full no-scrollbar touch-none ${tool === 'hand' ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
+    >
+      <div className="relative w-fit min-w-full min-h-full flex p-20">
+        <div 
+          ref={canvasContainerRef}
+          className={`relative m-auto ${isBlueprint ? 'invert hue-rotate-180 brightness-110 contrast-125' : ''}`}
+        >
+          <canvas ref={canvasRef} className="bg-white shadow-[0_0_60px_rgba(0,0,0,0.6)] border border-[#605E62]" />
+          
+          {showGrid && (
+            <div className="absolute inset-0 pointer-events-none opacity-20" 
+                 style={{ backgroundImage: 'linear-gradient(#605E62 1px, transparent 1px), linear-gradient(90deg, #605E62 1px, transparent 1px)', backgroundSize: `${50 * scale}px ${50 * scale}px` }}>
+            </div>
+          )}
+
+          <svg className="absolute inset-0 pointer-events-none w-full h-full">
+            {points.map((p, i) => (
+              <circle key={i} cx={p.x} cy={p.y} r="6" fill="#D3045C" stroke="#000" strokeWidth="2" />
+            ))}
+            {points.length === 2 && (
+              <>
+                <line x1={points[0].x} y1={points[0].y} x2={points[1].x} y2={points[1].y} stroke="#D3045C" strokeWidth="3" strokeDasharray="6,4" />
+                <g transform={`translate(${(points[0].x + points[1].x) / 2}, ${(points[0].y + points[1].y) / 2 - 20})`}>
+                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#D3045C" strokeWidth="2" />
+                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#D3045C" dy="5" className="font-mono">
+                    {displayDist}
+                  </text>
+                </g>
+              </>
+            )}
+          </svg>
+        </div>
+      </div>
+
+      {loading && (
+        <div className="absolute inset-0 bg-[#000000]/80 backdrop-blur-md flex items-center justify-center z-50">
+          <div className="flex flex-col items-center gap-6">
+            <div className="w-16 h-16 border-4 border-[#D3045C]/20 border-t-[#D3045C] animate-spin rounded-full"></div>
+            <div className="text-center">
+              <span className="block text-[#D3045C] font-mono text-xs tracking-widest uppercase mb-1">Cargando Render BIM</span>
+              <span className="text-[#A49FA6] text-[10px] uppercase font-bold tracking-widest">Calculando vectores...</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default PdfRenderer;
