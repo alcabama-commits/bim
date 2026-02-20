@@ -14,21 +14,21 @@
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: #003E52; }
+::-webkit-scrollbar-track { background: #000000; }
 ::-webkit-scrollbar-thumb { background: #FFA400; border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: #F28705; }
 
-#root { background-color: #003E52; min-height: 100vh; }
+#root { background-color: #000000; min-height: 100vh; }
 
 .sidebar-panel {
-  background-color: #024959;
+  background-color: #0D0D0D;
 }
 .theme-light .sidebar-panel {
   background-color: #FFFFFF;
 }
 
 .viewer-panel {
-  background-color: #003E52;
+  background-color: #000000;
 }
 .theme-light .viewer-panel {
   background-color: #F5F5F5;
@@ -77,8 +77,8 @@
 .text-slate-950 { color: #000000 !important; }
 
 /* Panel tints */
-.bg-slate-900\/90 { background-color: rgba(0,62,82,0.90) !important; }
-.bg-slate-950\/80 { background-color: rgba(0,62,82,0.80) !important; }
+.bg-slate-900\/90 { background-color: rgba(13,13,13,0.90) !important; }
+.bg-slate-950\/80 { background-color: rgba(0,0,0,0.80) !important; }
 
 /* Indigo light variants to primary tint */
 .bg-indigo-50 { background-color: rgba(255,164,0,0.08) !important; }
@@ -89,12 +89,12 @@
 /* Theme-scoped overrides */
 .theme-dark {
   color: #FFFFFF !important;
-  background-color: #003E52 !important;
+  background-color: #000000 !important;
 }
-.theme-dark .bg-slate-950 { background-color: #003E52 !important; }
-.theme-dark .bg-slate-900 { background-color: #024959 !important; }
-.theme-dark .bg-slate-800 { background-color: #0D0D0D !important; }
-.theme-dark .bg-slate-700 { background-color: #024959 !important; }
+.theme-dark .bg-slate-950 { background-color: #000000 !important; }
+.theme-dark .bg-slate-900 { background-color: #111111 !important; }
+.theme-dark .bg-slate-800 { background-color: #1A1A1A !important; }
+.theme-dark .bg-slate-700 { background-color: #222222 !important; }
 .theme-dark .text-slate-400 { color: #A49FA6 !important; }
 .theme-dark .border-slate-800 { border-color: #333333 !important; }
 .theme-dark .border-slate-700 { border-color: #2A2A2A !important; }

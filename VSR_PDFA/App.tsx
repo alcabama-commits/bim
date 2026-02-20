@@ -320,7 +320,7 @@ const App: React.FC = () => {
               />
             </div>
             {isLoadingDrawing && (
-              <div className="absolute inset-0 bg-[#003E52]/80 flex items-center justify-center z-40">
+              <div className="absolute inset-0 bg-[#000000]/80 flex items-center justify-center z-40">
                 <div className="px-4 py-3 rounded-xl bg-[#0D0D0D] border border-[#605E62]/60 shadow-2xl flex items-center gap-3">
                   <div className="w-6 h-6 border-2 border-[#FFA400]/20 border-t-[#FFA400] rounded-full animate-spin" />
                   <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-[#C5C0C8]">Cargando plano desde galería...</span>

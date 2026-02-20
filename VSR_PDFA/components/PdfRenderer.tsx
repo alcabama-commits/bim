@@ -328,7 +328,7 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       </div>
 
       {loading && (
-        <div className="absolute inset-0 bg-[#003E52]/80 backdrop-blur-md flex items-center justify-center z-50">
+        <div className="absolute inset-0 bg-[#000000]/80 backdrop-blur-md flex items-center justify-center z-50">
           <div className="flex flex-col items-center gap-6">
             <div className="w-16 h-16 border-4 border-[#FFA400]/20 border-t-[#FFA400] animate-spin rounded-full"></div>
             <div className="text-center">
