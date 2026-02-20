@@ -752,11 +752,17 @@ document.getElementById('btn-measure-point')?.addEventListener('click', () => {
 document.getElementById('btn-measure-angle')?.addEventListener('click', () => {
     activeTool = 'angle';
     logToScreen('Angle tool activated');
+    container.removeEventListener('click', pointHandler);
+    container.removeEventListener('click', slopeHandler as any);
+    container.addEventListener('click', angleHandler as any, { capture: true });
 });
 
 document.getElementById('btn-measure-slope')?.addEventListener('click', () => {
     activeTool = 'slope';
     logToScreen('Slope tool activated');
+    container.removeEventListener('click', pointHandler);
+    container.removeEventListener('click', angleHandler as any);
+    container.addEventListener('click', slopeHandler as any, { capture: true });
 });
 
 document.getElementById('btn-measure-area')?.addEventListener('click', () => {
@@ -774,6 +780,8 @@ document.getElementById('btn-none')?.addEventListener('click', () => {
     activeTool = 'none';
     logToScreen('Tools deactivated');
     container.removeEventListener('click', pointHandler);
+    container.removeEventListener('click', angleHandler as any);
+    container.removeEventListener('click', slopeHandler as any);
 });
 
 // --- ZOOM TO FIT ---
@@ -852,6 +860,7 @@ async function loadModelList() {
                         root.traverse((child: any) => {
                             if ((child.isMesh || child.isInstancedMesh) && child.visible) {
                                 components.meshes.push(child);
+                                (world as any).meshes?.add?.(child);
                             }
                         });
                    }
@@ -888,6 +897,7 @@ const loadModel = async (fragmentsFile: File) => {
         root.traverse((child: any) => {
             if ((child.isMesh || child.isInstancedMesh) && child.visible) {
                 components.meshes.push(child);
+                (world as any).meshes?.add?.(child);
             }
         });
     }
@@ -1102,6 +1112,61 @@ async function onMeasureClick(event: MouseEvent) {
     }
 }
 
+const anglePoints: THREE.Vector3[] = [];
+const angleHandler = async (event: MouseEvent) => {
+    if (activeTool !== 'angle') return;
+    const rect = container.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    lastPointerNDC = new THREE.Vector2(x, y);
+    const result = await simpleRaycaster.castRay();
+    if (!result || !result.point) return;
+    const p = result.point.clone();
+    anglePoints.push(p);
+    createMarker(p, 0x00ff00);
+    if (anglePoints.length === 3) {
+        const a = anglePoints[0];
+        const b = anglePoints[1];
+        const c = anglePoints[2];
+        const v1 = a.clone().sub(b);
+        const v2 = c.clone().sub(b);
+        const ang = THREE.MathUtils.radToDeg(v1.angleTo(v2));
+        createLine(a, b, 0x00ff00);
+        createLine(b, c, 0x00ff00);
+        createLabel(`${ang.toFixed(2)}°`, b.clone());
+        logToScreen(`Ángulo: ${ang.toFixed(2)}°`);
+        anglePoints.length = 0;
+    }
+};
+
+const slopePoints: THREE.Vector3[] = [];
+const slopeHandler = async (event: MouseEvent) => {
+    if (activeTool !== 'slope') return;
+    const rect = container.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    lastPointerNDC = new THREE.Vector2(x, y);
+    const result = await simpleRaycaster.castRay();
+    if (!result || !result.point) return;
+    const p = result.point.clone();
+    slopePoints.push(p);
+    createMarker(p, 0x00ff00);
+    if (slopePoints.length === 2) {
+        const p1 = slopePoints[0];
+        const p2 = slopePoints[1];
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const dz = p2.z - p1.z;
+        const horiz = Math.sqrt(dx*dx + dy*dy);
+        const angleDeg = THREE.MathUtils.radToDeg(Math.atan2(dz, horiz));
+        const percent = horiz === 0 ? 0 : (dz / horiz) * 100;
+        createLine(p1, p2, 0x00ff00);
+        const mid = p1.clone().add(p2).multiplyScalar(0.5);
+        createLabel(`Pendiente ${percent.toFixed(2)}% (${angleDeg.toFixed(2)}°)`, mid);
+        logToScreen(`Pendiente: ${percent.toFixed(2)}% (${angleDeg.toFixed(2)}°)`);
+        slopePoints.length = 0;
+    }
+};
 
 
 
