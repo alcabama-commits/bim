@@ -755,6 +755,7 @@ document.getElementById('btn-measure-angle')?.addEventListener('click', () => {
     container.removeEventListener('click', pointHandler);
     container.removeEventListener('click', slopeHandler as any);
     container.addEventListener('click', angleHandler as any, { capture: true });
+    container.addEventListener('pointerdown', angleHandler as any, { capture: true });
 });
 
 document.getElementById('btn-measure-slope')?.addEventListener('click', () => {
@@ -763,6 +764,7 @@ document.getElementById('btn-measure-slope')?.addEventListener('click', () => {
     container.removeEventListener('click', pointHandler);
     container.removeEventListener('click', angleHandler as any);
     container.addEventListener('click', slopeHandler as any, { capture: true });
+    container.addEventListener('pointerdown', slopeHandler as any, { capture: true });
 });
 
 document.getElementById('btn-measure-area')?.addEventListener('click', () => {
@@ -782,6 +784,8 @@ document.getElementById('btn-none')?.addEventListener('click', () => {
     container.removeEventListener('click', pointHandler);
     container.removeEventListener('click', angleHandler as any);
     container.removeEventListener('click', slopeHandler as any);
+    container.removeEventListener('pointerdown', angleHandler as any);
+    container.removeEventListener('pointerdown', slopeHandler as any);
 });
 
 // --- ZOOM TO FIT ---
