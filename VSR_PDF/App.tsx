@@ -169,8 +169,20 @@ const App: React.FC = () => {
         <main className="flex-1 relative overflow-hidden flex">
           <aside className="w-64 sidebar-panel border-r border-[#1E1B22] flex-shrink-0 flex flex-col pb-16">
             <div className="px-4 py-3 border-b border-[#1E1B22]">
-              <h2 className="text-[11px] font-black text-[#C5C0C8] tracking-[0.18em] uppercase">Planos BIM</h2>
-              <p className="text-[10px] text-[#827E84] mt-1">Selecciona un plano de la galería.</p>
+              <h2
+                className={`text-[11px] font-black tracking-[0.18em] uppercase ${
+                  theme === 'dark' ? 'text-[#C5C0C8]' : 'text-[#605E62]'
+                }`}
+              >
+                Planos BIM
+              </h2>
+              <p
+                className={`text-[10px] mt-1 ${
+                  theme === 'dark' ? 'text-[#827E84]' : 'text-[#827E84]'
+                }`}
+              >
+                Selecciona un plano de la galería.
+              </p>
             </div>
             <div className="px-4 py-2 border-b border-[#1E1B22] flex items-center gap-2">
               <button 
@@ -197,7 +209,11 @@ const App: React.FC = () => {
             <div className="flex-1 overflow-y-auto py-2 px-2 pb-16 space-y-1">
               {groupedDrawings.map(group => (
                 <div key={group.folder} className="mb-2">
-                  <div className="px-1 py-1 text-[9px] text-[#827E84] font-bold uppercase tracking-[0.16em] flex items-center justify-between">
+                  <div
+                    className={`px-1 py-1 text-[9px] font-bold uppercase tracking-[0.16em] flex items-center justify-between ${
+                      theme === 'dark' ? 'text-[#827E84]' : 'text-[#605E62]'
+                    }`}
+                  >
                     <span>{group.folder}</span>
                       <button 
                         onClick={() => toggleFolder(group.folder)} 
