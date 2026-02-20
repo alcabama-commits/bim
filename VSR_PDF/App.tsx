@@ -309,6 +309,7 @@ const App: React.FC = () => {
               onDocumentLoad={onDocumentLoad}
               onFileSelect={handleFileSelect}
               onToolChange={setActiveTool}
+              onZoom={setScale}
             />
             <div className="pointer-events-none fixed left-3 bottom-3 opacity-70">
               <img 

@@ -66,7 +66,15 @@ const Toolbar: React.FC<ToolbarProps> = ({
 
         <button onClick={onRotate} className="w-8 h-8 hover:bg-slate-800 rounded transition" title="Rotar"><i className="fa-solid fa-rotate-right text-xs"></i></button>
         <button onClick={onShowGridToggle} className={`w-8 h-8 rounded transition ${showGrid ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
-        <button onClick={onBlueprintToggle} className={`w-8 h-8 rounded transition ${isBlueprint ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title="Modo Blueprint"><i className="fa-solid fa-eye-slash text-xs"></i></button>
+        <button 
+          onClick={onBlueprintToggle} 
+          className={`w-8 h-8 rounded transition ${
+            isBlueprint ? 'text-[#D3045C] bg-[#D3045C]/10' : 'text-slate-500 hover:bg-slate-800'
+          }`} 
+          title="Modo alto contraste (Blueprint)"
+        >
+          <i className="fa-solid fa-draw-polygon text-xs"></i>
+        </button>
         <button onClick={onThemeToggle} className={`w-8 h-8 rounded transition ${theme === 'dark' ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}>
           <i className={`fa-solid ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-xs`}></i>
         </button>
