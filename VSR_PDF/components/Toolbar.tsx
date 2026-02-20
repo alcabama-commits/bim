@@ -69,11 +69,11 @@ const Toolbar: React.FC<ToolbarProps> = ({
         <button 
           onClick={onBlueprintToggle} 
           className={`w-8 h-8 rounded transition ${
-            isBlueprint ? 'text-[#D3045C] bg-[#D3045C]/10' : 'text-slate-500 hover:bg-slate-800'
+            isBlueprint ? 'bg-[#D3045C] text-white shadow' : 'text-slate-500 hover:bg-slate-800'
           }`} 
-          title="Modo alto contraste (Blueprint)"
+          title="Modo plano (alto contraste)"
         >
-          <i className="fa-solid fa-draw-polygon text-xs"></i>
+          <i className="fa-solid fa-file-lines text-xs"></i>
         </button>
         <button onClick={onThemeToggle} className={`w-8 h-8 rounded transition ${theme === 'dark' ? 'text-yellow-500 bg-yellow-500/10' : 'text-slate-500 hover:bg-slate-800'}`} title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}>
           <i className={`fa-solid ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-xs`}></i>
