@@ -35,8 +35,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
           <img 
-            src={theme === 'dark' ? 'https://i.postimg.cc/0yDgcyBp/Logo-transparente_blanco.png' : 'https://i.postimg.cc/GmWLmfZZ/Logo-transparente_negro.png'} 
-            alt="Alcabama" 
+            src={theme === 'dark' ? 'https://i.postimg.cc/3xdLSg9g/artis_urbano2_(1).png' : 'https://i.postimg.cc/vmKVZndP/artis_urbano2.png'} 
+            alt="Artis Urbano" 
             className="h-5 select-none"
             draggable={false}
           />
@@ -69,7 +69,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
         <button 
           onClick={onBlueprintToggle} 
           className={`w-8 h-8 rounded transition ${
-            isBlueprint ? 'bg-[#D3045C] text-white shadow' : 'text-slate-500 hover:bg-slate-800'
+            isBlueprint ? 'bg-[#FFA400] text-white shadow' : 'text-slate-500 hover:bg-slate-800'
           }`} 
           title="Modo plano (alto contraste)"
         >

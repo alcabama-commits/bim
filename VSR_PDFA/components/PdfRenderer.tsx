@@ -261,8 +261,8 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
     return (
       <div className="flex-1 flex flex-col items-center justify-center viewer-panel m-8 rounded-3xl">
         <div className="text-center space-y-4 max-w-sm p-8">
-          <div className="w-20 h-20 bg-[#D3045C]/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-[#D3045C]/20">
-            <i className="fa-solid fa-layer-group text-3xl text-[#D3045C]"></i>
+          <div className="w-20 h-20 bg-[#FFA400]/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-[#FFA400]/20">
+            <i className="fa-solid fa-layer-group text-3xl text-[#FFA400]"></i>
           </div>
           <h3 className="text-xl font-bold text-white uppercase tracking-tight">Selecciona un plano</h3>
           <p className="text-[#C5C0C8] text-sm">Elige un plano desde la galería lateral para iniciar el visor.</p>
@@ -310,14 +310,14 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
 
           <svg className="absolute inset-0 pointer-events-none w-full h-full">
             {points.map((p, i) => (
-              <circle key={i} cx={p.x} cy={p.y} r="6" fill="#D3045C" stroke="#000" strokeWidth="2" />
+              <circle key={i} cx={p.x} cy={p.y} r="6" fill="#FFA400" stroke="#000" strokeWidth="2" />
             ))}
             {points.length === 2 && (
               <>
-                <line x1={points[0].x} y1={points[0].y} x2={points[1].x} y2={points[1].y} stroke="#D3045C" strokeWidth="3" strokeDasharray="6,4" />
+                <line x1={points[0].x} y1={points[0].y} x2={points[1].x} y2={points[1].y} stroke="#FFA400" strokeWidth="3" strokeDasharray="6,4" />
                 <g transform={`translate(${(points[0].x + points[1].x) / 2}, ${(points[0].y + points[1].y) / 2 - 20})`}>
-                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#D3045C" strokeWidth="2" />
-                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#D3045C" dy="5" className="font-mono">
+                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#FFA400" strokeWidth="2" />
+                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#FFA400" dy="5" className="font-mono">
                     {displayDist}
                   </text>
                 </g>
@@ -328,11 +328,11 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       </div>
 
       {loading && (
-        <div className="absolute inset-0 bg-[#000000]/80 backdrop-blur-md flex items-center justify-center z-50">
+        <div className="absolute inset-0 bg-[#003E52]/80 backdrop-blur-md flex items-center justify-center z-50">
           <div className="flex flex-col items-center gap-6">
-            <div className="w-16 h-16 border-4 border-[#D3045C]/20 border-t-[#D3045C] animate-spin rounded-full"></div>
+            <div className="w-16 h-16 border-4 border-[#FFA400]/20 border-t-[#FFA400] animate-spin rounded-full"></div>
             <div className="text-center">
-              <span className="block text-[#D3045C] font-mono text-xs tracking-widest uppercase mb-1">Cargando Render BIM</span>
+              <span className="block text-[#FFA400] font-mono text-xs tracking-widest uppercase mb-1">Cargando Render BIM</span>
               <span className="text-[#A49FA6] text-[10px] uppercase font-bold tracking-widest">Calculando vectores...</span>
             </div>
           </div>

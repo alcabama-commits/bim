@@ -45,7 +45,7 @@ const App: React.FC = () => {
   const handleZoom = (delta: number) => setScale(prev => Math.max(0.1, Math.min(10, prev + delta)));
 
   useEffect(() => {
-    console.log(`%c ALCABAMA BIM v2.4 - ${new Date().toLocaleTimeString()} `, "background: #D3045C; color: #fff; font-size: 20px; padding: 10px;");
+    console.log(`%c ARTIS URBANO BIM v2.4 - ${new Date().toLocaleTimeString()} `, "background: #FFA400; color: #0D0D0D; font-size: 20px; padding: 10px;");
   }, []);
 
   useEffect(() => {
@@ -189,7 +189,7 @@ const App: React.FC = () => {
               </button>
             </div>
             {calibration ? (
-              <div className="flex items-center gap-2 text-[#D3045C] text-[10px] font-black animate-pulse">
+              <div className="flex items-center gap-2 text-[#FFA400] text-[10px] font-black animate-pulse">
                 <i className="fa-solid fa-check-circle"></i> ESCALA CALIBRADA
               </div>
             ) : (
@@ -274,8 +274,8 @@ const App: React.FC = () => {
                             file && file.name.startsWith(drawing.name)
                               ? (
                                   theme === 'dark'
-                                    ? 'bg-[#D3045C]/15 border-[#D3045C]/40 text-white'
-                                    : 'bg-[#D3045C]/10 border-[#D3045C] text-[#000000]'
+                                    ? 'bg-[#FFA400]/15 border-[#FFA400]/40 text-white'
+                                    : 'bg-[#FFA400]/10 border-[#FFA400] text-[#000000]'
                                 )
                               : (
                                   theme === 'dark'
@@ -320,9 +320,9 @@ const App: React.FC = () => {
               />
             </div>
             {isLoadingDrawing && (
-              <div className="absolute inset-0 bg-[#000000]/70 flex items-center justify-center z-40">
-                <div className="px-4 py-3 rounded-xl bg-[#0B0B0F] border border-[#605E62]/60 shadow-2xl flex items-center gap-3">
-                  <div className="w-6 h-6 border-2 border-[#D3045C]/20 border-t-[#D3045C] rounded-full animate-spin" />
+              <div className="absolute inset-0 bg-[#003E52]/80 flex items-center justify-center z-40">
+                <div className="px-4 py-3 rounded-xl bg-[#0D0D0D] border border-[#605E62]/60 shadow-2xl flex items-center gap-3">
+                  <div className="w-6 h-6 border-2 border-[#FFA400]/20 border-t-[#FFA400] rounded-full animate-spin" />
                   <span className="text-[11px] font-mono uppercase tracking-[0.18em] text-[#C5C0C8]">Cargando plano desde galería...</span>
                 </div>
               </div>
