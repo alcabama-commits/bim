@@ -873,28 +873,34 @@ async function loadModelList() {
             btn.innerHTML = `<i class="fa-solid fa-cube"></i> ${model.name}`;
             
             btn.addEventListener('click', async () => {
-                // Visual feedback
                 document.querySelectorAll('.model-btn').forEach(b => b.style.background = 'rgba(255, 255, 255, 0.1)');
                 btn.style.background = 'rgba(0, 255, 0, 0.2)';
                 
                 try {
                    logToScreen(`Cargando ${model.name}...`);
-                   const fragmentsManager = components.get(OBC.FragmentsManager);
+                   const fragments = components.get(OBC.FragmentsManager);
                    
                    const fileResponse = await fetch(`${baseUrl}${model.path}`);
                    const buffer = await fileResponse.arrayBuffer();
-                   const fragment = await fragmentsManager.load(buffer);
+                   const data = new Uint8Array(buffer);
                    
-                   if (!components.meshes) components.meshes = [];
-                   const root = fragment.mesh || fragment.object;
-                   if (root) {
-                        root.traverse((child: any) => {
-                            if ((child.isMesh || child.isInstancedMesh) && child.visible) {
-                                components.meshes.push(child);
-                                (world as any).meshes?.add?.(child);
+                   const loadedModel = await fragments.core.load(data, { modelId: model.path });
+                   if (!loadedModel) throw new Error('Fragments core.load devolvió undefined');
+
+                   loadedModel.useCamera(world.camera.three);
+                   world.scene.three.add(loadedModel.object);
+
+                   if (!(components as any).meshes) (components as any).meshes = [];
+                   loadedModel.object.traverse((child: any) => {
+                        if (child.isMesh || child.isInstancedMesh) {
+                            (world as any).meshes?.add?.(child);
+                            if (Array.isArray((components as any).meshes)) {
+                                (components as any).meshes.push(child);
                             }
-                        });
-                   }
+                        }
+                   });
+
+                   await fragments.core.update(true);
                    
                    logToScreen(`Modelo cargado: ${model.name}`);
                    await zoomToFit();
@@ -916,22 +922,27 @@ async function loadModelList() {
 
 // --- MODEL LOADING ---
 const loadModel = async (fragmentsFile: File) => {
-    const fragmentsManager = components.get(OBC.FragmentsManager);
+    const fragments = components.get(OBC.FragmentsManager);
     const buffer = await fragmentsFile.arrayBuffer();
-    const fragment = await fragmentsManager.load(buffer);
-    
-    // Populate components.meshes for raycasting
-    if (!components.meshes) components.meshes = [];
-    
-    const root = fragment.mesh || fragment.object;
-    if (root) {
-        root.traverse((child: any) => {
-            if ((child.isMesh || child.isInstancedMesh) && child.visible) {
-                components.meshes.push(child);
-                (world as any).meshes?.add?.(child);
+    const data = new Uint8Array(buffer);
+
+    const loadedModel = await fragments.core.load(data, { modelId: fragmentsFile.name });
+    if (!loadedModel) throw new Error('Fragments core.load devolvió undefined');
+
+    loadedModel.useCamera(world.camera.three);
+    world.scene.three.add(loadedModel.object);
+
+    if (!(components as any).meshes) (components as any).meshes = [];
+    loadedModel.object.traverse((child: any) => {
+        if (child.isMesh || child.isInstancedMesh) {
+            (world as any).meshes?.add?.(child);
+            if (Array.isArray((components as any).meshes)) {
+                (components as any).meshes.push(child);
             }
-        });
-    }
+        }
+    });
+
+    await fragments.core.update(true);
     
     logToScreen(`Model loaded: ${fragmentsFile.name}`);
     await zoomToFit();
