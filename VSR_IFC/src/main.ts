@@ -1212,12 +1212,11 @@ const grids = components.get(OBC.Grids);
 // MÓDULO DE ATAJOS DE TECLADO (Funciona en modo Capture) 
 // ==================================================================== 
 
-// 1. Función auxiliar para limpiar herramientas (necesaria para la tecla ESC) 
-function deactivateAllTools() { 
-    // Si tienes variables globales para herramientas, resetealas aquí 
-    if (typeof activeTool !== 'undefined') activeTool = 'none'; 
-    if (typeof measurementMode !== 'undefined') measurementMode = null; 
-    if (typeof snappingCursor !== 'undefined' && snappingCursor) snappingCursor.visible = false; 
+// 1. Función auxiliar para limpiar herramientas (necesaria para la tecla ESC)
+function deactivateAllTools() {
+    if (typeof activeTool !== 'undefined') activeTool = 'none';
+    if (typeof measurementMode !== 'undefined') measurementMode = null;
+    if (typeof snappingCursor !== 'undefined' && snappingCursor) snappingCursor.visible = false;
     
     if (typeof container !== 'undefined' && container) {
         container.removeEventListener('click', onMeasureClick);
@@ -1229,24 +1228,33 @@ function deactivateAllTools() {
         container.removeEventListener('pointerdown', slopeHandler as any, { capture: true });
     }
     
-    // Limpiar selección del Highlighter de OBC 
-    if (typeof components !== 'undefined') { 
-        try { 
-            // Asegúrate de importar OBF o usar la referencia correcta a Highlighter 
-            // const highlighter = components.get(OBF.Highlighter); 
-            // highlighter.clear('select'); 
-        } catch(e) { console.log("No se pudo limpiar highlighter", e); } 
-    } 
+    if (typeof components !== 'undefined') {
+        try {
+            const highlighter = components.get(OBF.Highlighter);
+            highlighter.clear('select');
+            highlighter.clear('hover');
+            highlighter.enabled = true;
+        } catch (e) {
+            console.log("No se pudo limpiar highlighter", e);
+        }
+        
+        try {
+            if (typeof area !== 'undefined') {
+                area.enabled = false;
+            }
+        } catch {
+            // Ignorar errores al desactivar área
+        }
+    }
     
-    // Limpiar líneas temporales de medición si existen 
-    if (typeof tempMeasurementLine !== 'undefined' && tempMeasurementLine) { 
-        if (typeof world !== 'undefined') world.scene.three.remove(tempMeasurementLine); 
-        tempMeasurementLine = null; 
-    } 
-    if (typeof measurementPoints !== 'undefined') measurementPoints = []; 
+    if (typeof tempMeasurementLine !== 'undefined' && tempMeasurementLine) {
+        if (typeof world !== 'undefined') world.scene.three.remove(tempMeasurementLine);
+        tempMeasurementLine = null;
+    }
+    if (typeof measurementPoints !== 'undefined') measurementPoints = [];
     
-    console.log("Herramientas desactivadas"); 
-} 
+    console.log("Herramientas desactivadas");
+}
 
 // 2. El Listener Maestro 
 window.addEventListener('keydown', async (e) => { 
