@@ -123,25 +123,16 @@ let activeTool: 'none' | 'angle' | 'slope' | 'point' = 'none';
 const customMeshes: THREE.Mesh[] = [];
 
 // --- UI & World Setup ---
-const container = document.getElementById('viewer-container') as HTMLElement;
+const container = document.getElementById('app')!;
 const components = new OBC.Components();
-if (!(components as any).meshes) (components as any).meshes = [];
-
 const worlds = components.get(OBC.Worlds);
-const world = worlds.create<
-  OBC.SimpleScene,
-  OBC.OrthoPerspectiveCamera,
-  OBC.SimpleRenderer
->();
+const world = worlds.create();
 
-world.scene = new OBC.SimpleScene(components);
-world.scene.setup();
-
-world.renderer = new OBC.SimpleRenderer(components, container);
-world.camera = new OBC.OrthoPerspectiveCamera(components);
+world.scene = new OBC.Scene(components);
+world.renderer = new OBC.Renderer(components, container);
+world.camera = new OBC.Camera(components);
 
 components.init();
-BUI.Manager.init();
 
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
@@ -191,9 +182,9 @@ function createSnapMarker() {
 }
 
 // --- Debug Panel ---
-const debugPanel = document.getElementById('debug-panel');
+const debugPanel = document.getElementById('debug-panel')!;
 const logToScreen = (msg: string) => {
-    if (debugPanel) debugPanel.textContent = msg;
+    debugPanel.textContent = msg;
     console.log('[UI]', msg);
 };
 
@@ -873,34 +864,28 @@ async function loadModelList() {
             btn.innerHTML = `<i class="fa-solid fa-cube"></i> ${model.name}`;
             
             btn.addEventListener('click', async () => {
+                // Visual feedback
                 document.querySelectorAll('.model-btn').forEach(b => b.style.background = 'rgba(255, 255, 255, 0.1)');
                 btn.style.background = 'rgba(0, 255, 0, 0.2)';
                 
                 try {
                    logToScreen(`Cargando ${model.name}...`);
-                   const fragments = components.get(OBC.FragmentsManager);
+                   const fragmentsManager = components.get(OBC.FragmentsManager);
                    
                    const fileResponse = await fetch(`${baseUrl}${model.path}`);
                    const buffer = await fileResponse.arrayBuffer();
-                   const data = new Uint8Array(buffer);
+                   const fragment = await fragmentsManager.load(buffer);
                    
-                   const loadedModel = await fragments.core.load(data, { modelId: model.path });
-                   if (!loadedModel) throw new Error('Fragments core.load devolvió undefined');
-
-                   loadedModel.useCamera(world.camera.three);
-                   world.scene.three.add(loadedModel.object);
-
-                   if (!(components as any).meshes) (components as any).meshes = [];
-                   loadedModel.object.traverse((child: any) => {
-                        if (child.isMesh || child.isInstancedMesh) {
-                            (world as any).meshes?.add?.(child);
-                            if (Array.isArray((components as any).meshes)) {
-                                (components as any).meshes.push(child);
+                   if (!components.meshes) components.meshes = [];
+                   const root = fragment.mesh || fragment.object;
+                   if (root) {
+                        root.traverse((child: any) => {
+                            if ((child.isMesh || child.isInstancedMesh) && child.visible) {
+                                components.meshes.push(child);
+                                (world as any).meshes?.add?.(child);
                             }
-                        }
-                   });
-
-                   await fragments.core.update(true);
+                        });
+                   }
                    
                    logToScreen(`Modelo cargado: ${model.name}`);
                    await zoomToFit();
@@ -922,27 +907,22 @@ async function loadModelList() {
 
 // --- MODEL LOADING ---
 const loadModel = async (fragmentsFile: File) => {
-    const fragments = components.get(OBC.FragmentsManager);
+    const fragmentsManager = components.get(OBC.FragmentsManager);
     const buffer = await fragmentsFile.arrayBuffer();
-    const data = new Uint8Array(buffer);
-
-    const loadedModel = await fragments.core.load(data, { modelId: fragmentsFile.name });
-    if (!loadedModel) throw new Error('Fragments core.load devolvió undefined');
-
-    loadedModel.useCamera(world.camera.three);
-    world.scene.three.add(loadedModel.object);
-
-    if (!(components as any).meshes) (components as any).meshes = [];
-    loadedModel.object.traverse((child: any) => {
-        if (child.isMesh || child.isInstancedMesh) {
-            (world as any).meshes?.add?.(child);
-            if (Array.isArray((components as any).meshes)) {
-                (components as any).meshes.push(child);
+    const fragment = await fragmentsManager.load(buffer);
+    
+    // Populate components.meshes for raycasting
+    if (!components.meshes) components.meshes = [];
+    
+    const root = fragment.mesh || fragment.object;
+    if (root) {
+        root.traverse((child: any) => {
+            if ((child.isMesh || child.isInstancedMesh) && child.visible) {
+                components.meshes.push(child);
+                (world as any).meshes?.add?.(child);
             }
-        }
-    });
-
-    await fragments.core.update(true);
+        });
+    }
     
     logToScreen(`Model loaded: ${fragmentsFile.name}`);
     await zoomToFit();
@@ -1134,9 +1114,13 @@ async function onMeasureClick(event: MouseEvent) {
 const anglePoints: THREE.Vector3[] = [];
 const angleHandler = async (event: MouseEvent) => {
     if (activeTool !== 'angle') return;
-    const hit = getIntersection(event);
-    if (!hit) return;
-    const p = hit.point.clone();
+    const rect = container.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    lastPointerNDC = new THREE.Vector2(x, y);
+    const result = await simpleRaycaster.castRay();
+    if (!result || !result.point) return;
+    const p = result.point.clone();
     anglePoints.push(p);
     createMarker(p, 0x00ff00);
     if (anglePoints.length === 3) {
@@ -1157,9 +1141,13 @@ const angleHandler = async (event: MouseEvent) => {
 const slopePoints: THREE.Vector3[] = [];
 const slopeHandler = async (event: MouseEvent) => {
     if (activeTool !== 'slope') return;
-    const hit = getIntersection(event);
-    if (!hit) return;
-    const p = hit.point.clone();
+    const rect = container.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    lastPointerNDC = new THREE.Vector2(x, y);
+    const result = await simpleRaycaster.castRay();
+    if (!result || !result.point) return;
+    const p = result.point.clone();
     slopePoints.push(p);
     createMarker(p, 0x00ff00);
     if (slopePoints.length === 2) {
@@ -1212,11 +1200,12 @@ const grids = components.get(OBC.Grids);
 // MÓDULO DE ATAJOS DE TECLADO (Funciona en modo Capture) 
 // ==================================================================== 
 
-// 1. Función auxiliar para limpiar herramientas (necesaria para la tecla ESC)
-function deactivateAllTools() {
-    if (typeof activeTool !== 'undefined') activeTool = 'none';
-    if (typeof measurementMode !== 'undefined') measurementMode = null;
-    if (typeof snappingCursor !== 'undefined' && snappingCursor) snappingCursor.visible = false;
+// 1. Función auxiliar para limpiar herramientas (necesaria para la tecla ESC) 
+function deactivateAllTools() { 
+    // Si tienes variables globales para herramientas, resetealas aquí 
+    if (typeof activeTool !== 'undefined') activeTool = 'none'; 
+    if (typeof measurementMode !== 'undefined') measurementMode = null; 
+    if (typeof snappingCursor !== 'undefined' && snappingCursor) snappingCursor.visible = false; 
     
     if (typeof container !== 'undefined' && container) {
         container.removeEventListener('click', onMeasureClick);
@@ -1228,33 +1217,24 @@ function deactivateAllTools() {
         container.removeEventListener('pointerdown', slopeHandler as any, { capture: true });
     }
     
-    if (typeof components !== 'undefined') {
-        try {
-            const highlighter = components.get(OBF.Highlighter);
-            highlighter.clear('select');
-            highlighter.clear('hover');
-            highlighter.enabled = true;
-        } catch (e) {
-            console.log("No se pudo limpiar highlighter", e);
-        }
-        
-        try {
-            if (typeof area !== 'undefined') {
-                area.enabled = false;
-            }
-        } catch {
-            // Ignorar errores al desactivar área
-        }
-    }
+    // Limpiar selección del Highlighter de OBC 
+    if (typeof components !== 'undefined') { 
+        try { 
+            // Asegúrate de importar OBF o usar la referencia correcta a Highlighter 
+            // const highlighter = components.get(OBF.Highlighter); 
+            // highlighter.clear('select'); 
+        } catch(e) { console.log("No se pudo limpiar highlighter", e); } 
+    } 
     
-    if (typeof tempMeasurementLine !== 'undefined' && tempMeasurementLine) {
-        if (typeof world !== 'undefined') world.scene.three.remove(tempMeasurementLine);
-        tempMeasurementLine = null;
-    }
-    if (typeof measurementPoints !== 'undefined') measurementPoints = [];
+    // Limpiar líneas temporales de medición si existen 
+    if (typeof tempMeasurementLine !== 'undefined' && tempMeasurementLine) { 
+        if (typeof world !== 'undefined') world.scene.three.remove(tempMeasurementLine); 
+        tempMeasurementLine = null; 
+    } 
+    if (typeof measurementPoints !== 'undefined') measurementPoints = []; 
     
-    console.log("Herramientas desactivadas");
-}
+    console.log("Herramientas desactivadas"); 
+} 
 
 // 2. El Listener Maestro 
 window.addEventListener('keydown', async (e) => { 
