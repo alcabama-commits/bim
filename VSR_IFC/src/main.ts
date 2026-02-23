@@ -123,16 +123,25 @@ let activeTool: 'none' | 'angle' | 'slope' | 'point' = 'none';
 const customMeshes: THREE.Mesh[] = [];
 
 // --- UI & World Setup ---
-const container = document.getElementById('app')!;
+const container = document.getElementById('viewer-container') as HTMLElement;
 const components = new OBC.Components();
-const worlds = components.get(OBC.Worlds);
-const world = worlds.create();
+if (!(components as any).meshes) (components as any).meshes = [];
 
-world.scene = new OBC.Scene(components);
-world.renderer = new OBC.Renderer(components, container);
-world.camera = new OBC.Camera(components);
+const worlds = components.get(OBC.Worlds);
+const world = worlds.create<
+  OBC.SimpleScene,
+  OBC.OrthoPerspectiveCamera,
+  OBC.SimpleRenderer
+>();
+
+world.scene = new OBC.SimpleScene(components);
+world.scene.setup();
+
+world.renderer = new OBC.SimpleRenderer(components, container);
+world.camera = new OBC.OrthoPerspectiveCamera(components);
 
 components.init();
+BUI.Manager.init();
 
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
@@ -182,9 +191,9 @@ function createSnapMarker() {
 }
 
 // --- Debug Panel ---
-const debugPanel = document.getElementById('debug-panel')!;
+const debugPanel = document.getElementById('debug-panel');
 const logToScreen = (msg: string) => {
-    debugPanel.textContent = msg;
+    if (debugPanel) debugPanel.textContent = msg;
     console.log('[UI]', msg);
 };
 
