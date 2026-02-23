@@ -119,7 +119,7 @@ THREE.Mesh.prototype.raycast = function(raycaster, intersects) {
 };
 
 // --- Measurement State ---
-let activeTool: 'none' | 'angle' | 'slope' | 'point' = 'none';
+let activeTool: 'none' | 'angle' | 'slope' | 'point' | 'area' = 'none';
 const customMeshes: THREE.Mesh[] = [];
 
 // --- UI & World Setup ---
@@ -663,7 +663,7 @@ container.addEventListener('mousemove', (event) => {
         return;
     }
     
-    if (['angle', 'slope', 'point'].includes(activeTool)) {
+    if (['angle', 'slope', 'point', 'area'].includes(activeTool)) {
         const hit = getIntersection(event);
         if (hit) {
             cursorMesh.visible = true;
@@ -789,12 +789,14 @@ document.getElementById('btn-measure-slope')?.addEventListener('click', () => {
 document.getElementById('btn-measure-area')?.addEventListener('click', () => {
     if (area.enabled) {
         area.enabled = false;
+        activeTool = 'none';
         setActiveMeasureButton(null);
         logToScreen('Area tool deactivated');
     } else {
         deactivateAllTools();
         area.enabled = true;
         area.create();
+        activeTool = 'area';
         setActiveMeasureButton('btn-measure-area');
         logToScreen('Area tool activated');
     }
@@ -1112,15 +1114,11 @@ async function onMeasureClick(event: MouseEvent) {
 }
 
 const anglePoints: THREE.Vector3[] = [];
-const angleHandler = async (event: MouseEvent) => {
+const angleHandler = (event: MouseEvent) => {
     if (activeTool !== 'angle') return;
-    const rect = container.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    lastPointerNDC = new THREE.Vector2(x, y);
-    const result = await simpleRaycaster.castRay();
-    if (!result || !result.point) return;
-    const p = result.point.clone();
+    const hit = getIntersection(event);
+    if (!hit) return;
+    const p = hit.point.clone();
     anglePoints.push(p);
     createMarker(p, 0x00ff00);
     if (anglePoints.length === 3) {
@@ -1139,15 +1137,11 @@ const angleHandler = async (event: MouseEvent) => {
 };
 
 const slopePoints: THREE.Vector3[] = [];
-const slopeHandler = async (event: MouseEvent) => {
+const slopeHandler = (event: MouseEvent) => {
     if (activeTool !== 'slope') return;
-    const rect = container.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    lastPointerNDC = new THREE.Vector2(x, y);
-    const result = await simpleRaycaster.castRay();
-    if (!result || !result.point) return;
-    const p = result.point.clone();
+    const hit = getIntersection(event);
+    if (!hit) return;
+    const p = hit.point.clone();
     slopePoints.push(p);
     createMarker(p, 0x00ff00);
     if (slopePoints.length === 2) {
