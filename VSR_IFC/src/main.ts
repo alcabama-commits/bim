@@ -134,6 +134,13 @@ world.camera = new OBC.Camera(components);
 
 components.init();
 
+const localGeometry = new THREE.BoxGeometry(10, 10, 10);
+const localMaterial = new THREE.MeshBasicMaterial({ color: 0x2196F3, wireframe: false });
+const localMesh = new THREE.Mesh(localGeometry, localMaterial);
+localMesh.position.set(0, 5, 0);
+world.scene.three.add(localMesh);
+components.meshes.push(localMesh);
+
 const mouse = new THREE.Vector2();
 const raycaster = new THREE.Raycaster();
 
