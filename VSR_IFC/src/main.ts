@@ -804,7 +804,8 @@ document.getElementById('btn-measure-area')?.addEventListener('click', () => {
         setActiveMeasureButton('btn-measure-area');
         logToScreen('Área activada (Click para puntos, Doble Click o click en inicio para terminar)');
         
-        container.addEventListener('click', areaClick);
+        container.addEventListener('click', areaClick, { capture: true });
+        container.addEventListener('pointerdown', areaClick, { capture: true }); // Add pointerdown for better response
         container.addEventListener('mousemove', areaMouseMove);
         container.addEventListener('dblclick', areaDbClick);
     }
@@ -1382,12 +1383,23 @@ const areaClick = (event: MouseEvent) => {
     if (activeTool !== 'area') return;
     if ((event.target as HTMLElement).closest('button') || (event.target as HTMLElement).closest('.sidebar')) return;
 
+    // Use stopPropagation to prevent other handlers
+    event.stopImmediatePropagation();
+    // Prevent default to avoid double firing (click + pointerdown)
+    // But be careful not to block orbit controls if no hit
+    
     const hit = getIntersection(event);
-    if (!hit) return;
+    if (!hit) {
+        console.log("Area Tool: No hit detected");
+        return;
+    }
+    
+    console.log("Area Tool: Hit at", hit.point);
     
     if (areaPoints.length >= 3) {
         const dist = hit.point.distanceTo(areaPoints[0]);
         if (dist < 0.5) {
+            console.log("Area Tool: Closing loop");
             finishAreaMeasurement();
             return;
         }
@@ -1413,6 +1425,7 @@ const areaMouseMove = (event: MouseEvent) => {
 
 const areaDbClick = (event: MouseEvent) => {
      if (activeTool !== 'area') return;
+     console.log("Area Tool: Double click finish");
      finishAreaMeasurement();
 };
 
@@ -1453,7 +1466,8 @@ function deactivateAllTools() {
         container.removeEventListener('click', slopeHandler as any, { capture: true });
         container.removeEventListener('pointerdown', slopeHandler as any, { capture: true });
         
-        container.removeEventListener('click', areaClick);
+        container.removeEventListener('click', areaClick, { capture: true });
+        container.removeEventListener('pointerdown', areaClick, { capture: true });
         container.removeEventListener('mousemove', areaMouseMove);
         container.removeEventListener('dblclick', areaDbClick);
     }
