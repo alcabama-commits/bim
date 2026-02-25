@@ -815,6 +815,13 @@ document.getElementById('btn-none')?.addEventListener('click', () => {
     logToScreen('Tools deactivated');
 });
 
+document.getElementById('btn-measure-delete')?.addEventListener('click', () => {
+    clearMeasurements();
+    // Also deactivate any active tool
+    deactivateAllTools();
+    setActiveMeasureButton(null);
+});
+
 // --- ZOOM TO FIT ---
 async function zoomToFit() {
     if (components.meshes && components.meshes.length > 0) {
@@ -1019,6 +1026,50 @@ function createLabel(text: string, position: THREE.Vector3) {
         requestAnimationFrame(update);
     };
     update();
+    return div;
+}
+
+function clearMeasurements() {
+    // Clear manual measurements (Markers & Lines)
+    measurementMarkers.forEach(marker => {
+        if (marker.parent) marker.parent.remove(marker);
+    });
+    measurementMarkers.length = 0;
+    
+    measurementLabels.forEach(label => label.remove());
+    measurementLabels.length = 0;
+    
+    // Clear temp line
+    if (tempMeasurementLine) {
+        if (tempMeasurementLine.parent) tempMeasurementLine.parent.remove(tempMeasurementLine);
+        tempMeasurementLine = null;
+    }
+    measurementPoints = [];
+    anglePoints.length = 0;
+    slopePoints.length = 0;
+
+    // Clear Area Measurement
+    if (area) {
+        try {
+            area.deleteAll();
+        } catch (e) {
+            console.warn("Could not clear area measurements", e);
+        }
+        area.enabled = false; 
+    }
+    
+    // Clear custom meshes (e.g. from Point tool)
+    customMeshes.forEach(mesh => {
+        if (mesh.parent) mesh.parent.remove(mesh);
+    });
+    customMeshes.length = 0;
+
+    // Reset snap markers
+    if (snapMarker) snapMarker.visible = false;
+    if (snapLine) snapLine.visible = false;
+    lastSnapped = null;
+
+    logToScreen('Todas las mediciones borradas');
 }
 
 async function onMeasureMouseMove(event: MouseEvent) {
@@ -1208,7 +1259,13 @@ function deactivateAllTools() {
     if (typeof measurementMode !== 'undefined') measurementMode = null; 
     if (typeof snappingCursor !== 'undefined' && snappingCursor) snappingCursor.visible = false; 
     
+    // Disable Area Tool
+    if (typeof area !== 'undefined' && area) {
+        area.enabled = false;
+    }
+
     if (typeof container !== 'undefined' && container) {
+
         container.removeEventListener('click', onMeasureClick);
         container.removeEventListener('mousemove', onMeasureMouseMove);
         container.removeEventListener('click', pointHandler as any);
