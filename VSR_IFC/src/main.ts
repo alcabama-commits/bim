@@ -794,18 +794,19 @@ document.getElementById('btn-measure-slope')?.addEventListener('click', () => {
 });
 
 document.getElementById('btn-measure-area')?.addEventListener('click', () => {
-    if (area.enabled) {
-        area.enabled = false;
-        activeTool = 'none';
+    if (activeTool === 'area') {
+        deactivateAllTools();
         setActiveMeasureButton(null);
-        logToScreen('Area tool deactivated');
+        logToScreen('Herramienta de Área desactivada');
     } else {
         deactivateAllTools();
-        area.enabled = true;
-        area.create();
         activeTool = 'area';
         setActiveMeasureButton('btn-measure-area');
-        logToScreen('Area tool activated');
+        logToScreen('Área activada (Click para puntos, Doble Click o click en inicio para terminar)');
+        
+        container.addEventListener('click', areaClick);
+        container.addEventListener('mousemove', areaMouseMove);
+        container.addEventListener('dblclick', areaDbClick);
     }
 });
 
@@ -1248,6 +1249,173 @@ const grids = components.get(OBC.Grids);
 
 // Initialize Clipper (Already done above, but ensure access)
 
+// --- Custom Area Tool Logic ---
+let areaPoints: THREE.Vector3[] = [];
+let tempAreaLine: THREE.Line | null = null;
+let tempAreaMesh: THREE.Mesh | null = null;
+
+function updateAreaVisuals(currentPoint?: THREE.Vector3) {
+    const points = [...areaPoints];
+    if (currentPoint) points.push(currentPoint);
+    
+    if (points.length < 2) {
+        if (tempAreaLine) {
+            world.scene.three.remove(tempAreaLine);
+            tempAreaLine = null;
+        }
+        if (tempAreaMesh) {
+            world.scene.three.remove(tempAreaMesh);
+            tempAreaMesh = null;
+        }
+        return;
+    }
+
+    // Close the loop for visuals if we have enough points or just show strip
+    const showLoop = points.length > 2;
+    const renderPoints = showLoop ? [...points, points[0]] : points;
+
+    const geometry = new THREE.BufferGeometry().setFromPoints(renderPoints);
+    
+    if (!tempAreaLine) {
+        const material = new THREE.LineBasicMaterial({ color: 0x00aaff, depthTest: false });
+        tempAreaLine = new THREE.Line(geometry, material);
+        world.scene.three.add(tempAreaLine);
+    } else {
+        tempAreaLine.geometry.dispose();
+        tempAreaLine.geometry = geometry;
+    }
+    
+    if (points.length >= 3) {
+        // Simple triangulation (Fan)
+        const indices = [];
+        for (let i = 1; i < points.length - 1; i++) {
+            indices.push(0, i, i + 1);
+        }
+        const meshGeo = new THREE.BufferGeometry().setFromPoints(points);
+        meshGeo.setIndex(indices);
+        meshGeo.computeVertexNormals();
+        
+        if (!tempAreaMesh) {
+             const mat = new THREE.MeshBasicMaterial({ color: 0x00aaff, side: THREE.DoubleSide, opacity: 0.2, transparent: true, depthTest: false });
+             tempAreaMesh = new THREE.Mesh(meshGeo, mat);
+             world.scene.three.add(tempAreaMesh);
+        } else {
+             tempAreaMesh.geometry.dispose();
+             tempAreaMesh.geometry = meshGeo;
+        }
+    } else if (tempAreaMesh) {
+        world.scene.three.remove(tempAreaMesh);
+        tempAreaMesh = null;
+    }
+}
+
+function calculatePolygonArea(points: THREE.Vector3[]): number {
+    if (points.length < 3) return 0;
+    
+    const normal = new THREE.Vector3();
+    for (let i = 0; i < points.length; i++) {
+        const j = (i + 1) % points.length;
+        normal.x += (points[i].y - points[j].y) * (points[i].z + points[j].z);
+        normal.y += (points[i].z - points[j].z) * (points[i].x + points[j].x);
+        normal.z += (points[i].x - points[j].x) * (points[i].y + points[j].y);
+    }
+    normal.normalize();
+    
+    const up = new THREE.Vector3(0, 0, 1);
+    const quat = new THREE.Quaternion().setFromUnitVectors(normal, up);
+    const projected = points.map(p => p.clone().applyQuaternion(quat));
+    
+    let area = 0;
+    for (let i = 0; i < projected.length; i++) {
+        const j = (i + 1) % projected.length;
+        area += projected[i].x * projected[j].y - projected[j].x * projected[i].y;
+    }
+    
+    return Math.abs(area) / 2.0;
+}
+
+function finishAreaMeasurement() {
+    if (areaPoints.length < 3) {
+        logToScreen('Se necesitan al menos 3 puntos para un área.');
+        return;
+    }
+    
+    const points = [...areaPoints, areaPoints[0]];
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({ color: 0x00aaff, depthTest: false, linewidth: 2 });
+    const line = new THREE.Line(geometry, material);
+    world.scene.three.add(line);
+    measurementMarkers.push(line as any);
+    
+    const indices = [];
+    for (let i = 1; i < areaPoints.length - 1; i++) {
+        indices.push(0, i, i + 1);
+    }
+    const meshGeo = new THREE.BufferGeometry().setFromPoints(areaPoints);
+    meshGeo.setIndex(indices);
+    const meshMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, side: THREE.DoubleSide, opacity: 0.2, transparent: true, depthTest: false });
+    const mesh = new THREE.Mesh(meshGeo, meshMat);
+    world.scene.three.add(mesh);
+    customMeshes.push(mesh);
+    
+    const areaVal = calculatePolygonArea(areaPoints);
+    
+    const center = new THREE.Vector3();
+    areaPoints.forEach(p => center.add(p));
+    center.divideScalar(areaPoints.length);
+    
+    createLabel(`Área: ${areaVal.toFixed(2)} m²`, center);
+    logToScreen(`Área: ${areaVal.toFixed(2)} m²`);
+    
+    areaPoints = [];
+    if (tempAreaLine) {
+        world.scene.three.remove(tempAreaLine);
+        tempAreaLine = null;
+    }
+    if (tempAreaMesh) {
+        world.scene.three.remove(tempAreaMesh);
+        tempAreaMesh = null;
+    }
+}
+
+const areaClick = (event: MouseEvent) => {
+    if (activeTool !== 'area') return;
+    if ((event.target as HTMLElement).closest('button') || (event.target as HTMLElement).closest('.sidebar')) return;
+
+    const hit = getIntersection(event);
+    if (!hit) return;
+    
+    if (areaPoints.length >= 3) {
+        const dist = hit.point.distanceTo(areaPoints[0]);
+        if (dist < 0.5) {
+            finishAreaMeasurement();
+            return;
+        }
+    }
+    
+    const p = hit.point.clone();
+    areaPoints.push(p);
+    createMarker(p, 0x00aaff);
+    updateAreaVisuals();
+};
+
+const areaMouseMove = (event: MouseEvent) => {
+    if (activeTool !== 'area') return;
+    const hit = getIntersection(event);
+    if (hit) {
+        cursorMesh.visible = true;
+        cursorMesh.position.copy(hit.point);
+        if (areaPoints.length > 0) updateAreaVisuals(hit.point);
+    } else {
+        cursorMesh.visible = false;
+    }
+};
+
+const areaDbClick = (event: MouseEvent) => {
+     if (activeTool !== 'area') return;
+     finishAreaMeasurement();
+};
+
 // ==================================================================== 
 // MÓDULO DE ATAJOS DE TECLADO (Funciona en modo Capture) 
 // ==================================================================== 
@@ -1264,6 +1432,17 @@ function deactivateAllTools() {
         area.enabled = false;
     }
 
+    // Custom Area Tool Cleanup
+    areaPoints = [];
+    if (tempAreaLine) {
+        if (typeof world !== 'undefined') world.scene.three.remove(tempAreaLine);
+        tempAreaLine = null;
+    }
+    if (tempAreaMesh) {
+        if (typeof world !== 'undefined') world.scene.three.remove(tempAreaMesh);
+        tempAreaMesh = null;
+    }
+
     if (typeof container !== 'undefined' && container) {
 
         container.removeEventListener('click', onMeasureClick);
@@ -1273,6 +1452,10 @@ function deactivateAllTools() {
         container.removeEventListener('pointerdown', angleHandler as any, { capture: true });
         container.removeEventListener('click', slopeHandler as any, { capture: true });
         container.removeEventListener('pointerdown', slopeHandler as any, { capture: true });
+        
+        container.removeEventListener('click', areaClick);
+        container.removeEventListener('mousemove', areaMouseMove);
+        container.removeEventListener('dblclick', areaDbClick);
     }
     
     // Limpiar selección del Highlighter de OBC 
