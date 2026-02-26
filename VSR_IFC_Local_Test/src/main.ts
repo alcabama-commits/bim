@@ -705,6 +705,7 @@ clipper.material = new THREE.MeshBasicMaterial({
 // --- ClipStyler Setup ---
 const clipStyler = components.get(OBF.ClipStyler);
 clipStyler.enabled = true;
+clipStyler.world = world; // Ensure ClipStyler knows about the world
 
 const fillMaterial = new THREE.MeshBasicMaterial({
     color: 0xCFD8DC,
@@ -730,6 +731,7 @@ clipStyler.styles.set('filled', {
 });
 
 clipper.onAfterCreate.add((plane) => {
+    console.log('[DEBUG] Clipper Plane Created:', plane);
     let planeId = '';
     for(const [id, p] of clipper.list) {
         if(p === plane) {
@@ -738,14 +740,25 @@ clipper.onAfterCreate.add((plane) => {
         }
     }
     
+    console.log('[DEBUG] Found Plane ID:', planeId);
+
     if (planeId) {
          // Apply style to all meshes
          // We can refine this later to apply different styles per category if needed
-         clipStyler.createFromClipping(planeId, {
-             items: {
-                 all: { style: 'filled' }
-             }
-         });
+         try {
+             console.log('[DEBUG] Applying ClipStyle "filled" to all items...');
+             clipStyler.createFromClipping(planeId, {
+                 world: world, // Explicitly pass world
+                 items: {
+                     all: { style: 'filled' }
+                 }
+             });
+             console.log('[DEBUG] ClipStyle applied successfully.');
+         } catch (e) {
+             console.error('[DEBUG] Failed to apply ClipStyle:', e);
+         }
+    } else {
+        console.warn('[DEBUG] Could not find Plane ID in clipper.list');
     }
 });
 
