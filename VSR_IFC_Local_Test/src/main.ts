@@ -4615,7 +4615,7 @@ function createLine(start: THREE.Vector3, end: THREE.Vector3) {
     return line;
 }
 
-function createLabel(text: string, position: THREE.Vector3): HTMLDivElement {
+function createLabel(text: string, position: THREE.Vector3) {
     const div = document.createElement('div');
     div.className = 'measurement-label';
     div.textContent = text;
@@ -4640,7 +4640,6 @@ function createLabel(text: string, position: THREE.Vector3): HTMLDivElement {
         requestAnimationFrame(update);
     };
     update();
-    return div;
 }
 
 async function onMeasureMouseMove(event: MouseEvent) {
@@ -4746,86 +4745,7 @@ async function onMeasureClick(event: MouseEvent) {
         const text = `X:${point.x.toFixed(2)} Y:${point.y.toFixed(2)} Z:${point.z.toFixed(2)}`;
         createLabel(text, point);
         logToScreen(`Point: ${text}`);
-    } else if (measurementMode === 'volume') {
-        // Volume Mode: Single Click Selection
-        const mesh = result.object as THREE.Mesh;
-        const instanceId = result.instanceId;
-
-        // Check for Ctrl key for cumulative selection
-        if (!event.ctrlKey) {
-             // Reset if Ctrl not held
-             // But wait, user might want to select one object and see its volume.
-             // If Ctrl is NOT held, we usually clear previous selection.
-             // However, for measurement tools, maybe we just want to ADD a new label?
-             // User said: "ir seleccionando con Ctrl vaya sumando". 
-             // Implies: Single click -> Show volume for THIS object (and maybe clear others?)
-             // Ctrl + Click -> Add to total.
-             
-             // Let's implement: 
-             // Single Click: Clear previous volume measurements, select this one.
-             // Ctrl + Click: Add this one to existing.
-             
-             // We need to store the current volume session state?
-             // Actually, `measurementLabels` and `measurementMarkers` are global for tools.
-             // If we want to "clear" on single click, we call `clearMeasurements()`.
-             clearMeasurements();
-        }
-
-        console.log('[DEBUG] Calculating volume for:', mesh, 'Instance:', instanceId);
-        
-        let volume = 0;
-        try {
-            volume = getMeshVolume(mesh, instanceId);
-        } catch (err) {
-            console.error('Volume calculation failed:', err);
-            logToScreen('Volume calculation failed');
-            return;
-        }
-
-        if (volume > 0) {
-            // Visual feedback: Highlight (Green for active selection?)
-            // For now, let's just use a marker at the click point
-            createMarker(point, 0x00ff00);
-
-            // Add to total volume tracking?
-            // If we want a "Total" label, we need to track it.
-            // But currently `createLabel` makes individual labels.
-            // User asked: "ir seleccionando con Ctrl vaya sumando" (go selecting with Ctrl and it keeps summing).
-            // This implies a SINGLE "Total Volume" display might be better, OR individual labels + a sum.
-            // "aparezca de una vez la etiqueta" (label appears at once).
-            
-            // Let's attach a label to THIS object.
-            // AND update a "Total Volume" indicator on screen?
-            
-            // Let's calculate total of currently visible labels? No, that's parsing strings.
-            // Let's attach volume data to the marker/label object or store in a list.
-            
-            // Simplified approach:
-            // 1. Create label for THIS object.
-            // 2. Calculate sum of ALL measured volumes in this session.
-            
-            // We need a way to store values.
-            // Let's add a property to the marker or maintain a list.
-            // Hack: Store volume in the label element's dataset.
-            
-            const labelText = `${volume.toFixed(3)} m³`;
-             const label = createLabel(labelText, point);
-             label.dataset.volume = volume.toString();
-             
-             // Calculate Total
-             let totalVolume = 0;
-             measurementLabels.forEach(l => {
-                 const v = parseFloat(l.dataset.volume || '0');
-                 totalVolume += v;
-             });
-             
-             logToScreen(`Volumen Total: ${totalVolume.toFixed(3)} m³`);
-             
-         } else {
-              logToScreen('Volume is 0');
-         }
-
-     } else if (measurementMode === 'length') {
+    } else if (measurementMode === 'length') {
         measurementPoints.push(point);
         createMarker(point, 0xffff00);
         
