@@ -4276,10 +4276,16 @@ function setupMeasurementTools_Deprecated() {
 async function getVolumeFromProperties(mesh: THREE.Mesh | THREE.InstancedMesh, instanceId: number | undefined): Promise<number | null> {
     try {
         const frag = (mesh as any).fragment;
-        if (!frag) return null;
+        if (!frag) {
+            console.warn('[DEBUG] No fragment found on mesh');
+            return null;
+        }
         
         const model = frag.group;
-        if (!model) return null;
+        if (!model) {
+             console.warn('[DEBUG] No model group found on fragment');
+             return null;
+        }
         
         let expressID: number | null = null;
         const idx = instanceId ?? 0;
@@ -4294,25 +4300,59 @@ async function getVolumeFromProperties(mesh: THREE.Mesh | THREE.InstancedMesh, i
              expressID = frag.items[idx];
         }
         
-        if (expressID === null || expressID === undefined) return null;
+        if (expressID === null || expressID === undefined) {
+             console.warn('[DEBUG] Could not determine Express ID for instance:', idx);
+             return null;
+        }
         
-        console.log(`[DEBUG] Property Lookup: Model ${model.uuid} Item ${expressID}`);
+        console.log(`[DEBUG] Property Lookup: Model ${model.uuid} Item ExpressID: ${expressID}`);
         
+        // --- 1. Deep Search in Direct Properties ---
+        if (model.properties && model.properties[expressID]) {
+             const props = model.properties[expressID];
+             console.log('[DEBUG] Direct Properties found:', props);
+
+             // Helper to recursively find volume
+             const findVolumeDeep = (obj: any, depth = 0): number | null => {
+                if (depth > 3) return null; // Limit recursion
+                if (!obj || typeof obj !== 'object') return null;
+
+                for (const key in obj) {
+                    // Check key name
+                    if (/Volume|Volumen|NetVolume|GrossVolume|Qto_Volume|BaseQuantities/i.test(key)) {
+                        const val = obj[key];
+                        // If it's a number, return it
+                        if (typeof val === 'number') return val;
+                        // If it's an object with value property
+                        if (val && typeof val === 'object' && val.value !== undefined) {
+                             const num = Number(val.value);
+                             if (!isNaN(num)) return num;
+                        }
+                    }
+                    
+                    // Recurse into objects (arrays or objects)
+                    if (typeof obj[key] === 'object') {
+                        const result = findVolumeDeep(obj[key], depth + 1);
+                        if (result !== null) return result;
+                    }
+                }
+                return null;
+             };
+
+             const directVolume = findVolumeDeep(props);
+             if (directVolume !== null) {
+                 console.log(`[DEBUG] Found volume in direct properties (Deep Search): ${directVolume}`);
+                 return directVolume;
+             }
+        } else {
+             console.warn('[DEBUG] No direct properties found for ExpressID:', expressID);
+        }
+
+        // --- 2. Check Relations (Quantities) ---
         const fragments = components.get(OBC.FragmentsManager);
         if (!fragments) return null;
-        
-        // Check direct properties first (fastest)
-        if (model.properties && model.properties[expressID]) {
-             const directProp = model.properties[expressID];
-             // Check generic property keys
-             for (const key of ['Volume', 'Volumen', 'NetVolume', 'GrossVolume']) {
-                 if (directProp[key] !== undefined) {
-                     const val = directProp[key];
-                     const num = typeof val === 'object' && val !== null ? val.value : val;
-                     if (typeof num === 'number') return num;
-                 }
-             }
-        }
+
+        console.log('[DEBUG] Checking relations via FragmentsManager...');
 
         // Use fragments.getData to resolve relations (slower but thorough)
         const data = await fragments.getData({ [model.uuid]: [expressID] }, {
@@ -4322,12 +4362,16 @@ async function getVolumeFromProperties(mesh: THREE.Mesh | THREE.InstancedMesh, i
         });
         
         const modelData = data[model.uuid];
-        if (!modelData || modelData.length === 0) return null;
+        if (!modelData || modelData.length === 0) {
+             console.warn('[DEBUG] No relation data returned');
+             return null;
+        }
         
         const item = modelData[0];
         const rels = item.relations?.IsDefinedBy;
         
         if (rels && Array.isArray(rels)) {
+            console.log(`[DEBUG] Found ${rels.length} IsDefinedBy relations`);
             for (const rel of rels) {
                 const def = rel.relatingPropertyDefinition || rel.RelatingPropertyDefinition;
                 if (!def) continue;
@@ -4340,26 +4384,38 @@ async function getVolumeFromProperties(mesh: THREE.Mesh | THREE.InstancedMesh, i
                     for (const q of quantities) {
                         const qAttrs = q.attributes || q;
                         const name = (qAttrs.Name?.value || qAttrs.Name || "").toString();
+                        console.log(`[DEBUG] Checking Quantity: ${name}`);
+                        
                         if (/Volume|Volumen|NetVolume|GrossVolume/i.test(name)) {
                             const val = qAttrs.VolumeValue?.value ?? qAttrs.VolumeValue ?? qAttrs.volumeValue?.value ?? qAttrs.volumeValue;
-                            if (val !== undefined) return Number(val);
+                            if (val !== undefined) {
+                                 console.log(`[DEBUG] Found volume in Quantity ${name}: ${val}`);
+                                 return Number(val);
+                            }
                         }
                     }
                 }
                 
-                // Check Properties
+                // Check Property Sets
                 const props = attributes.HasProperties || attributes.hasProperties;
                 if (props && Array.isArray(props)) {
                      for (const p of props) {
                         const pAttrs = p.attributes || p;
                         const name = (pAttrs.Name?.value || pAttrs.Name || "").toString();
+                         console.log(`[DEBUG] Checking Property: ${name}`);
+
                          if (/Volume|Volumen|NetVolume|GrossVolume/i.test(name)) {
                             const val = pAttrs.NominalValue?.value ?? pAttrs.NominalValue ?? pAttrs.nominalValue?.value ?? pAttrs.nominalValue;
-                            if (val !== undefined) return Number(val);
+                            if (val !== undefined) {
+                                console.log(`[DEBUG] Found volume in Property ${name}: ${val}`);
+                                return Number(val);
+                            }
                         }
                      }
                 }
             }
+        } else {
+             console.log('[DEBUG] No IsDefinedBy relations found');
         }
         
     } catch (e) {
@@ -4370,7 +4426,10 @@ async function getVolumeFromProperties(mesh: THREE.Mesh | THREE.InstancedMesh, i
 
 
 function getMeshVolume(mesh: THREE.Mesh | THREE.InstancedMesh, instanceId?: number): number {
-    if (!mesh.geometry) return 0;
+    if (!mesh.geometry) {
+        console.warn("getMeshVolume: No geometry found");
+        return 0;
+    }
     
     const geometry = mesh.geometry;
     const pos = geometry.attributes.position;
@@ -4383,24 +4442,24 @@ function getMeshVolume(mesh: THREE.Mesh | THREE.InstancedMesh, instanceId?: numb
 
     // Create a matrix that transforms local vertices to world space
     const matrix = new THREE.Matrix4().copy(mesh.matrixWorld);
-    if (mesh instanceof THREE.InstancedMesh && instanceId !== undefined) {
-        const instanceMatrix = new THREE.Matrix4();
-        mesh.getMatrixAt(instanceId, instanceMatrix);
-        matrix.multiply(instanceMatrix);
+    
+    if (mesh instanceof THREE.InstancedMesh) {
+        if (instanceId !== undefined) {
+             const instanceMatrix = new THREE.Matrix4();
+             mesh.getMatrixAt(instanceId, instanceMatrix);
+             matrix.multiply(instanceMatrix);
+        } else {
+             console.warn("[DEBUG] getMeshVolume: InstancedMesh but no instanceId provided. Using base transform.");
+        }
     }
     
-    console.log('[DEBUG] getMeshVolume: Matrix elements:', matrix.elements);
-    console.log('[DEBUG] getMeshVolume: Vertex count:', pos.count);
+    console.log(`[DEBUG] getMeshVolume: Vertex count: ${pos.count}, Triangle count: ${index ? index.count / 3 : pos.count / 3}`);
 
     let volume = 0;
     const p1 = new THREE.Vector3();
     const p2 = new THREE.Vector3();
     const p3 = new THREE.Vector3();
 
-    // Use a reference point to minimize floating point errors for far-away objects
-    // However, the standard signed volume formula (origin-based) works if we are careful
-    // Let's use the standard method with transformed vertices
-    
     // Helper: Cross product p2 x p3, then dot p1
     // (p1 . (p2 x p3)) / 6
     
@@ -4424,7 +4483,9 @@ function getMeshVolume(mesh: THREE.Mesh | THREE.InstancedMesh, instanceId?: numb
         }
     }
     
-    return Math.abs(volume);
+    const finalVolume = Math.abs(volume);
+    console.log(`[DEBUG] getMeshVolume: Calculated Volume: ${finalVolume}`);
+    return finalVolume;
 }
 
 function setupMeasurementTools() {
