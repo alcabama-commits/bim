@@ -4273,220 +4273,7 @@ function setupMeasurementTools_Deprecated() {
 
 // --- Measurement Tools Implementation (Custom Snapping) ---
 
-async function getVolumeFromProperties(mesh: THREE.Mesh | THREE.InstancedMesh, instanceId: number | undefined): Promise<number | null> {
-    try {
-        const frag = (mesh as any).fragment;
-        if (!frag) {
-            console.warn('[DEBUG] No fragment found on mesh');
-            return null;
-        }
-        
-        const model = frag.group;
-        if (!model) {
-             console.warn('[DEBUG] No model group found on fragment');
-             return null;
-        }
-        
-        let expressID: number | null = null;
-        const idx = instanceId ?? 0;
-        
-        // Try to get Express ID using various methods
-        if (typeof frag.getItemID === 'function') {
-             expressID = frag.getItemID(idx);
-        } else if (frag.ids) {
-             // Check if it's TypedArray or Array
-             expressID = frag.ids[idx];
-        } else if (frag.items) {
-             expressID = frag.items[idx];
-        }
-        
-        if (expressID === null || expressID === undefined) {
-             console.warn('[DEBUG] Could not determine Express ID for instance:', idx);
-             return null;
-        }
-        
-        console.log(`[DEBUG] Property Lookup: Model ${model.uuid} Item ExpressID: ${expressID}`);
-        
-        // --- 1. Deep Search in Direct Properties ---
-        if (model.properties && model.properties[expressID]) {
-             const props = model.properties[expressID];
-             console.log('[DEBUG] Direct Properties found:', props);
 
-             // Helper to recursively find volume
-             const findVolumeDeep = (obj: any, depth = 0): number | null => {
-                if (depth > 3) return null; // Limit recursion
-                if (!obj || typeof obj !== 'object') return null;
-
-                for (const key in obj) {
-                    // Check key name
-                    if (/Volume|Volumen|NetVolume|GrossVolume|Qto_Volume|BaseQuantities/i.test(key)) {
-                        const val = obj[key];
-                        // If it's a number, return it
-                        if (typeof val === 'number') return val;
-                        // If it's an object with value property
-                        if (val && typeof val === 'object' && val.value !== undefined) {
-                             const num = Number(val.value);
-                             if (!isNaN(num)) return num;
-                        }
-                    }
-                    
-                    // Recurse into objects (arrays or objects)
-                    if (typeof obj[key] === 'object') {
-                        const result = findVolumeDeep(obj[key], depth + 1);
-                        if (result !== null) return result;
-                    }
-                }
-                return null;
-             };
-
-             const directVolume = findVolumeDeep(props);
-             if (directVolume !== null) {
-                 console.log(`[DEBUG] Found volume in direct properties (Deep Search): ${directVolume}`);
-                 return directVolume;
-             }
-        } else {
-             console.warn('[DEBUG] No direct properties found for ExpressID:', expressID);
-        }
-
-        // --- 2. Check Relations (Quantities) ---
-        const fragments = components.get(OBC.FragmentsManager);
-        if (!fragments) return null;
-
-        console.log('[DEBUG] Checking relations via FragmentsManager...');
-
-        // Use fragments.getData to resolve relations (slower but thorough)
-        const data = await fragments.getData({ [model.uuid]: [expressID] }, {
-            relations: {
-                IsDefinedBy: { attributes: true, relations: true }
-            }
-        });
-        
-        const modelData = data[model.uuid];
-        if (!modelData || modelData.length === 0) {
-             console.warn('[DEBUG] No relation data returned');
-             return null;
-        }
-        
-        const item = modelData[0];
-        const rels = item.relations?.IsDefinedBy;
-        
-        if (rels && Array.isArray(rels)) {
-            console.log(`[DEBUG] Found ${rels.length} IsDefinedBy relations`);
-            for (const rel of rels) {
-                const def = rel.relatingPropertyDefinition || rel.RelatingPropertyDefinition;
-                if (!def) continue;
-                
-                const attributes = def.attributes || def;
-                
-                // Check Quantities
-                const quantities = attributes.Quantities || attributes.quantities;
-                if (quantities && Array.isArray(quantities)) {
-                    for (const q of quantities) {
-                        const qAttrs = q.attributes || q;
-                        const name = (qAttrs.Name?.value || qAttrs.Name || "").toString();
-                        console.log(`[DEBUG] Checking Quantity: ${name}`);
-                        
-                        if (/Volume|Volumen|NetVolume|GrossVolume/i.test(name)) {
-                            const val = qAttrs.VolumeValue?.value ?? qAttrs.VolumeValue ?? qAttrs.volumeValue?.value ?? qAttrs.volumeValue;
-                            if (val !== undefined) {
-                                 console.log(`[DEBUG] Found volume in Quantity ${name}: ${val}`);
-                                 return Number(val);
-                            }
-                        }
-                    }
-                }
-                
-                // Check Property Sets
-                const props = attributes.HasProperties || attributes.hasProperties;
-                if (props && Array.isArray(props)) {
-                     for (const p of props) {
-                        const pAttrs = p.attributes || p;
-                        const name = (pAttrs.Name?.value || pAttrs.Name || "").toString();
-                         console.log(`[DEBUG] Checking Property: ${name}`);
-
-                         if (/Volume|Volumen|NetVolume|GrossVolume/i.test(name)) {
-                            const val = pAttrs.NominalValue?.value ?? pAttrs.NominalValue ?? pAttrs.nominalValue?.value ?? pAttrs.nominalValue;
-                            if (val !== undefined) {
-                                console.log(`[DEBUG] Found volume in Property ${name}: ${val}`);
-                                return Number(val);
-                            }
-                        }
-                     }
-                }
-            }
-        } else {
-             console.log('[DEBUG] No IsDefinedBy relations found');
-        }
-        
-    } catch (e) {
-        console.error('Error getting volume from properties:', e);
-    }
-    return null;
-}
-
-
-function getMeshVolume(mesh: THREE.Mesh | THREE.InstancedMesh, instanceId?: number): number {
-    if (!mesh.geometry) {
-        console.warn("getMeshVolume: No geometry found");
-        return 0;
-    }
-    
-    const geometry = mesh.geometry;
-    const pos = geometry.attributes.position;
-    const index = geometry.index;
-    
-    if (!pos) {
-        console.warn("getMeshVolume: No position attribute found");
-        return 0;
-    }
-
-    // Create a matrix that transforms local vertices to world space
-    const matrix = new THREE.Matrix4().copy(mesh.matrixWorld);
-    
-    if (mesh instanceof THREE.InstancedMesh) {
-        if (instanceId !== undefined) {
-             const instanceMatrix = new THREE.Matrix4();
-             mesh.getMatrixAt(instanceId, instanceMatrix);
-             matrix.multiply(instanceMatrix);
-        } else {
-             console.warn("[DEBUG] getMeshVolume: InstancedMesh but no instanceId provided. Using base transform.");
-        }
-    }
-    
-    console.log(`[DEBUG] getMeshVolume: Vertex count: ${pos.count}, Triangle count: ${index ? index.count / 3 : pos.count / 3}`);
-
-    let volume = 0;
-    const p1 = new THREE.Vector3();
-    const p2 = new THREE.Vector3();
-    const p3 = new THREE.Vector3();
-
-    // Helper: Cross product p2 x p3, then dot p1
-    // (p1 . (p2 x p3)) / 6
-    
-    if (index) {
-        for (let i = 0; i < index.count; i += 3) {
-            // Get local coordinates and transform to world
-            p1.fromBufferAttribute(pos, index.getX(i)).applyMatrix4(matrix);
-            p2.fromBufferAttribute(pos, index.getX(i + 1)).applyMatrix4(matrix);
-            p3.fromBufferAttribute(pos, index.getX(i + 2)).applyMatrix4(matrix);
-            
-            // Signed volume of tetrahedron formed by origin and triangle
-            volume += p1.dot(p2.cross(p3)) / 6.0;
-        }
-    } else {
-        for (let i = 0; i < pos.count; i += 3) {
-            p1.fromBufferAttribute(pos, i).applyMatrix4(matrix);
-            p2.fromBufferAttribute(pos, i + 1).applyMatrix4(matrix);
-            p3.fromBufferAttribute(pos, i + 2).applyMatrix4(matrix);
-            
-            volume += p1.dot(p2.cross(p3)) / 6.0;
-        }
-    }
-    
-    const finalVolume = Math.abs(volume);
-    console.log(`[DEBUG] getMeshVolume: Calculated Volume: ${finalVolume}`);
-    return finalVolume;
-}
 
 function setupMeasurementTools() {
     console.log('[DEBUG] Setting up measurement tools...');
@@ -4499,16 +4286,6 @@ function setupMeasurementTools() {
         console.log('[DEBUG] Area Tool initialized');
     } catch (e) {
         console.warn('Could not initialize Area Tool:', e);
-    }
-
-    // Initialize Volume Tool
-    try {
-        volumeTool = components.get(OBF.VolumeMeasurement);
-        volumeTool.world = world;
-        volumeTool.enabled = false;
-        console.log('[DEBUG] Volume Tool initialized');
-    } catch (e) {
-        console.warn('Could not initialize Volume Tool:', e);
     }
 
     // Initialize Snapping Cursor
@@ -4526,7 +4303,6 @@ function setupMeasurementTools() {
     const btnArea = document.getElementById('btn-measure-area');
     const btnAngle = document.getElementById('btn-measure-angle');
     const btnSlope = document.getElementById('btn-measure-slope');
-    const btnVolume = document.getElementById('btn-measure-volume');
     const btnDelete = document.getElementById('btn-measure-delete');
     
     if (btnLength) {
@@ -4567,27 +4343,12 @@ function setupMeasurementTools() {
         });
     }
 
-    if (btnVolume) {
-        btnVolume.addEventListener('click', () => {
-            console.log('[DEBUG] Volume button clicked');
-            toggleMeasurementMode('volume');
-            setActiveButton(btnVolume);
-            if (volumeTool) {
-                console.log('[DEBUG] Volume Tool Enabled:', volumeTool.enabled);
-                console.log('[DEBUG] Volume Tool World:', volumeTool.world ? 'Set' : 'Unset');
-            }
-        });
-    }
-    
     if (btnDelete) {
         btnDelete.addEventListener('click', () => {
             console.log('[DEBUG] Delete button clicked');
             try {
                 if (areaTool && typeof areaTool.deleteAll === 'function') {
                     areaTool.deleteAll();
-                }
-                if (volumeTool && typeof volumeTool.list.clear === 'function') {
-                    volumeTool.list.clear();
                 }
             } catch (e) {
                 console.warn('Error clearing tools:', e);
@@ -4699,17 +4460,16 @@ function setupMeasurementTools() {
 
 function setActiveButton(activeBtn: HTMLElement | null) {
     // Reset all measure buttons
-    ['btn-measure-length', 'btn-measure-point', 'btn-measure-area', 'btn-measure-angle', 'btn-measure-slope', 'btn-measure-volume'].forEach(id => {
+    ['btn-measure-length', 'btn-measure-point', 'btn-measure-area', 'btn-measure-angle', 'btn-measure-slope'].forEach(id => {
         const btn = document.getElementById(id);
         if (btn) btn.classList.remove('active');
     });
     if (activeBtn) activeBtn.classList.add('active');
 }
 
-function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'slope' | 'volume') {
+function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'slope') {
     // Deactivate previous tools
     if (areaTool && areaTool.enabled) areaTool.enabled = false;
-    if (volumeTool && volumeTool.enabled) volumeTool.enabled = false;
 
     if (measurementMode === mode) {
         // Toggle off
@@ -4722,11 +4482,6 @@ function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'sl
         measurementMode = mode;
         resetCurrentMeasurement();
         
-        // Enable specific tool if needed
-                  // if (mode === 'volume' && volumeTool) {
-                  //    volumeTool.enabled = true;
-                  // }
-
         let modeName = '';
         switch(mode) {
             case 'length': modeName = 'Distance'; break;
@@ -4734,7 +4489,6 @@ function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'sl
             case 'angle': modeName = 'Angle (3 Points)'; break;
             case 'slope': modeName = 'Slope (2 Points)'; break;
             case 'point': modeName = 'Point Coordinate'; break;
-            case 'volume': modeName = 'Volume (Click to select, Ctrl+Click to add)'; break;
         }
         logToScreen(`Measurement mode: ${modeName}`);
     }
@@ -4913,59 +4667,6 @@ async function onMeasureClick(event: MouseEvent) {
         const text = `X:${point.x.toFixed(2)} Y:${point.y.toFixed(2)} Z:${point.z.toFixed(2)}`;
         createLabel(text, point);
         logToScreen(`Point: ${text}`);
-    } else if (measurementMode === 'volume') {
-        // Volume Mode: Single Click Selection
-        const mesh = result.object as THREE.Mesh;
-        const instanceId = result.instanceId;
-
-        // Check for Ctrl key for cumulative selection
-        if (!event.ctrlKey) {
-             // Reset if Ctrl not held
-             clearMeasurements();
-        }
-
-        console.log('[DEBUG] Calculating volume for:', mesh, 'Instance:', instanceId);
-        
-        let volume = 0;
-        
-        // 1. Try to get volume from properties (more accurate for complex geometry)
-        const propVolume = await getVolumeFromProperties(mesh, instanceId);
-        if (propVolume !== null && propVolume > 0) {
-            console.log(`[DEBUG] Using property volume: ${propVolume}`);
-            volume = propVolume;
-        } else {
-            // 2. Fallback to geometric calculation
-            try {
-                volume = getMeshVolume(mesh, instanceId);
-                console.log(`[DEBUG] Using geometric volume: ${volume}`);
-            } catch (err) {
-                console.error('Volume calculation failed:', err);
-                logToScreen('Volume calculation failed');
-                return;
-            }
-        }
-
-        if (volume > 0) {
-            // Visual feedback: Highlight (Green for active selection?)
-            createMarker(point, 0x00ff00);
-
-            const labelText = `${volume.toFixed(3)} m³`;
-            const label = createLabel(labelText, point);
-            label.dataset.volume = volume.toString();
-            
-            // Calculate Total
-            let totalVolume = 0;
-            measurementLabels.forEach(l => {
-                const v = parseFloat(l.dataset.volume || '0');
-                totalVolume += v;
-            });
-            
-            logToScreen(`Volumen Total: ${totalVolume.toFixed(3)} m³`);
-            
-        } else {
-             logToScreen('Volume is 0');
-        }
-
     } else if (measurementMode === 'length') {
         measurementPoints.push(point);
         createMarker(point, 0xffff00);
