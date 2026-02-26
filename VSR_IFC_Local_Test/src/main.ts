@@ -4437,48 +4437,48 @@ function setupMeasurementTools() {
         container.addEventListener('click', onMeasureClick);
         
         // Add double click for volume creation (Custom Implementation)
-        container.addEventListener('dblclick', async () => {
-            console.log('[DEBUG] dblclick for Volume');
-            if (measurementMode === 'volume') {
-                try {
-                    // Use SimpleRaycaster to get the intersected object
-                    const result = await simpleRaycaster.castRay();
-                    if (result && result.object) {
-                        const mesh = result.object as THREE.Mesh;
-                        const instanceId = result.instanceId;
-                        
-                        console.log('[DEBUG] Calculating volume for:', mesh, 'Instance:', instanceId);
-                        
-                        // Calculate Volume
-                        let volume = 0;
-                        try {
-                            volume = getMeshVolume(mesh, instanceId);
-                        } catch (err) {
-                            console.error('Volume calculation failed:', err);
-                            logToScreen('Volume calculation failed for this object');
-                            return;
-                        }
-                        
-                        if (volume > 0) {
-                            // Create Label
-                            const center = result.point.clone(); // Use hit point for label
-                            // Ideally, use bounding box center, but hit point is fine
-                            createLabel(`${volume.toFixed(3)} m³`, center);
-                            logToScreen(`Volume: ${volume.toFixed(3)} m³`);
-                            
-                            // Optional: Highlight the mesh briefly?
-                            // No, just show label.
-                        } else {
-                            logToScreen('Volume is 0 or invalid geometry');
-                        }
-                    } else {
-                        console.log('[DEBUG] No intersection for volume');
-                    }
-                } catch (e) {
-                    console.error('[ERROR] Custom volume tool failed:', e);
-                }
-            }
-        });
+        // container.addEventListener('dblclick', async () => {
+        //    console.log('[DEBUG] dblclick for Volume');
+        //    if (measurementMode === 'volume') {
+        //        try {
+        //            // Use SimpleRaycaster to get the intersected object
+        //            const result = await simpleRaycaster.castRay();
+        //            if (result && result.object) {
+        //                const mesh = result.object as THREE.Mesh;
+        //                const instanceId = result.instanceId;
+        //                
+        //                console.log('[DEBUG] Calculating volume for:', mesh, 'Instance:', instanceId);
+        //                
+        //                // Calculate Volume
+        //                let volume = 0;
+        //                try {
+        //                    volume = getMeshVolume(mesh, instanceId);
+        //                } catch (err) {
+        //                    console.error('Volume calculation failed:', err);
+        //                    logToScreen('Volume calculation failed for this object');
+        //                    return;
+        //                }
+        //                
+        //                if (volume > 0) {
+        //                    // Create Label
+        //                    const center = result.point.clone(); // Use hit point for label
+        //                    // Ideally, use bounding box center, but hit point is fine
+        //                    createLabel(`${volume.toFixed(3)} m³`, center);
+        //                    logToScreen(`Volume: ${volume.toFixed(3)} m³`);
+        //                    
+        //                    // Optional: Highlight the mesh briefly?
+        //                    // No, just show label.
+        //                } else {
+        //                    logToScreen('Volume is 0 or invalid geometry');
+        //                }
+        //            } else {
+        //                console.log('[DEBUG] No intersection for volume');
+        //            }
+        //        } catch (e) {
+        //            console.error('[ERROR] Custom volume tool failed:', e);
+        //        }
+        //    }
+        // });
 
         // Add keydown for volume finish
         window.addEventListener('keydown', (e) => {
@@ -4567,7 +4567,7 @@ function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'sl
             case 'angle': modeName = 'Angle (3 Points)'; break;
             case 'slope': modeName = 'Slope (2 Points)'; break;
             case 'point': modeName = 'Point Coordinate'; break;
-            case 'volume': modeName = 'Volume (Double click to create)'; break;
+            case 'volume': modeName = 'Volume (Click to select, Ctrl+Click to add)'; break;
         }
         logToScreen(`Measurement mode: ${modeName}`);
     }
@@ -4615,7 +4615,7 @@ function createLine(start: THREE.Vector3, end: THREE.Vector3) {
     return line;
 }
 
-function createLabel(text: string, position: THREE.Vector3) {
+function createLabel(text: string, position: THREE.Vector3): HTMLDivElement {
     const div = document.createElement('div');
     div.className = 'measurement-label';
     div.textContent = text;
@@ -4640,6 +4640,7 @@ function createLabel(text: string, position: THREE.Vector3) {
         requestAnimationFrame(update);
     };
     update();
+    return div;
 }
 
 async function onMeasureMouseMove(event: MouseEvent) {
@@ -4745,6 +4746,49 @@ async function onMeasureClick(event: MouseEvent) {
         const text = `X:${point.x.toFixed(2)} Y:${point.y.toFixed(2)} Z:${point.z.toFixed(2)}`;
         createLabel(text, point);
         logToScreen(`Point: ${text}`);
+    } else if (measurementMode === 'volume') {
+        // Volume Mode: Single Click Selection
+        const mesh = result.object as THREE.Mesh;
+        const instanceId = result.instanceId;
+
+        // Check for Ctrl key for cumulative selection
+        if (!event.ctrlKey) {
+             // Reset if Ctrl not held
+             clearMeasurements();
+        }
+
+        console.log('[DEBUG] Calculating volume for:', mesh, 'Instance:', instanceId);
+        
+        let volume = 0;
+        try {
+            volume = getMeshVolume(mesh, instanceId);
+        } catch (err) {
+            console.error('Volume calculation failed:', err);
+            logToScreen('Volume calculation failed');
+            return;
+        }
+
+        if (volume > 0) {
+            // Visual feedback: Highlight (Green for active selection?)
+            createMarker(point, 0x00ff00);
+
+            const labelText = `${volume.toFixed(3)} m³`;
+            const label = createLabel(labelText, point);
+            label.dataset.volume = volume.toString();
+            
+            // Calculate Total
+            let totalVolume = 0;
+            measurementLabels.forEach(l => {
+                const v = parseFloat(l.dataset.volume || '0');
+                totalVolume += v;
+            });
+            
+            logToScreen(`Volumen Total: ${totalVolume.toFixed(3)} m³`);
+            
+        } else {
+             logToScreen('Volume is 0');
+        }
+
     } else if (measurementMode === 'length') {
         measurementPoints.push(point);
         createMarker(point, 0xffff00);
