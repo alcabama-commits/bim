@@ -128,9 +128,9 @@ const components = new OBC.Components();
 const worlds = components.get(OBC.Worlds);
 const world = worlds.create();
 
-world.scene = new OBC.Scene(components);
-world.renderer = new OBC.Renderer(components, container);
-world.camera = new OBC.Camera(components);
+world.scene = new OBC.SimpleScene(components);
+world.renderer = new OBC.SimpleRenderer(components, container);
+world.camera = new OBC.SimpleCamera(components);
 
 components.init();
 
@@ -787,18 +787,20 @@ document.getElementById('btn-measure-slope')?.addEventListener('click', () => {
 });
 
 document.getElementById('btn-measure-area')?.addEventListener('click', () => {
-    if (area.enabled) {
-        area.enabled = false;
-        activeTool = 'none';
+    if (activeTool === 'area') {
+        deactivateAllTools();
         setActiveMeasureButton(null);
-        logToScreen('Area tool deactivated');
+        logToScreen('Herramienta de Área desactivada');
     } else {
         deactivateAllTools();
-        area.enabled = true;
-        area.create();
         activeTool = 'area';
         setActiveMeasureButton('btn-measure-area');
-        logToScreen('Area tool activated');
+        logToScreen('Área activada (Click para puntos, Doble Click o click en inicio para terminar)');
+        
+        container.addEventListener('click', areaClick, { capture: true });
+        container.addEventListener('pointerdown', areaClick, { capture: true }); // Add pointerdown for better response
+        container.addEventListener('mousemove', areaMouseMove);
+        container.addEventListener('dblclick', areaDbClick);
     }
 });
 
@@ -806,6 +808,13 @@ document.getElementById('btn-none')?.addEventListener('click', () => {
     deactivateAllTools();
     setActiveMeasureButton(null);
     logToScreen('Tools deactivated');
+});
+
+document.getElementById('btn-measure-delete')?.addEventListener('click', () => {
+    clearMeasurements();
+    // Also deactivate any active tool
+    deactivateAllTools();
+    setActiveMeasureButton(null);
 });
 
 // --- ZOOM TO FIT ---
@@ -1012,6 +1021,50 @@ function createLabel(text: string, position: THREE.Vector3) {
         requestAnimationFrame(update);
     };
     update();
+    return div;
+}
+
+function clearMeasurements() {
+    // Clear manual measurements (Markers & Lines)
+    measurementMarkers.forEach(marker => {
+        if (marker.parent) marker.parent.remove(marker);
+    });
+    measurementMarkers.length = 0;
+    
+    measurementLabels.forEach(label => label.remove());
+    measurementLabels.length = 0;
+    
+    // Clear temp line
+    if (tempMeasurementLine) {
+        if (tempMeasurementLine.parent) tempMeasurementLine.parent.remove(tempMeasurementLine);
+        tempMeasurementLine = null;
+    }
+    measurementPoints = [];
+    anglePoints.length = 0;
+    slopePoints.length = 0;
+
+    // Clear Area Measurement
+    if (area) {
+        try {
+            area.deleteAll();
+        } catch (e) {
+            console.warn("Could not clear area measurements", e);
+        }
+        area.enabled = false; 
+    }
+    
+    // Clear custom meshes (e.g. from Point tool)
+    customMeshes.forEach(mesh => {
+        if (mesh.parent) mesh.parent.remove(mesh);
+    });
+    customMeshes.length = 0;
+
+    // Reset snap markers
+    if (snapMarker) snapMarker.visible = false;
+    if (snapLine) snapLine.visible = false;
+    lastSnapped = null;
+
+    logToScreen('Todas las mediciones borradas');
 }
 
 async function onMeasureMouseMove(event: MouseEvent) {
@@ -1190,6 +1243,185 @@ const grids = components.get(OBC.Grids);
 
 // Initialize Clipper (Already done above, but ensure access)
 
+// --- Custom Area Tool Logic ---
+let areaPoints: THREE.Vector3[] = [];
+let tempAreaLine: THREE.Line | null = null;
+let tempAreaMesh: THREE.Mesh | null = null;
+
+function updateAreaVisuals(currentPoint?: THREE.Vector3) {
+    const points = [...areaPoints];
+    if (currentPoint) points.push(currentPoint);
+    
+    if (points.length < 2) {
+        if (tempAreaLine) {
+            world.scene.three.remove(tempAreaLine);
+            tempAreaLine = null;
+        }
+        if (tempAreaMesh) {
+            world.scene.three.remove(tempAreaMesh);
+            tempAreaMesh = null;
+        }
+        return;
+    }
+
+    // Close the loop for visuals if we have enough points or just show strip
+    const showLoop = points.length > 2;
+    const renderPoints = showLoop ? [...points, points[0]] : points;
+
+    const geometry = new THREE.BufferGeometry().setFromPoints(renderPoints);
+    
+    if (!tempAreaLine) {
+        const material = new THREE.LineBasicMaterial({ color: 0x00aaff, depthTest: false });
+        tempAreaLine = new THREE.Line(geometry, material);
+        world.scene.three.add(tempAreaLine);
+    } else {
+        tempAreaLine.geometry.dispose();
+        tempAreaLine.geometry = geometry;
+    }
+    
+    if (points.length >= 3) {
+        // Simple triangulation (Fan)
+        const indices = [];
+        for (let i = 1; i < points.length - 1; i++) {
+            indices.push(0, i, i + 1);
+        }
+        const meshGeo = new THREE.BufferGeometry().setFromPoints(points);
+        meshGeo.setIndex(indices);
+        meshGeo.computeVertexNormals();
+        
+        if (!tempAreaMesh) {
+             const mat = new THREE.MeshBasicMaterial({ color: 0x00aaff, side: THREE.DoubleSide, opacity: 0.2, transparent: true, depthTest: false });
+             tempAreaMesh = new THREE.Mesh(meshGeo, mat);
+             world.scene.three.add(tempAreaMesh);
+        } else {
+             tempAreaMesh.geometry.dispose();
+             tempAreaMesh.geometry = meshGeo;
+        }
+    } else if (tempAreaMesh) {
+        world.scene.three.remove(tempAreaMesh);
+        tempAreaMesh = null;
+    }
+}
+
+function calculatePolygonArea(points: THREE.Vector3[]): number {
+    if (points.length < 3) return 0;
+    
+    const normal = new THREE.Vector3();
+    for (let i = 0; i < points.length; i++) {
+        const j = (i + 1) % points.length;
+        normal.x += (points[i].y - points[j].y) * (points[i].z + points[j].z);
+        normal.y += (points[i].z - points[j].z) * (points[i].x + points[j].x);
+        normal.z += (points[i].x - points[j].x) * (points[i].y + points[j].y);
+    }
+    normal.normalize();
+    
+    const up = new THREE.Vector3(0, 0, 1);
+    const quat = new THREE.Quaternion().setFromUnitVectors(normal, up);
+    const projected = points.map(p => p.clone().applyQuaternion(quat));
+    
+    let area = 0;
+    for (let i = 0; i < projected.length; i++) {
+        const j = (i + 1) % projected.length;
+        area += projected[i].x * projected[j].y - projected[j].x * projected[i].y;
+    }
+    
+    return Math.abs(area) / 2.0;
+}
+
+function finishAreaMeasurement() {
+    if (areaPoints.length < 3) {
+        logToScreen('Se necesitan al menos 3 puntos para un área.');
+        return;
+    }
+    
+    const points = [...areaPoints, areaPoints[0]];
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({ color: 0x00aaff, depthTest: false, linewidth: 2 });
+    const line = new THREE.Line(geometry, material);
+    world.scene.three.add(line);
+    measurementMarkers.push(line as any);
+    
+    const indices = [];
+    for (let i = 1; i < areaPoints.length - 1; i++) {
+        indices.push(0, i, i + 1);
+    }
+    const meshGeo = new THREE.BufferGeometry().setFromPoints(areaPoints);
+    meshGeo.setIndex(indices);
+    const meshMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, side: THREE.DoubleSide, opacity: 0.2, transparent: true, depthTest: false });
+    const mesh = new THREE.Mesh(meshGeo, meshMat);
+    world.scene.three.add(mesh);
+    customMeshes.push(mesh);
+    
+    const areaVal = calculatePolygonArea(areaPoints);
+    
+    const center = new THREE.Vector3();
+    areaPoints.forEach(p => center.add(p));
+    center.divideScalar(areaPoints.length);
+    
+    createLabel(`Área: ${areaVal.toFixed(2)} m²`, center);
+    logToScreen(`Área: ${areaVal.toFixed(2)} m²`);
+    
+    areaPoints = [];
+    if (tempAreaLine) {
+        world.scene.three.remove(tempAreaLine);
+        tempAreaLine = null;
+    }
+    if (tempAreaMesh) {
+        world.scene.three.remove(tempAreaMesh);
+        tempAreaMesh = null;
+    }
+}
+
+const areaClick = (event: MouseEvent) => {
+    if (activeTool !== 'area') return;
+    if ((event.target as HTMLElement).closest('button') || (event.target as HTMLElement).closest('.sidebar')) return;
+
+    // Use stopPropagation to prevent other handlers
+    event.stopImmediatePropagation();
+    // Prevent default to avoid double firing (click + pointerdown)
+    // But be careful not to block orbit controls if no hit
+    
+    const hit = getIntersection(event);
+    if (!hit) {
+        console.log("Area Tool: No hit detected");
+        return;
+    }
+    
+    console.log("Area Tool: Hit at", hit.point);
+    
+    if (areaPoints.length >= 3) {
+        const dist = hit.point.distanceTo(areaPoints[0]);
+        if (dist < 0.5) {
+            console.log("Area Tool: Closing loop");
+            finishAreaMeasurement();
+            return;
+        }
+    }
+    
+    const p = hit.point.clone();
+    areaPoints.push(p);
+    createMarker(p, 0x00aaff);
+    updateAreaVisuals();
+};
+
+const areaMouseMove = (event: MouseEvent) => {
+    if (activeTool !== 'area') return;
+    const hit = getIntersection(event);
+    if (hit) {
+        cursorMesh.visible = true;
+        cursorMesh.position.copy(hit.point);
+        if (areaPoints.length > 0) updateAreaVisuals(hit.point);
+    } else {
+        cursorMesh.visible = false;
+    }
+};
+
+const areaDbClick = (event: MouseEvent) => {
+     if (activeTool !== 'area') return;
+     console.log("Area Tool: Double click finish");
+     finishAreaMeasurement();
+};
+
 // ==================================================================== 
 // MÓDULO DE ATAJOS DE TECLADO (Funciona en modo Capture) 
 // ==================================================================== 
@@ -1201,7 +1433,24 @@ function deactivateAllTools() {
     if (typeof measurementMode !== 'undefined') measurementMode = null; 
     if (typeof snappingCursor !== 'undefined' && snappingCursor) snappingCursor.visible = false; 
     
+    // Disable Area Tool
+    if (typeof area !== 'undefined' && area) {
+        area.enabled = false;
+    }
+
+    // Custom Area Tool Cleanup
+    areaPoints = [];
+    if (tempAreaLine) {
+        if (typeof world !== 'undefined') world.scene.three.remove(tempAreaLine);
+        tempAreaLine = null;
+    }
+    if (tempAreaMesh) {
+        if (typeof world !== 'undefined') world.scene.three.remove(tempAreaMesh);
+        tempAreaMesh = null;
+    }
+
     if (typeof container !== 'undefined' && container) {
+
         container.removeEventListener('click', onMeasureClick);
         container.removeEventListener('mousemove', onMeasureMouseMove);
         container.removeEventListener('click', pointHandler as any);
@@ -1209,6 +1458,11 @@ function deactivateAllTools() {
         container.removeEventListener('pointerdown', angleHandler as any, { capture: true });
         container.removeEventListener('click', slopeHandler as any, { capture: true });
         container.removeEventListener('pointerdown', slopeHandler as any, { capture: true });
+        
+        container.removeEventListener('click', areaClick, { capture: true });
+        container.removeEventListener('pointerdown', areaClick, { capture: true });
+        container.removeEventListener('mousemove', areaMouseMove);
+        container.removeEventListener('dblclick', areaDbClick);
     }
     
     // Limpiar selección del Highlighter de OBC 
