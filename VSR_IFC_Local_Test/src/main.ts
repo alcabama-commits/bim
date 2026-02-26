@@ -4281,44 +4281,56 @@ function getMeshVolume(mesh: THREE.Mesh | THREE.InstancedMesh, instanceId?: numb
     const geometry = mesh.geometry;
     const pos = geometry.attributes.position;
     const index = geometry.index;
+    
+    if (!pos) {
+        console.warn("getMeshVolume: No position attribute found");
+        return 0;
+    }
+
+    // Create a matrix that transforms local vertices to world space
+    const matrix = new THREE.Matrix4().copy(mesh.matrixWorld);
+    if (mesh instanceof THREE.InstancedMesh && instanceId !== undefined) {
+        const instanceMatrix = new THREE.Matrix4();
+        mesh.getMatrixAt(instanceId, instanceMatrix);
+        matrix.multiply(instanceMatrix);
+    }
+    
+    console.log('[DEBUG] getMeshVolume: Matrix elements:', matrix.elements);
+    console.log('[DEBUG] getMeshVolume: Vertex count:', pos.count);
+
     let volume = 0;
     const p1 = new THREE.Vector3();
     const p2 = new THREE.Vector3();
     const p3 = new THREE.Vector3();
 
+    // Use a reference point to minimize floating point errors for far-away objects
+    // However, the standard signed volume formula (origin-based) works if we are careful
+    // Let's use the standard method with transformed vertices
+    
+    // Helper: Cross product p2 x p3, then dot p1
+    // (p1 . (p2 x p3)) / 6
+    
     if (index) {
         for (let i = 0; i < index.count; i += 3) {
-            p1.fromBufferAttribute(pos, index.getX(i));
-            p2.fromBufferAttribute(pos, index.getX(i + 1));
-            p3.fromBufferAttribute(pos, index.getX(i + 2));
+            // Get local coordinates and transform to world
+            p1.fromBufferAttribute(pos, index.getX(i)).applyMatrix4(matrix);
+            p2.fromBufferAttribute(pos, index.getX(i + 1)).applyMatrix4(matrix);
+            p3.fromBufferAttribute(pos, index.getX(i + 2)).applyMatrix4(matrix);
+            
+            // Signed volume of tetrahedron formed by origin and triangle
             volume += p1.dot(p2.cross(p3)) / 6.0;
         }
     } else {
         for (let i = 0; i < pos.count; i += 3) {
-            p1.fromBufferAttribute(pos, i);
-            p2.fromBufferAttribute(pos, i + 1);
-            p3.fromBufferAttribute(pos, i + 2);
+            p1.fromBufferAttribute(pos, i).applyMatrix4(matrix);
+            p2.fromBufferAttribute(pos, i + 1).applyMatrix4(matrix);
+            p3.fromBufferAttribute(pos, i + 2).applyMatrix4(matrix);
+            
             volume += p1.dot(p2.cross(p3)) / 6.0;
         }
     }
     
-    // Calculate World Scale Determinant
-    const getDet = (m: THREE.Matrix4) => {
-        const e = m.elements;
-        return e[0] * (e[5] * e[10] - e[6] * e[9]) -
-               e[4] * (e[1] * e[10] - e[2] * e[9]) +
-               e[8] * (e[1] * e[6] - e[2] * e[5]);
-    };
-
-    let scaleFactor = getDet(mesh.matrixWorld);
-
-    if (mesh instanceof THREE.InstancedMesh && instanceId !== undefined) {
-        const instanceMatrix = new THREE.Matrix4();
-        mesh.getMatrixAt(instanceId, instanceMatrix);
-        scaleFactor *= getDet(instanceMatrix);
-    }
-
-    return Math.abs(volume * scaleFactor);
+    return Math.abs(volume);
 }
 
 function setupMeasurementTools() {
