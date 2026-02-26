@@ -179,8 +179,9 @@ const setupDebugSphere = (scene: THREE.Scene) => {
 
 
 // --- Measurement State (Hoisted to top to avoid ReferenceError) ---
-let measurementMode: 'length' | 'point' | 'area' | 'angle' | 'slope' | null = null;
+let measurementMode: 'length' | 'point' | 'area' | 'angle' | 'slope' | 'volume' | null = null;
 let areaTool: any = null; // Area Measurement Tool
+let volumeTool: any = null; // Volume Measurement Tool
 let measurementPoints: THREE.Vector3[] = [];
 let tempMeasurementLine: THREE.Line | null = null;
 const measurementLabels: HTMLElement[] = [];
@@ -4287,6 +4288,16 @@ function setupMeasurementTools() {
         console.warn('Could not initialize Area Tool:', e);
     }
 
+    // Initialize Volume Tool
+    try {
+        volumeTool = components.get(OBF.VolumeMeasurement);
+        volumeTool.world = world;
+        volumeTool.enabled = false;
+        console.log('[DEBUG] Volume Tool initialized');
+    } catch (e) {
+        console.warn('Could not initialize Volume Tool:', e);
+    }
+
     // Initialize Snapping Cursor
     if (!snappingCursor) {
         const cursorGeom = new THREE.SphereGeometry(0.15, 16, 16);
@@ -4302,11 +4313,11 @@ function setupMeasurementTools() {
     const btnArea = document.getElementById('btn-measure-area');
     const btnAngle = document.getElementById('btn-measure-angle');
     const btnSlope = document.getElementById('btn-measure-slope');
+    const btnVolume = document.getElementById('btn-measure-volume');
     const btnDelete = document.getElementById('btn-measure-delete');
     
     if (btnLength) {
         btnLength.addEventListener('click', () => {
-            if (areaTool) areaTool.enabled = false;
             toggleMeasurementMode('length');
             setActiveButton(btnLength);
         });
@@ -4314,7 +4325,6 @@ function setupMeasurementTools() {
     
     if (btnPoint) {
         btnPoint.addEventListener('click', () => {
-            if (areaTool) areaTool.enabled = false;
             toggleMeasurementMode('point');
             setActiveButton(btnPoint);
         });
@@ -4322,7 +4332,6 @@ function setupMeasurementTools() {
 
     if (btnArea) {
         btnArea.addEventListener('click', () => {
-            if (areaTool) areaTool.enabled = false;
             toggleMeasurementMode('area');
             setActiveButton(btnArea);
             logToScreen('Area tool activated (Click points, Right-click to finish)');
@@ -4331,7 +4340,6 @@ function setupMeasurementTools() {
 
     if (btnAngle) {
         btnAngle.addEventListener('click', () => {
-            if (areaTool) areaTool.enabled = false;
             toggleMeasurementMode('angle');
             setActiveButton(btnAngle);
             logToScreen('Angle tool activated (Click 3 points: Start, Vertex, End)');
@@ -4340,10 +4348,17 @@ function setupMeasurementTools() {
 
     if (btnSlope) {
         btnSlope.addEventListener('click', () => {
-            if (areaTool) areaTool.enabled = false;
             toggleMeasurementMode('slope');
             setActiveButton(btnSlope);
             logToScreen('Slope tool activated (Click 2 points)');
+        });
+    }
+
+    if (btnVolume) {
+        btnVolume.addEventListener('click', () => {
+            toggleMeasurementMode('volume');
+            setActiveButton(btnVolume);
+            // logToScreen('Volume tool activated (Double click to create volume, Enter to finish)');
         });
     }
     
@@ -4354,8 +4369,11 @@ function setupMeasurementTools() {
                 if (areaTool && typeof areaTool.deleteAll === 'function') {
                     areaTool.deleteAll();
                 }
+                if (volumeTool && typeof volumeTool.list.clear === 'function') {
+                    volumeTool.list.clear();
+                }
             } catch (e) {
-                console.warn('Error clearing area tool:', e);
+                console.warn('Error clearing tools:', e);
             }
             
             clearMeasurements();
@@ -4367,6 +4385,20 @@ function setupMeasurementTools() {
     if (container) {
         container.addEventListener('mousemove', onMeasureMouseMove);
         container.addEventListener('click', onMeasureClick);
+        
+        // Add double click for volume creation
+        container.addEventListener('dblclick', () => {
+            if (measurementMode === 'volume' && volumeTool) {
+                volumeTool.create();
+            }
+        });
+
+        // Add keydown for volume finish
+        window.addEventListener('keydown', (e) => {
+             if (measurementMode === 'volume' && volumeTool && (e.code === 'Enter' || e.code === 'NumpadEnter')) {
+                 volumeTool.endCreation();
+             }
+        });
         
         // Add right-click to cancel current measurement
         container.addEventListener('contextmenu', (e) => {
@@ -4413,18 +4445,18 @@ function setupMeasurementTools() {
 
 function setActiveButton(activeBtn: HTMLElement | null) {
     // Reset all measure buttons
-    ['btn-measure-length', 'btn-measure-point', 'btn-measure-area', 'btn-measure-angle', 'btn-measure-slope'].forEach(id => {
+    ['btn-measure-length', 'btn-measure-point', 'btn-measure-area', 'btn-measure-angle', 'btn-measure-slope', 'btn-measure-volume'].forEach(id => {
         const btn = document.getElementById(id);
         if (btn) btn.classList.remove('active');
     });
     if (activeBtn) activeBtn.classList.add('active');
 }
 
-function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'slope') {
-    if (areaTool && areaTool.enabled) {
-        areaTool.enabled = false;
-        logToScreen('Area tool deactivated');
-    }
+function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'slope' | 'volume') {
+    // Deactivate previous tools
+    if (areaTool && areaTool.enabled) areaTool.enabled = false;
+    if (volumeTool && volumeTool.enabled) volumeTool.enabled = false;
+
     if (measurementMode === mode) {
         // Toggle off
         measurementMode = null;
@@ -4435,6 +4467,12 @@ function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'sl
     } else {
         measurementMode = mode;
         resetCurrentMeasurement();
+        
+        // Enable specific tool if needed
+        if (mode === 'volume' && volumeTool) {
+            volumeTool.enabled = true;
+        }
+
         let modeName = '';
         switch(mode) {
             case 'length': modeName = 'Distance'; break;
@@ -4442,8 +4480,9 @@ function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'sl
             case 'angle': modeName = 'Angle (3 Points)'; break;
             case 'slope': modeName = 'Slope (2 Points)'; break;
             case 'point': modeName = 'Point Coordinate'; break;
+            case 'volume': modeName = 'Volume (Double click to create)'; break;
         }
-        logToScreen(`Measurement mode: ${modeName} (Click to start)`);
+        logToScreen(`Measurement mode: ${modeName}`);
     }
 }
 
