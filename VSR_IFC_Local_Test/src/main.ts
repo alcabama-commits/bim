@@ -4408,11 +4408,25 @@ function setupMeasurementTools() {
         //    }
         // });
 
-        // Add keydown for volume finish
+        // Add keydown for volume finish and Escape to cancel
         window.addEventListener('keydown', (e) => {
-             // if (measurementMode === 'volume' && volumeTool && (e.code === 'Enter' || e.code === 'NumpadEnter')) {
-             //    volumeTool.endCreation();
-             // }
+            if (e.key === 'Escape') {
+                if (measurementMode) {
+                    toggleMeasurementMode(measurementMode); // Toggle off
+                }
+                
+                // Also clear clipper if active
+                if (clipper.enabled) {
+                    clipper.enabled = false;
+                    const btn = document.getElementById('clipper-toggle');
+                    if (btn) btn.classList.remove('active');
+                    updateUI();
+                }
+
+                if (snappingCursor) {
+                    snappingCursor.visible = false;
+                }
+            }
         });
         
         // Add right-click to cancel current measurement
