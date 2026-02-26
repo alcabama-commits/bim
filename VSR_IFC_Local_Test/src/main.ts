@@ -4275,6 +4275,52 @@ function setupMeasurementTools_Deprecated() {
 
 
 
+function getMeshVolume(mesh: THREE.Mesh | THREE.InstancedMesh, instanceId?: number): number {
+    if (!mesh.geometry) return 0;
+    
+    const geometry = mesh.geometry;
+    const pos = geometry.attributes.position;
+    const index = geometry.index;
+    let volume = 0;
+    const p1 = new THREE.Vector3();
+    const p2 = new THREE.Vector3();
+    const p3 = new THREE.Vector3();
+
+    if (index) {
+        for (let i = 0; i < index.count; i += 3) {
+            p1.fromBufferAttribute(pos, index.getX(i));
+            p2.fromBufferAttribute(pos, index.getX(i + 1));
+            p3.fromBufferAttribute(pos, index.getX(i + 2));
+            volume += p1.dot(p2.cross(p3)) / 6.0;
+        }
+    } else {
+        for (let i = 0; i < pos.count; i += 3) {
+            p1.fromBufferAttribute(pos, i);
+            p2.fromBufferAttribute(pos, i + 1);
+            p3.fromBufferAttribute(pos, i + 2);
+            volume += p1.dot(p2.cross(p3)) / 6.0;
+        }
+    }
+    
+    // Calculate World Scale Determinant
+    const getDet = (m: THREE.Matrix4) => {
+        const e = m.elements;
+        return e[0] * (e[5] * e[10] - e[6] * e[9]) -
+               e[4] * (e[1] * e[10] - e[2] * e[9]) +
+               e[8] * (e[1] * e[6] - e[2] * e[5]);
+    };
+
+    let scaleFactor = getDet(mesh.matrixWorld);
+
+    if (mesh instanceof THREE.InstancedMesh && instanceId !== undefined) {
+        const instanceMatrix = new THREE.Matrix4();
+        mesh.getMatrixAt(instanceId, instanceMatrix);
+        scaleFactor *= getDet(instanceMatrix);
+    }
+
+    return Math.abs(volume * scaleFactor);
+}
+
 function setupMeasurementTools() {
     console.log('[DEBUG] Setting up measurement tools...');
 
@@ -4356,9 +4402,13 @@ function setupMeasurementTools() {
 
     if (btnVolume) {
         btnVolume.addEventListener('click', () => {
+            console.log('[DEBUG] Volume button clicked');
             toggleMeasurementMode('volume');
             setActiveButton(btnVolume);
-            // logToScreen('Volume tool activated (Double click to create volume, Enter to finish)');
+            if (volumeTool) {
+                console.log('[DEBUG] Volume Tool Enabled:', volumeTool.enabled);
+                console.log('[DEBUG] Volume Tool World:', volumeTool.world ? 'Set' : 'Unset');
+            }
         });
     }
     
@@ -4386,18 +4436,55 @@ function setupMeasurementTools() {
         container.addEventListener('mousemove', onMeasureMouseMove);
         container.addEventListener('click', onMeasureClick);
         
-        // Add double click for volume creation
-        container.addEventListener('dblclick', () => {
-            if (measurementMode === 'volume' && volumeTool) {
-                volumeTool.create();
+        // Add double click for volume creation (Custom Implementation)
+        container.addEventListener('dblclick', async () => {
+            console.log('[DEBUG] dblclick for Volume');
+            if (measurementMode === 'volume') {
+                try {
+                    // Use SimpleRaycaster to get the intersected object
+                    const result = await simpleRaycaster.castRay();
+                    if (result && result.object) {
+                        const mesh = result.object as THREE.Mesh;
+                        const instanceId = result.instanceId;
+                        
+                        console.log('[DEBUG] Calculating volume for:', mesh, 'Instance:', instanceId);
+                        
+                        // Calculate Volume
+                        let volume = 0;
+                        try {
+                            volume = getMeshVolume(mesh, instanceId);
+                        } catch (err) {
+                            console.error('Volume calculation failed:', err);
+                            logToScreen('Volume calculation failed for this object');
+                            return;
+                        }
+                        
+                        if (volume > 0) {
+                            // Create Label
+                            const center = result.point.clone(); // Use hit point for label
+                            // Ideally, use bounding box center, but hit point is fine
+                            createLabel(`${volume.toFixed(3)} m³`, center);
+                            logToScreen(`Volume: ${volume.toFixed(3)} m³`);
+                            
+                            // Optional: Highlight the mesh briefly?
+                            // No, just show label.
+                        } else {
+                            logToScreen('Volume is 0 or invalid geometry');
+                        }
+                    } else {
+                        console.log('[DEBUG] No intersection for volume');
+                    }
+                } catch (e) {
+                    console.error('[ERROR] Custom volume tool failed:', e);
+                }
             }
         });
 
         // Add keydown for volume finish
         window.addEventListener('keydown', (e) => {
-             if (measurementMode === 'volume' && volumeTool && (e.code === 'Enter' || e.code === 'NumpadEnter')) {
-                 volumeTool.endCreation();
-             }
+             // if (measurementMode === 'volume' && volumeTool && (e.code === 'Enter' || e.code === 'NumpadEnter')) {
+             //    volumeTool.endCreation();
+             // }
         });
         
         // Add right-click to cancel current measurement
@@ -4469,9 +4556,9 @@ function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'sl
         resetCurrentMeasurement();
         
         // Enable specific tool if needed
-        if (mode === 'volume' && volumeTool) {
-            volumeTool.enabled = true;
-        }
+                  // if (mode === 'volume' && volumeTool) {
+                  //    volumeTool.enabled = true;
+                  // }
 
         let modeName = '';
         switch(mode) {
