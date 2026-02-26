@@ -4273,6 +4273,100 @@ function setupMeasurementTools_Deprecated() {
 
 // --- Measurement Tools Implementation (Custom Snapping) ---
 
+async function getVolumeFromProperties(mesh: THREE.Mesh | THREE.InstancedMesh, instanceId: number | undefined): Promise<number | null> {
+    try {
+        const frag = (mesh as any).fragment;
+        if (!frag) return null;
+        
+        const model = frag.group;
+        if (!model) return null;
+        
+        let expressID: number | null = null;
+        const idx = instanceId ?? 0;
+        
+        // Try to get Express ID using various methods
+        if (typeof frag.getItemID === 'function') {
+             expressID = frag.getItemID(idx);
+        } else if (frag.ids) {
+             // Check if it's TypedArray or Array
+             expressID = frag.ids[idx];
+        } else if (frag.items) {
+             expressID = frag.items[idx];
+        }
+        
+        if (expressID === null || expressID === undefined) return null;
+        
+        console.log(`[DEBUG] Property Lookup: Model ${model.uuid} Item ${expressID}`);
+        
+        const fragments = components.get(OBC.FragmentsManager);
+        if (!fragments) return null;
+        
+        // Check direct properties first (fastest)
+        if (model.properties && model.properties[expressID]) {
+             const directProp = model.properties[expressID];
+             // Check generic property keys
+             for (const key of ['Volume', 'Volumen', 'NetVolume', 'GrossVolume']) {
+                 if (directProp[key] !== undefined) {
+                     const val = directProp[key];
+                     const num = typeof val === 'object' && val !== null ? val.value : val;
+                     if (typeof num === 'number') return num;
+                 }
+             }
+        }
+
+        // Use fragments.getData to resolve relations (slower but thorough)
+        const data = await fragments.getData({ [model.uuid]: [expressID] }, {
+            relations: {
+                IsDefinedBy: { attributes: true, relations: true }
+            }
+        });
+        
+        const modelData = data[model.uuid];
+        if (!modelData || modelData.length === 0) return null;
+        
+        const item = modelData[0];
+        const rels = item.relations?.IsDefinedBy;
+        
+        if (rels && Array.isArray(rels)) {
+            for (const rel of rels) {
+                const def = rel.relatingPropertyDefinition || rel.RelatingPropertyDefinition;
+                if (!def) continue;
+                
+                const attributes = def.attributes || def;
+                
+                // Check Quantities
+                const quantities = attributes.Quantities || attributes.quantities;
+                if (quantities && Array.isArray(quantities)) {
+                    for (const q of quantities) {
+                        const qAttrs = q.attributes || q;
+                        const name = (qAttrs.Name?.value || qAttrs.Name || "").toString();
+                        if (/Volume|Volumen|NetVolume|GrossVolume/i.test(name)) {
+                            const val = qAttrs.VolumeValue?.value ?? qAttrs.VolumeValue ?? qAttrs.volumeValue?.value ?? qAttrs.volumeValue;
+                            if (val !== undefined) return Number(val);
+                        }
+                    }
+                }
+                
+                // Check Properties
+                const props = attributes.HasProperties || attributes.hasProperties;
+                if (props && Array.isArray(props)) {
+                     for (const p of props) {
+                        const pAttrs = p.attributes || p;
+                        const name = (pAttrs.Name?.value || pAttrs.Name || "").toString();
+                         if (/Volume|Volumen|NetVolume|GrossVolume/i.test(name)) {
+                            const val = pAttrs.NominalValue?.value ?? pAttrs.NominalValue ?? pAttrs.nominalValue?.value ?? pAttrs.nominalValue;
+                            if (val !== undefined) return Number(val);
+                        }
+                     }
+                }
+            }
+        }
+        
+    } catch (e) {
+        console.error('Error getting volume from properties:', e);
+    }
+    return null;
+}
 
 
 function getMeshVolume(mesh: THREE.Mesh | THREE.InstancedMesh, instanceId?: number): number {
@@ -4772,12 +4866,22 @@ async function onMeasureClick(event: MouseEvent) {
         console.log('[DEBUG] Calculating volume for:', mesh, 'Instance:', instanceId);
         
         let volume = 0;
-        try {
-            volume = getMeshVolume(mesh, instanceId);
-        } catch (err) {
-            console.error('Volume calculation failed:', err);
-            logToScreen('Volume calculation failed');
-            return;
+        
+        // 1. Try to get volume from properties (more accurate for complex geometry)
+        const propVolume = await getVolumeFromProperties(mesh, instanceId);
+        if (propVolume !== null && propVolume > 0) {
+            console.log(`[DEBUG] Using property volume: ${propVolume}`);
+            volume = propVolume;
+        } else {
+            // 2. Fallback to geometric calculation
+            try {
+                volume = getMeshVolume(mesh, instanceId);
+                console.log(`[DEBUG] Using geometric volume: ${volume}`);
+            } catch (err) {
+                console.error('Volume calculation failed:', err);
+                logToScreen('Volume calculation failed');
+                return;
+            }
         }
 
         if (volume > 0) {
