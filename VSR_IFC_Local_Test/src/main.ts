@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as BUI from '@thatopen/ui';
@@ -370,7 +371,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-26-v30-MeasureFix';
+versionDiv.textContent = 'v2026-02-26-v31-ClipStyler';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
@@ -710,8 +711,22 @@ const fillMaterial = new THREE.MeshBasicMaterial({
     side: THREE.DoubleSide
 });
 
+const lineMaterial = new LineMaterial({
+    color: 0x333333,
+    linewidth: 2, // Width in pixels
+    resolution: new THREE.Vector2(window.innerWidth, window.innerHeight)
+});
+
+// Update resolution on resize to keep line thickness consistent
+window.addEventListener('resize', () => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    lineMaterial.resolution.set(width, height);
+});
+
 clipStyler.styles.set('filled', {
-    fillsMaterial: fillMaterial
+    fillsMaterial: fillMaterial,
+    linesMaterial: lineMaterial
 });
 
 clipper.onAfterCreate.add((plane) => {
@@ -724,6 +739,8 @@ clipper.onAfterCreate.add((plane) => {
     }
     
     if (planeId) {
+         // Apply style to all meshes
+         // We can refine this later to apply different styles per category if needed
          clipStyler.createFromClipping(planeId, {
              items: {
                  all: { style: 'filled' }
