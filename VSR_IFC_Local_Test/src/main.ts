@@ -408,8 +408,21 @@ const world = worlds.create<
   OBC.SimpleRenderer
 >();
 
-world.scene = new OBC.SimpleScene(components);
-world.scene.setup();
+try {
+    // Attempt to use ShadowedScene for better visuals
+    if (typeof OBC.ShadowedScene !== 'undefined') {
+        world.scene = new OBC.ShadowedScene(components);
+        world.scene.setup();
+        console.log('ShadowedScene initialized successfully');
+    } else {
+        throw new Error('ShadowedScene class is not available in OBC');
+    }
+} catch (e) {
+    console.warn('Failed to initialize ShadowedScene, falling back to SimpleScene:', e);
+    world.scene = new OBC.SimpleScene(components);
+    world.scene.setup();
+}
+
 world.scene.three.background = new THREE.Color(0x202020); // Dark gray
 
 const container = document.getElementById('viewer-container') as HTMLElement;
@@ -2028,6 +2041,32 @@ function initGridToggle() {
     });
 }
 
+function initShadowToggle() {
+    const btn = document.getElementById('shadow-toggle');
+    if (!btn) return;
+
+    // Check if the current scene supports shadows
+    if (!('shadowsEnabled' in world.scene)) {
+        console.warn('Current scene does not support shadows. Disabling shadow toggle.');
+        btn.style.display = 'none'; // Hide button if not supported
+        return;
+    }
+
+    // Cast scene to any to access shadowsEnabled property safely
+    const shadowedScene = world.scene as any;
+
+    // Set initial state
+    btn.classList.toggle('active', shadowedScene.shadowsEnabled);
+
+    btn.addEventListener('click', () => {
+        shadowedScene.shadowsEnabled = !shadowedScene.shadowsEnabled;
+        btn.classList.toggle('active', shadowedScene.shadowsEnabled);
+        
+        // Optional: Log status
+        // logToScreen(`Shadows ${shadowedScene.shadowsEnabled ? 'enabled' : 'disabled'}`);
+    });
+}
+
 
 
 
@@ -2260,6 +2299,7 @@ initSidebarTabs();
 initTheme();
 initProjectionToggle();
 initGridToggle();
+initShadowToggle();
 initClipperTool();
 initFitModelTool();
 loadModelList();
