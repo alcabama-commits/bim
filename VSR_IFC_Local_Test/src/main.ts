@@ -427,6 +427,7 @@ try {
                 resolution: 1024
             },
             directionalLight: {
+                color: new THREE.Color(0xffffff),
                 intensity: 1.5,
                 position: new THREE.Vector3(50, 50, 50)
             }
