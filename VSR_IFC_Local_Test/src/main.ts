@@ -403,12 +403,12 @@ if (!(components as any).meshes) (components as any).meshes = [];
 const worlds = components.get(OBC.Worlds);
 
 const world = worlds.create<
-  OBC.ShadowedScene,
+  OBC.SimpleScene,
   OBC.OrthoPerspectiveCamera,
   OBC.SimpleRenderer
 >();
 
-world.scene = new OBC.ShadowedScene(components);
+world.scene = new OBC.SimpleScene(components);
 world.scene.setup();
 world.scene.three.background = new THREE.Color(0x202020); // Dark gray
 
@@ -2028,22 +2028,6 @@ function initGridToggle() {
     });
 }
 
-function initShadowToggle() {
-    const btn = document.getElementById('shadow-toggle');
-    if (!btn) return;
-
-    // Set initial state based on scene (ShadowedScene defaults to false usually, but let's check)
-    // Actually ShadowedScene defaults to true for shadows?
-    // Let's assume it starts disabled or enabled and we toggle it.
-    // We should sync button state with initial state.
-    btn.classList.toggle('active', world.scene.shadowsEnabled);
-
-    btn.addEventListener('click', () => {
-        world.scene.shadowsEnabled = !world.scene.shadowsEnabled;
-        btn.classList.toggle('active', world.scene.shadowsEnabled);
-    });
-}
-
 
 
 
@@ -2276,7 +2260,6 @@ initSidebarTabs();
 initTheme();
 initProjectionToggle();
 initGridToggle();
-initShadowToggle();
 initClipperTool();
 initFitModelTool();
 loadModelList();
