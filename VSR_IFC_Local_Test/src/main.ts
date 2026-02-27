@@ -1014,10 +1014,19 @@ async function loadModel(url: string, path: string) {
 
         if (!model) throw new Error('Model failed to load (undefined result)');
 
+        // EXPLICIT REGISTRATION: Ensure model is in fragments.groups
+        // Some versions of FragmentsManager might not auto-add if loaded via core.load
+        if (fragments.groups instanceof Map) {
+             fragments.groups.set(model.uuid, model);
+        } else if (fragments.groups) {
+             (fragments.groups as any)[model.uuid] = model;
+        }
+
         (model as any).name = path.split('/').pop() || 'Model';
         // Store URL for state persistence
         if (!model.userData) model.userData = {};
         model.userData.url = url;
+        console.log(`[Viewpoints] Registered model URL for persistence: ${model.uuid} -> ${url}`);
 
         // FORCE UUID to match the path (which is the key in fragments.list)
         // This ensures the highlighter and classifier can find the model
@@ -1765,79 +1774,82 @@ function initSidebar() {
                 }
 
                 const file = target.files[0];
-                const buffer = await file.arrayBuffer();
                 
                 try {
                     if (file.name.toLowerCase().endsWith('.frag')) {
                         logToScreen(`Loading fragments: ${file.name}...`);
-                        const model = await fragments.core.load(buffer, { modelId: file.name });
                         
-                        // Ensure model has a valid UUID
-                        if (!model.uuid) {
-                            model.uuid = THREE.MathUtils.generateUUID();
-                            console.warn(`[DEBUG] Model had no UUID, generated: ${model.uuid}`);
-                        }
+                        // Create a persistent URL for this session
+                        const blobUrl = URL.createObjectURL(file);
+                        
+                        // Use the centralized loadModel function to ensure registration and userData setup
+                        // This handles fetch, decompression, and basic registration
+                        await loadModel(blobUrl, file.name);
+                        
+                        // Retrieve the model to perform post-load operations (dummy props, zoom)
+                        const model = fragments.groups.get(file.name) || 
+                                     (fragments.groups as any)[file.name] || 
+                                     Array.from(fragments.groups.values()).find((m: any) => m.uuid === file.name);
 
-                        // Ensure registration
-                        if (!fragments.list.has(model.uuid)) {
-                             fragments.list.set(model.uuid, model);
-                        }
-                        
-                        model.useCamera(world.camera.three);
-                        world.scene.three.add(model.object);
-                        await fragments.core.update(true);
-                        
-                        const bbox = new THREE.Box3().setFromObject(model.object);
-                        const sphere = new THREE.Sphere();
-                        bbox.getBoundingSphere(sphere);
-                        world.camera.controls.fitToSphere(sphere, true);
-
-                        // Try to load associated properties file
-                        const baseName = file.name.replace('.frag', '');
-                        logToScreen(`Attempting to find properties for ${baseName}...`);
-                        
-                        // Check if user selected multiple files (frag + json)
-                        // If only one file selected, we can't automagically find the json unless we ask for it
-                        
-                        // VERIFY PROPERTIES
-                        const modelAny = model as any;
-                        const hasProps = modelAny.properties && Object.keys(modelAny.properties).length > 0;
-                        logToScreen(`Fragment loaded. Properties found: ${hasProps ? Object.keys(modelAny.properties).length : 0}`);
-                        
-                        if (!hasProps) {
-                            logToScreen('WARNING: No properties found in .frag file. Generating dummy properties...', true);
-                            
-                            try {
-                                const ids = await model.getItemsIdsWithGeometry();
-                                const dummyProperties: Record<string, any> = {};
-                                
-                                // Create a basic map for classification if needed
-                                // Usually classifier needs IFC type entities. 
-                                // We will fake them as "IFCBUILDINGELEMENTPROXY" or similar if possible, 
-                                // but mainly we just want *some* property to show up.
-                                
-                                for (const id of ids) {
-                                    dummyProperties[id] = {
-                                        expressID: id,
-                                        type: 0, // Unknown type
-                                        GlobalId: { type: 1, value: `generated-${id}` },
-                                        Name: { type: 1, value: `Element ${id}` },
-                                        Description: { type: 1, value: 'Generated Property' }
-                                    };
-                                }
-                                
-                                modelAny.properties = dummyProperties;
-                                logToScreen(`Generated dummy properties for ${ids.length} elements.`);
-                                
-                                // Attempt classification (might be empty if types are 0, but at least properties exist)
-                                logToScreen(`Attempting classification on dummy properties...`);
-                                await classifyModel(model);
-                                await updateClassificationUI();
-                                logToScreen(`Classification complete (fallback).`);
-                                
-                            } catch (genErr) {
-                                logToScreen(`Error generating dummy properties: ${genErr}`, true);
+                        if (model) {
+                            // Ensure model has a valid UUID matching the filename for consistency
+                            if (model.uuid !== file.name) {
+                                model.uuid = file.name;
                             }
+                            
+                            model.useCamera(world.camera.three);
+                            world.scene.three.add(model.object);
+                            await fragments.core.update(true);
+                            
+                            const bbox = new THREE.Box3().setFromObject(model.object);
+                            const sphere = new THREE.Sphere();
+                            bbox.getBoundingSphere(sphere);
+                            world.camera.controls.fitToSphere(sphere, true);
+    
+                            // VERIFY PROPERTIES
+                            const modelAny = model as any;
+                            const hasProps = modelAny.properties && Object.keys(modelAny.properties).length > 0;
+                            logToScreen(`Fragment loaded. Properties found: ${hasProps ? Object.keys(modelAny.properties).length : 0}`);
+                            
+                            if (!hasProps) {
+                                logToScreen('WARNING: No properties found in .frag file. Generating dummy properties...', true);
+                                
+                                try {
+                                    const ids = await model.getItemsIdsWithGeometry();
+                                    const dummyProperties: Record<string, any> = {};
+                                    
+                                    for (const id of ids) {
+                                        dummyProperties[id] = {
+                                            expressID: id,
+                                            type: 0, // Unknown type
+                                            GlobalId: { type: 1, value: `generated-${id}` },
+                                            Name: { type: 1, value: `Element ${id}` },
+                                            Description: { type: 1, value: 'Generated Property' }
+                                        };
+                                    }
+                                    
+                                    modelAny.properties = dummyProperties;
+                                    logToScreen(`Generated dummy properties for ${ids.length} elements.`);
+                                    
+                                    // Re-attempt classification with new properties
+                                    logToScreen(`Attempting classification on dummy properties...`);
+                                    await classifyModel(model);
+                                    await updateClassificationUI();
+                                    logToScreen(`Classification complete (fallback).`);
+                                    
+                                } catch (genErr) {
+                                    logToScreen(`Error generating dummy properties: ${genErr}`, true);
+                                }
+                            }
+                            
+                            // Add to loadedModels map for sidebar consistency if not already there
+                            if (!loadedModels.has(file.name)) {
+                                loadedModels.set(file.name, model);
+                            }
+
+                        } else {
+                            throw new Error('Model loaded but not found in groups.');
+                        }
                         } else {
                             // Classify only if properties exist
                             logToScreen(`Classifying fragments: ${file.name}...`);
