@@ -457,23 +457,41 @@ try {
 
         // --- DEBUG HELPERS FOR SHADOWS ---
         // Add a ground plane to receive shadows (White Standard Material for better visibility)
-        const planeGeometry = new THREE.PlaneGeometry(200, 200);
+        // MOVED LOWER to avoid intersecting the model (User Request: "grey element covering half the model")
+        const planeGeometry = new THREE.PlaneGeometry(2000, 2000); // Increased size significantly
         const planeMaterial = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
         const plane = new THREE.Mesh(planeGeometry, planeMaterial);
         plane.rotation.x = -Math.PI / 2;
-        plane.position.y = -5; // Position below the model
+        plane.position.y = -50; // Lowered significantly to clear the model
         plane.receiveShadow = true;
         world.scene.three.add(plane);
-        console.log('Debug Ground Plane added at Y=-5 (Standard Material)');
+        console.log('Debug Ground Plane added at Y=-50 (Standard Material, 2000x2000)');
 
-        // Visualize Shadow Camera
+        // Visualize Shadow Camera & Configure Shadows More Aggressively
         if ((world.scene as any).directionalLights) {
             const lights = (world.scene as any).directionalLights;
             lights.forEach((light: THREE.DirectionalLight) => {
+                
+                // Configure Shadow Properties for Better Coverage
+                light.castShadow = true;
+                light.shadow.mapSize.width = 4096; // Ultra High Res
+                light.shadow.mapSize.height = 4096;
+                light.shadow.camera.near = 0.5;
+                light.shadow.camera.far = 1000;
+                
+                // Expand the shadow camera frustum to cover larger models (e.g. if units are mm)
+                const d = 500;
+                light.shadow.camera.left = -d;
+                light.shadow.camera.right = d;
+                light.shadow.camera.top = d;
+                light.shadow.camera.bottom = -d;
+                
+                light.shadow.bias = -0.0005; // Reduce shadow acne
+                
                 if (light.shadow && light.shadow.camera) {
                     const helper = new THREE.CameraHelper(light.shadow.camera);
                     world.scene.three.add(helper);
-                    console.log('Shadow Camera Helper added');
+                    console.log('Shadow Camera Helper added with Expanded Frustum (d=500)');
                 }
             });
         }
@@ -1124,6 +1142,12 @@ async function loadModel(url: string, path: string) {
         });
 
         await fragments.core.update(true);
+
+        // Force shadow update after model load
+        if ('updateShadows' in world.scene) {
+            await (world.scene as any).updateShadows();
+            console.log('[SHADOWS] Initial shadow update triggered after model load');
+        }
 
         // --- MODEL VERIFICATION (User Request) ---
         let hasNormals = false;
