@@ -408,104 +408,13 @@ const world = worlds.create<
   OBC.SimpleRenderer
 >();
 
+world.scene = new OBC.SimpleScene(components);
+world.scene.setup();
+world.scene.three.background = new THREE.Color(0x202020); // Dark gray
+
 const container = document.getElementById('viewer-container') as HTMLElement;
 world.renderer = new OBC.SimpleRenderer(components, container);
 world.camera = new OBC.OrthoPerspectiveCamera(components);
-
-// Enable shadow map on the renderer
-world.renderer.three.shadowMap.enabled = true;
-world.renderer.three.shadowMap.type = THREE.PCFSoftShadowMap;
-
-try {
-    // Attempt to use ShadowedScene for better visuals
-    if (typeof OBC.ShadowedScene !== 'undefined') {
-        world.scene = new OBC.ShadowedScene(components);
-        // ShadowedScene often requires the renderer to be ready for shadow map configuration
-        world.scene.setup({
-            shadows: {
-                cascade: 1,
-                resolution: 1024
-            },
-            directionalLight: {
-                color: new THREE.Color(0xffffff),
-                intensity: 1.5,
-                position: new THREE.Vector3(50, 50, 50)
-            },
-            ambientLight: {
-                color: new THREE.Color(0xffffff),
-                intensity: 0.4
-            }
-        });
-        
-        // Ensure shadows are enabled by default
-        if ('shadowsEnabled' in world.scene) {
-            (world.scene as any).shadowsEnabled = true;
-        }
-        
-        console.log('ShadowedScene initialized successfully with custom config');
-
-        // Add camera listener to update shadows when camera stops moving
-        const camera = world.camera as OBC.SimpleCamera;
-        if (camera.controls) {
-            camera.controls.addEventListener('rest', async () => {
-                if ('shadowsEnabled' in world.scene && (world.scene as any).shadowsEnabled) {
-                    await (world.scene as any).updateShadows();
-                }
-            });
-            console.log('Shadow updates bound to camera movement');
-        }
-
-        // --- DEBUG HELPERS FOR SHADOWS ---
-        // Add a ground plane to receive shadows (White Standard Material for better visibility)
-        // MOVED LOWER to avoid intersecting the model (User Request: "grey element covering half the model")
-        const planeGeometry = new THREE.PlaneGeometry(2000, 2000); // Increased size significantly
-        const planeMaterial = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
-        const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-        plane.rotation.x = -Math.PI / 2;
-        plane.position.y = -50; // Lowered significantly to clear the model
-        plane.receiveShadow = true;
-        world.scene.three.add(plane);
-        console.log('Debug Ground Plane added at Y=-50 (Standard Material, 2000x2000)');
-
-        // Visualize Shadow Camera & Configure Shadows More Aggressively
-        if ((world.scene as any).directionalLights) {
-            const lights = (world.scene as any).directionalLights;
-            lights.forEach((light: THREE.DirectionalLight) => {
-                
-                // Configure Shadow Properties for Better Coverage
-                light.castShadow = true;
-                light.shadow.mapSize.width = 4096; // Ultra High Res
-                light.shadow.mapSize.height = 4096;
-                light.shadow.camera.near = 0.5;
-                light.shadow.camera.far = 1000;
-                
-                // Expand the shadow camera frustum to cover larger models (e.g. if units are mm)
-                const d = 500;
-                light.shadow.camera.left = -d;
-                light.shadow.camera.right = d;
-                light.shadow.camera.top = d;
-                light.shadow.camera.bottom = -d;
-                
-                light.shadow.bias = -0.0005; // Reduce shadow acne
-                
-                if (light.shadow && light.shadow.camera) {
-                    const helper = new THREE.CameraHelper(light.shadow.camera);
-                    world.scene.three.add(helper);
-                    console.log('Shadow Camera Helper added with Expanded Frustum (d=500)');
-                }
-            });
-        }
-
-    } else {
-        throw new Error('ShadowedScene class is not available in OBC');
-    }
-} catch (e) {
-    console.warn('Failed to initialize ShadowedScene, falling back to SimpleScene:', e);
-    world.scene = new OBC.SimpleScene(components);
-    world.scene.setup();
-}
-
-world.scene.three.background = new THREE.Color(0x202020); // Dark gray
 
 components.init();
 BUI.Manager.init();
@@ -1110,30 +1019,6 @@ async function loadModel(url: string, path: string) {
         // We populate BOTH world.meshes and components.meshes to be safe.
         model.object.traverse((child: any) => {
             if (child.isMesh) {
-                // Enable Shadows
-                child.castShadow = true;
-                child.receiveShadow = true;
-                
-                // Check Material for Shadow Support
-                if (child.material) {
-                    const mat = Array.isArray(child.material) ? child.material[0] : child.material;
-                    if (mat && mat.type === 'MeshBasicMaterial') {
-                        console.warn(`[SHADOWS] Mesh ${child.name || child.uuid} uses MeshBasicMaterial. Shadows will NOT work. Attempting to swap to MeshLambertMaterial.`);
-                        const newMat = new THREE.MeshLambertMaterial({
-                            color: mat.color,
-                            map: mat.map,
-                            side: THREE.DoubleSide
-                        });
-                        if (Array.isArray(child.material)) {
-                            child.material[0] = newMat;
-                        } else {
-                            child.material = newMat;
-                        }
-                    } else if (mat) {
-                         console.log(`[SHADOWS] Mesh material compatible: ${mat.type}`);
-                    }
-                }
-
                 world.meshes.add(child);
                 if (components.meshes && Array.isArray(components.meshes)) {
                     components.meshes.push(child);
@@ -1142,12 +1027,6 @@ async function loadModel(url: string, path: string) {
         });
 
         await fragments.core.update(true);
-
-        // Force shadow update after model load
-        if ('updateShadows' in world.scene) {
-            await (world.scene as any).updateShadows();
-            console.log('[SHADOWS] Initial shadow update triggered after model load');
-        }
 
         // --- MODEL VERIFICATION (User Request) ---
         let hasNormals = false;
@@ -1174,28 +1053,6 @@ async function loadModel(url: string, path: string) {
              console.warn('[VERIFICATION] Normals MISSING. Snapping may be limited.');
              logToScreen('Model verification: Normals MISSING. Snapping limited.', true);
         }
-
-        // --- SHADOW VERIFICATION ---
-        // Ensure shadows are updated after model load
-        if ('updateShadows' in world.scene) {
-             logToScreen('Updating shadows...');
-             await (world.scene as any).updateShadows();
-        }
-
-        // Check directional light for shadows
-        const lights = world.scene.three.children.filter((child: any) => child.isDirectionalLight);
-        console.log('[DEBUG] Directional Lights found:', lights.length);
-        lights.forEach((light: any) => {
-             console.log('[DEBUG] Light castShadow:', light.castShadow);
-             // Ensure shadow map settings are robust
-             if (!light.castShadow) {
-                 console.warn('[DEBUG] Light does not have castShadow enabled. Enabling...');
-                 light.castShadow = true;
-                 light.shadow.mapSize.width = 2048;
-                 light.shadow.mapSize.height = 2048;
-                 light.shadow.bias = -0.0005;
-             }
-        });
 
         // Generate Edges (Snaps) for the model
         // This requires normals which are now present in the new .frag files
@@ -2171,34 +2028,6 @@ function initGridToggle() {
     });
 }
 
-function initShadowToggle() {
-    const btn = document.getElementById('shadow-toggle');
-    if (!btn) return;
-
-    // Check if the current scene supports shadows
-    if (!('shadowsEnabled' in world.scene)) {
-        console.warn('Current scene does not support shadows. Disabling shadow toggle.');
-        btn.style.display = 'none'; // Hide button if not supported
-        return;
-    }
-
-    // Cast scene to any to access shadowsEnabled property safely
-    const shadowedScene = world.scene as any;
-
-    // Set initial state
-    btn.classList.toggle('active', shadowedScene.shadowsEnabled);
-
-    btn.addEventListener('click', async () => {
-        shadowedScene.shadowsEnabled = !shadowedScene.shadowsEnabled;
-        btn.classList.toggle('active', shadowedScene.shadowsEnabled);
-        
-        // Force update if needed
-        if (shadowedScene.shadowsEnabled) {
-             await shadowedScene.updateShadows();
-        }
-    });
-}
-
 
 
 
@@ -2431,7 +2260,6 @@ initSidebarTabs();
 initTheme();
 initProjectionToggle();
 initGridToggle();
-initShadowToggle();
 initClipperTool();
 initFitModelTool();
 loadModelList();
