@@ -1914,6 +1914,16 @@ function initSidebar() {
                                 } catch (genErr) {
                                     logToScreen(`Error generating dummy properties: ${genErr}`, true);
                                 }
+                            } else {
+                                // Classify only if properties exist
+                                logToScreen(`Classifying fragments: ${file.name}...`);
+                                try {
+                                    await classifyModel(model);
+                                    await updateClassificationUI();
+                                    logToScreen(`Classification complete for ${file.name}`);
+                                } catch (err) {
+                                    logToScreen(`Classification failed: ${err}`, true);
+                                }
                             }
                             
                             // Add to loadedModels map for sidebar consistency if not already there
@@ -1923,17 +1933,6 @@ function initSidebar() {
 
                         } else {
                             throw new Error('Model loaded but not found in groups.');
-                        }
-                        } else {
-                            // Classify only if properties exist
-                            logToScreen(`Classifying fragments: ${file.name}...`);
-                            try {
-                                await classifyModel(model);
-                                await updateClassificationUI();
-                                logToScreen(`Classification complete for ${file.name}`);
-                            } catch (err) {
-                                logToScreen(`Classification failed: ${err}`, true);
-                            }
                         }
 
                         logToScreen(`Loaded .frag: ${file.name}`);
