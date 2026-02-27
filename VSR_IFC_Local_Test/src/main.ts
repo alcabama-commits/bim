@@ -509,7 +509,15 @@ try {
 const classifier = components.get(OBC.Classifier);
 const hider = components.get(OBC.Hider);
 
-// --- GLOBAL RAYCASTER PATCH FOR SNAPPING (Official Tools Support) ---
+// --- App Init ---
+    const versionStr = '2026-02-27-LocalPersistence-Fix';
+    console.warn(`VSR_IFC Version: ${versionStr}`);
+    
+    // UI Update for version (optional, but good for user confirmation)
+    const versionEl = document.getElementById('version-display');
+    if (versionEl) versionEl.innerText = `v${versionStr}`;
+
+    // --- GLOBAL RAYCASTER PATCH FOR SNAPPING (Official Tools Support) ---
 // This ensures that ALL tools using OBC.Raycasters (like Length, Area) benefit from snapping logic
 // even if they don't explicitly use a VertexPicker or if Snapper is missing.
 const raycasters = components.get(OBC.Raycasters);
