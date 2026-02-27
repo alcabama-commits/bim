@@ -451,6 +451,29 @@ try {
             console.log('Shadow updates bound to camera movement');
         }
 
+        // --- DEBUG HELPERS FOR SHADOWS ---
+        // Add a ground plane to receive shadows
+        const planeGeometry = new THREE.PlaneGeometry(200, 200);
+        const planeMaterial = new THREE.ShadowMaterial({ opacity: 0.5, color: 0x000000 });
+        const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+        plane.rotation.x = -Math.PI / 2;
+        plane.position.y = -5; // Position below the model
+        plane.receiveShadow = true;
+        world.scene.three.add(plane);
+        console.log('Debug Ground Plane added at Y=-5');
+
+        // Visualize Shadow Camera
+        if ((world.scene as any).directionalLights) {
+            const lights = (world.scene as any).directionalLights;
+            lights.forEach((light: THREE.DirectionalLight) => {
+                if (light.shadow && light.shadow.camera) {
+                    const helper = new THREE.CameraHelper(light.shadow.camera);
+                    world.scene.three.add(helper);
+                    console.log('Shadow Camera Helper added');
+                }
+            });
+        }
+
     } else {
         throw new Error('ShadowedScene class is not available in OBC');
     }
