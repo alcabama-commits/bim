@@ -4411,20 +4411,40 @@ function setupMeasurementTools() {
         // Add keydown for volume finish and Escape to cancel
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                let anyAction = false;
+
+                // 1. Cancel Measurement
                 if (measurementMode) {
-                    toggleMeasurementMode(measurementMode); // Toggle off
+                    toggleMeasurementMode(measurementMode); // This resets mode, points, temp lines, and UI buttons
+                    anyAction = true;
                 }
                 
-                // Also clear clipper if active
+                // 2. Disable Clipper
                 if (clipper.enabled) {
                     clipper.enabled = false;
                     const btn = document.getElementById('clipper-toggle');
                     if (btn) btn.classList.remove('active');
-                    updateUI();
+                    const controls = document.getElementById('clipper-controls');
+                    if (controls) controls.style.display = 'none';
+                    anyAction = true;
                 }
 
-                if (snappingCursor) {
+                // 3. Hide Snapping Cursor
+                if (snappingCursor && snappingCursor.visible) {
                     snappingCursor.visible = false;
+                    anyAction = true;
+                }
+
+                // 4. Clear Selection (Highlighter)
+                // Check if there is any selection in the 'select' group
+                const selection = highlighter.selection.select;
+                if (selection && Object.keys(selection).length > 0) {
+                     highlighter.clear('select');
+                     anyAction = true;
+                }
+
+                if (anyAction) {
+                    logToScreen('Cancelled / Cleared');
                 }
             }
         });
