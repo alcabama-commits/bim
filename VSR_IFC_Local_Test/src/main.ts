@@ -1015,6 +1015,9 @@ async function loadModel(url: string, path: string) {
         if (!model) throw new Error('Model failed to load (undefined result)');
 
         (model as any).name = path.split('/').pop() || 'Model';
+        // Store URL for state persistence
+        if (!model.userData) model.userData = {};
+        model.userData.url = url;
 
         // FORCE UUID to match the path (which is the key in fragments.list)
         // This ensures the highlighter and classifier can find the model
@@ -4933,6 +4936,72 @@ function setupViewpoints() {
             if (Object.keys(items).length > 0) {
                 await hider.set(false, items);
             }
+        },
+        getClippingPlanes: () => {
+            const planes: { normal: number[], constant: number }[] = [];
+            for(const [id, p] of clipper.list) {
+                if ((p as any).plane) {
+                    const plane = (p as any).plane as THREE.Plane;
+                    planes.push({
+                        normal: plane.normal.toArray(),
+                        constant: plane.constant
+                    });
+                }
+            }
+            return planes;
+        },
+        restoreClippingPlanes: (planes) => {
+            clipper.deleteAll();
+            if (!planes || planes.length === 0) return;
+            
+            planes.forEach(p => {
+                const normal = new THREE.Vector3(p.normal[0], p.normal[1], p.normal[2]);
+                const constant = p.constant;
+                const coplanarPoint = normal.clone().multiplyScalar(-constant);
+                clipper.createFromNormalAndCoplanarPoint(world, normal, coplanarPoint);
+            });
+        },
+        getLoadedModels: () => {
+             const models: { uuid: string, url: string }[] = [];
+             for (const [uuid, group] of fragments.groups) {
+                 if (group.userData && group.userData.url) {
+                     models.push({ uuid, url: group.userData.url });
+                 }
+             }
+             return models;
+        },
+        restoreLoadedModels: async (savedModels) => {
+             const currentUUIDs = new Set(fragments.groups.keys());
+             const savedUUIDs = new Set(savedModels.map(m => m.uuid));
+             
+             // Unload extra models
+             for (const uuid of currentUUIDs) {
+                 if (!savedUUIDs.has(uuid)) {
+                     const group = fragments.groups.get(uuid);
+                     if (group) {
+                         if ((fragments as any).disposeGroup) {
+                             (fragments as any).disposeGroup(group);
+                         } else {
+                             // Fallback manual disposal
+                             world.scene.three.remove(group);
+                             if (group.dispose) group.dispose();
+                             fragments.groups.delete(uuid);
+                         }
+                     }
+                 }
+             }
+             
+             // Load missing models
+             for (const m of savedModels) {
+                 if (!currentUUIDs.has(m.uuid)) {
+                     try {
+                        console.log(`[Viewpoints] Restoring model: ${m.uuid}`);
+                        await loadModel(m.url, m.uuid);
+                     } catch (e) {
+                         console.error(`[Viewpoints] Failed to restore model ${m.uuid}:`, e);
+                     }
+                 }
+             }
         }
     };
 

@@ -18,13 +18,19 @@ export interface ViewpointData {
     isolation: string[]; // GUIDs of isolated elements (Reserved for future use)
     hidden: { [modelUUID: string]: number[] }; // Map of Model UUID -> Array of ExpressIDs
     annotations: any[]; // Serialized measurements/annotations
+    clippingPlanes: { normal: number[], constant: number }[]; // Serialized clipping planes
+    loadedModels: { uuid: string, url: string }[]; // List of loaded models
 }
 
 export interface ViewpointStateProvider {
     getMeasurements(): any[];
     restoreMeasurements(data: any[]): void;
     getHiddenItems(): Record<string, number[]>;
-    restoreHiddenItems(items: Record<string, number[]>): void;
+    restoreHiddenItems(items: Record<string, number[]>): Promise<void> | void;
+    getClippingPlanes(): { normal: number[], constant: number }[];
+    restoreClippingPlanes(planes: { normal: number[], constant: number }[]): void;
+    getLoadedModels(): { uuid: string, url: string }[];
+    restoreLoadedModels(models: { uuid: string, url: string }[]): Promise<void> | void;
 }
 
 export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
@@ -87,10 +93,14 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         // 3. Capture Visibility & Annotations via Provider
         let hidden: Record<string, number[]> = {};
         let annotations: any[] = [];
+        let clippingPlanes: { normal: number[], constant: number }[] = [];
+        let loadedModels: { uuid: string, url: string }[] = [];
 
         if (this._stateProvider) {
             hidden = this._stateProvider.getHiddenItems();
             annotations = this._stateProvider.getMeasurements();
+            clippingPlanes = this._stateProvider.getClippingPlanes();
+            loadedModels = this._stateProvider.getLoadedModels();
         }
 
         const viewpointData: ViewpointData = {
@@ -108,7 +118,9 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             selection,
             isolation: [], 
             hidden,
-            annotations
+            annotations,
+            clippingPlanes,
+            loadedModels
         };
 
         this._savedViewpoints.push(viewpointData);
@@ -124,6 +136,11 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         if (!view) return;
 
         console.log(`Restoring viewpoint '${view.title}'...`);
+
+        // 0. Restore Loaded Models (Critical for scene composition)
+        if (this._stateProvider && view.loadedModels) {
+             await this._stateProvider.restoreLoadedModels(view.loadedModels);
+        }
 
         // 1. Restore Camera
         if (this._world.camera.controls) {
@@ -166,6 +183,9 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             }
             if (view.annotations) {
                 this._stateProvider.restoreMeasurements(view.annotations);
+            }
+            if (view.clippingPlanes) {
+                this._stateProvider.restoreClippingPlanes(view.clippingPlanes);
             }
         }
         
