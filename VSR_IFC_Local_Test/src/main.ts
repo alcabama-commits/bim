@@ -4,7 +4,20 @@ import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
+import { ViewpointsManager, ViewpointStateProvider } from './viewpoints-manager';
 import './style.css';
+
+
+// --- Viewpoints State ---
+interface MeasurementData {
+    type: 'point' | 'length' | 'area' | 'angle' | 'slope';
+    points: { x: number, y: number, z: number }[];
+    label: string;
+    labelPosition: { x: number, y: number, z: number };
+    color?: number;
+}
+let completedMeasurements: MeasurementData[] = [];
+let viewpointsManager: ViewpointsManager | null = null;
 
 
 // --- EDGE & VERTEX SNAP PATCH (v26) ---
@@ -4476,8 +4489,14 @@ function setupMeasurementTools() {
                 // Lift label slightly
                 center.y += 0.2;
                 
-                createLabel(`${area.toFixed(2)}m²`, center);
-                logToScreen(`Area: ${area.toFixed(2)}m²`);
+                const labelText = `${area.toFixed(2)}m²`;
+                createLabel(labelText, center, {
+                    type: 'area',
+                    points: measurementPoints.map(p => p.clone()),
+                    label: labelText,
+                    labelPosition: center.clone()
+                });
+                logToScreen(`Area: ${labelText}`);
                 
                 measurementPoints = [];
                 if (tempMeasurementLine) {
@@ -4545,6 +4564,7 @@ function clearMeasurements() {
     measurementLabels.length = 0;
     
     resetCurrentMeasurement();
+    completedMeasurements = [];
     logToScreen('Measurements cleared');
 }
 
@@ -4570,7 +4590,7 @@ function createLine(start: THREE.Vector3, end: THREE.Vector3) {
     return line;
 }
 
-function createLabel(text: string, position: THREE.Vector3): HTMLDivElement {
+function createLabel(text: string, position: THREE.Vector3, data?: MeasurementData): HTMLDivElement {
     const div = document.createElement('div');
     div.className = 'measurement-label';
     div.textContent = text;
@@ -4585,6 +4605,11 @@ function createLabel(text: string, position: THREE.Vector3): HTMLDivElement {
     document.body.appendChild(div);
     measurementLabels.push(div);
     
+    // Store metadata if provided
+    if (data) {
+        completedMeasurements.push(data);
+    }
+    
     const update = () => {
         if (!div.isConnected) return;
         const screenPos = position.clone().project(world.camera.three);
@@ -4592,6 +4617,7 @@ function createLabel(text: string, position: THREE.Vector3): HTMLDivElement {
         const y = (-(screenPos.y * .5) + .5) * window.innerHeight;
         div.style.left = `${x}px`;
         div.style.top = `${y}px`;
+        div.style.display = screenPos.z > 1 ? 'none' : 'block';
         requestAnimationFrame(update);
     };
     update();
@@ -4699,7 +4725,12 @@ async function onMeasureClick(event: MouseEvent) {
     if (measurementMode === 'point') {
         createMarker(point, 0x00ff00);
         const text = `X:${point.x.toFixed(2)} Y:${point.y.toFixed(2)} Z:${point.z.toFixed(2)}`;
-        createLabel(text, point);
+        createLabel(text, point, {
+            type: 'point',
+            points: [point.clone()],
+            label: text,
+            labelPosition: point.clone()
+        });
         logToScreen(`Point: ${text}`);
     } else if (measurementMode === 'length') {
         measurementPoints.push(point);
@@ -4713,9 +4744,15 @@ async function onMeasureClick(event: MouseEvent) {
             
             const dist = p1.distanceTo(p2);
             const mid = p1.clone().add(p2).multiplyScalar(0.5);
-            createLabel(`${dist.toFixed(3)}m`, mid);
+            const labelText = `${dist.toFixed(3)}m`;
+            createLabel(labelText, mid, {
+                type: 'length',
+                points: [p1.clone(), p2.clone()],
+                label: labelText,
+                labelPosition: mid.clone()
+            });
             
-            logToScreen(`Distance: ${dist.toFixed(3)}m`);
+            logToScreen(`Distance: ${labelText}`);
             
             // Reset for next measurement
             measurementPoints = [];
@@ -4761,8 +4798,14 @@ async function onMeasureClick(event: MouseEvent) {
             const angleRad = v1.angleTo(v2);
             const angleDeg = THREE.MathUtils.radToDeg(angleRad);
             
-            createLabel(`${angleDeg.toFixed(1)}°`, vertex);
-            logToScreen(`Angle: ${angleDeg.toFixed(1)}°`);
+            const labelText = `${angleDeg.toFixed(1)}°`;
+            createLabel(labelText, vertex, {
+                type: 'angle',
+                points: [p1.clone(), vertex.clone(), p3.clone()],
+                label: labelText,
+                labelPosition: vertex.clone()
+            });
+            logToScreen(`Angle: ${labelText}`);
             
             measurementPoints = [];
             if (tempMeasurementLine) {
@@ -4795,8 +4838,14 @@ async function onMeasureClick(event: MouseEvent) {
             const slopeDeg = THREE.MathUtils.radToDeg(slope);
             const mid = p1.clone().add(p2).multiplyScalar(0.5);
             
-            createLabel(`${slopeDeg.toFixed(1)}°`, mid);
-            logToScreen(`Slope: ${slopeDeg.toFixed(1)}°`);
+            const labelText = `${slopeDeg.toFixed(1)}°`;
+            createLabel(labelText, mid, {
+                type: 'slope',
+                points: [p1.clone(), p2.clone()],
+                label: labelText,
+                labelPosition: mid.clone()
+            });
+            logToScreen(`Slope: ${labelText}`);
             
             measurementPoints = [];
             if (tempMeasurementLine) {
@@ -4811,6 +4860,104 @@ async function onMeasureClick(event: MouseEvent) {
 // Note: This needs to be added to the container event listener setup
 // We'll modify the existing contextmenu handler
 // ... (The contextmenu handler is already defined in setupMeasurementTools, let's update it separately)
+
+
+// --- Viewpoint Management ---
+function setupViewpoints() {
+    console.log('[DEBUG] Setting up Viewpoints Manager...');
+    
+    const provider: ViewpointStateProvider = {
+        getMeasurements: () => {
+            return completedMeasurements;
+        },
+        restoreMeasurements: (data: any[]) => {
+            clearMeasurements();
+            if (!data || !Array.isArray(data)) return;
+            
+            data.forEach(m => {
+                if (m.type === 'point' && m.points && m.points.length > 0) {
+                    const p = new THREE.Vector3(m.points[0].x, m.points[0].y, m.points[0].z);
+                    createMarker(p, 0x00ff00);
+                    createLabel(m.label, p, m);
+                } else if (m.type === 'length' && m.points && m.points.length === 2) {
+                    const p1 = new THREE.Vector3(m.points[0].x, m.points[0].y, m.points[0].z);
+                    const p2 = new THREE.Vector3(m.points[1].x, m.points[1].y, m.points[1].z);
+                    createMarker(p1, 0xffff00);
+                    createMarker(p2, 0xffff00);
+                    createLine(p1, p2);
+                    const mid = new THREE.Vector3(m.labelPosition.x, m.labelPosition.y, m.labelPosition.z);
+                    createLabel(m.label, mid, m);
+                } else if (m.type === 'angle' && m.points && m.points.length === 3) {
+                    const p1 = new THREE.Vector3(m.points[0].x, m.points[0].y, m.points[0].z);
+                    const vertex = new THREE.Vector3(m.points[1].x, m.points[1].y, m.points[1].z);
+                    const p3 = new THREE.Vector3(m.points[2].x, m.points[2].y, m.points[2].z);
+                    createMarker(p1, 0xffa500);
+                    createMarker(vertex, 0xffa500);
+                    createMarker(p3, 0xffa500);
+                    createLine(p1, vertex);
+                    createLine(vertex, p3);
+                    createLabel(m.label, vertex, m);
+                } else if (m.type === 'slope' && m.points && m.points.length === 2) {
+                    const p1 = new THREE.Vector3(m.points[0].x, m.points[0].y, m.points[0].z);
+                    const p2 = new THREE.Vector3(m.points[1].x, m.points[1].y, m.points[1].z);
+                    createMarker(p1, 0x0000ff);
+                    createMarker(p2, 0x0000ff);
+                    createLine(p1, p2);
+                    const mid = new THREE.Vector3(m.labelPosition.x, m.labelPosition.y, m.labelPosition.z);
+                    createLabel(m.label, mid, m);
+                } else if (m.type === 'area' && m.points && m.points.length > 2) {
+                    const points = m.points.map((p: any) => new THREE.Vector3(p.x, p.y, p.z));
+                    points.forEach((p: any) => createMarker(p, 0x00ffff));
+                    for (let i = 0; i < points.length; i++) {
+                        createLine(points[i], points[(i + 1) % points.length]);
+                    }
+                    const center = new THREE.Vector3(m.labelPosition.x, m.labelPosition.y, m.labelPosition.z);
+                    createLabel(m.label, center, m);
+                }
+            });
+        },
+        getHiddenItems: () => {
+            const serializable: Record<string, number[]> = {};
+            for (const key in hiddenItems) {
+                if (hiddenItems[key].size > 0) {
+                    serializable[key] = Array.from(hiddenItems[key]);
+                }
+            }
+            return serializable;
+        },
+        restoreHiddenItems: async (items: Record<string, number[]>) => {
+            // Reset to show all (this clears hiddenItems via monkey-patch)
+            await hider.set(true);
+            
+            // Apply new hidden state (this updates hiddenItems via monkey-patch)
+            if (Object.keys(items).length > 0) {
+                await hider.set(false, items);
+            }
+        }
+    };
+
+    viewpointsManager = new ViewpointsManager(components, world, provider);
+    
+    // Connect UI
+    const container = document.getElementById('viewpoints-list-container');
+    if (container) {
+        viewpointsManager.createUI(container);
+    }
+    
+    // Connect Add Button (Header)
+    const addBtn = document.getElementById('btn-add-viewpoint');
+    if (addBtn) {
+        const newBtn = addBtn.cloneNode(true) as HTMLElement;
+        addBtn.parentNode?.replaceChild(newBtn, addBtn);
+        
+        newBtn.addEventListener('click', () => {
+            viewpointsManager?.openSaveModal();
+        });
+    }
+}
+
+// Initialize Viewpoints
+setupViewpoints();
 
 
 
