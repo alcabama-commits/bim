@@ -412,6 +412,10 @@ const container = document.getElementById('viewer-container') as HTMLElement;
 world.renderer = new OBC.SimpleRenderer(components, container);
 world.camera = new OBC.OrthoPerspectiveCamera(components);
 
+// Enable shadow map on the renderer
+world.renderer.three.shadowMap.enabled = true;
+world.renderer.three.shadowMap.type = THREE.PCFSoftShadowMap;
+
 try {
     // Attempt to use ShadowedScene for better visuals
     if (typeof OBC.ShadowedScene !== 'undefined') {
@@ -1033,6 +1037,10 @@ async function loadModel(url: string, path: string) {
         // We populate BOTH world.meshes and components.meshes to be safe.
         model.object.traverse((child: any) => {
             if (child.isMesh) {
+                // Enable Shadows
+                child.castShadow = true;
+                child.receiveShadow = true;
+
                 world.meshes.add(child);
                 if (components.meshes && Array.isArray(components.meshes)) {
                     components.meshes.push(child);
@@ -2059,12 +2067,14 @@ function initShadowToggle() {
     // Set initial state
     btn.classList.toggle('active', shadowedScene.shadowsEnabled);
 
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
         shadowedScene.shadowsEnabled = !shadowedScene.shadowsEnabled;
         btn.classList.toggle('active', shadowedScene.shadowsEnabled);
         
-        // Optional: Log status
-        // logToScreen(`Shadows ${shadowedScene.shadowsEnabled ? 'enabled' : 'disabled'}`);
+        // Force update if needed
+        if (shadowedScene.shadowsEnabled) {
+             await shadowedScene.updateShadows();
+        }
     });
 }
 
