@@ -408,10 +408,15 @@ const world = worlds.create<
   OBC.SimpleRenderer
 >();
 
+const container = document.getElementById('viewer-container') as HTMLElement;
+world.renderer = new OBC.SimpleRenderer(components, container);
+world.camera = new OBC.OrthoPerspectiveCamera(components);
+
 try {
     // Attempt to use ShadowedScene for better visuals
     if (typeof OBC.ShadowedScene !== 'undefined') {
         world.scene = new OBC.ShadowedScene(components);
+        // ShadowedScene often requires the renderer to be ready for shadow map configuration
         world.scene.setup();
         console.log('ShadowedScene initialized successfully');
     } else {
@@ -424,10 +429,6 @@ try {
 }
 
 world.scene.three.background = new THREE.Color(0x202020); // Dark gray
-
-const container = document.getElementById('viewer-container') as HTMLElement;
-world.renderer = new OBC.SimpleRenderer(components, container);
-world.camera = new OBC.OrthoPerspectiveCamera(components);
 
 components.init();
 BUI.Manager.init();
