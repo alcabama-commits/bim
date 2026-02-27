@@ -103,7 +103,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             camera: {
                 position: position.toArray(),
                 target: target.toArray(),
-                projection: this._world.camera.projection.toLowerCase()
+                projection: ((this._world.camera as any).projection?.current || 'Perspective').toLowerCase()
             },
             selection,
             isolation: [], 
@@ -130,11 +130,15 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             const { position, target, projection } = view.camera;
             
             // Restore projection if needed
-            if (this._world.camera.projection.toLowerCase() !== projection) {
-                if (projection === 'orthographic') {
-                    await this._world.camera.set('Orthographic');
-                } else {
-                    await this._world.camera.set('Perspective');
+            const currentProjection = ((this._world.camera as any).projection?.current || 'Perspective').toLowerCase();
+            if (currentProjection !== projection) {
+                const projectionApi = (this._world.camera as any).projection;
+                if (projectionApi && typeof projectionApi.set === 'function') {
+                    if (projection === 'orthographic') {
+                        await projectionApi.set('Orthographic');
+                    } else {
+                        await projectionApi.set('Perspective');
+                    }
                 }
             }
 
