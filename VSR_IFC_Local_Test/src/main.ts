@@ -1866,6 +1866,10 @@ function initSidebar() {
                             if (!model.userData) model.userData = {};
                             model.userData.isLocal = true;
                             model.userData.dbKey = file.name;
+                            // Ensure URL is set for this session
+                            model.userData.url = blobUrl;
+                            
+                            console.log(`[Viewpoints] Model ${model.uuid} marked as local with DB key: ${file.name}`);
                             
                             model.useCamera(world.camera.three);
                             world.scene.three.add(model.object);
@@ -5050,14 +5054,24 @@ function setupViewpoints() {
                 ? Array.from(fragments.groups.entries())
                 : Object.entries(fragments.groups || {});
 
+             console.log(`[Viewpoints] Saving models. Found ${entries.length} groups.`);
+
              for (const [uuid, group] of entries) {
-                 if (group.userData && group.userData.url) {
+                 if (group.userData) {
+                     console.log(`[Viewpoints] Inspecting model ${uuid}:`, group.userData);
                      if (group.userData.isLocal && group.userData.dbKey) {
                          // Encode IDB key in URL for persistence
-                         models.push({ uuid, url: `indexeddb://${group.userData.dbKey}` });
-                     } else {
+                         const idbUrl = `indexeddb://${group.userData.dbKey}`;
+                         models.push({ uuid, url: idbUrl });
+                         console.log(`[Viewpoints] Saved local model reference: ${idbUrl}`);
+                     } else if (group.userData.url) {
                          models.push({ uuid, url: group.userData.url });
+                         console.log(`[Viewpoints] Saved remote model reference: ${group.userData.url}`);
+                     } else {
+                         console.warn(`[Viewpoints] Model ${uuid} has no URL or DB key. Skipping persistence.`);
                      }
+                 } else {
+                      console.warn(`[Viewpoints] Model ${uuid} has no userData. Skipping persistence.`);
                  }
              }
              return models;
@@ -5092,7 +5106,7 @@ function setupViewpoints() {
              for (const m of savedModels) {
                  if (!currentUUIDs.has(m.uuid)) {
                      try {
-                        console.log(`[Viewpoints] Restoring model: ${m.uuid}`);
+                        console.log(`[Viewpoints] Restoring model: ${m.uuid} from ${m.url}`);
                         
                         let loadUrl = m.url;
                         let isLocal = false;
@@ -5105,6 +5119,7 @@ function setupViewpoints() {
                             
                             const buffer = await loadFromIndexedDB(dbKey);
                             if (buffer) {
+                                console.log(`[Viewpoints] Retrieved ${buffer.byteLength} bytes from IDB for ${dbKey}`);
                                 const blob = new Blob([buffer]);
                                 loadUrl = URL.createObjectURL(blob);
                                 isLocal = true;
@@ -5115,7 +5130,9 @@ function setupViewpoints() {
                             }
                         }
 
+                        console.log(`[Viewpoints] Calling loadModel with URL: ${loadUrl}`);
                         await loadModel(loadUrl, m.uuid);
+                        console.log(`[Viewpoints] loadModel completed for ${m.uuid}`);
                         
                         // Restore local flags if needed
                         if (isLocal) {
@@ -5126,12 +5143,17 @@ function setupViewpoints() {
                                  model.userData.dbKey = dbKey;
                                  // Update URL to current blob for subsequent saves in this session
                                  model.userData.url = loadUrl; 
+                                 console.log(`[Viewpoints] Restored local metadata for ${m.uuid}`);
+                             } else {
+                                 console.error(`[Viewpoints] Model ${m.uuid} not found in fragments.groups after load!`);
                              }
                         }
 
                      } catch (e) {
                          console.error(`[Viewpoints] Failed to restore model ${m.uuid}:`, e);
                      }
+                 } else {
+                     console.log(`[Viewpoints] Model ${m.uuid} already loaded. Skipping.`);
                  }
              }
         }
