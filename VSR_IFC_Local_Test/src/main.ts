@@ -430,6 +430,10 @@ try {
                 color: new THREE.Color(0xffffff),
                 intensity: 1.5,
                 position: new THREE.Vector3(50, 50, 50)
+            },
+            ambientLight: {
+                color: new THREE.Color(0xffffff),
+                intensity: 0.4
             }
         });
         
@@ -452,15 +456,15 @@ try {
         }
 
         // --- DEBUG HELPERS FOR SHADOWS ---
-        // Add a ground plane to receive shadows
+        // Add a ground plane to receive shadows (White Standard Material for better visibility)
         const planeGeometry = new THREE.PlaneGeometry(200, 200);
-        const planeMaterial = new THREE.ShadowMaterial({ opacity: 0.5, color: 0x000000 });
+        const planeMaterial = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
         const plane = new THREE.Mesh(planeGeometry, planeMaterial);
         plane.rotation.x = -Math.PI / 2;
         plane.position.y = -5; // Position below the model
         plane.receiveShadow = true;
         world.scene.three.add(plane);
-        console.log('Debug Ground Plane added at Y=-5');
+        console.log('Debug Ground Plane added at Y=-5 (Standard Material)');
 
         // Visualize Shadow Camera
         if ((world.scene as any).directionalLights) {
@@ -1091,6 +1095,26 @@ async function loadModel(url: string, path: string) {
                 // Enable Shadows
                 child.castShadow = true;
                 child.receiveShadow = true;
+                
+                // Check Material for Shadow Support
+                if (child.material) {
+                    const mat = Array.isArray(child.material) ? child.material[0] : child.material;
+                    if (mat && mat.type === 'MeshBasicMaterial') {
+                        console.warn(`[SHADOWS] Mesh ${child.name || child.uuid} uses MeshBasicMaterial. Shadows will NOT work. Attempting to swap to MeshLambertMaterial.`);
+                        const newMat = new THREE.MeshLambertMaterial({
+                            color: mat.color,
+                            map: mat.map,
+                            side: THREE.DoubleSide
+                        });
+                        if (Array.isArray(child.material)) {
+                            child.material[0] = newMat;
+                        } else {
+                            child.material = newMat;
+                        }
+                    } else if (mat) {
+                         console.log(`[SHADOWS] Mesh material compatible: ${mat.type}`);
+                    }
+                }
 
                 world.meshes.add(child);
                 if (components.meshes && Array.isArray(components.meshes)) {
