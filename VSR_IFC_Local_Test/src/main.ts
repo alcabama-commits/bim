@@ -4963,7 +4963,12 @@ function setupViewpoints() {
         },
         getLoadedModels: () => {
              const models: { uuid: string, url: string }[] = [];
-             for (const [uuid, group] of fragments.groups) {
+             // Handle both Map and Object for fragments.groups
+             const entries = (fragments.groups instanceof Map) 
+                ? Array.from(fragments.groups.entries())
+                : Object.entries(fragments.groups || {});
+
+             for (const [uuid, group] of entries) {
                  if (group.userData && group.userData.url) {
                      models.push({ uuid, url: group.userData.url });
                  }
@@ -4971,13 +4976,14 @@ function setupViewpoints() {
              return models;
         },
         restoreLoadedModels: async (savedModels) => {
-             const currentUUIDs = new Set(fragments.groups.keys());
+             const isMap = fragments.groups instanceof Map;
+             const currentUUIDs = new Set(isMap ? fragments.groups.keys() : Object.keys(fragments.groups || {}));
              const savedUUIDs = new Set(savedModels.map(m => m.uuid));
              
              // Unload extra models
              for (const uuid of currentUUIDs) {
                  if (!savedUUIDs.has(uuid)) {
-                     const group = fragments.groups.get(uuid);
+                     const group = isMap ? fragments.groups.get(uuid) : (fragments.groups as any)[uuid];
                      if (group) {
                          if ((fragments as any).disposeGroup) {
                              (fragments as any).disposeGroup(group);
@@ -4985,7 +4991,11 @@ function setupViewpoints() {
                              // Fallback manual disposal
                              world.scene.three.remove(group);
                              if (group.dispose) group.dispose();
-                             fragments.groups.delete(uuid);
+                             if (isMap) {
+                                fragments.groups.delete(uuid);
+                             } else {
+                                delete (fragments.groups as any)[uuid];
+                             }
                          }
                      }
                  }
