@@ -439,6 +439,18 @@ try {
         }
         
         console.log('ShadowedScene initialized successfully with custom config');
+
+        // Add camera listener to update shadows when camera stops moving
+        const camera = world.camera as OBC.SimpleCamera;
+        if (camera.controls) {
+            camera.controls.addEventListener('rest', async () => {
+                if ('shadowsEnabled' in world.scene && (world.scene as any).shadowsEnabled) {
+                    await (world.scene as any).updateShadows();
+                }
+            });
+            console.log('Shadow updates bound to camera movement');
+        }
+
     } else {
         throw new Error('ShadowedScene class is not available in OBC');
     }
