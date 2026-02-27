@@ -965,6 +965,60 @@ export function ensureModelEdges(model: any) {
     console.log(`[DEBUG] Skipped static edge generation for ${model.uuid} (using dynamic snapping)`);
 }
 
+// --- IndexedDB Helper for Local Models Persistence ---
+const DB_NAME = 'VSR_IFC_Storage';
+const STORE_NAME = 'models';
+let _dbPromise: Promise<IDBDatabase> | null = null;
+
+function getDB(): Promise<IDBDatabase> {
+    if (!_dbPromise) {
+        _dbPromise = new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, 1);
+            request.onupgradeneeded = (event) => {
+                const db = (event.target as IDBOpenDBRequest).result;
+                if (!db.objectStoreNames.contains(STORE_NAME)) {
+                    db.createObjectStore(STORE_NAME);
+                }
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+    return _dbPromise;
+}
+
+async function saveToIndexedDB(key: string, data: ArrayBuffer) {
+    try {
+        const db = await getDB();
+        return new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.put(data, key);
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+        });
+    } catch (e) {
+        console.warn('IndexedDB save failed:', e);
+    }
+}
+
+async function loadFromIndexedDB(key: string): Promise<ArrayBuffer | undefined> {
+    try {
+        const db = await getDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.get(key);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    } catch (e) {
+        console.warn('IndexedDB load failed:', e);
+        return undefined;
+    }
+}
+
+
 // --- Model Loading Logic ---
 
 async function loadModel(url: string, path: string) {
@@ -1782,6 +1836,17 @@ function initSidebar() {
                         // Create a persistent URL for this session
                         const blobUrl = URL.createObjectURL(file);
                         
+                        // Save to IndexedDB for cross-session persistence
+                        logToScreen(`Saving ${file.name} to local storage...`);
+                        try {
+                             // Clone buffer because core.load or others might detach/transfer it
+                             const buffer = await file.arrayBuffer();
+                             await saveToIndexedDB(file.name, buffer);
+                             logToScreen(`Saved to local storage.`);
+                        } catch (dbErr) {
+                             console.warn('Failed to save to IDB:', dbErr);
+                        }
+
                         // Use the centralized loadModel function to ensure registration and userData setup
                         // This handles fetch, decompression, and basic registration
                         await loadModel(blobUrl, file.name);
@@ -1796,6 +1861,11 @@ function initSidebar() {
                             if (model.uuid !== file.name) {
                                 model.uuid = file.name;
                             }
+
+                            // Mark as local so we know to look in IDB later
+                            if (!model.userData) model.userData = {};
+                            model.userData.isLocal = true;
+                            model.userData.dbKey = file.name;
                             
                             model.useCamera(world.camera.three);
                             world.scene.three.add(model.object);
@@ -4982,7 +5052,12 @@ function setupViewpoints() {
 
              for (const [uuid, group] of entries) {
                  if (group.userData && group.userData.url) {
-                     models.push({ uuid, url: group.userData.url });
+                     if (group.userData.isLocal && group.userData.dbKey) {
+                         // Encode IDB key in URL for persistence
+                         models.push({ uuid, url: `indexeddb://${group.userData.dbKey}` });
+                     } else {
+                         models.push({ uuid, url: group.userData.url });
+                     }
                  }
              }
              return models;
@@ -5018,7 +5093,42 @@ function setupViewpoints() {
                  if (!currentUUIDs.has(m.uuid)) {
                      try {
                         console.log(`[Viewpoints] Restoring model: ${m.uuid}`);
-                        await loadModel(m.url, m.uuid);
+                        
+                        let loadUrl = m.url;
+                        let isLocal = false;
+                        let dbKey = '';
+
+                        // Check if it's a local model in IndexedDB
+                        if (m.url.startsWith('indexeddb://')) {
+                            dbKey = m.url.replace('indexeddb://', '');
+                            logToScreen(`Restoring local model from storage: ${dbKey}...`);
+                            
+                            const buffer = await loadFromIndexedDB(dbKey);
+                            if (buffer) {
+                                const blob = new Blob([buffer]);
+                                loadUrl = URL.createObjectURL(blob);
+                                isLocal = true;
+                            } else {
+                                console.warn(`Local model ${dbKey} not found in IndexedDB.`);
+                                logToScreen(`Error: Local model ${dbKey} expired/missing. Please reload file.`, true);
+                                continue;
+                            }
+                        }
+
+                        await loadModel(loadUrl, m.uuid);
+                        
+                        // Restore local flags if needed
+                        if (isLocal) {
+                             const model = isMap ? fragments.groups.get(m.uuid) : (fragments.groups as any)[m.uuid];
+                             if (model) {
+                                 if (!model.userData) model.userData = {};
+                                 model.userData.isLocal = true;
+                                 model.userData.dbKey = dbKey;
+                                 // Update URL to current blob for subsequent saves in this session
+                                 model.userData.url = loadUrl; 
+                             }
+                        }
+
                      } catch (e) {
                          console.error(`[Viewpoints] Failed to restore model ${m.uuid}:`, e);
                      }
