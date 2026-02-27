@@ -26,7 +26,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VSR IFC Viewer v27-EventSnap</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script type="module" crossorigin src="./assets/main-DJJaWtXy.js"></script>
+    <script type="module" crossorigin src="./assets/main-D1666S87.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/main-gS-EMorV.css">
   </head>
   <body>
@@ -40,6 +40,9 @@
             </button>
             <button class="tab-btn" data-tab="classification" title="Clasificación">
                 <i class="fa-solid fa-tags"></i>
+            </button>
+            <button class="tab-btn" data-tab="viewpoints" title="Vistas">
+                <i class="fa-solid fa-camera"></i>
             </button>
         </div>
 
@@ -62,6 +65,19 @@
                 <div style="padding: 20px; text-align: center; color: #888;">
                     Carga un modelo para ver la clasificación
                 </div>
+            </div>
+        </div>
+
+        <div id="tab-viewpoints" class="tab-content" style="display: none;">
+            <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h3><i class="fa-solid fa-camera"></i> Vistas Guardadas</h3>
+                <button id="btn-add-viewpoint" class="icon-btn" title="Guardar Vista Actual" style="background: none; border: none; color: #333; cursor: pointer;">
+                    <i class="fa-solid fa-plus-circle" style="font-size: 1.2em;"></i>
+                </button>
+            </div>
+            
+            <div class="sidebar-content" id="viewpoints-list-container">
+                <!-- Populated by ViewpointsManager -->
             </div>
         </div>
 

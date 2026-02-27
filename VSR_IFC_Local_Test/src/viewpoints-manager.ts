@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
+import * as OBF from '@thatopen/components-front';
 
 export interface ViewpointData {
     id: string;
@@ -33,7 +34,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     private _components: OBC.Components;
     private _world: OBC.World;
     private _viewpoints: OBC.Viewpoints;
-    private _highlighter: OBC.Highlighter;
+    private _highlighter: OBF.Highlighter;
     private _hider: OBC.Hider;
     
     private _savedViewpoints: ViewpointData[] = [];
@@ -53,7 +54,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         this._viewpoints = components.get(OBC.Viewpoints);
         this._viewpoints.world = world;
         
-        this._highlighter = components.get(OBC.Highlighter);
+        this._highlighter = components.get(OBF.Highlighter);
         this._hider = components.get(OBC.Hider);
         
         this.loadFromStorage();
