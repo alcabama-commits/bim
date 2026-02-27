@@ -421,8 +421,23 @@ try {
     if (typeof OBC.ShadowedScene !== 'undefined') {
         world.scene = new OBC.ShadowedScene(components);
         // ShadowedScene often requires the renderer to be ready for shadow map configuration
-        world.scene.setup();
-        console.log('ShadowedScene initialized successfully');
+        world.scene.setup({
+            shadows: {
+                cascade: 1,
+                resolution: 1024
+            },
+            directionalLight: {
+                intensity: 1.5,
+                position: new THREE.Vector3(50, 50, 50)
+            }
+        });
+        
+        // Ensure shadows are enabled by default
+        if ('shadowsEnabled' in world.scene) {
+            (world.scene as any).shadowsEnabled = true;
+        }
+        
+        console.log('ShadowedScene initialized successfully with custom config');
     } else {
         throw new Error('ShadowedScene class is not available in OBC');
     }
@@ -1075,6 +1090,28 @@ async function loadModel(url: string, path: string) {
              console.warn('[VERIFICATION] Normals MISSING. Snapping may be limited.');
              logToScreen('Model verification: Normals MISSING. Snapping limited.', true);
         }
+
+        // --- SHADOW VERIFICATION ---
+        // Ensure shadows are updated after model load
+        if ('updateShadows' in world.scene) {
+             logToScreen('Updating shadows...');
+             await (world.scene as any).updateShadows();
+        }
+
+        // Check directional light for shadows
+        const lights = world.scene.three.children.filter((child: any) => child.isDirectionalLight);
+        console.log('[DEBUG] Directional Lights found:', lights.length);
+        lights.forEach((light: any) => {
+             console.log('[DEBUG] Light castShadow:', light.castShadow);
+             // Ensure shadow map settings are robust
+             if (!light.castShadow) {
+                 console.warn('[DEBUG] Light does not have castShadow enabled. Enabling...');
+                 light.castShadow = true;
+                 light.shadow.mapSize.width = 2048;
+                 light.shadow.mapSize.height = 2048;
+                 light.shadow.bias = -0.0005;
+             }
+        });
 
         // Generate Edges (Snaps) for the model
         // This requires normals which are now present in the new .frag files
