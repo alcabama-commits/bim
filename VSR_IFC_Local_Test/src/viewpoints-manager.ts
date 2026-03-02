@@ -178,15 +178,15 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
         // 3. Restore Visibility & Annotations
         if (this._stateProvider) {
-            if (view.hidden) {
-                await this._stateProvider.restoreHiddenItems(view.hidden);
-            }
-            if (view.annotations) {
-                this._stateProvider.restoreMeasurements(view.annotations);
-            }
-            if (view.clippingPlanes) {
-                this._stateProvider.restoreClippingPlanes(view.clippingPlanes);
-            }
+            // Always call restoreHiddenItems to reset visibility if needed
+            // If view.hidden is undefined/empty, we pass {} so everything becomes visible
+            await this._stateProvider.restoreHiddenItems(view.hidden || {});
+
+            // Always restore measurements (clearing if empty)
+            this._stateProvider.restoreMeasurements(view.annotations || []);
+
+            // Always restore clipping planes (clearing if empty)
+            this._stateProvider.restoreClippingPlanes(view.clippingPlanes || []);
         }
         
         console.log(`Viewpoint '${view.title}' restored.`);

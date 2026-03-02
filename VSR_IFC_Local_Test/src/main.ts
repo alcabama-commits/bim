@@ -10,7 +10,7 @@ import './style.css';
 
 // --- Viewpoints State ---
 interface MeasurementData {
-    type: 'point' | 'length' | 'area' | 'angle' | 'slope';
+    type: 'point' | 'length' | 'area' | 'angle' | 'slope' | 'volume';
     points: { x: number, y: number, z: number }[];
     label: string;
     labelPosition: { x: number, y: number, z: number };
@@ -1076,14 +1076,6 @@ async function loadModel(url: string, path: string) {
 
         if (!model) throw new Error('Model failed to load (undefined result)');
 
-        // EXPLICIT REGISTRATION: Ensure model is in fragments.groups
-        // Some versions of FragmentsManager might not auto-add if loaded via core.load
-        if (fragments.groups instanceof Map) {
-             fragments.groups.set(model.uuid, model);
-        } else if (fragments.groups) {
-             (fragments.groups as any)[model.uuid] = model;
-        }
-
         (model as any).name = path.split('/').pop() || 'Model';
         // Store URL for state persistence
         if (!model.userData) model.userData = {};
@@ -1092,9 +1084,18 @@ async function loadModel(url: string, path: string) {
 
         // FORCE UUID to match the path (which is the key in fragments.list)
         // This ensures the highlighter and classifier can find the model
+        // MUST BE DONE BEFORE REGISTRATION in fragments.groups
         if (model.uuid !== path) {
+             console.log(`[DEBUG] Renaming model UUID from ${model.uuid} to ${path}`);
              model.uuid = path;
-             console.log(`[DEBUG] Forced model UUID to match path: ${model.uuid}`);
+        }
+
+        // EXPLICIT REGISTRATION: Ensure model is in fragments.groups
+        // Some versions of FragmentsManager might not auto-add if loaded via core.load
+        if (fragments.groups instanceof Map) {
+             fragments.groups.set(model.uuid, model);
+        } else if (fragments.groups) {
+             (fragments.groups as any)[model.uuid] = model;
         }
 
         model.useCamera(world.camera.three);
@@ -4412,6 +4413,7 @@ function setupMeasurementTools() {
     const btnArea = document.getElementById('btn-measure-area');
     const btnAngle = document.getElementById('btn-measure-angle');
     const btnSlope = document.getElementById('btn-measure-slope');
+    const btnVolume = document.getElementById('btn-measure-volume');
     const btnDelete = document.getElementById('btn-measure-delete');
     
     if (btnLength) {
@@ -4452,6 +4454,14 @@ function setupMeasurementTools() {
         });
     }
 
+    if (btnVolume) {
+        btnVolume.addEventListener('click', () => {
+            toggleMeasurementMode('volume');
+            setActiveButton(btnVolume);
+            logToScreen('Volume tool activated (Double-click object)');
+        });
+    }
+
     if (btnDelete) {
         btnDelete.addEventListener('click', () => {
             console.log('[DEBUG] Delete button clicked');
@@ -4474,48 +4484,71 @@ function setupMeasurementTools() {
         container.addEventListener('click', onMeasureClick);
         
         // Add double click for volume creation (Custom Implementation)
-        // container.addEventListener('dblclick', async () => {
-        //    console.log('[DEBUG] dblclick for Volume');
-        //    if (measurementMode === 'volume') {
-        //        try {
-        //            // Use SimpleRaycaster to get the intersected object
-        //            const result = await simpleRaycaster.castRay();
-        //            if (result && result.object) {
-        //                const mesh = result.object as THREE.Mesh;
-        //                const instanceId = result.instanceId;
-        //                
-        //                console.log('[DEBUG] Calculating volume for:', mesh, 'Instance:', instanceId);
-        //                
-        //                // Calculate Volume
-        //                let volume = 0;
-        //                try {
-        //                    volume = getMeshVolume(mesh, instanceId);
-        //                } catch (err) {
-        //                    console.error('Volume calculation failed:', err);
-        //                    logToScreen('Volume calculation failed for this object');
-        //                    return;
-        //                }
-        //                
-        //                if (volume > 0) {
-        //                    // Create Label
-        //                    const center = result.point.clone(); // Use hit point for label
-        //                    // Ideally, use bounding box center, but hit point is fine
-        //                    createLabel(`${volume.toFixed(3)} m³`, center);
-        //                    logToScreen(`Volume: ${volume.toFixed(3)} m³`);
-        //                    
-        //                    // Optional: Highlight the mesh briefly?
-        //                    // No, just show label.
-        //                } else {
-        //                    logToScreen('Volume is 0 or invalid geometry');
-        //                }
-        //            } else {
-        //                console.log('[DEBUG] No intersection for volume');
-        //            }
-        //        } catch (e) {
-        //            console.error('[ERROR] Custom volume tool failed:', e);
-        //        }
-        //    }
-        // });
+        container.addEventListener('dblclick', async () => {
+           console.log('[DEBUG] dblclick for Volume');
+           if (measurementMode === 'volume') {
+               try {
+                   // Use SimpleRaycaster to get the intersected object
+                   const result = await simpleRaycaster.castRay();
+                   if (result && result.object) {
+                       const mesh = result.object as THREE.Mesh;
+                       const instanceId = result.instanceId;
+                       
+                       console.log('[DEBUG] Calculating volume for:', mesh, 'Instance:', instanceId);
+                       
+                       // Calculate Volume
+                       let volume = 0;
+                       try {
+                           volume = getMeshVolume(mesh, instanceId);
+                       } catch (err) {
+                           console.error('Volume calculation failed:', err);
+                           logToScreen('Volume calculation failed for this object');
+                           return;
+                       }
+                       
+                       if (volume > 0) {
+                           // Create Label
+                           // Calculate Bounding Box Center for better placement
+                           const geometry = mesh.geometry;
+                           if (!geometry.boundingBox) geometry.computeBoundingBox();
+                           const box = geometry.boundingBox!.clone();
+                           
+                           // Apply matrix to box
+                           let matrix = new THREE.Matrix4();
+                           if (mesh instanceof THREE.InstancedMesh && instanceId !== undefined) {
+                               const instanceMatrix = new THREE.Matrix4();
+                               mesh.getMatrixAt(instanceId, instanceMatrix);
+                               matrix.multiplyMatrices(mesh.matrixWorld, instanceMatrix);
+                           } else {
+                               matrix.copy(mesh.matrixWorld);
+                           }
+                           
+                           box.applyMatrix4(matrix);
+                           const center = new THREE.Vector3();
+                           box.getCenter(center);
+
+                           const label = `${volume.toFixed(3)} m³`;
+                           createLabel(label, center, {
+                               type: 'volume',
+                               points: [],
+                               label: label,
+                               labelPosition: center.toJSON()
+                           });
+                           logToScreen(`Volume: ${volume.toFixed(3)} m³`);
+                           
+                           // Optional: Highlight the mesh briefly?
+                           // No, just show label.
+                       } else {
+                           logToScreen('Volume is 0 or invalid geometry');
+                       }
+                   } else {
+                       console.log('[DEBUG] No intersection for volume');
+                   }
+               } catch (e) {
+                   console.error('[ERROR] Custom volume tool failed:', e);
+               }
+           }
+        });
 
         // Add keydown for volume finish and Escape to cancel
         window.addEventListener('keydown', (e) => {
@@ -4616,7 +4649,7 @@ function setActiveButton(activeBtn: HTMLElement | null) {
     if (activeBtn) activeBtn.classList.add('active');
 }
 
-function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'slope') {
+function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'slope' | 'volume') {
     // Deactivate previous tools
     if (areaTool && areaTool.enabled) areaTool.enabled = false;
 
@@ -4637,6 +4670,7 @@ function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'sl
             case 'area': modeName = 'Area'; break;
             case 'angle': modeName = 'Angle (3 Points)'; break;
             case 'slope': modeName = 'Slope (2 Points)'; break;
+            case 'volume': modeName = 'Volume (Double Click)'; break;
             case 'point': modeName = 'Point Coordinate'; break;
         }
         logToScreen(`Measurement mode: ${modeName}`);
@@ -4684,6 +4718,61 @@ function createLine(start: THREE.Vector3, end: THREE.Vector3) {
     world.scene.three.add(line);
     measurementMarkers.push(line as any); 
     return line;
+}
+
+function signedVolumeOfTriangle(p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3): number {
+    return (
+        p1.x * (p2.y * p3.z - p2.z * p3.y) +
+        p1.y * (p2.z * p3.x - p2.x * p3.z) +
+        p1.z * (p2.x * p3.y - p2.y * p3.x)
+    ) / 6.0;
+}
+
+function getMeshVolume(mesh: THREE.Mesh, instanceId?: number): number {
+    if (!mesh.geometry) return 0;
+    
+    // Calculate transformation matrix
+    let matrix = new THREE.Matrix4();
+    if (mesh instanceof THREE.InstancedMesh && instanceId !== undefined) {
+        const instanceMatrix = new THREE.Matrix4();
+        mesh.getMatrixAt(instanceId, instanceMatrix);
+        matrix.multiplyMatrices(mesh.matrixWorld, instanceMatrix);
+    } else {
+        matrix.copy(mesh.matrixWorld);
+    }
+    
+    const geometry = mesh.geometry;
+    let volume = 0;
+    
+    const p1 = new THREE.Vector3();
+    const p2 = new THREE.Vector3();
+    const p3 = new THREE.Vector3();
+    
+    // Check for index
+    if (geometry.index) {
+        const index = geometry.index;
+        const position = geometry.attributes.position;
+        
+        for (let i = 0; i < index.count; i += 3) {
+            p1.fromBufferAttribute(position, index.getX(i)).applyMatrix4(matrix);
+            p2.fromBufferAttribute(position, index.getX(i + 1)).applyMatrix4(matrix);
+            p3.fromBufferAttribute(position, index.getX(i + 2)).applyMatrix4(matrix);
+            
+            volume += signedVolumeOfTriangle(p1, p2, p3);
+        }
+    } else {
+        const position = geometry.attributes.position;
+        
+        for (let i = 0; i < position.count; i += 3) {
+            p1.fromBufferAttribute(position, i).applyMatrix4(matrix);
+            p2.fromBufferAttribute(position, i + 1).applyMatrix4(matrix);
+            p3.fromBufferAttribute(position, i + 2).applyMatrix4(matrix);
+            
+            volume += signedVolumeOfTriangle(p1, p2, p3);
+        }
+    }
+    
+    return Math.abs(volume);
 }
 
 function createLabel(text: string, position: THREE.Vector3, data?: MeasurementData): HTMLDivElement {
@@ -4971,7 +5060,13 @@ function setupViewpoints() {
             if (!data || !Array.isArray(data)) return;
             
             data.forEach(m => {
-                if (m.type === 'point' && m.points && m.points.length > 0) {
+                if (m.type === 'volume') {
+                    // Volume uses labelPosition for the label
+                    if (m.labelPosition) {
+                        const p = new THREE.Vector3(m.labelPosition.x, m.labelPosition.y, m.labelPosition.z);
+                        createLabel(m.label, p, m);
+                    }
+                } else if (m.type === 'point' && m.points && m.points.length > 0) {
                     const p = new THREE.Vector3(m.points[0].x, m.points[0].y, m.points[0].z);
                     createMarker(p, 0x00ff00);
                     createLabel(m.label, p, m);
@@ -5032,27 +5127,61 @@ function setupViewpoints() {
         },
         getClippingPlanes: () => {
             const planes: { normal: number[], constant: number }[] = [];
-            for(const [id, p] of clipper.list) {
-                if ((p as any).plane) {
-                    const plane = (p as any).plane as THREE.Plane;
-                    planes.push({
-                        normal: plane.normal.toArray(),
-                        constant: plane.constant
-                    });
+            console.log('[Viewpoints] Getting clipping planes. List size:', clipper.list.size);
+            
+            // Robust iteration over Clipper planes
+            // Note: clipper.list values are SimplePlane (which extend THREE.Plane or have a .plane property)
+            // In some versions, clipper.list values ARE the planes themselves (THREE.Plane + mesh)
+            
+            try {
+                // Convert Map iterator to Array for safe iteration
+                const entries = Array.from(clipper.list.entries());
+                
+                for(const [id, p] of entries) {
+                    let plane: THREE.Plane | null = null;
+                    
+                    // Check for .plane property (OBC pattern)
+                    if ((p as any).plane && (p as any).plane.normal) {
+                        plane = (p as any).plane;
+                    } 
+                    // Check if object itself is a Plane-like structure
+                    else if ((p as any).normal && (p as any).constant !== undefined) {
+                        plane = p as unknown as THREE.Plane;
+                    }
+                    
+                    if (plane) {
+                        planes.push({
+                            normal: plane.normal.toArray(),
+                            constant: plane.constant
+                        });
+                        console.log(`[Viewpoints] Saved plane: normal=${plane.normal.toArray()}, constant=${plane.constant}`);
+                    } else {
+                        console.warn('[Viewpoints] Found clipper item without valid plane data:', id, p);
+                    }
                 }
+            } catch (e) {
+                console.error('[Viewpoints] Error getting clipping planes:', e);
             }
+            
             return planes;
         },
         restoreClippingPlanes: (planes) => {
             clipper.deleteAll();
             if (!planes || planes.length === 0) return;
             
+            console.log(`[Viewpoints] Restoring ${planes.length} clipping planes.`);
             planes.forEach(p => {
                 const normal = new THREE.Vector3(p.normal[0], p.normal[1], p.normal[2]);
                 const constant = p.constant;
                 const coplanarPoint = normal.clone().multiplyScalar(-constant);
                 clipper.createFromNormalAndCoplanarPoint(world, normal, coplanarPoint);
             });
+
+            // Ensure clipper is enabled if planes are present
+            if (clipper.enabled === false) {
+                clipper.enabled = true;
+                console.log('[Viewpoints] Clipper enabled automatically.');
+            }
         },
         getLoadedModels: () => {
              const models: { uuid: string, url: string }[] = [];
@@ -5084,85 +5213,94 @@ function setupViewpoints() {
              return models;
         },
         restoreLoadedModels: async (savedModels) => {
+             console.log('[Viewpoints] restoreLoadedModels started with:', savedModels);
+             
+             // Normalize current groups access
              const isMap = fragments.groups instanceof Map;
              const currentUUIDs = new Set(isMap ? fragments.groups.keys() : Object.keys(fragments.groups || {}));
-             const savedUUIDs = new Set(savedModels.map(m => m.uuid));
              
+             const modelsToRestore = savedModels || [];
+             const savedUUIDs = new Set(modelsToRestore.map(m => m.uuid));
+             
+             console.log('[Viewpoints] Current models:', Array.from(currentUUIDs));
+             console.log('[Viewpoints] Target models:', Array.from(savedUUIDs));
+
              // Unload extra models
              for (const uuid of currentUUIDs) {
                  if (!savedUUIDs.has(uuid)) {
+                     console.log(`[Viewpoints] Unloading extra model: ${uuid}`);
                      const group = isMap ? fragments.groups.get(uuid) : (fragments.groups as any)[uuid];
                      if (group) {
-                         if ((fragments as any).disposeGroup) {
-                             (fragments as any).disposeGroup(group);
-                         } else {
-                             // Fallback manual disposal
-                             world.scene.three.remove(group);
-                             if (group.dispose) group.dispose();
-                             if (isMap) {
-                                fragments.groups.delete(uuid);
+                         try {
+                             if ((fragments as any).disposeGroup) {
+                                 (fragments as any).disposeGroup(group);
                              } else {
-                                delete (fragments.groups as any)[uuid];
+                                 world.scene.three.remove(group.object || group);
+                                 if (group.dispose) group.dispose();
+                                 if (isMap) fragments.groups.delete(uuid);
+                                 else delete (fragments.groups as any)[uuid];
                              }
+                             if (loadedModels.has(uuid)) loadedModels.delete(uuid);
+                             console.log(`[Viewpoints] Model ${uuid} unloaded.`);
+                         } catch (unloadErr) {
+                             console.error(`[Viewpoints] Error unloading model ${uuid}:`, unloadErr);
                          }
                      }
                  }
              }
              
              // Load missing models
-             for (const m of savedModels) {
+             for (const m of modelsToRestore) {
                  if (!currentUUIDs.has(m.uuid)) {
                      try {
                         console.log(`[Viewpoints] Restoring model: ${m.uuid} from ${m.url}`);
+                        logToScreen(`Restoring view model: ${m.uuid}...`);
                         
                         let loadUrl = m.url;
                         let isLocal = false;
                         let dbKey = '';
 
-                        // Check if it's a local model in IndexedDB
                         if (m.url.startsWith('indexeddb://')) {
                             dbKey = m.url.replace('indexeddb://', '');
-                            logToScreen(`Restoring local model from storage: ${dbKey}...`);
-                            
                             const buffer = await loadFromIndexedDB(dbKey);
                             if (buffer) {
-                                console.log(`[Viewpoints] Retrieved ${buffer.byteLength} bytes from IDB for ${dbKey}`);
                                 const blob = new Blob([buffer]);
                                 loadUrl = URL.createObjectURL(blob);
                                 isLocal = true;
                             } else {
-                                console.warn(`Local model ${dbKey} not found in IndexedDB.`);
-                                logToScreen(`Error: Local model ${dbKey} expired/missing. Please reload file.`, true);
+                                logToScreen(`Error: Local model ${dbKey} expired/missing.`, true);
                                 continue;
                             }
                         }
 
-                        console.log(`[Viewpoints] Calling loadModel with URL: ${loadUrl}`);
                         await loadModel(loadUrl, m.uuid);
-                        console.log(`[Viewpoints] loadModel completed for ${m.uuid}`);
                         
-                        // Restore local flags if needed
-                        if (isLocal) {
-                             const model = isMap ? fragments.groups.get(m.uuid) : (fragments.groups as any)[m.uuid];
-                             if (model) {
-                                 if (!model.userData) model.userData = {};
-                                 model.userData.isLocal = true;
-                                 model.userData.dbKey = dbKey;
-                                 // Update URL to current blob for subsequent saves in this session
-                                 model.userData.url = loadUrl; 
-                                 console.log(`[Viewpoints] Restored local metadata for ${m.uuid}`);
-                             } else {
-                                 console.error(`[Viewpoints] Model ${m.uuid} not found in fragments.groups after load!`);
-                             }
+                        // Force visibility and metadata
+                        const model = isMap ? fragments.groups.get(m.uuid) : (fragments.groups as any)[m.uuid];
+                        if (model) {
+                            if (model.object) model.object.visible = true;
+                            if (isLocal) {
+                                if (!model.userData) model.userData = {};
+                                model.userData.isLocal = true;
+                                model.userData.dbKey = dbKey;
+                                model.userData.url = loadUrl; 
+                            }
                         }
 
                      } catch (e) {
                          console.error(`[Viewpoints] Failed to restore model ${m.uuid}:`, e);
+                         logToScreen(`Failed to restore model ${m.uuid}`, true);
                      }
                  } else {
-                     console.log(`[Viewpoints] Model ${m.uuid} already loaded. Skipping.`);
+                     // Ensure already loaded models are visible
+                     const model = isMap ? fragments.groups.get(m.uuid) : (fragments.groups as any)[m.uuid];
+                     if (model && model.object) model.object.visible = true;
                  }
              }
+             
+             // Refresh UI to reflect changes (update eye icons)
+             await loadModelList();
+             console.log('[Viewpoints] UI updated after model restoration.');
         }
     };
 
