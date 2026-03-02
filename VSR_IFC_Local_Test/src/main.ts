@@ -451,35 +451,44 @@ debugSphere.renderOrder = 999;
 debugSphere.visible = false;
 // Correctly add to the scene using the world object
 world.scene.three.add(debugSphere);
+// Prevent debug sphere from being hit by raycaster
+debugSphere.raycast = () => {};
 
 // --- v29-SmartSnap: GLOBAL INDEPENDENT SNAPPING LOOP ---
-container.addEventListener('mousemove', (event) => {
-    if (!world || !world.camera || !world.scene) return;
-    const rect = container.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    
-    const tempRaycaster = new THREE.Raycaster();
-    tempRaycaster.setFromCamera(new THREE.Vector2(x, y), world.camera.three);
-    
-    // NUCLEAR DEBUG: Raycast against EVERYTHING in scene
-    const candidates: THREE.Object3D[] = [];
-    world.scene.three.traverse((child) => {
-        if (child instanceof THREE.Mesh || child instanceof THREE.InstancedMesh) {
-            candidates.push(child);
-        }
-    });
+let lastSnapTime = 0;
+const SNAP_THROTTLE = 50; // Max 20 checks per second
 
-    if (candidates.length === 0) return;
+container.addEventListener('mousemove', (event) => {
+    const now = performance.now();
+    if (now - lastSnapTime < SNAP_THROTTLE) return;
+    lastSnapTime = now;
+
+    if (!world || !world.camera || !world.scene) return;
     
-    const intersects = tempRaycaster.intersectObjects(candidates, true);
-    
-    if (intersects.length > 0) {
-        applyGlobalSnap([intersects[0]]);
-    } else {
+    try {
+        // Use Official Raycaster (OBC) for performance
+        // This avoids full scene traversal and uses BVH if available
+        const raycasters = components.get(OBC.Raycasters);
+        const caster = raycasters.get(world);
+        
+        // Use castRay which returns the first intersection or null
+        // Note: castRay expects an array of events but we pass one
+        const result = caster.castRay([event]);
+        
+        if (result) {
+            applyGlobalSnap([result]);
+        } else {
+            if (debugSphere) debugSphere.visible = false;
+        }
+        
+    } catch (e) {
+        // Fallback to manual raycast if OBC raycaster fails (e.g. not ready)
+        // Only do this if absolutely necessary to avoid "viewer destroyed"
+        // console.warn("Snap loop error:", e);
         if (debugSphere) debugSphere.visible = false;
     }
 });
+
 
 const debugConsole = document.getElementById('debug-console');
 if (debugConsole) {
@@ -2144,6 +2153,7 @@ function initGridToggle() {
 
 // Add global state for folder open/close
 const folderStates: Record<string, boolean> = {};
+let lastModelListHash: string = ''; // Track changes to avoid re-rendering
 
 // Load models from JSON and populate sidebar
 async function loadModelList() {
@@ -2154,13 +2164,24 @@ async function loadModelList() {
 
     try {
         const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
-        logToScreen('Scanning GitHub for models...');
+        // Only log on first load or explicit refresh to avoid spamming console
+        if (!(window as any)._autoUpdateStarted) {
+             logToScreen('Scanning GitHub for models...');
+        }
         
         const response = await fetch(GITHUB_API_URL);
         if (!response.ok) throw new Error(`GitHub API Error: ${response.status}`);
         
         const data = await response.json();
         if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
+
+        // Simple hash to check if content changed
+        const currentHash = JSON.stringify(data.map((i: any) => i.name));
+        if (currentHash === lastModelListHash && (window as any)._autoUpdateStarted) {
+            // No changes, skip DOM update
+            return;
+        }
+        lastModelListHash = currentHash;
 
         const models = data
             .filter((item: any) => item.name.toLowerCase().endsWith('.frag'))
@@ -2170,7 +2191,9 @@ async function loadModelList() {
                 url: item.download_url
             }));
 
-        logToScreen(`GitHub Scan: ${models.length} .frag models found`);
+        if (!(window as any)._autoUpdateStarted) {
+             logToScreen(`GitHub Scan: ${models.length} .frag models found`);
+        }
 
         // Group models by specialty
         const groups: Record<string, any[]> = {};
@@ -5329,8 +5352,29 @@ function setupViewpoints() {
 setupViewpoints();
 
 // --- User Profile Logic ---
-// Initialize User Profile Manager
-new UserProfileManager();
+// Initialize User Profile Manager safely
+try {
+    console.log('Initializing User Profile Manager...');
+    // Ensure DOM is ready before initializing manager that relies on DOM elements
+    const initProfile = () => {
+        try {
+            const userProfileManager = new UserProfileManager();
+            // Expose for debugging
+            (window as any).userProfileManager = userProfileManager;
+        } catch (e) {
+            console.error('Failed to initialize User Profile Manager (deferred):', e);
+        }
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initProfile);
+    } else {
+        initProfile();
+    }
+} catch (error) {
+    console.error('Failed to initialize User Profile Manager:', error);
+    // logToScreen('Warning: User Profile module failed to load.', true);
+}
 
 
 

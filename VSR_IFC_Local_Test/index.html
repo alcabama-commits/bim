@@ -26,6 +26,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VSR IFC Viewer v27-EventSnap</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+      window.addEventListener('error', function(e) {
+        const msg = document.createElement('div');
+        msg.style.position = 'fixed';
+        msg.style.top = '0';
+        msg.style.left = '0';
+        msg.style.width = '100%';
+        msg.style.background = 'red';
+        msg.style.color = 'white';
+        msg.style.padding = '10px';
+        msg.style.zIndex = '10000';
+        msg.innerText = 'Global Error: ' + e.message + ' at ' + e.filename + ':' + e.lineno;
+        document.body.appendChild(msg);
+      });
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </head>
   <body>
@@ -229,12 +244,12 @@
 
            <!-- User Profile Trigger -->
            <div id="user-profile-trigger" class="user-profile-trigger" title="Perfil de Usuario" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-left: 10px; padding: 5px; border-radius: 4px;">
-               <span id="user-name-display" style="font-size: 14px; font-weight: 500; display: none;">Usuario</span>
-               <div style="position: relative;">
-                   <div id="user-avatar" style="width: 32px; height: 32px; border-radius: 50%; background-color: #D8005E; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold;">
+               <span id="user-name-display" style="font-size: 14px; font-weight: 500; display: none; color: var(--text-dark-gray, #333);">Usuario</span>
+               <div style="position: relative; width: 40px; height: 40px;">
+                   <div id="user-avatar" style="width: 40px; height: 40px; border-radius: 50%; background-color: #D8005E; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px;">
                        <i class="fa-solid fa-user"></i>
                    </div>
-                   <div id="connection-status" title="Conectado" style="width: 10px; height: 10px; background-color: #4CAF50; border-radius: 50%; position: absolute; bottom: 0; right: 0; border: 2px solid white;"></div>
+                   <div id="connection-status" title="Conectado" style="width: 12px; height: 12px; background-color: #4CAF50; border-radius: 50%; position: absolute; bottom: 0; right: 0; border: 2px solid white;"></div>
                </div>
            </div>
       </div>

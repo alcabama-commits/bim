@@ -94,7 +94,7 @@ export class UserProfileManager {
             this.nameDisplay.style.display = 'block';
         }
         
-        this.updateAvatar(this.avatarDisplay, photo, initials, '32px');
+        this.updateAvatar(this.avatarDisplay, photo, initials, '40px');
 
         // Update Modal
         if (this.modalName) this.modalName.textContent = name;
