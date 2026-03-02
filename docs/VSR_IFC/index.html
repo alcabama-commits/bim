@@ -26,8 +26,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VSR IFC Viewer v27-EventSnap</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script type="module" crossorigin src="./assets/main-CzCQWGLa.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/main-BRyay5FL.css">
+    <script type="module" crossorigin src="./assets/main-BRbGsP3N.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/main-gS-EMorV.css">
   </head>
   <body>
     <div id="app">
@@ -192,9 +192,6 @@
               <button id="btn-measure-slope" class="projection-toggle-btn" title="Medir Pendiente">
                   <i class="fa-solid fa-chart-line"></i>
               </button>
-              <button id="btn-measure-volume" class="projection-toggle-btn" title="Medir Volumen (Doble Clic)">
-                  <i class="fa-solid fa-cube"></i>
-              </button>
               
               <button id="btn-measure-point" class="projection-toggle-btn" title="Coordenada Punto">
                   <i class="fa-solid fa-location-crosshairs"></i>
@@ -227,45 +224,8 @@
            <button id="properties-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar propiedades">
                <i class="fa-solid fa-circle-info"></i>
            </button>
-
-           <!-- User Profile Trigger -->
-           <div id="user-profile-trigger" class="user-profile-trigger" title="Perfil de Usuario" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-left: 10px; padding: 5px; border-radius: 4px;">
-               <span id="user-name-display" style="font-size: 14px; font-weight: 500; display: none;">Usuario</span>
-               <div style="position: relative;">
-                   <div id="user-avatar" style="width: 32px; height: 32px; border-radius: 50%; background-color: #D8005E; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold;">
-                       <i class="fa-solid fa-user"></i>
-                   </div>
-                   <div id="connection-status" title="Conectado" style="width: 10px; height: 10px; background-color: #4CAF50; border-radius: 50%; position: absolute; bottom: 0; right: 0; border: 2px solid white;"></div>
-               </div>
-           </div>
       </div>
-  </header>
-
-  <!-- User Profile Modal -->
-  <div id="user-profile-modal" class="modal" style="display: none;">
-      <div class="modal-content" style="max-width: 320px;">
-          <span class="close-modal">&times;</span>
-          <div style="text-align: center; margin-bottom: 20px;">
-               <div style="position: relative; display: inline-block; margin: 0 auto 10px;">
-                  <div id="modal-user-avatar" style="width: 80px; height: 80px; border-radius: 50%; background-color: #D8005E; color: white; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: bold;">
-                      <i class="fa-solid fa-user"></i>
-                  </div>
-                  <button id="update-photo-btn" title="Actualizar Foto" style="position: absolute; bottom: 0; right: 0; background: #D8005E; color: white; border: none; border-radius: 50%; width: 28px; height: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
-                      <i class="fa-solid fa-camera" style="font-size: 14px;"></i>
-                  </button>
-                  <input type="file" id="profile-photo-input" accept="image/png, image/jpeg" style="display: none;">
-               </div>
-              <h2 id="modal-user-name" style="margin: 5px 0; font-size: 18px;">Invitado</h2>
-              <p id="modal-user-email" style="color: #666; font-size: 14px; margin: 0;">Inicia sesión para ver tu perfil</p>
-              <p id="modal-last-access" style="font-size: 11px; color: #999; margin-top: 5px; display: none;">Último acceso: -</p>
-               <span id="modal-user-role" style="background-color: #eee; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-top: 10px; display: none;">Rol</span>
-          </div>
-          <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
-          <button id="logout-btn" style="width: 100%; padding: 10px; background-color: #D8005E; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
-              Cerrar Sesión
-          </button>
-      </div>
-  </div>
+      </header>
 
       <!-- Console Toggle (Moved to bottom left standalone) -->
       <div class="console-toggle-container">
