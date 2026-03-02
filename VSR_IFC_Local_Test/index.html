@@ -226,8 +226,35 @@
            <button id="properties-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar propiedades">
                <i class="fa-solid fa-circle-info"></i>
            </button>
+
+           <!-- User Profile Trigger -->
+           <div id="user-profile-trigger" class="user-profile-trigger" title="Perfil de Usuario" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-left: 10px; padding: 5px; border-radius: 4px;">
+               <span id="user-name-display" style="font-size: 14px; font-weight: 500; display: none;">Usuario</span>
+               <div id="user-avatar" style="width: 32px; height: 32px; border-radius: 50%; background-color: #D8005E; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold;">
+                   <i class="fa-solid fa-user"></i>
+               </div>
+           </div>
       </div>
-      </header>
+  </header>
+
+  <!-- User Profile Modal -->
+  <div id="user-profile-modal" class="modal" style="display: none;">
+      <div class="modal-content" style="max-width: 320px;">
+          <span class="close-modal">&times;</span>
+          <div style="text-align: center; margin-bottom: 20px;">
+               <div id="modal-user-avatar" style="width: 80px; height: 80px; border-radius: 50%; background-color: #D8005E; color: white; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: bold; margin: 0 auto 10px;">
+                  <i class="fa-solid fa-user"></i>
+              </div>
+              <h2 id="modal-user-name" style="margin: 5px 0; font-size: 18px;">Invitado</h2>
+              <p id="modal-user-email" style="color: #666; font-size: 14px; margin: 0;">Inicia sesión para ver tu perfil</p>
+               <span id="modal-user-role" style="background-color: #eee; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-top: 10px; display: none;">Rol</span>
+          </div>
+          <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee;">
+          <button id="logout-btn" style="width: 100%; padding: 10px; background-color: #D8005E; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+              Cerrar Sesión
+          </button>
+      </div>
+  </div>
 
       <!-- Console Toggle (Moved to bottom left standalone) -->
       <div class="console-toggle-container">

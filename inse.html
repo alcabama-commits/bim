@@ -81,7 +81,7 @@
 
                 const msalInstance = new msal.PublicClientApplication(msalConfig);
 
-                await msalInstance.loginPopup({
+                const loginResponse = await msalInstance.loginPopup({
                     scopes: ["User.Read"] // Solo necesitamos leer el perfil del usuario
                 });
 
@@ -89,6 +89,27 @@
                 console.log('MSAL Account after loginPopup:', account); // Debugging: Verificar si se obtiene la cuenta
 
                 if (account) {
+                    // Obtener foto de perfil de Microsoft Graph
+                    let photoData = null;
+                    try {
+                        const accessToken = loginResponse.accessToken;
+                        if (accessToken) {
+                            const photoResponse = await fetch("https://graph.microsoft.com/v1.0/me/photo/$value", {
+                                headers: { Authorization: `Bearer ${accessToken}` }
+                            });
+                            if (photoResponse.ok) {
+                                const blob = await photoResponse.blob();
+                                photoData = await new Promise((resolve) => {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => resolve(reader.result);
+                                    reader.readAsDataURL(blob);
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("No se pudo obtener la foto de perfil:", e);
+                    }
+
                     // URL del script que devuelve la lista de roles en formato JSON
                     const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx4NEpE6EyrC2ggk8To0F0TP5P9y0YnaxiWzCbcIhSR7-KRSy4Wu0PM9hYyNY5y72Q/exec';
                     let userRole = null;
@@ -117,7 +138,8 @@
                     const userProfile = {
                         name: account.name,
                         username: account.username,
-                        role: userRole // Guardamos el rol del usuario
+                        role: userRole, // Guardamos el rol del usuario
+                        photo: photoData // Guardamos la foto (base64)
                     };                    
                     console.log('DEBUG: User profile created:', userProfile);
 

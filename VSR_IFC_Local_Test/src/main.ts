@@ -5327,6 +5327,120 @@ function setupViewpoints() {
 // Initialize Viewpoints
 setupViewpoints();
 
+// --- User Profile Logic ---
+function setupUserProfile() {
+    const trigger = document.getElementById('user-profile-trigger');
+    const modal = document.getElementById('user-profile-modal');
+    const closeBtn = document.querySelector('.close-modal');
+    const logoutBtn = document.getElementById('logout-btn');
+    
+    // Elements to update
+    const nameDisplay = document.getElementById('user-name-display');
+    const avatarDisplay = document.getElementById('user-avatar');
+    
+    const modalName = document.getElementById('modal-user-name');
+    const modalEmail = document.getElementById('modal-user-email');
+    const modalRole = document.getElementById('modal-user-role');
+    const modalAvatar = document.getElementById('modal-user-avatar');
+
+    // Get user data
+    const storedUser = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+    
+    if (storedUser) {
+        try {
+            const user = JSON.parse(storedUser);
+            const name = user.name || 'Usuario';
+            const email = user.username || '';
+            const role = user.role || '';
+            const photo = user.photo; // Base64 string
+
+            // Get initials
+            const names = name.split(' ');
+            let initials = names[0][0];
+            if (names.length > 1) initials += names[names.length - 1][0];
+            initials = initials.toUpperCase();
+
+            // Update Header Display
+            if (nameDisplay) {
+                nameDisplay.textContent = name.split(' ')[0]; 
+                nameDisplay.style.display = 'block';
+            }
+            if (avatarDisplay) {
+                if (photo) {
+                    avatarDisplay.innerHTML = `<img src="${photo}" alt="User Photo" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
+                    avatarDisplay.style.backgroundColor = 'transparent';
+                } else {
+                    avatarDisplay.textContent = initials;
+                    avatarDisplay.innerHTML = initials;
+                    avatarDisplay.style.backgroundColor = '#D8005E';
+                }
+            }
+
+            // Update Modal
+            if (modalName) modalName.textContent = name;
+            if (modalEmail) modalEmail.textContent = email;
+            if (modalRole) {
+                modalRole.textContent = role;
+                modalRole.style.display = 'inline-block';
+            }
+            if (modalAvatar) {
+                if (photo) {
+                    modalAvatar.innerHTML = `<img src="${photo}" alt="User Photo" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
+                    modalAvatar.style.backgroundColor = 'transparent';
+                } else {
+                    modalAvatar.textContent = initials;
+                    modalAvatar.innerHTML = initials;
+                    modalAvatar.style.backgroundColor = '#D8005E';
+                }
+            }
+
+        } catch (e) {
+            console.error('Error parsing user profile:', e);
+        }
+    } else {
+        if (nameDisplay) nameDisplay.textContent = 'Invitado';
+    }
+
+    // Event Listeners
+    if (trigger && modal) {
+        trigger.addEventListener('click', () => {
+            modal.style.display = 'flex';
+        });
+    }
+
+    if (closeBtn && modal) {
+        closeBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+    }
+
+    if (modal) {
+        window.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    }
+
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            sessionStorage.removeItem('userAccount');
+            localStorage.removeItem('userAccount');
+            // Redirect to login
+            if (window.location.pathname.includes('/docs/VSR_IFC/')) {
+                window.location.href = '../../inse.html';
+            } else if (window.location.pathname.includes('/VSR_IFC/')) {
+                 window.location.href = '../inse.html';
+            } else {
+                 window.location.href = '../inse.html';
+            }
+        });
+    }
+}
+
+// Initialize User Profile
+setupUserProfile();
+
 
 
 
