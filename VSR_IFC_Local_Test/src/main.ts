@@ -5190,6 +5190,114 @@ function setupViewpoints() {
 setupViewpoints();
 
 
+// --- User Authentication Setup (Reused from home.html) ---
+function setupUserAuthentication() {
+    console.log('[Auth] Setting up user authentication...');
+    const userContainer = document.getElementById('user-profile-container');
+    
+    if (!userContainer) {
+        console.warn('[Auth] user-profile-container not found');
+        return;
+    }
+
+    // Try to get user from sessionStorage or localStorage
+    const userAccountStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+    
+    if (userAccountStr) {
+        try {
+            const userAccount = JSON.parse(userAccountStr);
+            console.log('[Auth] User found:', userAccount.name);
+            
+            // User Name Display
+            const nameSpan = document.createElement('span');
+            // Get first name
+            const firstName = userAccount.name ? userAccount.name.split(' ')[0] : 'Usuario';
+            nameSpan.textContent = `Hola, ${firstName}`;
+            nameSpan.style.fontSize = '14px';
+            nameSpan.style.fontWeight = '500';
+            nameSpan.style.color = 'var(--text-dark-gray)'; // Adapt to theme if needed
+            
+            // Avatar (Initials)
+            const avatar = document.createElement('div');
+            avatar.style.width = '32px';
+            avatar.style.height = '32px';
+            avatar.style.borderRadius = '50%';
+            avatar.style.backgroundColor = 'var(--primary-color)'; // Brand color
+            avatar.style.color = 'white';
+            avatar.style.display = 'flex';
+            avatar.style.alignItems = 'center';
+            avatar.style.justifyContent = 'center';
+            avatar.style.fontSize = '14px';
+            avatar.style.fontWeight = 'bold';
+            
+            // Initials logic
+            let initials = 'U';
+            if (userAccount.name) {
+                const parts = userAccount.name.split(' ');
+                if (parts.length >= 2) {
+                    initials = (parts[0][0] + parts[1][0]).toUpperCase();
+                } else {
+                    initials = parts[0][0].toUpperCase();
+                }
+            }
+            avatar.textContent = initials;
+            avatar.title = userAccount.name + (userAccount.role ? ` (${userAccount.role})` : '');
+            
+            // Logout Button
+            const logoutBtn = document.createElement('button');
+            logoutBtn.innerHTML = '<i class="fa-solid fa-right-from-bracket"></i>';
+            logoutBtn.title = "Cerrar Sesión";
+            logoutBtn.style.background = 'none';
+            logoutBtn.style.border = 'none';
+            logoutBtn.style.cursor = 'pointer';
+            logoutBtn.style.fontSize = '16px';
+            logoutBtn.style.color = '#666';
+            logoutBtn.style.marginLeft = '5px';
+            
+            logoutBtn.onmouseover = () => { logoutBtn.style.color = '#e91e63'; };
+            logoutBtn.onmouseout = () => { logoutBtn.style.color = '#666'; };
+            
+            logoutBtn.onclick = () => {
+                if (confirm('¿Cerrar sesión?')) {
+                    sessionStorage.removeItem('userAccount');
+                    localStorage.removeItem('userAccount');
+                    window.location.reload();
+                }
+            };
+            
+            userContainer.appendChild(nameSpan);
+            userContainer.appendChild(avatar);
+            userContainer.appendChild(logoutBtn);
+            
+        } catch (e) {
+            console.error('[Auth] Error parsing user account:', e);
+            renderGuestMode(userContainer);
+        }
+    } else {
+        console.log('[Auth] No user found. Rendering guest mode.');
+        renderGuestMode(userContainer);
+    }
+}
+
+function renderGuestMode(container: HTMLElement) {
+    const loginLink = document.createElement('a');
+    // Use the production URL for login
+    loginLink.href = "https://alcabama-commits.github.io/bim/inse.html"; 
+    loginLink.innerHTML = '<i class="fa-solid fa-user"></i> <span style="margin-left:5px; font-size:14px;">Iniciar Sesión</span>';
+    loginLink.style.textDecoration = "none";
+    loginLink.style.color = "var(--primary-color)"; // Brand color
+    loginLink.style.display = "flex";
+    loginLink.style.alignItems = "center";
+    loginLink.style.fontWeight = "500";
+    loginLink.removeAttribute('target');
+    
+    container.appendChild(loginLink);
+}
+
+// Call it
+setupUserAuthentication();
+
+
 
 
 
