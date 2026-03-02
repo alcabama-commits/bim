@@ -128,7 +128,9 @@
 </footer>
 </div>
 
-<script>
+<script type="module">
+    import { UserProfileWidget } from './js/UserProfileWidget.js';
+
     document.addEventListener('DOMContentLoaded', () => {
         const authContainer = document.getElementById('auth-container');
         // Buscar usuario en sessionStorage y luego en localStorage
@@ -136,15 +138,10 @@
 
         // --- GESTIÓN DE AUTENTICACIÓN ---
         if (userAccount) {
-            authContainer.innerHTML = `
-                <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
-                <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
-            `;
-            document.getElementById('logout-button').addEventListener('click', () => {
-                sessionStorage.removeItem('userAccount'); // Limpiar ambas ubicaciones
-                localStorage.removeItem('userAccount');
-                window.location.reload();
-            });
+            // Initialize User Profile Widget
+            new UserProfileWidget('auth-container');
+        } else {
+            // Keep default "Iniciar sesión" link if not logged in
         }
 
         // --- CONTROL DE ACCESO POR USUARIO ---

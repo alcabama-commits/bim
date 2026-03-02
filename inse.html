@@ -82,7 +82,7 @@
                 const msalInstance = new msal.PublicClientApplication(msalConfig);
 
                 const loginResponse = await msalInstance.loginPopup({
-                    scopes: ["User.Read"] // Solo necesitamos leer el perfil del usuario
+                    scopes: ["User.Read", "User.ReadWrite"] // Solicitamos permiso para leer y escribir el perfil
                 });
 
                 const account = msalInstance.getAllAccounts()[0];
@@ -139,7 +139,8 @@
                         name: account.name,
                         username: account.username,
                         role: userRole, // Guardamos el rol del usuario
-                        photo: photoData // Guardamos la foto (base64)
+                        photo: photoData, // Guardamos la foto (base64)
+                        lastAccess: new Date().toISOString() // Guardamos fecha de último acceso
                     };                    
                     console.log('DEBUG: User profile created:', userProfile);
 

@@ -9,9 +9,12 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@types/node": "^25.3.3",
     "@types/three": "^0.182.0",
+    "happy-dom": "^20.7.0",
     "typescript": "^5.2.2",
-    "vite": "^5.0.0"
+    "vite": "^5.0.0",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "@thatopen/components-front": "^3.2.17",
