@@ -2164,6 +2164,8 @@ async function loadModelList() {
 
     try {
         const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
+        const baseUrl = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/docs/VSR_IFC/';
+
         // Only log on first load or explicit refresh to avoid spamming console
         if (!(window as any)._autoUpdateStarted) {
              logToScreen('Scanning GitHub for models...');
@@ -4582,6 +4584,12 @@ function setupMeasurementTools() {
                 // 1. Cancel Measurement
                 if (measurementMode) {
                     toggleMeasurementMode(measurementMode); // This resets mode, points, temp lines, and UI buttons
+                    anyAction = true;
+                }
+
+                // Ensure activeTool is also reset (for safety)
+                if (activeTool !== 'none') {
+                    activeTool = 'none';
                     anyAction = true;
                 }
                 

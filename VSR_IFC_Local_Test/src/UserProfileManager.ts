@@ -201,42 +201,34 @@ export class UserProfileManager {
                 sessionStorage.setItem('userAccount', JSON.stringify(this.userProfile));
             }
             
-            // Update UI
             this.updateUI();
             this.logAudit('User updated profile photo');
-            
-            // Optional: Try to sync with backend/Azure if possible (not implemented here as we lack backend proxy)
-            console.log('Photo updated locally. Sync with Azure requires backend proxy with User.ReadWrite.All scope.');
         }
     }
 
     private handleLogout() {
-        this.logAudit('User logged out');
         sessionStorage.removeItem('userAccount');
         localStorage.removeItem('userAccount');
-        
-        // Redirect logic
-        if (window.location.pathname.includes('/docs/VSR_IFC/')) {
-            window.location.href = '../../inse.html';
-        } else if (window.location.pathname.includes('/VSR_IFC/')) {
-             window.location.href = '../inse.html';
-        } else {
-             window.location.href = '../inse.html';
-        }
+        window.location.reload();
     }
 
     private updateConnectionStatus() {
+        if (!this.statusIndicator) return;
+        
         const isOnline = navigator.onLine;
-        if (this.statusIndicator) {
-            this.statusIndicator.style.backgroundColor = isOnline ? '#4CAF50' : '#f44336';
-            this.statusIndicator.title = isOnline ? 'Conectado' : 'Sin conexión';
+        this.statusIndicator.style.backgroundColor = isOnline ? '#4CAF50' : '#f44336';
+        this.statusIndicator.title = isOnline ? 'Conectado' : 'Desconectado';
+        
+        if (!isOnline) {
+            this.logAudit('Connection lost', 'WARNING');
         }
     }
 
-    private logAudit(action: string, level: 'INFO' | 'ERROR' | 'WARN' = 'INFO') {
+    private logAudit(action: string, level: 'INFO' | 'WARNING' | 'ERROR' = 'INFO') {
         const timestamp = new Date().toISOString();
-        const user = this.userProfile ? this.userProfile.username : 'Guest';
-        console.log(`[AUDIT] [${timestamp}] [${level}] [${user}] ${action}`);
-        // Here we could push to a local log array or send to an endpoint
+        const user = this.userProfile ? (this.userProfile.username || 'Guest') : 'Unknown';
+        const logEntry = `[${timestamp}] [${level}] [User:${user}] ${action}`;
+        
+        console.log(logEntry);
     }
 }
