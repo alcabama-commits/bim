@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { exec } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -104,6 +105,35 @@ const viewpointsGenerator = () => {
                 
                 // Trigger index regeneration
                 generateViewpointsIndex();
+
+                // Automate Git Sync (Add, Commit, Push)
+                // Run in the project root or specific folder
+                const projectRoot = __dirname; 
+                console.log('[Server] Starting background Git sync...');
+                
+                exec('git add .', { cwd: projectRoot }, (err, stdout, stderr) => {
+                    if (err) {
+                        console.error('[Server] Git Add Error:', stderr);
+                        return;
+                    }
+                    exec(`git commit -m "feat: auto-save view ${viewpoint.id}"`, { cwd: projectRoot }, (err, stdout, stderr) => {
+                         if (err) {
+                            // It's possible there's nothing to commit if file didn't change, but here it's new
+                            console.error('[Server] Git Commit Error:', stderr);
+                            // If commit fails (e.g. empty), we might still want to push? No.
+                            return;
+                         }
+                         console.log('[Server] Git Commit Success');
+                         
+                         exec('git push origin main', { cwd: projectRoot }, (err, stdout, stderr) => {
+                             if (err) {
+                                 console.error('[Server] Git Push Error:', stderr);
+                             } else {
+                                 console.log('[Server] Successfully pushed to GitHub!');
+                             }
+                         });
+                    });
+                });
 
                 res.statusCode = 200;
                 res.setHeader('Content-Type', 'application/json');

@@ -292,7 +292,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
             if (response.ok) {
                 console.log('[Viewpoints] Saved to server successfully.');
-                alert(`Vista "${viewpoint.title}" guardada en el servidor (VIEWS/${this._currentUserId}).`);
+                alert(`Vista "${viewpoint.title}" guardada localmente.\n\nSe ha iniciado la sincronización automática con GitHub en segundo plano.\nPor favor espera unos segundos antes de verificar el repositorio.`);
             } else {
                 // If 404/500, we assume we are not in a dev environment that supports this
                 console.warn('[Viewpoints] Server save unavailable (likely in production or static host).');
