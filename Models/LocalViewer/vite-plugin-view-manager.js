@@ -6,14 +6,18 @@ export default function viewManagerPlugin() {
   return {
     name: 'vite-plugin-view-manager',
     configureServer(server) {
+      const viewsDir = path.resolve(process.cwd(), 'public/VIEWS');
+      
+      // Ensure base views directory exists immediately on server start
+      if (!fs.existsSync(viewsDir)) {
+        fs.mkdirSync(viewsDir, { recursive: true });
+        console.log('[ViewManager] Created base views directory:', viewsDir);
+      }
+
       server.middlewares.use((req, res, next) => {
         if (req.url.startsWith('/api/views')) {
-          const viewsDir = path.resolve(process.cwd(), 'public/VIEWS');
+          // viewsDir is already defined above
 
-          // Ensure base views directory exists
-          if (!fs.existsSync(viewsDir)) {
-            fs.mkdirSync(viewsDir, { recursive: true });
-          }
 
           if (req.method === 'POST') {
             let body = '';
