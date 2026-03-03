@@ -1428,6 +1428,170 @@ function initSidebarTabs() {
     });
 }
 
+// --- View Manager Implementation ---
+async function initViewManager() {
+    const userInput = document.getElementById('view-user') as HTMLInputElement;
+    const addBtn = document.getElementById('add-view-btn');
+    const refreshBtn = document.getElementById('refresh-views-btn');
+    const listContainer = document.getElementById('views-list');
+
+    if (!userInput || !addBtn || !refreshBtn || !listContainer) {
+        console.warn('View Manager UI elements not found');
+        return;
+    }
+
+    const loadViews = async () => {
+        const user = userInput.value.trim();
+        if (!user) {
+            listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">Ingrese un usuario para ver sus vistas</div>';
+            return;
+        }
+
+        listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">Cargando...</div>';
+
+        try {
+            const response = await fetch(`/api/views/${encodeURIComponent(user)}`);
+            
+            if (!response.ok) {
+                 if (response.status === 404) {
+                     listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">No se encontraron vistas para este usuario.</div>';
+                     return;
+                 }
+                 throw new Error(`Error ${response.status}`);
+            }
+            
+            const views = await response.json();
+            
+            listContainer.innerHTML = '';
+            
+            if (views.length === 0) {
+                listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">No hay vistas guardadas</div>';
+                return;
+            }
+
+            views.forEach((view: any) => {
+                const item = document.createElement('div');
+                item.className = 'view-item';
+                item.style.padding = '12px';
+                item.style.borderBottom = '1px solid #444';
+                item.style.cursor = 'pointer';
+                item.style.display = 'flex';
+                item.style.justifyContent = 'space-between';
+                item.style.alignItems = 'center';
+                item.style.backgroundColor = 'rgba(255,255,255,0.05)';
+                item.style.marginBottom = '5px';
+                item.style.borderRadius = '4px';
+                
+                item.innerHTML = `
+                    <span style="font-weight: 500;"><i class="fa-solid fa-eye" style="margin-right: 8px; color: #007bff;"></i> ${view.name}</span>
+                    <i class="fa-solid fa-chevron-right" style="color: #666; font-size: 12px;"></i>
+                `;
+                
+                item.onmouseenter = () => item.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                item.onmouseleave = () => item.style.backgroundColor = 'rgba(255,255,255,0.05)';
+
+                item.addEventListener('click', async () => {
+                    const data = view.data;
+                    if (data.position && data.target) {
+                        try {
+                            if (world.camera.controls) {
+                                await world.camera.controls.setLookAt(
+                                    data.position.x, data.position.y, data.position.z,
+                                    data.target.x, data.target.y, data.target.z,
+                                    true
+                                );
+                            }
+                            if (data.projection && world.camera.projection) {
+                                if (world.camera.projection.current !== data.projection) {
+                                    await world.camera.projection.set(data.projection);
+                                }
+                            }
+                            logToScreen(`Vista restaurada: ${view.name}`);
+                        } catch (e) {
+                            console.error('Error restoring view:', e);
+                            logToScreen('Error restaurando vista', true);
+                        }
+                    }
+                });
+
+                listContainer.appendChild(item);
+            });
+            
+        } catch (e) {
+            console.error('Error loading views:', e);
+            listContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #ff6b6b;">Error al cargar vistas</div>';
+        }
+    };
+
+    refreshBtn.addEventListener('click', loadViews);
+    
+    userInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') loadViews();
+    });
+
+    addBtn.addEventListener('click', async () => {
+        const user = userInput.value.trim();
+        if (!user) {
+            alert('Por favor ingrese un nombre de usuario (ej. su correo)');
+            return;
+        }
+
+        const name = prompt('Nombre de la nueva vista:');
+        if (!name) return;
+        
+        if (!name.trim()) {
+            alert('El nombre no puede estar vacío');
+            return;
+        }
+
+        if (!world.camera.controls) {
+             alert('Error: Controles de cámara no inicializados');
+             return;
+        }
+
+        const position = new THREE.Vector3();
+        const target = new THREE.Vector3();
+        
+        await world.camera.controls.getPosition(position);
+        await world.camera.controls.getTarget(target);
+
+        const viewData = {
+            position: { x: position.x, y: position.y, z: position.z },
+            target: { x: target.x, y: target.y, z: target.z },
+            projection: world.camera.projection.current
+        };
+
+        try {
+            logToScreen(`Guardando vista '${name}'...`);
+            
+            const response = await fetch('/api/views', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user,
+                    name,
+                    viewData
+                })
+            });
+
+            if (!response.ok) throw new Error('Failed to save');
+            
+            const result = await response.json();
+            logToScreen(`Vista guardada exitosamente.`);
+            loadViews();
+            
+        } catch (e) {
+            console.error('Error saving view:', e);
+            logToScreen('Error al guardar la vista', true);
+            alert('Error al guardar la vista. Revise la consola.');
+        }
+    });
+
+    if (userInput.value) {
+        loadViews();
+    }
+}
+
 // Global tracking for hidden items (Fragments/Items hidden via Hider)
 const hiddenItems: Record<string, Set<number>> = {};
 
@@ -2232,6 +2396,7 @@ initClipperTool();
 initFitModelTool();
 loadModelList();
 initPropertiesPanel();
+initViewManager();
 
 // --- View Controls & Console Toggle ---
 

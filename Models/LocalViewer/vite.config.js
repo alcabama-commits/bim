@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import viewManagerPlugin from './vite-plugin-view-manager';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,7 +63,10 @@ function generateModels() {
 }
 
 export default defineConfig({
-  plugins: [modelsGenerator()],
+  plugins: [
+    modelsGenerator(),
+    viewManagerPlugin()
+  ],
   base: './', // Ensures relative paths for GitHub Pages
   build: {
     target: 'esnext', // Enable top-level await
