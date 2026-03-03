@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="version" content="v26-EdgeSnap" />
+    <meta name="version" content="v27-EventSnap" />
     <!--
     <script>
       // COI Service Worker Registration for SharedArrayBuffer support
@@ -24,9 +24,9 @@
     -->
     <link rel="icon" type="image/svg+xml" href="vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VSR IFC Viewer v26-EdgeSnap</title>
+    <title>VSR IFC Viewer v27-EventSnap</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script type="module" crossorigin src="./assets/main-B-qTOYwo.js"></script>
+    <script type="module" crossorigin src="./assets/main-DpXGjtKe.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/main-gS-EMorV.css">
   </head>
   <body>
@@ -40,6 +40,9 @@
             </button>
             <button class="tab-btn" data-tab="classification" title="Clasificación">
                 <i class="fa-solid fa-tags"></i>
+            </button>
+            <button class="tab-btn" data-tab="views" title="Vistas Guardadas">
+                <i class="fa-solid fa-camera"></i>
             </button>
         </div>
 
@@ -61,6 +64,26 @@
             <div class="sidebar-content" id="classification-list">
                 <div style="padding: 20px; text-align: center; color: #888;">
                     Carga un modelo para ver la clasificación
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-views" class="tab-content" style="display: none;">
+            <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h3><i class="fa-solid fa-camera"></i> Vistas Guardadas</h3>
+                <button id="add-view-btn" class="sidebar-toggle-btn" title="Guardar Vista Actual" style="background: none; border: none; cursor: pointer;">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
+            </div>
+            
+            <div style="padding: 10px;">
+                <input type="text" id="view-user" placeholder="Usuario (ej. alcabama.bim)" value="alcabama.bim@outlook.com" style="width: 100%; margin-bottom: 10px; padding: 5px;">
+                <button id="refresh-views-btn" style="width: 100%; padding: 5px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px;">Actualizar Vistas</button>
+            </div>
+
+            <div class="sidebar-content" id="views-list">
+                <div style="padding: 20px; text-align: center; color: #888;">
+                    Cargando vistas...
                 </div>
             </div>
         </div>
