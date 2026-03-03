@@ -69,6 +69,61 @@ const viewpointsGenerator = () => {
       generateViewpointsIndex();
     },
     configureServer(server) {
+      // Server Middleware
+      server.middlewares.use('/api/save-viewpoint', async (req, res, next) => {
+        if (req.method === 'POST') {
+          try {
+            const chunks = [];
+            req.on('data', chunk => chunks.push(chunk));
+            req.on('end', () => {
+              try {
+                const body = JSON.parse(Buffer.concat(chunks).toString());
+                const { userId, viewpoint } = body;
+
+                if (!userId || !viewpoint) {
+                  res.statusCode = 400;
+                  res.end(JSON.stringify({ error: 'Missing userId or viewpoint data' }));
+                  return;
+                }
+
+                // Sanitize userId to be safe for file system
+                const safeUserId = userId.replace(/[^a-zA-Z0-9@._-]/g, '_');
+                const userDir = path.resolve(__dirname, 'public/VIEWS', safeUserId);
+
+                // 2. Verify/Create user folder
+                if (!fs.existsSync(userDir)) {
+                  fs.mkdirSync(userDir, { recursive: true });
+                  console.log(`[Server] Created directory: ${userDir}`);
+                }
+
+                // 3. Store JSON
+                const filePath = path.join(userDir, `${viewpoint.id}.json`);
+                fs.writeFileSync(filePath, JSON.stringify(viewpoint, null, 2));
+                
+                console.log(`[Server] Saved viewpoint to: ${filePath}`);
+                
+                // Trigger index regeneration
+                generateViewpointsIndex();
+
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ success: true, path: filePath }));
+              } catch (e) {
+                console.error('[Server] Error parsing JSON:', e);
+                res.statusCode = 500;
+                res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+              }
+            });
+          } catch (err) {
+            console.error('[Server] Error saving viewpoint:', err);
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: err.message }));
+          }
+        } else {
+          next();
+        }
+      });
+
       const viewsPath = path.resolve(__dirname, 'public/VIEWS');
       server.watcher.add(viewsPath);
       

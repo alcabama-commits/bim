@@ -264,6 +264,9 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         try {
             this.saveToStorage();
             console.log('[Viewpoints] Saved to storage successfully.');
+            
+            // Attempt to save to server (Local Dev only)
+            this._saveToServer(viewpointData);
         } catch (e) {
             console.error('[Viewpoints] Failed to save to storage:', e);
             alert('Error al guardar en almacenamiento local (ver consola).');
@@ -272,6 +275,31 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         this.renderList();
         
         return viewpointData;
+    }
+
+    private async _saveToServer(viewpoint: ViewpointData) {
+        try {
+            const response = await fetch('/api/save-viewpoint', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    userId: this._currentUserId,
+                    viewpoint: viewpoint
+                })
+            });
+
+            if (response.ok) {
+                console.log('[Viewpoints] Saved to server successfully.');
+                alert(`Vista "${viewpoint.title}" guardada en el servidor (VIEWS/${this._currentUserId}).`);
+            } else {
+                // If 404/500, we assume we are not in a dev environment that supports this
+                console.warn('[Viewpoints] Server save unavailable (likely in production or static host).');
+            }
+        } catch (e) {
+            console.warn('[Viewpoints] Could not save to server:', e);
+        }
     }
 
     public async restoreViewpoint(id: string) {
