@@ -11,7 +11,7 @@ export interface ViewpointIndexItem {
 }
 
 export class ViewpointRepository {
-    private _indexUrl: string = 'VISTAS/index.json';
+    private _indexUrl: string = 'VIEWS/index.json';
     private _viewpoints: ViewpointIndexItem[] = [];
 
     constructor() {
@@ -29,7 +29,7 @@ export class ViewpointRepository {
             
             if (!response.ok) {
                 if (response.status === 404) {
-                    console.warn('[Repository] No viewpoints index found (VISTAS/index.json).');
+                    console.warn('[Repository] No viewpoints index found (VIEWS/index.json).');
                     return [];
                 }
                 throw new Error(`Failed to load index: ${response.statusText}`);

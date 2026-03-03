@@ -181,7 +181,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         const view = this._savedViewpoints.find(v => v.id === id);
         if (view) {
             this._repository.exportViewpoint(view);
-            alert(`Vista "${view.title}" descargada.\n\nPARA QUE PERSISTA EN EL REPOSITORIO:\n1. Mueve el archivo JSON descargado a la carpeta 'public/VISTAS' del proyecto.\n2. Haz commit y push de los cambios.\n3. Si estás en local, asegúrate de que el servidor se reinicie o ejecuta 'npm run build'.`);
+            const userFolder = view.userId || 'guest';
+            alert(`Vista "${view.title}" descargada.\n\nPARA QUE PERSISTA EN EL REPOSITORIO:\n1. Crea una carpeta llamada "${userFolder}" dentro de 'public/VIEWS/' (si no existe).\n2. Mueve el archivo JSON descargado a esa carpeta.\n3. Haz commit y push de los cambios.\n4. Si estás en local, el sistema detectará el cambio automáticamente.`);
         }
     }
 

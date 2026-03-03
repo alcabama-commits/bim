@@ -61,7 +61,7 @@ function generateModels() {
   }
 }
 
-// Plugin to auto-generate viewpoints index (VISTAS/index.json)
+// Plugin to auto-generate viewpoints index (VIEWS/index.json)
 const viewpointsGenerator = () => {
   return {
     name: 'generate-viewpoints-index',
@@ -69,23 +69,23 @@ const viewpointsGenerator = () => {
       generateViewpointsIndex();
     },
     configureServer(server) {
-      const vistasPath = path.resolve(__dirname, 'public/VISTAS');
-      server.watcher.add(vistasPath);
+      const viewsPath = path.resolve(__dirname, 'public/VIEWS');
+      server.watcher.add(viewsPath);
       
       server.watcher.on('add', (file) => {
-        if (file.includes('VISTAS') && file.endsWith('.json') && !file.endsWith('index.json')) {
+        if (file.includes('VIEWS') && file.endsWith('.json') && !file.endsWith('index.json')) {
             console.log(`Viewpoint added: ${file}`);
             generateViewpointsIndex();
         }
       });
       server.watcher.on('unlink', (file) => {
-        if (file.includes('VISTAS') && file.endsWith('.json')) {
+        if (file.includes('VIEWS') && file.endsWith('.json')) {
             console.log(`Viewpoint removed: ${file}`);
             generateViewpointsIndex();
         }
       });
       server.watcher.on('change', (file) => {
-        if (file.includes('VISTAS') && file.endsWith('.json') && !file.endsWith('index.json')) {
+        if (file.includes('VIEWS') && file.endsWith('.json') && !file.endsWith('index.json')) {
              console.log(`Viewpoint changed: ${file}`);
              generateViewpointsIndex();
         }
@@ -95,37 +95,52 @@ const viewpointsGenerator = () => {
 };
 
 function generateViewpointsIndex() {
-  const vistasDir = path.resolve(__dirname, 'public/VISTAS');
-  const outputFile = path.resolve(__dirname, 'public/VISTAS/index.json');
+  const viewsDir = path.resolve(__dirname, 'public/VIEWS');
+  const outputFile = path.resolve(__dirname, 'public/VIEWS/index.json');
   
-  if (!fs.existsSync(vistasDir)) return;
+  if (!fs.existsSync(viewsDir)) return;
 
   try {
-    const files = fs.readdirSync(vistasDir).filter(file => file.toLowerCase().endsWith('.json') && file !== 'index.json');
-    
     const viewpoints = [];
-    
-    for (const file of files) {
-      try {
-        const content = fs.readFileSync(path.join(vistasDir, file), 'utf-8');
-        const data = JSON.parse(content);
-        // Only include metadata in the index to keep it light
-        viewpoints.push({
-          id: data.id,
-          title: data.title,
-          description: data.description,
-          category: data.category,
-          userId: data.userId,
-          date: data.date,
-          file: `VISTAS/${file}`
-        });
-      } catch (e) {
-        console.warn(`[Viewpoints Generator] Skipping invalid JSON: ${file}`);
-      }
+
+    // Helper to scan directories recursively
+    function scanDirectory(dir) {
+        const items = fs.readdirSync(dir, { withFileTypes: true });
+        
+        for (const item of items) {
+            const fullPath = path.join(dir, item.name);
+            
+            if (item.isDirectory()) {
+                scanDirectory(fullPath);
+            } else if (item.isFile() && item.name.toLowerCase().endsWith('.json') && item.name !== 'index.json') {
+                try {
+                    const content = fs.readFileSync(fullPath, 'utf-8');
+                    const data = JSON.parse(content);
+                    
+                    // Relative path from public root
+                    const relativePath = path.relative(path.resolve(__dirname, 'public'), fullPath).replace(/\\/g, '/');
+
+                    // Only include metadata in the index to keep it light
+                    viewpoints.push({
+                      id: data.id,
+                      title: data.title,
+                      description: data.description,
+                      category: data.category,
+                      userId: data.userId,
+                      date: data.date,
+                      file: relativePath // e.g. "VIEWS/user@email.com/view1.json"
+                    });
+                } catch (e) {
+                    console.warn(`[Viewpoints Generator] Skipping invalid JSON: ${fullPath}`);
+                }
+            }
+        }
     }
 
+    scanDirectory(viewsDir);
+
     fs.writeFileSync(outputFile, JSON.stringify(viewpoints, null, 2));
-    console.log(`[Viewpoints Generator] Updated VISTAS/index.json with ${viewpoints.length} views.`);
+    console.log(`[Viewpoints Generator] Updated VIEWS/index.json with ${viewpoints.length} views.`);
   } catch (err) {
     console.error('[Viewpoints Generator] Error generating index.json:', err);
   }
