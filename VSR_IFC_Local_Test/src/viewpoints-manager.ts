@@ -4,6 +4,7 @@ import * as OBF from '@thatopen/components-front';
 
 export interface ViewpointData {
     id: string;
+    userId: string; // Foreign Key to User
     title: string;
     description: string;
     date: number;
@@ -45,6 +46,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     
     private _savedViewpoints: ViewpointData[] = [];
     private _stateProvider?: ViewpointStateProvider;
+    private _currentUserId: string | null = null;
     
     // UI
     private _container: HTMLElement | null = null;
@@ -63,7 +65,33 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         this._highlighter = components.get(OBF.Highlighter);
         this._hider = components.get(OBC.Hider);
         
+        this.initializeUser();
         this.loadFromStorage();
+    }
+
+    private initializeUser() {
+        // Middleware: Authenticate User
+        try {
+            const userStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+            if (userStr) {
+                const user = JSON.parse(userStr);
+                // Use email or unique identifier as UserID
+                this._currentUserId = user.email || user.username || 'guest';
+            } else {
+                this._currentUserId = 'guest'; // Fallback
+            }
+        } catch (e) {
+            console.error('Auth Middleware Error:', e);
+            this._currentUserId = 'guest';
+        }
+    }
+
+    // Middleware: Authorization Check
+    // NOTE: In a serverless/local-first architecture, this method acts as the API Gateway/Middleware layer
+    // ensuring that no operation proceeds without ownership validation.
+    private checkOwnership(viewpoint: ViewpointData): boolean {
+        if (!this._currentUserId || this._currentUserId === 'guest') return false;
+        return viewpoint.userId === this._currentUserId;
     }
 
     setStateProvider(provider: ViewpointStateProvider) {
@@ -103,8 +131,15 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             loadedModels = this._stateProvider.getLoadedModels();
         }
 
+        // Validate Authentication
+        if (!this._currentUserId || this._currentUserId === 'guest') {
+            alert('Debe iniciar sesión para guardar vistas.');
+            return;
+        }
+
         const viewpointData: ViewpointData = {
             id: THREE.MathUtils.generateUUID(),
+            userId: this._currentUserId,
             title,
             description,
             category,
@@ -133,7 +168,18 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
     public async restoreViewpoint(id: string) {
         const view = this._savedViewpoints.find(v => v.id === id);
-        if (!view) return;
+        
+        // 403 Forbidden Simulation
+        if (!view) {
+             console.error('Viewpoint not found.');
+             return;
+        }
+        
+        if (!this.checkOwnership(view)) {
+             console.error('403 Forbidden: You do not have permission to access this view.');
+             alert('Error 403: No tiene permisos para acceder a esta vista.');
+             return;
+        }
 
         console.log(`Restoring viewpoint '${view.title}'...`);
 
@@ -193,6 +239,14 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     }
 
     public deleteViewpoint(id: string) {
+        const view = this._savedViewpoints.find(v => v.id === id);
+        if (!view) return;
+        
+        if (!this.checkOwnership(view)) {
+             alert('Error 403: No tiene permisos para eliminar esta vista.');
+             return;
+        }
+
         this._savedViewpoints = this._savedViewpoints.filter(v => v.id !== id);
         this.saveToStorage();
         this.renderList();
@@ -216,8 +270,15 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
     public createUI(container: HTMLElement) {
         this._container = container;
+        const userName = this._currentUserId === 'guest' ? 'Invitado' : (this._currentUserId || 'Usuario');
+        
         this._container.innerHTML = `
             <div class="viewpoints-ui" style="padding: 10px; color: #eee;">
+                <div style="margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #444;">
+                    <small style="color: #aaa; font-size: 11px;">DASHBOARD DE VISTAS</small>
+                    <div style="font-weight: bold; color: var(--primary-color, #D8005E);">${userName}</div>
+                </div>
+
                 <div style="margin-bottom: 15px; display: flex; gap: 5px;">
                     <button id="vp-create-btn" class="projection-toggle-btn" style="flex: 1; justify-content: center;">
                         <i class="fa-solid fa-plus"></i> Nueva Vista
@@ -409,18 +470,40 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         }
     }
 
+    private getStorageKey(): string {
+        if (!this._currentUserId || this._currentUserId === 'guest') {
+            return 'vsr-ifc-viewpoints-guest';
+        }
+        // User-Specific Storage Key (Simulates Database Partitioning)
+        return `vsr-ifc-viewpoints-${this._currentUserId}`;
+    }
+
     private saveToStorage() {
-        localStorage.setItem('vsr-ifc-viewpoints', JSON.stringify(this._savedViewpoints));
+        const key = this.getStorageKey();
+        localStorage.setItem(key, JSON.stringify(this._savedViewpoints));
     }
 
     private loadFromStorage() {
-        const data = localStorage.getItem('vsr-ifc-viewpoints');
+        const key = this.getStorageKey();
+        const data = localStorage.getItem(key);
         if (data) {
             try {
                 this._savedViewpoints = JSON.parse(data);
+                
+                // Verify ownership integrity on load (Middleware check)
+                this._savedViewpoints = this._savedViewpoints.filter(v => {
+                    if (v.userId && v.userId !== this._currentUserId) {
+                        console.warn(`[Security] Filtered out unauthorized view ${v.id} belonging to ${v.userId}`);
+                        return false;
+                    }
+                    return true;
+                });
+
             } catch (e) {
                 console.error("Failed to load viewpoints", e);
             }
+        } else {
+            this._savedViewpoints = [];
         }
     }
 

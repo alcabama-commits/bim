@@ -5297,6 +5297,21 @@ function renderGuestMode(container: HTMLElement) {
 // Call it
 setupUserAuthentication();
 
+// --- Test Runner ---
+import { runViewpointAuthTests } from './tests/auth-viewpoints.test';
+
+// Check for test flag
+if (window.location.search.includes('test=auth')) {
+    console.log('Running Auth Tests...');
+    // We need to wait for components/world to be initialized or mock them inside the test file
+    // The test file mocks its own components, so we can just run it.
+    runViewpointAuthTests().then(() => {
+        console.log('Auth Tests Completed.');
+    });
+}
+// Expose for manual run
+(window as any).runAuthTests = runViewpointAuthTests;
+
 
 
 
