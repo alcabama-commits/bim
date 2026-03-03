@@ -99,7 +99,13 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     }
 
     public async saveViewpoint(title: string, category: string = 'General', description: string = '') {
-        if (!this._world.camera.controls) return;
+        console.log('[Viewpoints] Attempting to save view:', title);
+
+        if (!this._world.camera.controls) {
+            console.error('[Viewpoints] Camera controls not found!');
+            alert('Error: No se pudo acceder a la cámara para guardar la vista.');
+            return;
+        }
 
         // 1. Capture Camera
         const camera = this._world.camera.three;
@@ -114,8 +120,10 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         // 2. Capture Selection
         const selection: { [fragmentID: string]: number[] } = {};
         const selectionMap = this._highlighter.selection.select;
-        for (const [fragID, ids] of Object.entries(selectionMap)) {
-            selection[fragID] = Array.from(ids);
+        if (selectionMap) {
+            for (const [fragID, ids] of Object.entries(selectionMap)) {
+                selection[fragID] = Array.from(ids);
+            }
         }
 
         // 3. Capture Visibility & Annotations via Provider
@@ -125,10 +133,14 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         let loadedModels: { uuid: string, url: string }[] = [];
 
         if (this._stateProvider) {
-            hidden = this._stateProvider.getHiddenItems();
-            annotations = this._stateProvider.getMeasurements();
-            clippingPlanes = this._stateProvider.getClippingPlanes();
-            loadedModels = this._stateProvider.getLoadedModels();
+            try {
+                hidden = this._stateProvider.getHiddenItems() || {};
+                annotations = this._stateProvider.getMeasurements() || [];
+                clippingPlanes = this._stateProvider.getClippingPlanes() || [];
+                loadedModels = this._stateProvider.getLoadedModels() || [];
+            } catch (e) {
+                console.error('[Viewpoints] Error retrieving state from provider:', e);
+            }
         }
 
         // Validate Authentication
@@ -158,11 +170,19 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             loadedModels
         };
 
+        console.log('[Viewpoints] Saving data:', viewpointData);
+
         this._savedViewpoints.push(viewpointData);
-        this.saveToStorage();
+        try {
+            this.saveToStorage();
+            console.log('[Viewpoints] Saved to storage successfully.');
+        } catch (e) {
+            console.error('[Viewpoints] Failed to save to storage:', e);
+            alert('Error al guardar en almacenamiento local (ver consola).');
+        }
+        
         this.renderList();
         
-        console.log(`Viewpoint '${title}' saved.`, viewpointData);
         return viewpointData;
     }
 
