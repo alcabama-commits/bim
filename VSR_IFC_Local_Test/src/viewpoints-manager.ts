@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
+import { ViewpointRepository } from './viewpoint-repository';
 
 export interface ViewpointData {
     id: string;
@@ -47,6 +48,9 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     private _savedViewpoints: ViewpointData[] = [];
     private _stateProvider?: ViewpointStateProvider;
     private _currentUserId: string | null = null;
+
+    // Repository
+    private _repository: ViewpointRepository;
     
     // UI
     private _container: HTMLElement | null = null;
@@ -65,8 +69,11 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         this._highlighter = components.get(OBF.Highlighter);
         this._hider = components.get(OBC.Hider);
         
+        this._repository = new ViewpointRepository();
+
         this.initializeUser();
         this.loadFromStorage();
+        this.loadFromRepository();
     }
 
     private initializeUser() {
@@ -96,6 +103,54 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
     setStateProvider(provider: ViewpointStateProvider) {
         this._stateProvider = provider;
+    }
+
+    // --- Repository Integration ---
+
+    async loadFromRepository() {
+        console.log('[Viewpoints] Loading from repository...');
+        try {
+            const index = await this._repository.loadIndex();
+            
+            for (const item of index) {
+                // Check if we already have this ID loaded locally (prefer local edit? or prefer repo?)
+                // Let's prefer repo as source of truth, unless local is newer? 
+                // For simplicity: If ID exists, skip or overwrite. 
+                // Let's overwrite to ensure sync.
+                
+                // Only load if user has access? 
+                // If the view is in the public repo, maybe it's public? 
+                // Or we filter by userId here too.
+                if (item.userId && item.userId !== this._currentUserId) {
+                    continue; // Skip views not belonging to this user
+                }
+
+                try {
+                    const fullView = await this._repository.loadViewpointData(item.file);
+                    if (fullView) {
+                        const existingIdx = this._savedViewpoints.findIndex(v => v.id === fullView.id);
+                        if (existingIdx !== -1) {
+                            this._savedViewpoints[existingIdx] = fullView;
+                        } else {
+                            this._savedViewpoints.push(fullView);
+                        }
+                    }
+                } catch (e) {
+                    console.error(`[Viewpoints] Failed to load view ${item.id}`, e);
+                }
+            }
+            this.renderList();
+        } catch (e) {
+            console.error('[Viewpoints] Error in repository sync:', e);
+        }
+    }
+
+    async exportViewpointToRepository(id: string) {
+        const view = this._savedViewpoints.find(v => v.id === id);
+        if (view) {
+            this._repository.exportViewpoint(view);
+            alert(`Vista "${view.title}" exportada. Por favor, guarda el archivo en 'public/VISTAS' y haz commit al repositorio.`);
+        }
     }
 
     public async saveViewpoint(title: string, category: string = 'General', description: string = '') {
@@ -444,12 +499,13 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 const date = new Date(v.date).toLocaleDateString();
                 
                 item.innerHTML = `
-                    <div style="display: flex; flex-direction: column; overflow: hidden;">
+                    <div style="display: flex; flex-direction: column; overflow: hidden; width: 60%;">
                         <span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${v.title}</span>
                         <span style="font-size: 10px; color: #aaa;">${date}</span>
                     </div>
                     <div style="display: flex; gap: 5px;">
                         <button class="restore-view-btn" title="Restaurar" style="background:none; border:none; color: #4caf50; cursor: pointer;"><i class="fa-solid fa-eye"></i></button>
+                        <button class="export-view-btn" title="Exportar a Repositorio" style="background:none; border:none; color: #2196f3; cursor: pointer;"><i class="fa-solid fa-file-export"></i></button>
                         <button class="delete-view-btn" title="Eliminar" style="background:none; border:none; color: #e91e63; cursor: pointer;"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 `;
@@ -469,6 +525,14 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                     restoreBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
                         this.restoreViewpoint(v.id);
+                    });
+                }
+
+                const exportBtn = item.querySelector('.export-view-btn');
+                if (exportBtn) {
+                    exportBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.exportViewpointToRepository(v.id);
                     });
                 }
 

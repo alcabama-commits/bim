@@ -1,0 +1,11 @@
+[
+  {
+    "id": "sample-view-001",
+    "title": "Vista de Ejemplo del Repositorio",
+    "description": "Esta es una vista persistente almacenada en el repositorio.",
+    "category": "Ejemplos",
+    "userId": "alcabama.bim@outlook.com",
+    "date": 1740924000000,
+    "file": "VISTAS/sample-view.json"
+  }
+]
