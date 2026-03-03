@@ -25,3 +25,7 @@ El archivo `index.json` se genera automáticamente durante el proceso de constru
 2. Haz clic en el botón "Exportar a Repositorio" en el panel de vistas.
 3. Guarda el archivo JSON descargado en esta carpeta (`public/VISTAS`).
 4. Haz commit y push de los cambios al repositorio.
+5. **IMPORTANTE**: Si estás probando localmente, debes ejecutar `npm run build` o reiniciar el servidor de desarrollo para que `index.json` se actualice y la vista aparezca en la lista.
+
+## Nota sobre index.json
+No edites manualmente `index.json`. Este archivo es generado automáticamente por el script de construcción de Vite (`vite.config.js`). Si añades un archivo JSON a esta carpeta, el índice se regenerará en la próxima compilación.

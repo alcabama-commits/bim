@@ -107,6 +107,38 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
     // --- Repository Integration ---
 
+    async importViewpointFromFile(file: File) {
+        try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+            
+            // Basic validation
+            if (!data.id || !data.camera) {
+                alert('El archivo no parece ser una vista válida (Faltan campos id o camera).');
+                return;
+            }
+
+            // Check if exists
+            const existingIdx = this._savedViewpoints.findIndex(v => v.id === data.id);
+            if (existingIdx !== -1) {
+                if (!confirm(`La vista "${data.title}" ya existe. ¿Deseas sobrescribirla?`)) {
+                    return;
+                }
+                this._savedViewpoints[existingIdx] = data;
+            } else {
+                this._savedViewpoints.push(data);
+            }
+            
+            // We save to local storage to keep it in the current session
+            this.saveToStorage();
+            this.renderList();
+            alert(`Vista "${data.title}" importada correctamente.`);
+        } catch (e) {
+            console.error('[Viewpoints] Error importing viewpoint:', e);
+            alert('Error al importar la vista. Verifique el formato del archivo JSON.');
+        }
+    }
+
     async loadFromRepository() {
         console.log('[Viewpoints] Loading from repository...');
         try {
@@ -149,7 +181,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         const view = this._savedViewpoints.find(v => v.id === id);
         if (view) {
             this._repository.exportViewpoint(view);
-            alert(`Vista "${view.title}" exportada. Por favor, guarda el archivo en 'public/VISTAS' y haz commit al repositorio.`);
+            alert(`Vista "${view.title}" descargada.\n\nPARA QUE PERSISTA EN EL REPOSITORIO:\n1. Mueve el archivo JSON descargado a la carpeta 'public/VISTAS' del proyecto.\n2. Haz commit y push de los cambios.\n3. Si estás en local, asegúrate de que el servidor se reinicie o ejecuta 'npm run build'.`);
         }
     }
 
@@ -358,6 +390,13 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                     <button id="vp-create-btn" class="projection-toggle-btn" style="flex: 1; justify-content: center;">
                         <i class="fa-solid fa-plus"></i> Nueva Vista
                     </button>
+                    <button id="vp-import-btn" class="projection-toggle-btn" style="flex: 0 0 auto;" title="Importar vista desde archivo JSON">
+                        <i class="fa-solid fa-file-import"></i>
+                    </button>
+                    <input type="file" id="vp-file-input" accept=".json" style="display: none;" />
+                    <button id="vp-refresh-btn" class="projection-toggle-btn" style="flex: 0 0 auto;" title="Recargar vistas del repositorio">
+                        <i class="fa-solid fa-sync"></i>
+                    </button>
                     <button id="vp-save-btn" class="projection-toggle-btn" style="flex: 0 0 auto;" title="Guardar cambios en vista actual">
                         <i class="fa-solid fa-save"></i>
                     </button>
@@ -400,6 +439,9 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         
         // Event Listeners
         const createBtn = this._container.querySelector('#vp-create-btn');
+        const importBtn = this._container.querySelector('#vp-import-btn');
+        const refreshBtn = this._container.querySelector('#vp-refresh-btn');
+        const fileInput = this._container.querySelector('#vp-file-input') as HTMLInputElement;
         const modal = this._container.querySelector('#vp-modal') as HTMLElement;
         const cancelBtn = this._container.querySelector('#vp-cancel-btn');
         const confirmBtn = this._container.querySelector('#vp-confirm-btn');
@@ -414,6 +456,29 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                     nameInput.value = `Vista ${this._savedViewpoints.length + 1}`;
                     nameInput.focus();
                 }
+            });
+        }
+
+        if (importBtn && fileInput) {
+            importBtn.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            fileInput.addEventListener('change', async (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0];
+                if (file) {
+                    await this.importViewpointFromFile(file);
+                    fileInput.value = ''; // Reset
+                }
+            });
+        }
+        
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', async () => {
+                const icon = refreshBtn.querySelector('i');
+                if (icon) icon.classList.add('fa-spin');
+                await this.loadFromRepository();
+                if (icon) icon.classList.remove('fa-spin');
             });
         }
         

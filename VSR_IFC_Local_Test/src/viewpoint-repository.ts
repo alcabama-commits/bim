@@ -23,7 +23,10 @@ export class ViewpointRepository {
      */
     async loadIndex(): Promise<ViewpointIndexItem[]> {
         try {
-            const response = await fetch(this._indexUrl);
+            // Add timestamp to prevent caching
+            const url = `${this._indexUrl}?t=${Date.now()}`;
+            const response = await fetch(url);
+            
             if (!response.ok) {
                 if (response.status === 404) {
                     console.warn('[Repository] No viewpoints index found (VISTAS/index.json).');
@@ -53,7 +56,10 @@ export class ViewpointRepository {
      */
     async loadViewpointData(fileUrl: string): Promise<ViewpointData | null> {
         try {
-            const response = await fetch(fileUrl);
+            // Prevent caching for individual files too
+            const url = `${fileUrl}?t=${Date.now()}`;
+            const response = await fetch(url);
+            
             if (!response.ok) {
                 throw new Error(`Failed to load view file: ${fileUrl}`);
             }
