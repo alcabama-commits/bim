@@ -491,17 +491,6 @@ export default function App() {
                   <Lock size={14} className={isEditMode ? 'text-white' : 'text-alcabama-grey'} />
                   {isEditMode ? 'Edición Activa' : 'Habilitar Edición'}
                 </button>
-
-                <div className="h-8 w-[1px] bg-alcabama-light-grey/30 mx-2" />
-
-                <span className="text-[10px] uppercase tracking-tighter text-alcabama-grey font-bold">Progreso General</span>
-                <div className="w-32 h-2 bg-alcabama-light-grey/30 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-alcabama-pink transition-all duration-1000" 
-                    style={{ width: `${stats.percentage}%` }}
-                  />
-                </div>
-                <span className="text-sm font-bold text-alcabama-pink">{stats.percentage}%</span>
               </div>
             </div>
 
