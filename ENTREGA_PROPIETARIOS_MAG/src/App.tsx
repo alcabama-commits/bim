@@ -205,7 +205,7 @@ const TowerCard = ({
         </div>
       </div>
 
-      <div className="bg-alcabama-light-grey/5 px-4 py-3 border-t border-alcabama-light-grey grid grid-cols-2 gap-y-2 gap-x-2 text-[10px] text-alcabama-dark-grey leading-tight">
+      <div className="bg-alcabama-light-grey/5 px-4 py-3 border-t border-alcabama-light-grey grid grid-cols-2 gap-y-2 gap-x-2 text-sm text-alcabama-dark-grey leading-tight">
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 bg-blue-600 rounded-sm shrink-0" />
           <span className="truncate">Propietarios: <strong className="text-sm">{towerStats.owner}</strong></span>
