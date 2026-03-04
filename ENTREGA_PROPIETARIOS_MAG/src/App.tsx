@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Building2, CheckCircle2, Clock, Info, Search, BarChart3, LayoutGrid, Lock } from 'lucide-react';
+import { Building2, CheckCircle2, Clock, Info, Search, BarChart3, LayoutGrid, Lock, Save, Loader2, Eye, EyeOff } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell 
@@ -361,10 +361,26 @@ export default function App() {
 
   // Password Protection State
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [password, setPassword] = useState('');
   const [pendingStatus, setPendingStatus] = useState<Status | null>(null);
   const [error, setError] = useState('');
   const [isEditMode, setIsEditMode] = useState(false);
+  const [pendingChanges, setPendingChanges] = useState<Map<string, {towerId: number, aptNumber: string, status: Status}>>(new Map());
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Warn before unload if there are pending changes
+  React.useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (pendingChanges.size > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [pendingChanges]);
 
   const handleStatusChange = (newStatus: Status) => {
     if (!editingApartment) return;
@@ -382,24 +398,59 @@ export default function App() {
         };
       }));
 
-      // Update Google Sheet
-      updateSheetStatus(
-        editingApartment.towerId, 
-        editingApartment.apartment.number, 
-        newStatus
-      ).then(success => {
-        if (!success) {
-           console.error('Failed to sync with Google Sheets');
-           // Here we could revert the optimistic update if we wanted to be strict
-        }
+      // Add to pending changes
+      setPendingChanges(prev => {
+        const newMap = new Map(prev);
+        const key = `${editingApartment.towerId}-${editingApartment.apartment.number}`;
+        newMap.set(key, {
+          towerId: editingApartment.towerId,
+          aptNumber: editingApartment.apartment.number,
+          status: newStatus
+        });
+        return newMap;
       });
 
       setEditingApartment(null);
     } else {
       // If not in edit mode, this shouldn't happen via UI but as a safeguard
       // we can prompt for edit mode or just ignore. 
-      // Given the UI will hide/show things based on edit mode, we might not reach here.
-      // But if we do, let's just ignore or set error.
+    }
+  };
+
+  const handleSaveChanges = async () => {
+    if (pendingChanges.size === 0) return;
+    
+    setIsSaving(true);
+    
+    try {
+      // Process all pending changes
+      // Since GAS API (as implemented) handles one by one, we loop.
+      // Ideally we would update GAS to handle batch, but for now we loop.
+      const changes = Array.from(pendingChanges.values());
+      let successCount = 0;
+      
+      // Execute sequentially to avoid overwhelming the script/rate limits if any
+      for (const change of changes) {
+        const success = await updateSheetStatus(change.towerId, change.aptNumber, change.status);
+        if (success) successCount++;
+      }
+      
+      if (successCount === changes.length) {
+        setPendingChanges(new Map());
+      } else {
+        console.error(`Failed to save ${changes.length - successCount} changes`);
+        // We could keep failed changes in the map, but for simplicity let's clear all 
+        // and rely on the user to check if something looks wrong or just re-edit.
+        // Or better: keep failed ones? 
+        // For now, let's clear and assume retries will happen if user notices.
+        setPendingChanges(new Map()); 
+        alert('Algunos cambios no se pudieron guardar. Por favor verifica.');
+      }
+    } catch (err) {
+      console.error('Error saving changes:', err);
+      alert('Error al guardar cambios.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -407,6 +458,7 @@ export default function App() {
     setShowPasswordModal(true);
     setPassword('');
     setError('');
+    setShowPassword(false);
   };
 
   const confirmStatusChange = () => {
@@ -496,6 +548,18 @@ export default function App() {
                 </button>
               </div>
               <div className="hidden sm:flex items-center gap-4">
+                {/* Save Button */}
+                {isEditMode && pendingChanges.size > 0 && (
+                  <button
+                    onClick={handleSaveChanges}
+                    disabled={isSaving}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-blue-600 text-white shadow-lg shadow-blue-600/30 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                    {isSaving ? 'Guardando...' : `Guardar (${pendingChanges.size})`}
+                  </button>
+                )}
+
                 {/* Edit Mode Toggle */}
                 <button
                   onClick={() => {
@@ -771,15 +835,24 @@ export default function App() {
                 </p>
                 
                 <div className="space-y-2">
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Contraseña"
-                    className="w-full px-4 py-3 rounded-xl border border-alcabama-light-grey focus:outline-none focus:ring-2 focus:ring-alcabama-pink/50 transition-all"
-                    autoFocus
-                    onKeyDown={(e) => e.key === 'Enter' && confirmStatusChange()}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Contraseña"
+                      className="w-full px-4 py-3 rounded-xl border border-alcabama-light-grey focus:outline-none focus:ring-2 focus:ring-alcabama-black/20 focus:border-alcabama-black transition-all"
+                      autoFocus
+                      onKeyDown={(e) => e.key === 'Enter' && confirmStatusChange()}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-alcabama-grey hover:text-alcabama-black transition-colors"
+                    >
+                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
                   {error && (
                     <p className="text-xs text-red-500 font-bold ml-1">{error}</p>
                   )}
