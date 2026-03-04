@@ -1,4 +1,5 @@
 import { ViewpointData } from './viewpoints-manager';
+import { VIEWPOINTS_API_URL } from './config';
 
 export interface ViewpointIndexItem {
     id: string;
@@ -7,7 +8,7 @@ export interface ViewpointIndexItem {
     category: string;
     userId: string;
     date: number;
-    file: string; // Path to full JSON file
+    file: string; // Path to full JSON file or URL
 }
 
 export class ViewpointRepository {
@@ -16,48 +17,75 @@ export class ViewpointRepository {
 
     constructor() {
         console.log('[Repository] Initialized');
+        if (VIEWPOINTS_API_URL) {
+            console.log('[Repository] Cloud API configured:', VIEWPOINTS_API_URL);
+        }
     }
 
     /**
      * Loads the index of available viewpoints from the repository.
+     * Tries cloud first if configured, falls back to local static file.
      */
     async loadIndex(): Promise<ViewpointIndexItem[]> {
+        let cloudData: ViewpointIndexItem[] = [];
+        
+        // 1. Try Cloud
+        if (VIEWPOINTS_API_URL) {
+            try {
+                const response = await fetch(`${VIEWPOINTS_API_URL}?action=list`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (Array.isArray(data)) {
+                        console.log(`[Repository] Loaded ${data.length} viewpoints from Cloud.`);
+                        cloudData = data;
+                    }
+                }
+            } catch (e) {
+                console.warn('[Repository] Cloud load failed, falling back to local:', e);
+            }
+        }
+
+        // 2. Try Local/Static
         try {
             // Add timestamp to prevent caching
             const url = `${this._indexUrl}?t=${Date.now()}`;
             const response = await fetch(url);
             
-            if (!response.ok) {
-                if (response.status === 404) {
-                    console.warn('[Repository] No viewpoints index found (VIEWS/index.json).');
-                    return [];
+            if (response.ok) {
+                const localData = await response.json();
+                if (Array.isArray(localData)) {
+                     console.log(`[Repository] Loaded ${localData.length} viewpoints from Local.`);
+                     // Merge strategies could be complex, for now let's prioritize Cloud if available,
+                     // or merge by ID.
+                     // Simple merge: Add local items that aren't in cloud.
+                     const cloudIds = new Set(cloudData.map(i => i.id));
+                     for (const item of localData) {
+                         if (!cloudIds.has(item.id)) {
+                             cloudData.push(item);
+                         }
+                     }
                 }
-                throw new Error(`Failed to load index: ${response.statusText}`);
             }
-            const data = await response.json();
-            
-            // Basic validation of index structure
-            if (!Array.isArray(data)) {
-                throw new Error('Invalid index format: expected an array.');
-            }
-
-            this._viewpoints = data;
-            console.log(`[Repository] Loaded ${this._viewpoints.length} viewpoints from repository.`);
-            return this._viewpoints;
         } catch (e) {
-            console.error('[Repository] Error loading index:', e);
-            return [];
+            console.warn('[Repository] Local index load failed:', e);
         }
+
+        this._viewpoints = cloudData;
+        return this._viewpoints;
     }
 
     /**
      * Fetches the full data for a specific viewpoint.
-     * @param fileUrl Relative path to the JSON file (e.g., "VISTAS/view-123.json")
+     * @param fileUrl Relative path or full URL to the JSON file
      */
     async loadViewpointData(fileUrl: string): Promise<ViewpointData | null> {
         try {
-            // Prevent caching for individual files too
-            const url = `${fileUrl}?t=${Date.now()}`;
+            // Check if it's a full URL (cloud) or relative path
+            let url = fileUrl;
+            if (!fileUrl.startsWith('http')) {
+                 url = `${fileUrl}?t=${Date.now()}`;
+            }
+
             const response = await fetch(url);
             
             if (!response.ok) {
@@ -74,6 +102,47 @@ export class ViewpointRepository {
         } catch (e) {
             console.error(`[Repository] Error loading view ${fileUrl}:`, e);
             return null;
+        }
+    }
+
+    /**
+     * Saves a viewpoint to the cloud via Google Apps Script.
+     */
+    async saveViewpointToCloud(viewpoint: ViewpointData): Promise<boolean> {
+        if (!VIEWPOINTS_API_URL) {
+            console.warn('[Repository] No Cloud API URL configured.');
+            return false;
+        }
+
+        try {
+            // We use no-cors mode usually for GAS if we don't need response, 
+            // but we might want to know if it succeeded. 
+            // GAS Web App needs to return JSON with correct CORS headers.
+            const response = await fetch(VIEWPOINTS_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'text/plain;charset=utf-8', // GAS handles text/plain better usually to avoid preflight options issues sometimes
+                },
+                body: JSON.stringify({
+                    action: 'save',
+                    data: viewpoint
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Cloud save failed: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            if (result.status === 'success') {
+                console.log('[Repository] Saved to cloud successfully.');
+                return true;
+            } else {
+                throw new Error(result.message || 'Unknown error from server');
+            }
+        } catch (e) {
+            console.error('[Repository] Error saving to cloud:', e);
+            return false;
         }
     }
 

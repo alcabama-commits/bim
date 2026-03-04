@@ -180,9 +180,28 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     async exportViewpointToRepository(id: string) {
         const view = this._savedViewpoints.find(v => v.id === id);
         if (view) {
-            this._repository.exportViewpoint(view);
-            const userFolder = view.userId || 'guest';
-            alert(`Vista "${view.title}" descargada.\n\nPARA QUE PERSISTA EN EL REPOSITORIO:\n1. Crea una carpeta llamada "${userFolder}" dentro de 'public/VIEWS/' (si no existe).\n2. Mueve el archivo JSON descargado a esa carpeta.\n3. Haz commit y push de los cambios.\n4. Si estás en local, el sistema detectará el cambio automáticamente.`);
+            // Show loading cursor
+            const originalCursor = document.body.style.cursor;
+            document.body.style.cursor = 'wait';
+
+            try {
+                // 1. Try to save to Cloud first
+                console.log('[Viewpoints] Attempting cloud save...');
+                const cloudSuccess = await this._repository.saveViewpointToCloud(view);
+                
+                if (cloudSuccess) {
+                    alert(`Vista "${view.title}" guardada exitosamente en la nube.`);
+                    return;
+                }
+
+                // 2. Fallback to manual download
+                console.warn('[Viewpoints] Cloud save failed or not configured. Falling back to manual download.');
+                this._repository.exportViewpoint(view);
+                const userFolder = view.userId || 'guest';
+                alert(`Vista "${view.title}" descargada (Modo Manual).\n\nNo se pudo guardar en la nube. Se ha descargado el archivo JSON.`);
+            } finally {
+                document.body.style.cursor = originalCursor;
+            }
         }
     }
 
