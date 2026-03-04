@@ -118,7 +118,7 @@ function setupSheet(force = false) {
   
   // Generar datos iniciales (Estructura base)
   const data = [];
-  const TOTAL_TOWERS = 19;
+  const TOTAL_TOWERS = 21;
   const FLOORS_PER_TOWER = 9;
   const APTS_PER_FLOOR = 4;
   

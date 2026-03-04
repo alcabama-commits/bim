@@ -15,7 +15,7 @@ import { API_CONFIG } from './config';
 
 // --- Types ---
 
-type Status = 'owner_delivered' | 'post_construction_delivered' | 'notarized' | 'weekly_goal' | 'in_process' | 'special';
+type Status = 'owner_delivered' | 'post_construction_delivered' | 'notarized' | 'weekly_goal' | 'in_process' | 'special' | 'under_construction';
 type Tab = 'towers' | 'charts';
 
 interface Apartment {
@@ -32,7 +32,7 @@ interface Tower {
 
 // --- Constants & Mock Data Generation ---
 
-const TOTAL_TOWERS = 19;
+const TOTAL_TOWERS = 21;
 const FLOORS_PER_TOWER = 9;
 const APTS_PER_FLOOR = 4;
 
@@ -89,6 +89,8 @@ const ApartmentCell = ({
         return 'bg-red-600 text-white border-red-700';
       case 'in_process':
         return 'bg-white text-alcabama-black border-alcabama-light-grey';
+      case 'under_construction':
+        return 'bg-gray-400 text-white border-gray-500';
       case 'special':
         return 'bg-white text-alcabama-black border-alcabama-light-grey italic opacity-60';
       default:
@@ -103,6 +105,7 @@ const ApartmentCell = ({
       case 'notarized': return 'Escriturado';
       case 'weekly_goal': return 'Lista meta semanal';
       case 'in_process': return 'En proceso';
+      case 'under_construction': return 'En obra';
       case 'special': return 'Área Especial';
       default: return '';
     }
@@ -150,6 +153,7 @@ const TowerCard = ({
     notarized: tower.apartments.filter(a => a.status === 'notarized').length,
     weekly: tower.apartments.filter(a => a.status === 'weekly_goal').length,
     process: tower.apartments.filter(a => a.status === 'in_process').length,
+    underConstruction: tower.apartments.filter(a => a.status === 'under_construction').length,
     total: tower.apartments.filter(a => a.status !== 'special').length,
   }), [tower]);
 
@@ -198,26 +202,30 @@ const TowerCard = ({
         </div>
       </div>
 
-      <div className="bg-alcabama-light-grey/5 px-4 py-3 border-t border-alcabama-light-grey grid grid-cols-2 gap-y-2 gap-x-2 text-sm text-alcabama-dark-grey leading-tight">
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 bg-blue-600 rounded-sm shrink-0" />
-          <span className="truncate">Propietarios: <strong className="text-sm">{towerStats.owner}</strong></span>
+      <div className="bg-alcabama-light-grey/5 px-4 py-3 border-t border-alcabama-light-grey grid grid-cols-2 gap-2 text-xs text-alcabama-dark-grey leading-tight">
+        <div className="flex items-start gap-2">
+          <div className="w-2.5 h-2.5 bg-blue-600 rounded-sm shrink-0 mt-0.5" />
+          <span className="break-words">Propietarios: <strong className="font-bold">{towerStats.owner}</strong></span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 bg-green-500 rounded-sm shrink-0" />
-          <span className="truncate">Post Const.: <strong className="text-sm">{towerStats.post}</strong></span>
+        <div className="flex items-start gap-2">
+          <div className="w-2.5 h-2.5 bg-green-500 rounded-sm shrink-0 mt-0.5" />
+          <span className="break-words">Post Const.: <strong className="font-bold">{towerStats.post}</strong></span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 bg-orange-500 rounded-sm shrink-0" />
-          <span className="truncate">Escriturado: <strong className="text-sm">{towerStats.notarized}</strong></span>
+        <div className="flex items-start gap-2">
+          <div className="w-2.5 h-2.5 bg-orange-500 rounded-sm shrink-0 mt-0.5" />
+          <span className="break-words">Escriturado: <strong className="font-bold">{towerStats.notarized}</strong></span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 bg-red-600 rounded-sm shrink-0" />
-          <span className="truncate">Meta Semanal: <strong className="text-sm">{towerStats.weekly}</strong></span>
+        <div className="flex items-start gap-2">
+          <div className="w-2.5 h-2.5 bg-red-600 rounded-sm shrink-0 mt-0.5" />
+          <span className="break-words">Meta Semanal: <strong className="font-bold">{towerStats.weekly}</strong></span>
         </div>
-        <div className="flex items-center gap-2 col-span-2">
-          <div className="w-2.5 h-2.5 bg-white border border-alcabama-light-grey rounded-sm shrink-0" />
-          <span className="truncate">En proceso: <strong className="text-sm">{towerStats.process}</strong></span>
+        <div className="flex items-start gap-2">
+          <div className="w-2.5 h-2.5 bg-gray-400 border border-gray-500 rounded-sm shrink-0 mt-0.5" />
+          <span className="break-words">En obra: <strong className="font-bold">{towerStats.underConstruction}</strong></span>
+        </div>
+        <div className="flex items-start gap-2">
+          <div className="w-2.5 h-2.5 bg-white border border-alcabama-light-grey rounded-sm shrink-0 mt-0.5" />
+          <span className="break-words">En proceso: <strong className="font-bold">{towerStats.process}</strong></span>
         </div>
       </div>
     </motion.div>
@@ -230,6 +238,7 @@ const ChartsView = ({ towers, stats }: { towers: Tower[], stats: any }) => {
     { name: 'Post Const.', value: stats.postConstruction, color: '#22c55e' },
     { name: 'Escriturado', value: stats.notarized, color: '#f97316' },
     { name: 'Meta Semanal', value: stats.weeklyGoal, color: '#dc2626' },
+    { name: 'En Obra', value: stats.underConstruction, color: '#9ca3af' },
     { name: 'En Proceso', value: stats.inProcess, color: '#e5e7eb' },
   ];
 
@@ -484,6 +493,7 @@ export default function App() {
     const notarized = allTowers.reduce((acc, t) => acc + t.apartments.filter(a => a.status === 'notarized').length, 0);
     const weeklyGoal = allTowers.reduce((acc, t) => acc + t.apartments.filter(a => a.status === 'weekly_goal').length, 0);
     const inProcess = allTowers.reduce((acc, t) => acc + t.apartments.filter(a => a.status === 'in_process').length, 0);
+    const underConstruction = allTowers.reduce((acc, t) => acc + t.apartments.filter(a => a.status === 'under_construction').length, 0);
     
     return {
       total,
@@ -492,6 +502,7 @@ export default function App() {
       notarized,
       weeklyGoal,
       inProcess,
+      underConstruction,
       percentage: Math.round((ownerDelivered / total) * 100)
     };
   }, [allTowers]);
