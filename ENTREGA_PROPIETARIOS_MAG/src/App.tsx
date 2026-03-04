@@ -10,6 +10,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell 
 } from 'recharts';
+import { fetchSheetData, updateSheetStatus, SheetData } from './services/sheetService';
+import { API_CONFIG } from './config';
 
 // --- Types ---
 
@@ -34,24 +36,15 @@ const TOTAL_TOWERS = 19;
 const FLOORS_PER_TOWER = 9;
 const APTS_PER_FLOOR = 4;
 
-const generateMockData = (): Tower[] => {
+const generateStructure = (): Tower[] => {
   const towers: Tower[] = [];
-  const statuses: Status[] = ['owner_delivered', 'post_construction_delivered', 'notarized', 'weekly_goal', 'in_process'];
   
   for (let t = 1; t <= TOTAL_TOWERS; t++) {
     const apartments: Apartment[] = [];
     for (let f = 1; f <= FLOORS_PER_TOWER; f++) {
       for (let a = 1; a <= APTS_PER_FLOOR; a++) {
         const aptNumber = `${f}0${a}`;
-        
-        // Randomly assign a status for mock data
-        let status: Status;
-        const rand = Math.random();
-        if (rand > 0.7) status = 'owner_delivered';
-        else if (rand > 0.6) status = 'notarized';
-        else if (rand > 0.5) status = 'post_construction_delivered';
-        else if (rand > 0.45) status = 'weekly_goal';
-        else status = 'in_process';
+        let status: Status = 'in_process'; // Default status
         
         // Special case for COW as seen in the image (Tower 1, Floor 1, Position 4)
         if (f === 1 && a === 4) {
@@ -323,8 +316,48 @@ const ChartsView = ({ towers, stats }: { towers: Tower[], stats: any }) => {
 export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('towers');
-  const [allTowers, setAllTowers] = useState<Tower[]>(() => generateMockData());
+  const [allTowers, setAllTowers] = useState<Tower[]>(() => generateStructure());
   const [editingApartment, setEditingApartment] = useState<{ towerId: number, apartment: Apartment } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load data from Google Sheets
+  React.useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        const data = await fetchSheetData();
+        if (data && data.length > 0) {
+          setAllTowers(prevTowers => {
+            // Create a map for faster lookup: "towerId-aptNumber" -> status
+            const statusMap = new Map();
+            data.forEach(item => {
+              statusMap.set(`${item.towerId}-${item.aptNumber}`, item.status);
+            });
+            
+            return prevTowers.map(tower => ({
+              ...tower,
+              apartments: tower.apartments.map(apt => {
+                const key = `${tower.id}-${apt.number}`;
+                const newStatus = statusMap.get(key) as Status;
+                
+                // Only update if we have a valid status and it's not a special area
+                if (newStatus && apt.status !== 'special') {
+                   return { ...apt, status: newStatus };
+                }
+                return apt;
+              })
+            }));
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadData();
+  }, []);
 
   // Password Protection State
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -338,6 +371,7 @@ export default function App() {
     
     // If in edit mode, apply change immediately
     if (isEditMode) {
+      // Optimistic update
       setAllTowers(prev => prev.map(tower => {
         if (tower.id !== editingApartment.towerId) return tower;
         return {
@@ -347,6 +381,19 @@ export default function App() {
           )
         };
       }));
+
+      // Update Google Sheet
+      updateSheetStatus(
+        editingApartment.towerId, 
+        editingApartment.apartment.number, 
+        newStatus
+      ).then(success => {
+        if (!success) {
+           console.error('Failed to sync with Google Sheets');
+           // Here we could revert the optimistic update if we wanted to be strict
+        }
+      });
+
       setEditingApartment(null);
     } else {
       // If not in edit mode, this shouldn't happen via UI but as a safeguard
