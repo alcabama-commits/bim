@@ -527,65 +527,60 @@ export default function App() {
             transition={{ duration: 0.4 }}
           >
             {/* General Progress Chart Section */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-alcabama-light-grey mb-8 flex flex-col md:flex-row items-center justify-center gap-12">
-              <div className="relative h-48 w-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={70}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                {/* Center Text */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-[10px] font-bold text-alcabama-grey uppercase tracking-wider">Total</span>
-                  <span className="text-2xl font-black text-alcabama-black">{stats.total}</span>
+            <div className="bg-white rounded-2xl p-8 shadow-sm border border-alcabama-light-grey mb-8 grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+              
+              {/* Left Side: Stacked Progress Bar (Rectangle) */}
+              <div className="flex flex-col gap-4">
+                <div className="flex justify-between items-end mb-1">
+                   <h3 className="text-sm font-bold uppercase tracking-wider text-alcabama-grey">Progreso General</h3>
+                   <span className="text-xs font-medium text-alcabama-light-grey">{stats.ownerDelivered} / {stats.total} Entregados</span>
+                </div>
+                
+                {/* The Progress Bar Container */}
+                <div className="h-16 w-full flex rounded-xl overflow-hidden bg-gray-100 relative">
+                  {pieData.map((item, index) => {
+                     const widthPercent = stats.total > 0 ? (item.value / stats.total) * 100 : 0;
+                     if (widthPercent <= 0) return null;
+                     return (
+                       <div 
+                         key={item.name}
+                         className="h-full relative group transition-all duration-500 ease-out hover:opacity-90"
+                         style={{ width: `${widthPercent}%`, backgroundColor: item.color }}
+                       >
+                         {/* Tooltip on Hover */}
+                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10 pointer-events-none">
+                           <div className="bg-gray-900 text-white text-xs rounded-lg py-2 px-3 shadow-xl whitespace-nowrap">
+                             <div className="font-bold mb-0.5">{item.name}</div>
+                             <div>{item.value} unidades ({Math.round(widthPercent)}%)</div>
+                             {/* Triangle arrow */}
+                             <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
+                           </div>
+                         </div>
+                       </div>
+                     );
+                  })}
+                </div>
+
+                {/* Compact Legend */}
+                <div className="flex flex-wrap gap-x-4 gap-y-2 mt-2">
+                   {pieData.map((item) => (
+                      <div key={item.name} className="flex items-center gap-1.5">
+                        <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
+                        <span className="text-[10px] text-alcabama-dark-grey font-medium">{item.name}</span>
+                      </div>
+                   ))}
                 </div>
               </div>
               
-              {/* Legend/Stats Text */}
-              <div className="flex flex-col gap-4">
-                 <h3 className="text-sm font-bold uppercase tracking-wider text-alcabama-grey">Resumen de Unidades</h3>
-                 <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-xs">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 rounded-sm bg-blue-600" />
-                      <span className="text-alcabama-dark-grey">Propietario: <strong className="ml-1">{stats.ownerDelivered}</strong></span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 rounded-sm bg-green-500" />
-                      <span className="text-alcabama-dark-grey">Post Const.: <strong className="ml-1">{stats.postConstruction}</strong></span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                       <div className="w-2.5 h-2.5 rounded-sm bg-orange-500" />
-                       <span className="text-alcabama-dark-grey">Escriturado: <strong className="ml-1">{stats.notarized}</strong></span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                       <div className="w-2.5 h-2.5 rounded-sm bg-red-600" />
-                       <span className="text-alcabama-dark-grey">Meta Semanal: <strong className="ml-1">{stats.weeklyGoal}</strong></span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                       <div className="w-2.5 h-2.5 rounded-sm bg-gray-400 border border-gray-500" />
-                       <span className="text-alcabama-dark-grey">En obra: <strong className="ml-1">{stats.underConstruction}</strong></span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                       <div className="w-2.5 h-2.5 rounded-sm bg-white border border-alcabama-light-grey" />
-                       <span className="text-alcabama-dark-grey">Sin proceso: <strong className="ml-1">{stats.inProcess}</strong></span>
-                    </div>
+              {/* Right Side: Big Total Number */}
+              <div className="flex flex-col items-center justify-center md:border-l md:border-alcabama-light-grey h-full py-4">
+                 <span className="text-sm font-bold text-alcabama-grey uppercase tracking-wider mb-2">Total Unidades</span>
+                 <span className="text-7xl font-black text-alcabama-black tracking-tight">{stats.total}</span>
+                 <div className="mt-2 text-xs text-alcabama-light-grey font-medium bg-gray-50 px-3 py-1 rounded-full border border-gray-100">
+                    100% del proyecto
                  </div>
               </div>
+
             </div>
 
               {/* Dashboard Stats */}
