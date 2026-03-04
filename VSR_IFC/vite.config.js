@@ -111,33 +111,41 @@ const viewpointsGenerator = () => {
                 const projectRoot = __dirname; 
                 console.log('[Server] Starting background Git sync...');
                 
-                exec('git add .', { cwd: projectRoot }, (err, stdout, stderr) => {
-                    if (err) {
-                        console.error('[Server] Git Add Error:', stderr);
-                        return;
-                    }
-                    exec(`git commit -m "feat: auto-save view ${viewpoint.id}"`, { cwd: projectRoot }, (err, stdout, stderr) => {
-                         if (err) {
-                            // It's possible there's nothing to commit if file didn't change, but here it's new
-                            console.error('[Server] Git Commit Error:', stderr);
-                            // If commit fails (e.g. empty), we might still want to push? No.
-                            return;
-                         }
-                         console.log('[Server] Git Commit Success');
-                         
-                         exec('git push origin main', { cwd: projectRoot }, (err, stdout, stderr) => {
-                             if (err) {
-                                 console.error('[Server] Git Push Error:', stderr);
-                             } else {
-                                 console.log('[Server] Successfully pushed to GitHub!');
-                             }
-                         });
+                const execPromise = (cmd, options) => {
+                  return new Promise((resolve, reject) => {
+                    exec(cmd, options, (err, stdout, stderr) => {
+                      if (err) {
+                        console.error(`[Server] Error executing: ${cmd}`, stderr);
+                        reject(err);
+                      } else {
+                        console.log(`[Server] Success: ${cmd}`);
+                        resolve(stdout);
+                      }
                     });
-                });
+                  });
+                };
 
-                res.statusCode = 200;
-                res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({ success: true, path: filePath }));
+                try {
+                    await execPromise('git add .', { cwd: projectRoot });
+                    try {
+                        await execPromise(`git commit -m "feat: auto-save view ${viewpoint.id}"`, { cwd: projectRoot });
+                    } catch (e) {
+                         // Ignore commit error if nothing to commit, but proceed to push
+                         console.log('[Server] Git commit might be empty, proceeding...');
+                    }
+                    await execPromise('git push origin main', { cwd: projectRoot });
+                    console.log('[Server] Successfully pushed to GitHub!');
+
+                    res.statusCode = 200;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({ success: true, path: filePath, git: 'synced' }));
+                } catch (gitErr) {
+                    console.error('[Server] Git Sync Failed:', gitErr);
+                    // We still return 200 because the file WAS saved locally, but we warn about git
+                    res.statusCode = 200;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({ success: true, path: filePath, git: 'failed', error: gitErr.message }));
+                }
               } catch (e) {
                 console.error('[Server] Error parsing JSON:', e);
                 res.statusCode = 500;

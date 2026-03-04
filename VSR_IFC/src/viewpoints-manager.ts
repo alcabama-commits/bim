@@ -278,6 +278,10 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     }
 
     private async _saveToServer(viewpoint: ViewpointData) {
+        // Show loading feedback
+        const originalText = document.body.style.cursor;
+        document.body.style.cursor = 'wait';
+        
         try {
             const response = await fetch('/api/save-viewpoint', {
                 method: 'POST',
@@ -290,15 +294,28 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 })
             });
 
+            document.body.style.cursor = originalText;
+
             if (response.ok) {
-                console.log('[Viewpoints] Saved to server successfully.');
-                alert(`Vista "${viewpoint.title}" guardada localmente.\n\nSe ha iniciado la sincronización automática con GitHub en segundo plano.\nPor favor espera unos segundos antes de verificar el repositorio.`);
+                const result = await response.json();
+                console.log('[Viewpoints] Server response:', result);
+                
+                if (result.git === 'synced') {
+                    alert(`Vista "${viewpoint.title}" guardada y sincronizada con GitHub correctamente.`);
+                } else if (result.git === 'failed') {
+                    alert(`Vista "${viewpoint.title}" guardada localmente, pero falló la sincronización con GitHub:\n${result.error}`);
+                } else {
+                    alert(`Vista "${viewpoint.title}" guardada localmente.`);
+                }
             } else {
                 // If 404/500, we assume we are not in a dev environment that supports this
                 console.warn('[Viewpoints] Server save unavailable (likely in production or static host).');
+                // Don't alert here to avoid annoying users on production
             }
         } catch (e) {
+            document.body.style.cursor = originalText;
             console.warn('[Viewpoints] Could not save to server:', e);
+            alert('Error de conexión al intentar guardar en el servidor.');
         }
     }
 
