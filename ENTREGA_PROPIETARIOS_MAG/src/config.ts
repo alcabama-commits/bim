@@ -1,4 +1,4 @@
-const SCRIPT_URL = ''; // TODO: Replace with your deployed Web App URL
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwGTZM6MWrR-9rqvEhQjS02hg53sPkFt3j7eb6j-hB6klPfBQXZ96fxrMBRypnVkt4S/exec'; // TODO: Replace with your deployed Web App URL
 
 export const API_CONFIG = {
   scriptUrl: SCRIPT_URL,
