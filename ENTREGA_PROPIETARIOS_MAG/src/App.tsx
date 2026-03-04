@@ -696,7 +696,7 @@ export default function App() {
           />
           <div className="text-center md:text-right">
             <p className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-2">Plataforma de Gestión de Entregas</p>
-            <p className="text-xs text-white/60">© {new Date().getFullYear()} Alcabama S.A. Todos los derechos reservados. v1.2</p>
+            <p className="text-xs text-white/60">© {new Date().getFullYear()} Inversiones Alcabama S.A. Todos los derechos reservados. v1.2</p>
           </div>
         </div>
       </footer>
