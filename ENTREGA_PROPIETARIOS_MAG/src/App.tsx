@@ -104,7 +104,7 @@ const ApartmentCell = ({
       case 'post_construction_delivered': return 'Entregado a Post construcción';
       case 'notarized': return 'Escriturado';
       case 'weekly_goal': return 'Lista meta semanal';
-      case 'in_process': return 'En proceso';
+      case 'in_process': return 'Sin proceso';
       case 'under_construction': return 'En obra';
       case 'special': return 'Área Especial';
       default: return '';
@@ -225,7 +225,7 @@ const TowerCard = ({
         </div>
         <div className="flex items-start gap-2">
           <div className="w-2.5 h-2.5 bg-white border border-alcabama-light-grey rounded-sm shrink-0 mt-0.5" />
-          <span className="break-words">En proceso: <strong className="font-bold">{towerStats.process}</strong></span>
+          <span className="break-words">Sin proceso: <strong className="font-bold">{towerStats.process}</strong></span>
         </div>
       </div>
     </motion.div>
@@ -239,7 +239,7 @@ const ChartsView = ({ towers, stats }: { towers: Tower[], stats: any }) => {
     { name: 'Escriturado', value: stats.notarized, color: '#f97316' },
     { name: 'Meta Semanal', value: stats.weeklyGoal, color: '#dc2626' },
     { name: 'En Obra', value: stats.underConstruction, color: '#9ca3af' },
-    { name: 'En Proceso', value: stats.inProcess, color: '#e5e7eb' },
+    { name: 'Sin Proceso', value: stats.inProcess, color: '#e5e7eb' },
   ];
 
   const barData = towers.map(t => ({
@@ -666,7 +666,7 @@ export default function App() {
                   <div className="w-10 h-10 bg-white border border-alcabama-light-grey rounded-lg mb-2 flex items-center justify-center text-alcabama-black font-bold">
                     {stats.inProcess}
                   </div>
-                  <p className="text-[10px] text-alcabama-grey uppercase font-bold tracking-wider leading-tight">En Proceso</p>
+                  <p className="text-[10px] text-alcabama-grey uppercase font-bold tracking-wider leading-tight">Sin Proceso</p>
                 </div>
               </div>
 
@@ -695,7 +695,7 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-white border border-alcabama-light-grey rounded-sm" />
-                  <span className="text-[10px] text-alcabama-dark-grey">En proceso</span>
+                  <span className="text-[10px] text-alcabama-dark-grey">Sin proceso</span>
                 </div>
               </div>
 
@@ -819,7 +819,7 @@ export default function App() {
                   className="w-full flex items-center gap-4 p-4 rounded-xl border border-alcabama-light-grey hover:border-alcabama-black hover:bg-alcabama-light-grey/5 transition-all group"
                 >
                   <div className="w-4 h-4 bg-white border border-alcabama-light-grey rounded-full" />
-                  <span className="text-sm font-medium text-alcabama-dark-grey group-hover:text-alcabama-black">En proceso</span>
+                  <span className="text-sm font-medium text-alcabama-dark-grey group-hover:text-alcabama-black">Sin proceso</span>
                 </button>
 
                 <div className="pt-4">
