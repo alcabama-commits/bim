@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Building2, CheckCircle2, Clock, Info, Search, BarChart3, LayoutGrid } from 'lucide-react';
+import { Building2, CheckCircle2, Clock, Info, Search, BarChart3, LayoutGrid, Lock } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell 
@@ -326,19 +326,40 @@ export default function App() {
   const [allTowers, setAllTowers] = useState<Tower[]>(() => generateMockData());
   const [editingApartment, setEditingApartment] = useState<{ towerId: number, apartment: Apartment } | null>(null);
 
+  // Password Protection State
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [password, setPassword] = useState('');
+  const [pendingStatus, setPendingStatus] = useState<Status | null>(null);
+  const [error, setError] = useState('');
+
   const handleStatusChange = (newStatus: Status) => {
     if (!editingApartment) return;
+    setPendingStatus(newStatus);
+    setShowPasswordModal(true);
+    setPassword('');
+    setError('');
+  };
 
-    setAllTowers(prev => prev.map(tower => {
-      if (tower.id !== editingApartment.towerId) return tower;
-      return {
-        ...tower,
-        apartments: tower.apartments.map(apt => 
-          apt.id === editingApartment.apartment.id ? { ...apt, status: newStatus } : apt
-        )
-      };
-    }));
-    setEditingApartment(null);
+  const confirmStatusChange = () => {
+    if (password === 'Alcabama2026') {
+      if (editingApartment && pendingStatus) {
+        setAllTowers(prev => prev.map(tower => {
+          if (tower.id !== editingApartment.towerId) return tower;
+          return {
+            ...tower,
+            apartments: tower.apartments.map(apt => 
+              apt.id === editingApartment.apartment.id ? { ...apt, status: pendingStatus } : apt
+            )
+          };
+        }));
+        setEditingApartment(null);
+        setShowPasswordModal(false);
+        setPendingStatus(null);
+        setPassword('');
+      }
+    } else {
+      setError('Contraseña incorrecta');
+    }
   };
 
   const filteredTowers = useMemo(() => {
@@ -636,6 +657,68 @@ export default function App() {
                     className="w-full py-3 text-xs font-bold uppercase tracking-widest text-alcabama-grey hover:text-alcabama-black transition-colors"
                   >
                     Cancelar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Password Modal */}
+      <AnimatePresence>
+        {showPasswordModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowPasswordModal(false)}
+              className="absolute inset-0 bg-alcabama-black/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden"
+            >
+              <div className="bg-alcabama-black p-6 text-white flex items-center gap-3">
+                <Lock size={20} />
+                <h3 className="text-lg font-bold">Verificar Identidad</h3>
+              </div>
+              
+              <div className="p-6 space-y-4">
+                <p className="text-sm text-alcabama-grey">
+                  Ingresa la contraseña para confirmar el cambio de estado.
+                </p>
+                
+                <div className="space-y-2">
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Contraseña"
+                    className="w-full px-4 py-3 rounded-xl border border-alcabama-light-grey focus:outline-none focus:ring-2 focus:ring-alcabama-pink/50 transition-all"
+                    autoFocus
+                    onKeyDown={(e) => e.key === 'Enter' && confirmStatusChange()}
+                  />
+                  {error && (
+                    <p className="text-xs text-red-500 font-bold ml-1">{error}</p>
+                  )}
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    onClick={() => setShowPasswordModal(false)}
+                    className="flex-1 py-3 text-xs font-bold uppercase tracking-widest text-alcabama-grey hover:bg-alcabama-light-grey/10 rounded-xl transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={confirmStatusChange}
+                    className="flex-1 py-3 text-xs font-bold uppercase tracking-widest bg-alcabama-black text-white rounded-xl hover:bg-alcabama-black/90 transition-all"
+                  >
+                    Confirmar
                   </button>
                 </div>
               </div>
