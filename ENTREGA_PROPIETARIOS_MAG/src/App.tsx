@@ -5,10 +5,9 @@
 
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Building2, CheckCircle2, Clock, Info, Search, BarChart3, LayoutGrid, Lock, Save, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Building2, CheckCircle2, Clock, Info, Search, Lock, Save, Loader2, Eye, EyeOff } from 'lucide-react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
-  PieChart, Pie, Cell 
+  Tooltip, ResponsiveContainer, PieChart, Pie, Cell 
 } from 'recharts';
 import { fetchSheetData, updateSheetStatus, SheetData } from './services/sheetService';
 import { API_CONFIG } from './config';
@@ -232,99 +231,9 @@ const TowerCard = ({
   );
 };
 
-const ChartsView = ({ towers, stats }: { towers: Tower[], stats: any }) => {
-  const pieData = [
-    { name: 'Propietario', value: stats.ownerDelivered, color: '#2563eb' },
-    { name: 'Post Const.', value: stats.postConstruction, color: '#22c55e' },
-    { name: 'Escriturado', value: stats.notarized, color: '#f97316' },
-    { name: 'Meta Semanal', value: stats.weeklyGoal, color: '#dc2626' },
-    { name: 'En Obra', value: stats.underConstruction, color: '#9ca3af' },
-    { name: 'Sin Proceso', value: stats.inProcess, color: '#e5e7eb' },
-  ];
-
-  const barData = towers.map(t => ({
-    name: t.name.replace('TORRE ', 'T'),
-    entregados: t.apartments.filter(a => a.status === 'owner_delivered').length,
-    total: t.apartments.filter(a => a.status !== 'special').length,
-  })).sort((a, b) => b.entregados - a.entregados);
-
-  return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Pie Chart */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-alcabama-light-grey">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-alcabama-grey mb-6">Distribución de Estados</h3>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                />
-                <Legend verticalAlign="bottom" height={36}/>
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Summary Table */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-alcabama-light-grey">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-alcabama-grey mb-6">Resumen Numérico</h3>
-          <div className="space-y-4">
-            {pieData.map((item) => (
-              <div key={item.name} className="flex items-center justify-between p-3 bg-alcabama-light-grey/5 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-sm font-medium text-alcabama-dark-grey">{item.name}</span>
-                </div>
-                <span className="text-lg font-bold">{item.value}</span>
-              </div>
-            ))}
-            <div className="pt-4 border-t border-alcabama-light-grey flex justify-between items-center">
-              <span className="text-sm font-bold text-alcabama-black uppercase">Total Unidades</span>
-              <span className="text-2xl font-black text-alcabama-pink">{stats.total}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Bar Chart */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-alcabama-light-grey">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-alcabama-grey mb-6">Entregas a Propietario por Torre</h3>
-        <div className="h-[400px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={barData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#605E62' }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#605E62' }} />
-              <Tooltip 
-                cursor={{ fill: '#f3f4f6' }}
-                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-              />
-              <Bar dataKey="entregados" fill="#2563eb" radius={[4, 4, 0, 0]} name="Entregados" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<Tab>('towers');
+  // activeTab removed
   const [allTowers, setAllTowers] = useState<Tower[]>(() => generateStructure());
   const [editingApartment, setEditingApartment] = useState<{ towerId: number, apartment: Apartment } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -507,6 +416,15 @@ export default function App() {
     };
   }, [allTowers]);
 
+  const pieData = [
+    { name: 'Propietario', value: stats.ownerDelivered, color: '#2563eb' },
+    { name: 'Post Const.', value: stats.postConstruction, color: '#22c55e' },
+    { name: 'Escriturado', value: stats.notarized, color: '#f97316' },
+    { name: 'Meta Semanal', value: stats.weeklyGoal, color: '#dc2626' },
+    { name: 'En Obra', value: stats.underConstruction, color: '#9ca3af' },
+    { name: 'Sin Proceso', value: stats.inProcess, color: '#e5e7eb' },
+  ];
+
   return (
     <div className="min-h-screen flex flex-col bg-alcabama-white">
       {/* Navigation / Header */}
@@ -542,22 +460,6 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-8">
-              <div className="flex bg-white rounded-xl p-1 border border-alcabama-light-grey shadow-sm">
-                <button 
-                  onClick={() => setActiveTab('towers')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeTab === 'towers' ? 'bg-alcabama-black text-white' : 'text-alcabama-grey hover:bg-alcabama-light-grey/10'}`}
-                >
-                  <LayoutGrid size={14} />
-                  Torres
-                </button>
-                <button 
-                  onClick={() => setActiveTab('charts')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${activeTab === 'charts' ? 'bg-alcabama-black text-white' : 'text-alcabama-grey hover:bg-alcabama-light-grey/10'}`}
-                >
-                  <BarChart3 size={14} />
-                  Gráficos
-                </button>
-              </div>
               <div className="hidden sm:flex items-center gap-4">
                 {/* Save Button */}
                 {isEditMode && pendingChanges.size > 0 && (
@@ -603,8 +505,7 @@ export default function App() {
               </div>
             </div>
 
-            {activeTab === 'towers' && (
-              <div className="relative w-full md:w-auto">
+            <div className="relative w-full md:w-auto">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-alcabama-grey" size={14} />
                 <input 
                   type="text" 
@@ -613,23 +514,80 @@ export default function App() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
-        <AnimatePresence mode="wait">
-          {activeTab === 'towers' ? (
-            <motion.div
-              key="towers"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.2 }}
-            >
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            {/* General Progress Chart Section */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-alcabama-light-grey mb-8 flex flex-col md:flex-row items-center justify-center gap-12">
+              <div className="relative h-48 w-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={70}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* Center Text */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-[10px] font-bold text-alcabama-grey uppercase tracking-wider">Total</span>
+                  <span className="text-2xl font-black text-alcabama-black">{stats.total}</span>
+                </div>
+              </div>
+              
+              {/* Legend/Stats Text */}
+              <div className="flex flex-col gap-4">
+                 <h3 className="text-sm font-bold uppercase tracking-wider text-alcabama-grey">Resumen de Unidades</h3>
+                 <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-sm bg-blue-600" />
+                      <span className="text-alcabama-dark-grey">Propietario: <strong className="ml-1">{stats.ownerDelivered}</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-sm bg-green-500" />
+                      <span className="text-alcabama-dark-grey">Post Const.: <strong className="ml-1">{stats.postConstruction}</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <div className="w-2.5 h-2.5 rounded-sm bg-orange-500" />
+                       <span className="text-alcabama-dark-grey">Escriturado: <strong className="ml-1">{stats.notarized}</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <div className="w-2.5 h-2.5 rounded-sm bg-red-600" />
+                       <span className="text-alcabama-dark-grey">Meta Semanal: <strong className="ml-1">{stats.weeklyGoal}</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <div className="w-2.5 h-2.5 rounded-sm bg-gray-400 border border-gray-500" />
+                       <span className="text-alcabama-dark-grey">En obra: <strong className="ml-1">{stats.underConstruction}</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <div className="w-2.5 h-2.5 rounded-sm bg-white border border-alcabama-light-grey" />
+                       <span className="text-alcabama-dark-grey">Sin proceso: <strong className="ml-1">{stats.inProcess}</strong></span>
+                    </div>
+                 </div>
+              </div>
+            </div>
+
               {/* Dashboard Stats */}
               <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-12">
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-alcabama-light-grey flex flex-col items-center text-center">
@@ -717,18 +675,6 @@ export default function App() {
                 </div>
               )}
             </motion.div>
-          ) : (
-            <motion.div
-              key="charts"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <ChartsView towers={allTowers} stats={stats} />
-            </motion.div>
-          )}
-        </AnimatePresence>
       </main>
 
       {/* Footer */}
