@@ -76,7 +76,7 @@ const viewpointsGenerator = () => {
           try {
             const chunks = [];
             req.on('data', chunk => chunks.push(chunk));
-            req.on('end', () => {
+            req.on('end', async () => {
               try {
                 const body = JSON.parse(Buffer.concat(chunks).toString());
                 const { userId, viewpoint } = body;
