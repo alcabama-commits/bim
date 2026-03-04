@@ -537,16 +537,23 @@ export default function App() {
                 </div>
                 
                 {/* The Progress Bar Container */}
-                <div className="h-16 w-full flex rounded-xl overflow-hidden bg-gray-100 relative">
+                <div className="h-16 w-full flex rounded-xl overflow-hidden bg-gray-100 relative shadow-inner">
                   {pieData.map((item, index) => {
                      const widthPercent = stats.total > 0 ? (item.value / stats.total) * 100 : 0;
                      if (widthPercent <= 0) return null;
                      return (
                        <div 
                          key={item.name}
-                         className="h-full relative group transition-all duration-500 ease-out hover:opacity-90"
+                         className="h-full relative group transition-all duration-500 ease-out hover:opacity-90 flex items-center justify-center overflow-hidden"
                          style={{ width: `${widthPercent}%`, backgroundColor: item.color }}
                        >
+                         {/* Text inside bar if wide enough */}
+                         {widthPercent > 8 && (
+                            <span className={`text-[10px] md:text-xs font-bold drop-shadow-md ${item.name === 'Sin Proceso' ? 'text-alcabama-dark-grey' : 'text-white'}`}>
+                                {Math.round(widthPercent)}%
+                            </span>
+                         )}
+
                          {/* Tooltip on Hover */}
                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10 pointer-events-none">
                            <div className="bg-gray-900 text-white text-xs rounded-lg py-2 px-3 shadow-xl whitespace-nowrap">
@@ -562,13 +569,19 @@ export default function App() {
                 </div>
 
                 {/* Compact Legend */}
-                <div className="flex flex-wrap gap-x-4 gap-y-2 mt-2">
-                   {pieData.map((item) => (
-                      <div key={item.name} className="flex items-center gap-1.5">
-                        <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: item.color }} />
-                        <span className="text-[10px] text-alcabama-dark-grey font-medium">{item.name}</span>
-                      </div>
-                   ))}
+                <div className="flex flex-wrap gap-x-6 gap-y-3 mt-4">
+                   {pieData.map((item) => {
+                      const percent = stats.total > 0 ? ((item.value / stats.total) * 100).toFixed(1) : '0';
+                      return (
+                        <div key={item.name} className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: item.color, border: item.name === 'Sin Proceso' ? '1px solid #e5e7eb' : 'none' }} />
+                          <div className="flex flex-col leading-none">
+                             <span className="text-[10px] font-bold text-alcabama-dark-grey uppercase tracking-wide">{item.name}</span>
+                             <span className="text-[10px] text-alcabama-grey font-medium mt-0.5">{percent}% ({item.value})</span>
+                          </div>
+                        </div>
+                      );
+                   })}
                 </div>
               </div>
               
