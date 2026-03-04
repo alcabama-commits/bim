@@ -396,7 +396,7 @@ export default function App() {
   }, [allTowers, searchTerm]);
 
   const stats = useMemo(() => {
-    const total = allTowers.reduce((acc, t) => acc + t.apartments.length, 0);
+    const total = allTowers.reduce((acc, t) => acc + t.apartments.filter(a => a.status !== 'special').length, 0);
     const ownerDelivered = allTowers.reduce((acc, t) => acc + t.apartments.filter(a => a.status === 'owner_delivered').length, 0);
     const postConstruction = allTowers.reduce((acc, t) => acc + t.apartments.filter(a => a.status === 'post_construction_delivered').length, 0);
     const notarized = allTowers.reduce((acc, t) => acc + t.apartments.filter(a => a.status === 'notarized').length, 0);
