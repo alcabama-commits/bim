@@ -631,7 +631,7 @@ export default function App() {
               transition={{ duration: 0.2 }}
             >
               {/* Dashboard Stats */}
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-12">
+              <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-12">
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-alcabama-light-grey flex flex-col items-center text-center">
                   <div className="w-10 h-10 bg-blue-600 rounded-lg mb-2 flex items-center justify-center text-white font-bold">
                     {stats.ownerDelivered}
@@ -655,6 +655,12 @@ export default function App() {
                     {stats.weeklyGoal}
                   </div>
                   <p className="text-[10px] text-alcabama-grey uppercase font-bold tracking-wider leading-tight">Meta Semanal</p>
+                </div>
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-alcabama-light-grey flex flex-col items-center text-center">
+                  <div className="w-10 h-10 bg-gray-400 rounded-lg mb-2 flex items-center justify-center text-white font-bold">
+                    {stats.underConstruction}
+                  </div>
+                  <p className="text-[10px] text-alcabama-grey uppercase font-bold tracking-wider leading-tight">En Obra</p>
                 </div>
                 <div className="bg-white p-4 rounded-xl shadow-sm border border-alcabama-light-grey flex flex-col items-center text-center">
                   <div className="w-10 h-10 bg-white border border-alcabama-light-grey rounded-lg mb-2 flex items-center justify-center text-alcabama-black font-bold">
@@ -682,6 +688,10 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-red-600 rounded-sm" />
                   <span className="text-[10px] text-alcabama-dark-grey">Lista meta semanal</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-gray-400 border border-gray-500 rounded-sm" />
+                  <span className="text-[10px] text-alcabama-dark-grey">En obra</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-white border border-alcabama-light-grey rounded-sm" />
@@ -794,6 +804,14 @@ export default function App() {
                 >
                   <div className="w-4 h-4 bg-red-600 rounded-full" />
                   <span className="text-sm font-medium text-alcabama-dark-grey group-hover:text-red-700">Lista meta semanal</span>
+                </button>
+
+                <button 
+                  onClick={() => handleStatusChange('under_construction')}
+                  className="w-full flex items-center gap-4 p-4 rounded-xl border border-alcabama-light-grey hover:border-gray-500 hover:bg-gray-50 transition-all group"
+                >
+                  <div className="w-4 h-4 bg-gray-400 rounded-full" />
+                  <span className="text-sm font-medium text-alcabama-dark-grey group-hover:text-gray-600">En obra</span>
                 </button>
 
                 <button 
