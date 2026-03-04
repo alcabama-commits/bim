@@ -205,26 +205,26 @@ const TowerCard = ({
         </div>
       </div>
 
-      <div className="bg-alcabama-light-grey/5 px-4 py-3 border-t border-alcabama-light-grey grid grid-cols-2 gap-y-1.5 gap-x-2 text-[8px] text-alcabama-dark-grey leading-tight">
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 bg-blue-600 rounded-sm shrink-0" />
-          <span className="truncate">Propietarios: <strong>{towerStats.owner}</strong></span>
+      <div className="bg-alcabama-light-grey/5 px-4 py-3 border-t border-alcabama-light-grey grid grid-cols-2 gap-y-2 gap-x-2 text-[10px] text-alcabama-dark-grey leading-tight">
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 bg-blue-600 rounded-sm shrink-0" />
+          <span className="truncate">Propietarios: <strong className="text-sm">{towerStats.owner}</strong></span>
         </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 bg-green-500 rounded-sm shrink-0" />
-          <span className="truncate">Post Const.: <strong>{towerStats.post}</strong></span>
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 bg-green-500 rounded-sm shrink-0" />
+          <span className="truncate">Post Const.: <strong className="text-sm">{towerStats.post}</strong></span>
         </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 bg-orange-500 rounded-sm shrink-0" />
-          <span className="truncate">Escriturado: <strong>{towerStats.notarized}</strong></span>
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 bg-orange-500 rounded-sm shrink-0" />
+          <span className="truncate">Escriturado: <strong className="text-sm">{towerStats.notarized}</strong></span>
         </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 bg-red-600 rounded-sm shrink-0" />
-          <span className="truncate">Meta Semanal: <strong>{towerStats.weekly}</strong></span>
+        <div className="flex items-center gap-2">
+          <div className="w-2.5 h-2.5 bg-red-600 rounded-sm shrink-0" />
+          <span className="truncate">Meta Semanal: <strong className="text-sm">{towerStats.weekly}</strong></span>
         </div>
-        <div className="flex items-center gap-1 col-span-2">
-          <div className="w-2 h-2 bg-white border border-alcabama-light-grey rounded-sm shrink-0" />
-          <span className="truncate">En proceso: <strong>{towerStats.process}</strong></span>
+        <div className="flex items-center gap-2 col-span-2">
+          <div className="w-2.5 h-2.5 bg-white border border-alcabama-light-grey rounded-sm shrink-0" />
+          <span className="truncate">En proceso: <strong className="text-sm">{towerStats.process}</strong></span>
         </div>
       </div>
     </motion.div>
@@ -331,10 +331,32 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [pendingStatus, setPendingStatus] = useState<Status | null>(null);
   const [error, setError] = useState('');
+  const [isEditMode, setIsEditMode] = useState(false);
 
   const handleStatusChange = (newStatus: Status) => {
     if (!editingApartment) return;
-    setPendingStatus(newStatus);
+    
+    // If in edit mode, apply change immediately
+    if (isEditMode) {
+      setAllTowers(prev => prev.map(tower => {
+        if (tower.id !== editingApartment.towerId) return tower;
+        return {
+          ...tower,
+          apartments: tower.apartments.map(apt => 
+            apt.id === editingApartment.apartment.id ? { ...apt, status: newStatus } : apt
+          )
+        };
+      }));
+      setEditingApartment(null);
+    } else {
+      // If not in edit mode, this shouldn't happen via UI but as a safeguard
+      // we can prompt for edit mode or just ignore. 
+      // Given the UI will hide/show things based on edit mode, we might not reach here.
+      // But if we do, let's just ignore or set error.
+    }
+  };
+
+  const handleEnableEditMode = () => {
     setShowPasswordModal(true);
     setPassword('');
     setError('');
@@ -342,21 +364,9 @@ export default function App() {
 
   const confirmStatusChange = () => {
     if (password === 'Alcabama2026') {
-      if (editingApartment && pendingStatus) {
-        setAllTowers(prev => prev.map(tower => {
-          if (tower.id !== editingApartment.towerId) return tower;
-          return {
-            ...tower,
-            apartments: tower.apartments.map(apt => 
-              apt.id === editingApartment.apartment.id ? { ...apt, status: pendingStatus } : apt
-            )
-          };
-        }));
-        setEditingApartment(null);
-        setShowPasswordModal(false);
-        setPendingStatus(null);
-        setPassword('');
-      }
+      setIsEditMode(true);
+      setShowPasswordModal(false);
+      setPassword('');
     } else {
       setError('Contraseña incorrecta');
     }
@@ -439,6 +449,27 @@ export default function App() {
                 </button>
               </div>
               <div className="hidden sm:flex items-center gap-4">
+                {/* Edit Mode Toggle */}
+                <button
+                  onClick={() => {
+                    if (isEditMode) {
+                      setIsEditMode(false);
+                    } else {
+                      handleEnableEditMode();
+                    }
+                  }}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                    isEditMode 
+                      ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' 
+                      : 'bg-white text-alcabama-grey border border-alcabama-light-grey hover:bg-alcabama-light-grey/10'
+                  }`}
+                >
+                  <Lock size={14} className={isEditMode ? 'text-white' : 'text-alcabama-grey'} />
+                  {isEditMode ? 'Edición Activa' : 'Habilitar Edición'}
+                </button>
+
+                <div className="h-8 w-[1px] bg-alcabama-light-grey/30 mx-2" />
+
                 <span className="text-[10px] uppercase tracking-tighter text-alcabama-grey font-bold">Progreso General</span>
                 <div className="w-32 h-2 bg-alcabama-light-grey/30 rounded-full overflow-hidden">
                   <div 
