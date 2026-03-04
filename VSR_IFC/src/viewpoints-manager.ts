@@ -144,6 +144,11 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         try {
             const index = await this._repository.loadIndex();
             
+            if (index.length === 0) {
+                console.log('[Viewpoints] No views found in repository.');
+            }
+
+            let loadedCount = 0;
             for (const item of index) {
                 // Check if we already have this ID loaded locally (prefer local edit? or prefer repo?)
                 // Let's prefer repo as source of truth, unless local is newer? 
@@ -166,14 +171,17 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                         } else {
                             this._savedViewpoints.push(fullView);
                         }
+                        loadedCount++;
                     }
                 } catch (e) {
                     console.error(`[Viewpoints] Failed to load view ${item.id}`, e);
                 }
             }
+            console.log(`[Viewpoints] Synced ${loadedCount} views from repository.`);
             this.renderList();
         } catch (e) {
             console.error('[Viewpoints] Error in repository sync:', e);
+            alert('Error al sincronizar con el repositorio de vistas.');
         }
     }
 
@@ -284,8 +292,19 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             this.saveToStorage();
             console.log('[Viewpoints] Saved to storage successfully.');
             
-            // Attempt to save to server (Local Dev only)
-            this._saveToServer(viewpointData);
+            // Auto-save to Cloud (Drive)
+            const originalCursor = document.body.style.cursor;
+            document.body.style.cursor = 'wait';
+            
+            this._repository.saveViewpointToCloud(viewpointData).then(success => {
+                document.body.style.cursor = originalCursor;
+                if (success) {
+                    alert(`Vista "${title}" guardada en la nube y localmente.`);
+                } else {
+                    alert(`Vista "${title}" guardada LOCALMENTE.\n\nNo se pudo conectar con la nube. Puedes intentar exportarla manualmente más tarde.`);
+                }
+            });
+
         } catch (e) {
             console.error('[Viewpoints] Failed to save to storage:', e);
             alert('Error al guardar en almacenamiento local (ver consola).');
