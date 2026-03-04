@@ -277,20 +277,64 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         return viewpointData;
     }
 
+    // CONFIGURACIÓN DE GITHUB
+    // IMPORTANTE: Reemplaza 'TU_TOKEN_AQUI' con un Personal Access Token (Classic) con permisos de 'repo'
+    // Puedes crearlo aquí: https://github.com/settings/tokens
+    private readonly GITHUB_TOKEN = 'TU_TOKEN_AQUI'; 
+    private readonly REPO_OWNER = 'alcabama-commits';
+    private readonly REPO_NAME = 'bim';
+    private readonly BRANCH = 'main';
+
     private async _saveToServer(viewpoint: ViewpointData) {
         // Show loading feedback
         const originalText = document.body.style.cursor;
         document.body.style.cursor = 'wait';
         
         try {
-            const response = await fetch('/api/save-viewpoint', {
-                method: 'POST',
+            // Preparar el contenido para GitHub (debe estar en base64)
+            // Usamos un pequeño hack con encodeURIComponent para soportar caracteres especiales (tildes, ñ)
+            const jsonString = JSON.stringify(viewpoint, null, 2);
+            const contentEncoded = btoa(unescape(encodeURIComponent(jsonString)));
+            
+            // Ruta donde se guardará en el repositorio
+            // VSR_IFC/public/VIEWS/email/viewID.json
+            const safeUserId = this._currentUserId.replace(/[^a-zA-Z0-9@._-]/g, '_');
+            const filePath = `VSR_IFC/public/VIEWS/${safeUserId}/${viewpoint.id}.json`;
+            
+            // URL de la API de GitHub
+            const url = `https://api.github.com/repos/${this.REPO_OWNER}/${this.REPO_NAME}/contents/${filePath}`;
+
+            // Verificar si el archivo ya existe para obtener su SHA (necesario para actualizar)
+            let sha: string | undefined;
+            try {
+                const checkResponse = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${this.GITHUB_TOKEN}`,
+                        'Accept': 'application/vnd.github.v3+json'
+                    }
+                });
+                if (checkResponse.ok) {
+                    const data = await checkResponse.json();
+                    sha = data.sha;
+                }
+            } catch (checkErr) {
+                // Si falla la verificación, asumimos que es nuevo (sha undefined)
+                console.log('[Viewpoints] File does not exist, creating new.');
+            }
+
+            // Realizar el PUT (Crear o Actualizar)
+            const response = await fetch(url, {
+                method: 'PUT',
                 headers: {
+                    'Authorization': `Bearer ${this.GITHUB_TOKEN}`,
+                    'Accept': 'application/vnd.github.v3+json',
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    userId: this._currentUserId,
-                    viewpoint: viewpoint
+                    message: `feat: auto-save view ${viewpoint.title} by ${this._currentUserId}`,
+                    content: contentEncoded,
+                    branch: this.BRANCH,
+                    sha: sha // Si existe, actualizamos. Si es undefined, creamos.
                 })
             });
 
@@ -298,24 +342,22 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
             if (response.ok) {
                 const result = await response.json();
-                console.log('[Viewpoints] Server response:', result);
-                
-                if (result.git === 'synced') {
-                    alert(`Vista "${viewpoint.title}" guardada y sincronizada con GitHub correctamente.`);
-                } else if (result.git === 'failed') {
-                    alert(`Vista "${viewpoint.title}" guardada localmente, pero falló la sincronización con GitHub:\n${result.error}`);
-                } else {
-                    alert(`Vista "${viewpoint.title}" guardada localmente.`);
-                }
+                console.log('[Viewpoints] Saved to GitHub successfully:', result);
+                alert(`Vista "${viewpoint.title}" guardada exitosamente en GitHub.\n\nRuta: ${result.content.path}`);
             } else {
-                // If 404/500, we assume we are not in a dev environment that supports this
-                console.warn('[Viewpoints] Server save unavailable (likely in production or static host).');
-                // Don't alert here to avoid annoying users on production
+                const errorData = await response.json();
+                console.error('[Viewpoints] GitHub API Error:', errorData);
+                
+                if (response.status === 401) {
+                    alert('Error de Autenticación en GitHub: El token es inválido o expiró.\nRevisa la configuración en viewpoints-manager.ts');
+                } else {
+                    alert(`Error al guardar en GitHub (${response.status}):\n${errorData.message}`);
+                }
             }
         } catch (e) {
             document.body.style.cursor = originalText;
-            console.warn('[Viewpoints] Could not save to server:', e);
-            alert('Error de conexión al intentar guardar en el servidor.');
+            console.warn('[Viewpoints] Connection error:', e);
+            alert('Error de conexión al intentar contactar con GitHub.');
         }
     }
 
