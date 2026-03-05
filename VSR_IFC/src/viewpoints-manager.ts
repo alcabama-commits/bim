@@ -21,18 +21,18 @@ export interface ViewpointData {
     hidden: { [modelUUID: string]: number[] }; // Map of Model UUID -> Array of ExpressIDs
     annotations: any[]; // Serialized measurements/annotations
     clippingPlanes: { normal: number[], constant: number }[]; // Serialized clipping planes
-  loadedModels: { uuid: string, url: string, visible?: boolean }[]; // List of loaded models
+    loadedModels: { uuid: string, url: string }[]; // List of loaded models
 }
 
 export interface ViewpointStateProvider {
-  getMeasurements(): any[];
-  restoreMeasurements(data: any[]): void;
-  getHiddenItems(): Record<string, number[]>;
-  restoreHiddenItems(items: Record<string, number[]>): Promise<void> | void;
-  getClippingPlanes(): { normal: number[], constant: number }[];
-  restoreClippingPlanes(planes: { normal: number[], constant: number }[]): void;
-  getLoadedModels(): { uuid: string, url: string, visible?: boolean }[];
-  restoreLoadedModels(models: { uuid: string, url: string, visible?: boolean }[]): Promise<void> | void;
+    getMeasurements(): any[];
+    restoreMeasurements(data: any[]): void;
+    getHiddenItems(): Record<string, number[]>;
+    restoreHiddenItems(items: Record<string, number[]>): Promise<void> | void;
+    getClippingPlanes(): { normal: number[], constant: number }[];
+    restoreClippingPlanes(planes: { normal: number[], constant: number }[]): void;
+    getLoadedModels(): { uuid: string, url: string }[];
+    restoreLoadedModels(models: { uuid: string, url: string }[]): Promise<void> | void;
 }
 
 export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
@@ -245,7 +245,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         let hidden: Record<string, number[]> = {};
         let annotations: any[] = [];
         let clippingPlanes: { normal: number[], constant: number }[] = [];
-        let loadedModels: { uuid: string, url: string, visible?: boolean }[] = [];
+        let loadedModels: { uuid: string, url: string }[] = [];
 
         if (this._stateProvider) {
             try {
@@ -418,26 +418,18 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
         // 0. Restore Loaded Models (Critical for scene composition)
         if (this._stateProvider && view.loadedModels) {
-             try {
-                await this._stateProvider.restoreLoadedModels(view.loadedModels);
-             } catch (modelError) {
-                console.error('[Viewpoints] Error restoring loaded models:', modelError);
-                // Continue execution to ensure camera is restored even if models fail
-             }
+             await this._stateProvider.restoreLoadedModels(view.loadedModels);
         }
 
         // 1. Restore Camera
         if (this._world.camera.controls) {
             const { position, target, projection } = view.camera;
             
-            console.log('[Viewpoints] Restoring camera:', { position, target, projection });
-
             // Restore projection if needed
             const currentProjection = ((this._world.camera as any).projection?.current || 'Perspective').toLowerCase();
             if (currentProjection !== projection) {
                 const projectionApi = (this._world.camera as any).projection;
                 if (projectionApi && typeof projectionApi.set === 'function') {
-                    console.log(`[Viewpoints] Switching projection to ${projection}`);
                     if (projection === 'orthographic') {
                         await projectionApi.set('Orthographic');
                     } else {
@@ -446,23 +438,11 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 }
             }
 
-            // Force camera position (disable transition for accuracy)
-            try {
-                 // Small delay to ensure any previous transitions/updates are finished
-                 await new Promise(resolve => setTimeout(resolve, 100));
-
-                 await this._world.camera.controls.setLookAt(
-                    position[0], position[1], position[2],
-                    target[0], target[1], target[2],
-                    false // TRANSITION DISABLED: Ensures instant and accurate placement
-                );
-                
-                const finalPos = new THREE.Vector3();
-                this._world.camera.three.getWorldPosition(finalPos);
-                console.log('[Viewpoints] Camera restored to:', finalPos);
-            } catch (e) {
-                console.error('[Viewpoints] Error setting camera lookAt:', e);
-            }
+            await this._world.camera.controls.setLookAt(
+                position[0], position[1], position[2],
+                target[0], target[1], target[2],
+                true
+            );
         }
 
         // 2. Restore Selection
