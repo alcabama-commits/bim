@@ -494,10 +494,11 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 console.log(`[Viewpoints] Viewpoint ${id} deleted from cloud.`);
             } else {
                 console.warn(`[Viewpoints] Failed to delete ${id} from cloud (or not configured). Deleting locally only.`);
+                alert('Advertencia: El servidor no confirmó la eliminación en Drive. Verifica si la nueva versión del Script está desplegada.');
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error('[Viewpoints] Error deleting from cloud:', e);
-            alert('Advertencia: No se pudo eliminar el archivo de Google Drive. Se eliminará solo de la lista local.');
+            alert(`Error al eliminar de Drive: ${e.message || e}. \n\nAsegúrate de haber desplegado una NUEVA VERSIÓN en Google Apps Script.`);
         } finally {
             document.body.style.cursor = originalCursor;
         }

@@ -53,7 +53,7 @@ function handleRequest(e) {
     let result = { status: "error", message: "Invalid action" };
 
     if (action === "list") {
-      // Devolver lista de vistas disponibles (Index)
+      // Listar vistas existentes
       result = listViewpoints();
     } else if (action === "get") {
       // Devolver contenido de una vista específica
@@ -64,11 +64,12 @@ function handleRequest(e) {
         result = { error: "Missing ID" };
       }
     } else if (action === "save") {
-      // Guardar una nueva vista o actualizar existente
-      if (payload) {
-        result = saveViewpoint(payload);
+      // Guardar una nueva vista
+      const data = e.parameter.data || (payload ? payload : null);
+      if (data) {
+        result = saveViewpoint(data);
       } else {
-        result = { status: "error", message: "No data provided" };
+        result = { status: "error", message: "Missing data" };
       }
     } else if (action === "delete") {
       // Eliminar una vista existente
@@ -78,6 +79,13 @@ function handleRequest(e) {
       } else {
         result = { status: "error", message: "Missing ID for deletion" };
       }
+    } else {
+      result = { status: "error", message: "Invalid action: " + action };
+    }
+    
+    // Agregar versión para depuración
+    if (result && typeof result === 'object' && !Array.isArray(result)) {
+      result._version = "1.1.0";
     }
 
     // Preparar respuesta JSON
