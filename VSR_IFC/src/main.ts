@@ -5058,8 +5058,11 @@ function setupViewpoints() {
              const models: { uuid: string, url: string, visible?: boolean }[] = [];
              const seenUUIDs = new Set<string>();
 
+             console.log('[Viewpoints] getLoadedModels called');
+
              // Helper to add model if not already added
              const addModel = (uuid: string, url: string, visible: boolean, source: string) => {
+                 if (!uuid) return;
                  if (!seenUUIDs.has(uuid)) {
                      models.push({ uuid, url, visible });
                      seenUUIDs.add(uuid);
@@ -5084,21 +5087,49 @@ function setupViewpoints() {
                      
                      addModel(uuid, url, isVisible, 'loadedModels Map');
                  }
+             } else {
+                 console.warn('[Viewpoints] loadedModels Map is empty or undefined');
              }
 
-             // 2. Fallback: Check fragments.groups
+             // 2. DOM Scraping (Prioritized Fallback for User UI)
              try {
-                 const entries = (fragments.groups instanceof Map) 
-                    ? Array.from(fragments.groups.entries())
-                    : Object.entries(fragments.groups || {});
+                 // Try both class names just in case
+                 const listItems = document.querySelectorAll('.model-item, .modelo-item');
+                 console.log(`[Viewpoints] Found ${listItems.length} items in model list DOM`);
+                 
+                 listItems.forEach(item => {
+                     const el = item as HTMLElement;
+                     // Check for visible OR active class
+                     const isVisible = el.classList.contains('visible') || el.classList.contains('active');
+                     
+                     // Get path from dataset (support multiple conventions)
+                     const path = el.dataset.path || el.dataset.fileName || el.dataset.url;
+                     
+                     if (isVisible && path) {
+                         // If we found it in DOM but not in Map, assume it's visible and valid
+                         // Use path as URL if it looks like one, otherwise assume relative path
+                         addModel(path, path, true, 'DOM Scraping');
+                     }
+                 });
+             } catch (e) {
+                 console.error('[Viewpoints] DOM scraping error:', e);
+             }
+             
+             // 3. Fallback: Check fragments.groups
+             try {
+                 if (fragments && fragments.groups) {
+                     const entries = (fragments.groups instanceof Map) 
+                        ? Array.from(fragments.groups.entries())
+                        : Object.entries(fragments.groups || {});
 
-                 for (const [uuid, group] of entries) {
-                     // Only add if not already seen
-                     if (!seenUUIDs.has(uuid)) {
-                         if (group.userData && (group.userData.url || group.userData.dbKey)) {
-                             const isVisible = group.object ? group.object.visible : true;
-                             const url = group.userData.dbKey ? `indexeddb://${group.userData.dbKey}` : group.userData.url;
-                             addModel(uuid, url, isVisible, 'fragments.groups');
+                     for (const [uuid, group] of entries) {
+                         // Only add if not already seen
+                         if (!seenUUIDs.has(uuid)) {
+                             if (group.userData && (group.userData.url || group.userData.dbKey)) {
+                                 const isVisible = group.object ? group.object.visible : true;
+                                 const url = group.userData.dbKey ? `indexeddb://${group.userData.dbKey}` : group.userData.url;
+                                 addModel(uuid, url, isVisible, 'fragments.groups');
+                             }
                          }
                      }
                  }
@@ -5106,31 +5137,19 @@ function setupViewpoints() {
                  console.warn('[Viewpoints] Error checking fragments.groups:', e);
              }
              
-             // 3. Last Resort: DOM Scraping (UI Truth)
-             // This covers cases where internal state maps are out of sync with UI.
-             // Matches user suggestion but uses correct class names (.model-item.visible)
-             try {
-                 const visibleItems = document.querySelectorAll('.model-item.visible');
-                 if (visibleItems.length > 0) {
-                     console.log(`[Viewpoints] Found ${visibleItems.length} visible models in DOM.`);
-                     visibleItems.forEach(item => {
-                         const el = item as HTMLElement;
-                         const path = el.dataset.path;
-                         
-                         if (path && !seenUUIDs.has(path)) {
-                             // We assume path is the UUID. 
-                             // For URL, we use path (relative) or try to reconstruct.
-                             // Since loadModelList uses path as UUID, this aligns.
-                             addModel(path, path, true, 'DOM (.model-item.visible)');
-                         }
-                     });
-                 }
-             } catch (e) {
-                 console.warn('[Viewpoints] Error scraping DOM:', e);
-             }
-             
              if (models.length === 0) {
                  console.warn('[Viewpoints] No models found in any source (loadedModels, fragments, DOM).');
+                 // Last resort: Check Scene Children for FragmentGroups
+                 try {
+                     world.scene.three.children.forEach(child => {
+                         if (child.name === 'FragmentGroup' || (child as any).isFragmentGroup) {
+                              // Try to recover data from userData
+                              if (child.userData && child.userData.url) {
+                                  addModel(child.uuid, child.userData.url, child.visible, 'Scene Children');
+                              }
+                         }
+                     });
+                 } catch(e) {}
              }
              
              return models;
