@@ -5056,35 +5056,83 @@ function setupViewpoints() {
         },
         getLoadedModels: () => {
              const models: { uuid: string, url: string, visible?: boolean }[] = [];
-             // Handle both Map and Object for fragments.groups
-             const entries = (fragments.groups instanceof Map) 
-                ? Array.from(fragments.groups.entries())
-                : Object.entries(fragments.groups || {});
+             const seenUUIDs = new Set<string>();
 
-             console.log(`[Viewpoints] Saving models. Found ${entries.length} groups.`);
+             // Helper to add model if not already added
+             const addModel = (uuid: string, url: string, visible: boolean, source: string) => {
+                 if (!seenUUIDs.has(uuid)) {
+                     models.push({ uuid, url, visible });
+                     seenUUIDs.add(uuid);
+                     console.log(`[Viewpoints] Saved model from ${source}: ${uuid} (visible: ${visible})`);
+                 }
+             };
 
-             for (const [uuid, group] of entries) {
-                 if (group.userData) {
-                     console.log(`[Viewpoints] Inspecting model ${uuid}:`, group.userData);
+             // 1. Check loadedModels Map (Primary Source)
+             if (loadedModels && loadedModels.size > 0) {
+                 for (const [path, model] of loadedModels.entries()) {
+                     const isVisible = model.object ? model.object.visible : true;
+                     const uuid = path; 
                      
-                     // Capture visibility
-                     const isVisible = group.object ? group.object.visible : true;
-                     
-                     if (group.userData.isLocal && group.userData.dbKey) {
-                         // Encode IDB key in URL for persistence
-                         const idbUrl = `indexeddb://${group.userData.dbKey}`;
-                         models.push({ uuid, url: idbUrl, visible: isVisible });
-                         console.log(`[Viewpoints] Saved local model reference: ${idbUrl} (visible: ${isVisible})`);
-                     } else if (group.userData.url) {
-                         models.push({ uuid, url: group.userData.url, visible: isVisible });
-                         console.log(`[Viewpoints] Saved remote model reference: ${group.userData.url} (visible: ${isVisible})`);
-                     } else {
-                         console.warn(`[Viewpoints] Model ${uuid} has no URL or DB key. Skipping persistence.`);
+                     let url = path; // Default
+                     if (model.userData) {
+                         if (model.userData.isLocal && model.userData.dbKey) {
+                             url = `indexeddb://${model.userData.dbKey}`;
+                         } else if (model.userData.url) {
+                             url = model.userData.url;
+                         }
                      }
-                 } else {
-                      console.warn(`[Viewpoints] Model ${uuid} has no userData. Skipping persistence.`);
+                     
+                     addModel(uuid, url, isVisible, 'loadedModels Map');
                  }
              }
+
+             // 2. Fallback: Check fragments.groups
+             try {
+                 const entries = (fragments.groups instanceof Map) 
+                    ? Array.from(fragments.groups.entries())
+                    : Object.entries(fragments.groups || {});
+
+                 for (const [uuid, group] of entries) {
+                     // Only add if not already seen
+                     if (!seenUUIDs.has(uuid)) {
+                         if (group.userData && (group.userData.url || group.userData.dbKey)) {
+                             const isVisible = group.object ? group.object.visible : true;
+                             const url = group.userData.dbKey ? `indexeddb://${group.userData.dbKey}` : group.userData.url;
+                             addModel(uuid, url, isVisible, 'fragments.groups');
+                         }
+                     }
+                 }
+             } catch (e) {
+                 console.warn('[Viewpoints] Error checking fragments.groups:', e);
+             }
+             
+             // 3. Last Resort: DOM Scraping (UI Truth)
+             // This covers cases where internal state maps are out of sync with UI.
+             // Matches user suggestion but uses correct class names (.model-item.visible)
+             try {
+                 const visibleItems = document.querySelectorAll('.model-item.visible');
+                 if (visibleItems.length > 0) {
+                     console.log(`[Viewpoints] Found ${visibleItems.length} visible models in DOM.`);
+                     visibleItems.forEach(item => {
+                         const el = item as HTMLElement;
+                         const path = el.dataset.path;
+                         
+                         if (path && !seenUUIDs.has(path)) {
+                             // We assume path is the UUID. 
+                             // For URL, we use path (relative) or try to reconstruct.
+                             // Since loadModelList uses path as UUID, this aligns.
+                             addModel(path, path, true, 'DOM (.model-item.visible)');
+                         }
+                     });
+                 }
+             } catch (e) {
+                 console.warn('[Viewpoints] Error scraping DOM:', e);
+             }
+             
+             if (models.length === 0) {
+                 console.warn('[Viewpoints] No models found in any source (loadedModels, fragments, DOM).');
+             }
+             
              return models;
         },
         restoreLoadedModels: async (savedModels) => {
