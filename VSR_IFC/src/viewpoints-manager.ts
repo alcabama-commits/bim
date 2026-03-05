@@ -471,7 +471,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         console.log(`Viewpoint '${view.title}' restored.`);
     }
 
-    public deleteViewpoint(id: string) {
+    public async deleteViewpoint(id: string) {
         const view = this._savedViewpoints.find(v => v.id === id);
         if (!view) return;
         
@@ -480,6 +480,29 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
              return;
         }
 
+        if (!confirm(`¿Estás seguro de eliminar la vista "${view.title}"? Esta acción no se puede deshacer y se borrará también de Google Drive.`)) {
+            return;
+        }
+
+        const originalCursor = document.body.style.cursor;
+        document.body.style.cursor = 'wait';
+
+        // 1. Delete from Cloud (Drive)
+        try {
+            const cloudSuccess = await this._repository.deleteViewpointFromCloud(id);
+            if (cloudSuccess) {
+                console.log(`[Viewpoints] Viewpoint ${id} deleted from cloud.`);
+            } else {
+                console.warn(`[Viewpoints] Failed to delete ${id} from cloud (or not configured). Deleting locally only.`);
+            }
+        } catch (e) {
+            console.error('[Viewpoints] Error deleting from cloud:', e);
+            alert('Advertencia: No se pudo eliminar el archivo de Google Drive. Se eliminará solo de la lista local.');
+        } finally {
+            document.body.style.cursor = originalCursor;
+        }
+
+        // 2. Delete Locally
         this._savedViewpoints = this._savedViewpoints.filter(v => v.id !== id);
         this.saveToStorage();
         this.renderList();
@@ -731,9 +754,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 if (delBtn) {
                     delBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        if (confirm(`¿Estás seguro de eliminar la vista "${v.title}"?`)) {
-                            this.deleteViewpoint(v.id);
-                        }
+                        // Confirm moved to deleteViewpoint
+                        this.deleteViewpoint(v.id);
                     });
                 }
 

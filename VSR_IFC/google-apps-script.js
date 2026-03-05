@@ -44,6 +44,7 @@ function handleRequest(e) {
         const body = JSON.parse(e.postData.contents);
         if (body.action) action = body.action;
         if (body.data) payload = body.data;
+        if (body.id) payload = { id: body.id }; // Handle direct ID payload
       } catch (err) {
         // Si no es JSON, ignorar
       }
@@ -68,6 +69,14 @@ function handleRequest(e) {
         result = saveViewpoint(payload);
       } else {
         result = { status: "error", message: "No data provided" };
+      }
+    } else if (action === "delete") {
+      // Eliminar una vista existente
+      const id = e.parameter.id || (payload ? payload.id : null);
+      if (id) {
+        result = deleteViewpoint(id);
+      } else {
+        result = { status: "error", message: "Missing ID for deletion" };
       }
     }
 
@@ -164,5 +173,19 @@ function saveViewpoint(data) {
     // Crear nuevo
     folder.createFile(fileName, JSON.stringify(data, null, 2), "application/json");
     return { status: "success", action: "created", id: id };
+  }
+}
+
+function deleteViewpoint(id) {
+  const folder = getFolder();
+  const fileName = `${id}.json`;
+  const files = folder.getFilesByName(fileName);
+  
+  if (files.hasNext()) {
+    const file = files.next();
+    file.setTrashed(true);
+    return { status: "success", action: "deleted", id: id };
+  } else {
+    return { status: "error", message: "Viewpoint file not found", id: id };
   }
 }

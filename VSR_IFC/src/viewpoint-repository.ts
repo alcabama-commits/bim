@@ -147,6 +147,45 @@ export class ViewpointRepository {
     }
 
     /**
+     * Deletes a viewpoint from the cloud via Google Apps Script.
+     */
+    async deleteViewpointFromCloud(id: string): Promise<boolean> {
+        if (!VIEWPOINTS_API_URL) {
+            console.warn('[Repository] No Cloud API URL configured.');
+            return false;
+        }
+
+        try {
+            console.log(`[Repository] Deleting viewpoint ${id} from cloud...`);
+            const response = await fetch(VIEWPOINTS_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'text/plain;charset=utf-8',
+                },
+                body: JSON.stringify({
+                    action: 'delete',
+                    id: id
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Cloud delete failed: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            if (result.status === 'success') {
+                console.log('[Repository] Deleted from cloud successfully.');
+                return true;
+            } else {
+                throw new Error(result.message || 'Unknown error from server');
+            }
+        } catch (e) {
+            console.error('[Repository] Error deleting from cloud:', e);
+            return false;
+        }
+    }
+
+    /**
      * Validates that the loaded JSON matches the expected ViewpointData structure.
      */
     private validateViewpointData(data: any): data is ViewpointData {
