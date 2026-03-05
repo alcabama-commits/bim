@@ -5099,16 +5099,36 @@ function setupViewpoints() {
                  
                  listItems.forEach(item => {
                      const el = item as HTMLElement;
-                     // Check for visible OR active class
-                     const isVisible = el.classList.contains('visible') || el.classList.contains('active');
+                     
+                     // Check visibility:
+                     // 1. Class 'visible' or 'active' on LI
+                     // 2. Icon class 'fa-eye' inside LI (Visual confirmation)
+                     const hasVisibleClass = el.classList.contains('visible') || el.classList.contains('active');
+                     const icon = el.querySelector('.fa-eye');
+                     const hasVisibleIcon = !!icon;
+                     
+                     const isVisible = hasVisibleClass || hasVisibleIcon;
                      
                      // Get path from dataset (support multiple conventions)
-                     const path = el.dataset.path || el.dataset.fileName || el.dataset.url;
+                     let path = el.dataset.path || el.dataset.fileName || el.dataset.url;
+                     
+                     // Fallback: Use name from text content if path is missing
+                     if (!path) {
+                         const nameEl = el.querySelector('.model-name');
+                         if (nameEl) {
+                             path = nameEl.textContent?.trim();
+                         } else {
+                             path = el.innerText.trim();
+                         }
+                     }
                      
                      if (isVisible && path) {
                          // If we found it in DOM but not in Map, assume it's visible and valid
                          // Use path as URL if it looks like one, otherwise assume relative path
-                         addModel(path, path, true, 'DOM Scraping');
+                         addModel(path, path, true, 'DOM Scraping (Robust)');
+                     } else {
+                         // Debug log for skipped items to help diagnose
+                         // console.log(`[Viewpoints] Skipped DOM item: Path=${path}, Visible=${isVisible}`);
                      }
                  });
              } catch (e) {
