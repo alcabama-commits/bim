@@ -5259,7 +5259,10 @@ function setupViewpoints() {
                             
                             // Restore local flags if needed
                             if (isLocal) {
-                                const model = isMap ? fragments.groups.get(m.uuid) : (fragments.groups as any)[m.uuid];
+                                // SAFE ACCESS TO FRAGMENTS.GROUPS
+                                const groups = fragments.groups;
+                                const model = (groups && isMap) ? groups.get(m.uuid) : (groups ? (groups as any)[m.uuid] : undefined);
+
                                 if (model) {
                                     if (!model.userData) model.userData = {};
                                     model.userData.isLocal = true;
@@ -5283,12 +5286,18 @@ function setupViewpoints() {
                      console.log(`[Viewpoints] Model ${m.uuid} already loaded. Skipping load.`);
                  }
                  
-                 // Restore Visibility
-                 const model = isMap ? fragments.groups.get(m.uuid) : (fragments.groups as any)[m.uuid];
-                 if (model && model.object) {
-                     if (m.visible !== undefined) {
-                         model.object.visible = m.visible;
+                 // Restore Visibility - SAFE ACCESS
+                 try {
+                     const groups = fragments.groups;
+                     const model = (groups && isMap) ? groups.get(m.uuid) : (groups ? (groups as any)[m.uuid] : undefined);
+                     
+                     if (model && model.object) {
+                         if (m.visible !== undefined) {
+                             model.object.visible = m.visible;
+                         }
                      }
+                 } catch (visErr) {
+                     console.warn(`[Viewpoints] Could not set visibility for ${m.uuid}:`, visErr);
                  }
              }
              

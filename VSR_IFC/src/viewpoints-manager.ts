@@ -418,7 +418,12 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
         // 0. Restore Loaded Models (Critical for scene composition)
         if (this._stateProvider && view.loadedModels) {
-             await this._stateProvider.restoreLoadedModels(view.loadedModels);
+             try {
+                await this._stateProvider.restoreLoadedModels(view.loadedModels);
+             } catch (modelError) {
+                console.error('[Viewpoints] Error restoring loaded models:', modelError);
+                // Continue execution to ensure camera is restored even if models fail
+             }
         }
 
         // 1. Restore Camera
