@@ -5055,7 +5055,7 @@ function setupViewpoints() {
             });
         },
         getLoadedModels: () => {
-             const models: { uuid: string, url: string }[] = [];
+             const models: { uuid: string, url: string, visible?: boolean }[] = [];
              // Handle both Map and Object for fragments.groups
              const entries = (fragments.groups instanceof Map) 
                 ? Array.from(fragments.groups.entries())
@@ -5066,14 +5066,18 @@ function setupViewpoints() {
              for (const [uuid, group] of entries) {
                  if (group.userData) {
                      console.log(`[Viewpoints] Inspecting model ${uuid}:`, group.userData);
+                     
+                     // Capture visibility
+                     const isVisible = group.object ? group.object.visible : true;
+                     
                      if (group.userData.isLocal && group.userData.dbKey) {
                          // Encode IDB key in URL for persistence
                          const idbUrl = `indexeddb://${group.userData.dbKey}`;
-                         models.push({ uuid, url: idbUrl });
-                         console.log(`[Viewpoints] Saved local model reference: ${idbUrl}`);
+                         models.push({ uuid, url: idbUrl, visible: isVisible });
+                         console.log(`[Viewpoints] Saved local model reference: ${idbUrl} (visible: ${isVisible})`);
                      } else if (group.userData.url) {
-                         models.push({ uuid, url: group.userData.url });
-                         console.log(`[Viewpoints] Saved remote model reference: ${group.userData.url}`);
+                         models.push({ uuid, url: group.userData.url, visible: isVisible });
+                         console.log(`[Viewpoints] Saved remote model reference: ${group.userData.url} (visible: ${isVisible})`);
                      } else {
                          console.warn(`[Viewpoints] Model ${uuid} has no URL or DB key. Skipping persistence.`);
                      }
@@ -5160,9 +5164,20 @@ function setupViewpoints() {
                          console.error(`[Viewpoints] Failed to restore model ${m.uuid}:`, e);
                      }
                  } else {
-                     console.log(`[Viewpoints] Model ${m.uuid} already loaded. Skipping.`);
+                     console.log(`[Viewpoints] Model ${m.uuid} already loaded. Skipping load.`);
+                 }
+                 
+                 // Restore Visibility
+                 const model = isMap ? fragments.groups.get(m.uuid) : (fragments.groups as any)[m.uuid];
+                 if (model && model.object) {
+                     if (m.visible !== undefined) {
+                         model.object.visible = m.visible;
+                     }
                  }
              }
+             
+             // Sync UI (Sidebar)
+             loadModelList();
         }
     };
 

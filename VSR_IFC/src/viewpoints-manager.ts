@@ -21,18 +21,18 @@ export interface ViewpointData {
     hidden: { [modelUUID: string]: number[] }; // Map of Model UUID -> Array of ExpressIDs
     annotations: any[]; // Serialized measurements/annotations
     clippingPlanes: { normal: number[], constant: number }[]; // Serialized clipping planes
-    loadedModels: { uuid: string, url: string }[]; // List of loaded models
+  loadedModels: { uuid: string, url: string, visible?: boolean }[]; // List of loaded models
 }
 
 export interface ViewpointStateProvider {
-    getMeasurements(): any[];
-    restoreMeasurements(data: any[]): void;
-    getHiddenItems(): Record<string, number[]>;
-    restoreHiddenItems(items: Record<string, number[]>): Promise<void> | void;
-    getClippingPlanes(): { normal: number[], constant: number }[];
-    restoreClippingPlanes(planes: { normal: number[], constant: number }[]): void;
-    getLoadedModels(): { uuid: string, url: string }[];
-    restoreLoadedModels(models: { uuid: string, url: string }[]): Promise<void> | void;
+  getMeasurements(): any[];
+  restoreMeasurements(data: any[]): void;
+  getHiddenItems(): Record<string, number[]>;
+  restoreHiddenItems(items: Record<string, number[]>): Promise<void> | void;
+  getClippingPlanes(): { normal: number[], constant: number }[];
+  restoreClippingPlanes(planes: { normal: number[], constant: number }[]): void;
+  getLoadedModels(): { uuid: string, url: string, visible?: boolean }[];
+  restoreLoadedModels(models: { uuid: string, url: string, visible?: boolean }[]): Promise<void> | void;
 }
 
 export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
@@ -245,7 +245,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         let hidden: Record<string, number[]> = {};
         let annotations: any[] = [];
         let clippingPlanes: { normal: number[], constant: number }[] = [];
-        let loadedModels: { uuid: string, url: string }[] = [];
+        let loadedModels: { uuid: string, url: string, visible?: boolean }[] = [];
 
         if (this._stateProvider) {
             try {
