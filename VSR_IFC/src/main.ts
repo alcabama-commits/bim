@@ -5122,7 +5122,21 @@ function setupViewpoints() {
                          }
                      }
                      
-                     if (isVisible && path) {
+                     // STRICT FILTERING: Only accept valid file paths or known UUID patterns
+                     // Ignore UI categories like "VIGA DE CONCRETO", "Suelo", etc. unless they look like paths
+                     const isValidPath = (p: string) => {
+                         if (!p) return false;
+                         const lower = p.toLowerCase();
+                         // Must have extension or be a known special ID
+                         if (lower.endsWith('.frag') || lower.endsWith('.json') || lower.endsWith('.ifc')) return true;
+                         // Allow UUIDs (roughly)
+                         if (p.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/i)) return true;
+                         // Allow URLs
+                         if (lower.startsWith('http')) return true;
+                         return false;
+                     };
+
+                     if (isVisible && path && isValidPath(path)) {
                          // If we found it in DOM but not in Map, assume it's visible and valid
                          // Use path as URL if it looks like one, otherwise assume relative path
                          addModel(path, path, true, 'DOM Scraping (Robust)');
@@ -5204,6 +5218,14 @@ function setupViewpoints() {
              for (const m of savedModels) {
                  if (!currentUUIDs.has(m.uuid)) {
                      try {
+                        // FILTER OUT GARBAGE (Backward Compatibility for Bad JSONs)
+                        if (!m.url || m.url.trim() === '') continue;
+                        const lowerUrl = m.url.toLowerCase();
+                        if (!lowerUrl.includes('.frag') && !lowerUrl.startsWith('indexeddb://') && !lowerUrl.startsWith('http')) {
+                            console.warn(`[Viewpoints] Skipping invalid model URL in restore: ${m.url}`);
+                            continue;
+                        }
+
                         console.log(`[Viewpoints] Restoring model: ${m.uuid} from ${m.url}`);
                         
                         let loadUrl = m.url;
@@ -5229,26 +5251,33 @@ function setupViewpoints() {
                         }
 
                         console.log(`[Viewpoints] Calling loadModel with URL: ${loadUrl}`);
-                        await loadModel(loadUrl, m.uuid);
-                        console.log(`[Viewpoints] loadModel completed for ${m.uuid}`);
                         
-                        // Restore local flags if needed
-                        if (isLocal) {
-                             const model = isMap ? fragments.groups.get(m.uuid) : (fragments.groups as any)[m.uuid];
-                             if (model) {
-                                 if (!model.userData) model.userData = {};
-                                 model.userData.isLocal = true;
-                                 model.userData.dbKey = dbKey;
-                                 // Update URL to current blob for subsequent saves in this session
-                                 model.userData.url = loadUrl; 
-                                 console.log(`[Viewpoints] Restored local metadata for ${m.uuid}`);
-                             } else {
-                                 console.error(`[Viewpoints] Model ${m.uuid} not found in fragments.groups after load!`);
-                             }
+                        // Try-Catch per model to prevent one failure from stopping the whole process
+                        try {
+                            await loadModel(loadUrl, m.uuid);
+                            console.log(`[Viewpoints] loadModel completed for ${m.uuid}`);
+                            
+                            // Restore local flags if needed
+                            if (isLocal) {
+                                const model = isMap ? fragments.groups.get(m.uuid) : (fragments.groups as any)[m.uuid];
+                                if (model) {
+                                    if (!model.userData) model.userData = {};
+                                    model.userData.isLocal = true;
+                                    model.userData.dbKey = dbKey;
+                                    // Update URL to current blob for subsequent saves in this session
+                                    model.userData.url = loadUrl; 
+                                    console.log(`[Viewpoints] Restored local metadata for ${m.uuid}`);
+                                } else {
+                                    console.error(`[Viewpoints] Model ${m.uuid} not found in fragments.groups after load!`);
+                                }
+                            }
+                        } catch (loadErr) {
+                            console.error(`[Viewpoints] FAILED to load model ${m.uuid}:`, loadErr);
+                            // Continue to next model, do not crash!
                         }
 
                      } catch (e) {
-                         console.error(`[Viewpoints] Failed to restore model ${m.uuid}:`, e);
+                         console.error(`[Viewpoints] Failed to restore model setup ${m.uuid}:`, e);
                      }
                  } else {
                      console.log(`[Viewpoints] Model ${m.uuid} already loaded. Skipping load.`);
