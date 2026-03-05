@@ -425,11 +425,14 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         if (this._world.camera.controls) {
             const { position, target, projection } = view.camera;
             
+            console.log('[Viewpoints] Restoring camera:', { position, target, projection });
+
             // Restore projection if needed
             const currentProjection = ((this._world.camera as any).projection?.current || 'Perspective').toLowerCase();
             if (currentProjection !== projection) {
                 const projectionApi = (this._world.camera as any).projection;
                 if (projectionApi && typeof projectionApi.set === 'function') {
+                    console.log(`[Viewpoints] Switching projection to ${projection}`);
                     if (projection === 'orthographic') {
                         await projectionApi.set('Orthographic');
                     } else {
@@ -438,11 +441,23 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 }
             }
 
-            await this._world.camera.controls.setLookAt(
-                position[0], position[1], position[2],
-                target[0], target[1], target[2],
-                true
-            );
+            // Force camera position (disable transition for accuracy)
+            try {
+                 // Small delay to ensure any previous transitions/updates are finished
+                 await new Promise(resolve => setTimeout(resolve, 100));
+
+                 await this._world.camera.controls.setLookAt(
+                    position[0], position[1], position[2],
+                    target[0], target[1], target[2],
+                    false // TRANSITION DISABLED: Ensures instant and accurate placement
+                );
+                
+                const finalPos = new THREE.Vector3();
+                this._world.camera.three.getWorldPosition(finalPos);
+                console.log('[Viewpoints] Camera restored to:', finalPos);
+            } catch (e) {
+                console.error('[Viewpoints] Error setting camera lookAt:', e);
+            }
         }
 
         // 2. Restore Selection
