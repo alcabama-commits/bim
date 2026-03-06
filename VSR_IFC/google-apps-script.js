@@ -1,5 +1,6 @@
 // ==========================================
 // GOOGLE APPS SCRIPT CODE FOR VSR_IFC VIEWPOINTS
+// VERSION: 1.3.0 (Robust Delete)
 // ==========================================
 // INSTRUCCIONES DE DESPLIEGUE:
 // 1. Ve a https://script.google.com/home
@@ -9,7 +10,7 @@
 // 5. Haz clic en el botón azul "Implementar" (arriba derecha) > "Nueva implementación".
 // 6. Selecciona el tipo: "Aplicación web" (icono de engranaje).
 // 7. Configura los siguientes campos EXACTAMENTE así:
-//    - Descripción: "V2 - Fix Delete"
+//    - Descripción: "V3 - Robust Delete"
 //    - Ejecutar como: "Yo" (tu cuenta de Google)
 //    - Quién tiene acceso: "Cualquier persona" (IMPORTANTE: Esto permite que la app acceda sin login de Google)
 // 8. Haz clic en "Implementar".
@@ -20,7 +21,7 @@
 // ID de la carpeta de Google Drive donde se guardarán los JSONs
 // Carpeta: "VSR_VIEWPOINTS_STORAGE" (https://drive.google.com/drive/folders/1ylvuOsv0zzWCthbGT1IwsCSD5nEBM8Kl)
 const FOLDER_ID = "1ylvuOsv0zzWCthbGT1IwsCSD5nEBM8Kl";
-const API_VERSION = "1.2.0";
+const API_VERSION = "1.3.0";
 
 function doGet(e) {
   return handleRequest(e);
@@ -175,7 +176,7 @@ function saveViewpoint(data) {
     // Actualizar existente
     const file = files.next();
     if (file.isTrashed()) {
-       // Si estaba en la papelera, restaurar (o crear nuevo si no se puede restaurar via API fácil)
+       // Si estaba en la papelera, restaurar
        file.setTrashed(false);
     }
     file.setContent(JSON.stringify(data, null, 2));
@@ -190,21 +191,40 @@ function saveViewpoint(data) {
 function deleteViewpoint(id) {
   const folder = getFolder();
   const fileName = `${id}.json`;
-  const files = folder.getFilesByName(fileName);
   
-  if (files.hasNext()) {
+  // 1. Buscar por nombre exacto (con .json)
+  const files = folder.getFilesByName(fileName);
+  let deletedCount = 0;
+  
+  while (files.hasNext()) {
     const file = files.next();
-    file.setTrashed(true); // Mover a la papelera
-    return { status: "success", action: "deleted", id: id };
-  } else {
-    // Intentar buscar sin .json por si acaso (aunque siempre guardamos con .json)
-    const filesNoExt = folder.getFilesByName(id);
-    if (filesNoExt.hasNext()) {
-        const file = filesNoExt.next();
-        file.setTrashed(true);
-        return { status: "success", action: "deleted", id: id, note: "Found without extension" };
+    try {
+      if (!file.isTrashed()) {
+        file.setTrashed(true); // Mover a la papelera
+        deletedCount++;
+      }
+    } catch (e) {
+      // Error al borrar un archivo específico
     }
-    
-    return { status: "error", message: "Viewpoint file not found", id: id };
+  }
+
+  // 2. Buscar por nombre sin extensión (fallback)
+  if (deletedCount === 0) {
+    const filesNoExt = folder.getFilesByName(id);
+    while (filesNoExt.hasNext()) {
+        const file = filesNoExt.next();
+        try {
+          if (!file.isTrashed()) {
+            file.setTrashed(true);
+            deletedCount++;
+          }
+        } catch (e) {}
+    }
+  }
+
+  if (deletedCount > 0) {
+    return { status: "success", action: "deleted", id: id, count: deletedCount };
+  } else {
+    return { status: "error", message: "Viewpoint file not found in Drive", id: id };
   }
 }
