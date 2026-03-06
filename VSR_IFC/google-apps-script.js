@@ -9,17 +9,18 @@
 // 5. Haz clic en el botón azul "Implementar" (arriba derecha) > "Nueva implementación".
 // 6. Selecciona el tipo: "Aplicación web" (icono de engranaje).
 // 7. Configura los siguientes campos EXACTAMENTE así:
-//    - Descripción: "V1"
+//    - Descripción: "V2 - Fix Delete"
 //    - Ejecutar como: "Yo" (tu cuenta de Google)
 //    - Quién tiene acceso: "Cualquier persona" (IMPORTANTE: Esto permite que la app acceda sin login de Google)
 // 8. Haz clic en "Implementar".
 // 9. Copia la "URL de la aplicación web" (termina en /exec).
-// 10. Pega esa URL en el archivo `src/config.ts` de tu proyecto VSR_IFC.
+// 10. Pega esa URL en el archivo `src/config.ts` de tu proyecto VSR_IFC (si cambia).
 // ==========================================
 
 // ID de la carpeta de Google Drive donde se guardarán los JSONs
 // Carpeta: "VSR_VIEWPOINTS_STORAGE" (https://drive.google.com/drive/folders/1ylvuOsv0zzWCthbGT1IwsCSD5nEBM8Kl)
 const FOLDER_ID = "1ylvuOsv0zzWCthbGT1IwsCSD5nEBM8Kl";
+const API_VERSION = "1.2.0";
 
 function doGet(e) {
   return handleRequest(e);
@@ -44,7 +45,8 @@ function handleRequest(e) {
         const body = JSON.parse(e.postData.contents);
         if (body.action) action = body.action;
         if (body.data) payload = body.data;
-        if (body.id) payload = { id: body.id }; // Handle direct ID payload
+        // Solo sobrescribir payload con ID si no existe data (para evitar conflictos)
+        if (body.id && !payload) payload = { id: body.id }; 
       } catch (err) {
         // Si no es JSON, ignorar
       }
@@ -57,7 +59,7 @@ function handleRequest(e) {
       result = listViewpoints();
     } else if (action === "get") {
       // Devolver contenido de una vista específica
-      const id = e.parameter.id;
+      const id = e.parameter.id || (payload ? payload.id : null);
       if (id) {
         result = getViewpoint(id);
       } else {
@@ -85,12 +87,10 @@ function handleRequest(e) {
     
     // Agregar versión para depuración
     if (result && typeof result === 'object' && !Array.isArray(result)) {
-      result._version = "1.1.0";
+      result._version = API_VERSION;
     }
 
     // Preparar respuesta JSON
-    // NOTA: Si 'result' es un array (caso 'list'), se devuelve el array directamente.
-    // Si es objeto, se devuelve el objeto.
     const jsonString = JSON.stringify(result);
     const output = ContentService.createTextOutput(jsonString);
     output.setMimeType(ContentService.MimeType.JSON);
@@ -100,7 +100,8 @@ function handleRequest(e) {
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({
       status: "error",
-      message: err.toString()
+      message: err.toString(),
+      _stack: err.stack
     })).setMimeType(ContentService.MimeType.JSON);
   } finally {
     lock.releaseLock();
@@ -119,12 +120,9 @@ function listViewpoints() {
 
   while (files.hasNext()) {
     const file = files.next();
-    // Procesar solo archivos JSON
-    if (file.getMimeType() === "application/json" || file.getName().endsWith(".json")) {
+    // Procesar solo archivos JSON y excluir los que están en la papelera (por si acaso)
+    if ((file.getMimeType() === "application/json" || file.getName().endsWith(".json")) && !file.isTrashed()) {
       try {
-        // Leer contenido para metadatos
-        // OPTIMIZACIÓN: Si hay muchos archivos, esto será lento. 
-        // Idealmente guardaríamos un 'index.json' separado.
         const content = file.getBlob().getDataAsString();
         const data = JSON.parse(content);
         
@@ -135,7 +133,6 @@ function listViewpoints() {
           category: data.category || "General",
           userId: data.userId || "anonymous",
           date: data.date || new Date(file.getLastUpdated()).getTime(),
-          // URL mágica para obtener el contenido a través de este mismo script
           file: `${scriptUrl}?action=get&id=${data.id}`
         });
       } catch (e) {
@@ -157,6 +154,8 @@ function getViewpoint(id) {
   
   if (files.hasNext()) {
     const file = files.next();
+    if (file.isTrashed()) return { error: "Viewpoint is deleted" };
+
     const content = file.getBlob().getDataAsString();
     return JSON.parse(content);
   }
@@ -175,6 +174,10 @@ function saveViewpoint(data) {
   if (files.hasNext()) {
     // Actualizar existente
     const file = files.next();
+    if (file.isTrashed()) {
+       // Si estaba en la papelera, restaurar (o crear nuevo si no se puede restaurar via API fácil)
+       file.setTrashed(false);
+    }
     file.setContent(JSON.stringify(data, null, 2));
     return { status: "success", action: "updated", id: id };
   } else {
@@ -191,9 +194,17 @@ function deleteViewpoint(id) {
   
   if (files.hasNext()) {
     const file = files.next();
-    file.setTrashed(true);
+    file.setTrashed(true); // Mover a la papelera
     return { status: "success", action: "deleted", id: id };
   } else {
+    // Intentar buscar sin .json por si acaso (aunque siempre guardamos con .json)
+    const filesNoExt = folder.getFilesByName(id);
+    if (filesNoExt.hasNext()) {
+        const file = filesNoExt.next();
+        file.setTrashed(true);
+        return { status: "success", action: "deleted", id: id, note: "Found without extension" };
+    }
+    
     return { status: "error", message: "Viewpoint file not found", id: id };
   }
 }
