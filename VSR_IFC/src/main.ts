@@ -5043,45 +5043,54 @@ function setupViewpoints() {
                 
                 console.log(`[Viewpoints] Clipper list size: ${clipper.list.size || clipper.list.length}`);
                 if (clipper.list.size > 0) {
-                     // Iterate and inspect
-                     const iterator = clipper.list.entries();
-                     for(let i=0; i<clipper.list.size; i++) {
-                         const entry = iterator.next().value;
-                         if(!entry) break;
-                         const [id, p] = entry;
-                         console.log(`[Viewpoints] Inspecting plane ${id}:`, p);
-                     }
+                     // Iterate using forEach which is safer for Maps
+                     clipper.list.forEach((p, id) => {
+                         console.log(`[Viewpoints] Map.forEach - Plane ${id}:`, p);
+                         
+                         let plane: THREE.Plane | null = null;
+                         const anyP = p as any;
+                         
+                         if (anyP.plane) {
+                              plane = anyP.plane as THREE.Plane;
+                         } else if (anyP.normal && anyP.constant !== undefined) {
+                              plane = anyP;
+                         } else if (anyP.object && anyP.object.plane) {
+                              plane = anyP.object.plane;
+                         }
+    
+                         if (plane) {
+                             console.log(`[Viewpoints] Found plane:`, plane.normal, plane.constant);
+                             planes.push({
+                                 normal: plane.normal.toArray(),
+                                 constant: plane.constant
+                             });
+                         } else {
+                             console.warn('[Viewpoints] Clipper item does not look like a plane:', p);
+                         }
+                     });
+                } else {
+                    console.warn('[Viewpoints] Clipper list is empty (size 0). Are planes created?');
+                }
+                
+                // Fallback: check internal 'planes' array if exists (some versions)
+                if (planes.length === 0 && (clipper as any).planes && Array.isArray((clipper as any).planes)) {
+                     console.log('[Viewpoints] Checking legacy .planes array...');
+                     const legacyPlanes = (clipper as any).planes;
+                     legacyPlanes.forEach((p: any) => {
+                         if (p.normal && p.constant !== undefined) {
+                              planes.push({
+                                  normal: p.normal.toArray(),
+                                  constant: p.constant
+                              });
+                         }
+                     });
                 }
 
-                for(const [id, p] of clipper.list) {
-                    // Check if 'p' has a 'plane' property (Standard OBC)
-                    // Or if 'p' itself is the plane (Unlikely but possible in some versions)
-                    let plane: THREE.Plane | null = null;
-                    const anyP = p as any;
-                    
-                    if (anyP.plane) {
-                         plane = anyP.plane as THREE.Plane;
-                    } else if (anyP.normal && anyP.constant !== undefined) {
-                         plane = anyP;
-                    } else if (anyP.object && anyP.object.plane) {
-                         // Some versions might nest it under object?
-                         plane = anyP.object.plane;
-                    }
-
-                    if (plane) {
-                        console.log(`[Viewpoints] Found plane:`, plane.normal, plane.constant);
-                        planes.push({
-                            normal: plane.normal.toArray(),
-                            constant: plane.constant
-                        });
-                    } else {
-                        console.warn('[Viewpoints] Clipper item does not look like a plane:', p);
-                    }
-                }
+                return planes;
             } catch (e) {
                 console.error('[Viewpoints] Error getting clipping planes:', e);
+                return [];
             }
-            return planes;
         },
         restoreClippingPlanes: (planes) => {
             console.log('[Viewpoints] Restoring clipping planes (count):', planes ? planes.length : 0);
