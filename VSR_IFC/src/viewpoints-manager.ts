@@ -252,6 +252,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 hidden = this._stateProvider.getHiddenItems() || {};
                 annotations = this._stateProvider.getMeasurements() || [];
                 clippingPlanes = this._stateProvider.getClippingPlanes() || [];
+                console.log(`[Viewpoints] Retrieved ${clippingPlanes.length} clipping planes from provider.`);
                 loadedModels = this._stateProvider.getLoadedModels() || [];
             } catch (e) {
                 console.error('[Viewpoints] Error retrieving state from provider:', e);
@@ -464,6 +465,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 this._stateProvider.restoreMeasurements(view.annotations);
             }
             if (view.clippingPlanes) {
+                console.log(`[Viewpoints] Restoring ${view.clippingPlanes.length} clipping planes...`);
                 this._stateProvider.restoreClippingPlanes(view.clippingPlanes);
             }
         }
