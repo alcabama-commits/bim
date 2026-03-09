@@ -1872,12 +1872,14 @@ function initSidebar() {
 
                             // Mark as local so we know to look in IDB later
                             if (!model.userData) model.userData = {};
-                            model.userData.isLocal = true;
-                            model.userData.dbKey = file.name;
-                            // Ensure URL is set for this session
-                            model.userData.url = blobUrl;
                             
-                            console.log(`[Viewpoints] Model ${model.uuid} marked as local with DB key: ${file.name}`);
+                            // MODIFIED: Treat manual loads as deployed models if possible
+                            // This allows Viewpoints to restore them from the server path
+                            model.userData.isLocal = false; 
+                            model.userData.url = `models/${file.name}`;
+                            
+                            console.log(`[Viewpoints] Manual load: Assigned URL ${model.userData.url} to ${model.uuid}`);
+                            logToScreen(`Assigned persistence URL: ${model.userData.url}`);
                             
                             model.useCamera(world.camera.three);
                             world.scene.three.add(model.object);
@@ -5067,6 +5069,7 @@ function setupViewpoints() {
                 : Object.entries(source || {});
 
              console.log(`[Viewpoints] Saving models. Found ${entries.length} groups/models.`);
+             logToScreen(`[Viewpoints] Found ${entries.length} models.`);
 
              for (const [uuid, group] of entries) {
                  // Check visibility on the object wrapper or the object itself
@@ -5078,8 +5081,11 @@ function setupViewpoints() {
                  // Only save visible models
                  if (!isVisible) {
                      console.log(`[Viewpoints] Model ${uuid} is hidden (visible=${isVisible}). Skipping.`);
+                     logToScreen(`[Viewpoints] Skipping hidden: ${uuid}`);
                      continue;
                  }
+                 
+                 logToScreen(`[Viewpoints] Processing visible: ${uuid}`);
 
                  if (group.userData) {
                      console.log(`[Viewpoints] Inspecting model ${uuid}:`, group.userData);
@@ -5088,14 +5094,18 @@ function setupViewpoints() {
                          const idbUrl = `indexeddb://${group.userData.dbKey}`;
                          models.push({ uuid, url: idbUrl });
                          console.log(`[Viewpoints] Saved local model reference: ${idbUrl}`);
+                         logToScreen(`[Viewpoints] Saved local: ${group.userData.dbKey}`);
                      } else if (group.userData.url) {
                          models.push({ uuid, url: group.userData.url });
                          console.log(`[Viewpoints] Saved remote model reference: ${group.userData.url}`);
+                         logToScreen(`[Viewpoints] Saved remote: ${group.userData.url}`);
                      } else {
                          console.warn(`[Viewpoints] Model ${uuid} has no URL or DB key. Skipping persistence.`);
+                         logToScreen(`[Viewpoints] SKIP: No URL/DBKey for ${uuid}`, true);
                      }
                  } else {
                       console.warn(`[Viewpoints] Model ${uuid} has no userData. Skipping persistence.`);
+                      logToScreen(`[Viewpoints] SKIP: No userData for ${uuid}`, true);
                  }
              }
              return models;
