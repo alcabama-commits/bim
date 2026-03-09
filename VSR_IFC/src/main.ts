@@ -5042,16 +5042,30 @@ function setupViewpoints() {
                 }
                 
                 console.log(`[Viewpoints] Clipper list size: ${clipper.list.size || clipper.list.length}`);
+                if (clipper.list.size > 0) {
+                     // Iterate and inspect
+                     const iterator = clipper.list.entries();
+                     for(let i=0; i<clipper.list.size; i++) {
+                         const entry = iterator.next().value;
+                         if(!entry) break;
+                         const [id, p] = entry;
+                         console.log(`[Viewpoints] Inspecting plane ${id}:`, p);
+                     }
+                }
 
                 for(const [id, p] of clipper.list) {
                     // Check if 'p' has a 'plane' property (Standard OBC)
                     // Or if 'p' itself is the plane (Unlikely but possible in some versions)
                     let plane: THREE.Plane | null = null;
+                    const anyP = p as any;
                     
-                    if ((p as any).plane) {
-                         plane = (p as any).plane as THREE.Plane;
-                    } else if ((p as any).normal && (p as any).constant !== undefined) {
-                         plane = p as any;
+                    if (anyP.plane) {
+                         plane = anyP.plane as THREE.Plane;
+                    } else if (anyP.normal && anyP.constant !== undefined) {
+                         plane = anyP;
+                    } else if (anyP.object && anyP.object.plane) {
+                         // Some versions might nest it under object?
+                         plane = anyP.object.plane;
                     }
 
                     if (plane) {
@@ -5070,12 +5084,18 @@ function setupViewpoints() {
             return planes;
         },
         restoreClippingPlanes: (planes) => {
-            console.log('[Viewpoints] Restoring clipping planes:', planes);
+            console.log('[Viewpoints] Restoring clipping planes (count):', planes ? planes.length : 0);
+            console.log('[Viewpoints] Raw planes data:', JSON.stringify(planes));
+            
             try {
                 // Ensure clipper is cleared first
-                clipper.deleteAll();
+                if (clipper.list.size > 0) {
+                    console.log(`[Viewpoints] Clearing ${clipper.list.size} existing planes...`);
+                    clipper.deleteAll();
+                }
                 
                 if (!planes || planes.length === 0) {
+                    console.log('[Viewpoints] No planes to restore. Disabling clipper.');
                     clipper.enabled = false;
                     const btn = document.getElementById('clipper-toggle');
                     if (btn) btn.classList.remove('active');
@@ -5085,24 +5105,27 @@ function setupViewpoints() {
                 }
                 
                 // Enable clipper if we have planes
+                console.log('[Viewpoints] Enabling clipper tool...');
                 clipper.enabled = true;
                 const btn = document.getElementById('clipper-toggle');
                 if (btn) btn.classList.add('active');
                 const controls = document.getElementById('clipper-controls');
                 if (controls) controls.style.display = 'flex';
 
-                planes.forEach(p => {
-                    if (p.normal && p.constant !== undefined) {
-                        const normal = new THREE.Vector3(p.normal[0], p.normal[1], p.normal[2]);
-                        const constant = p.constant;
-                        const coplanarPoint = normal.clone().multiplyScalar(-constant);
-                        
-                        console.log(`[Viewpoints] Creating plane: normal=${normal.toArray()}, constant=${constant}`);
-                        clipper.createFromNormalAndCoplanarPoint(world, normal, coplanarPoint);
-                    } else {
-                         console.warn('[Viewpoints] Invalid plane data:', p);
-                    }
-                });
+                planes.forEach((p, index) => {
+                     console.log(`[Viewpoints] Restoring plane #${index}:`, p);
+                     if (p.normal && p.constant !== undefined) {
+                         const normal = new THREE.Vector3(p.normal[0], p.normal[1], p.normal[2]).normalize();
+                         const constant = p.constant;
+                         const coplanarPoint = normal.clone().multiplyScalar(-constant);
+                         
+                         console.log(`[Viewpoints] Creating plane #${index}: normal=${normal.toArray()}, constant=${constant}`);
+                         const created = clipper.createFromNormalAndCoplanarPoint(world, normal, coplanarPoint);
+                         console.log(`[Viewpoints] Plane #${index} created:`, created);
+                     } else {
+                          console.warn('[Viewpoints] Invalid plane data for plane #${index}:', p);
+                     }
+                 });
             } catch (e) {
                 console.error('[Viewpoints] Error restoring clipping planes:', e);
             }

@@ -286,7 +286,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             loadedModels
         };
 
-        console.log('[Viewpoints] Saving data:', viewpointData);
+        console.log('[Viewpoints] Saving viewpoint data:', JSON.stringify(viewpointData, null, 2));
 
         this._savedViewpoints.push(viewpointData);
         try {
