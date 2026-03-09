@@ -5056,14 +5056,31 @@ function setupViewpoints() {
         },
         getLoadedModels: () => {
              const models: { uuid: string, url: string }[] = [];
-             // Handle both Map and Object for fragments.groups
-             const entries = (fragments.groups instanceof Map) 
-                ? Array.from(fragments.groups.entries())
-                : Object.entries(fragments.groups || {});
+             
+             // Use fragments.list as primary source, fallback to groups
+             // This ensures we capture all models, including those from drag-and-drop
+             const source = (fragments.list && fragments.list.size > 0) ? fragments.list : fragments.groups;
 
-             console.log(`[Viewpoints] Saving models. Found ${entries.length} groups.`);
+             // Handle both Map and Object
+             const entries = (source instanceof Map) 
+                ? Array.from(source.entries())
+                : Object.entries(source || {});
+
+             console.log(`[Viewpoints] Saving models. Found ${entries.length} groups/models.`);
 
              for (const [uuid, group] of entries) {
+                 // Check visibility on the object wrapper or the object itself
+                 // FragmentsGroup has .object property which is the actual THREE.Group in the scene
+                 const isVisible = (group.object && group.object.visible !== undefined) 
+                    ? group.object.visible 
+                    : (group.visible !== undefined ? group.visible : true);
+
+                 // Only save visible models
+                 if (!isVisible) {
+                     console.log(`[Viewpoints] Model ${uuid} is hidden (visible=${isVisible}). Skipping.`);
+                     continue;
+                 }
+
                  if (group.userData) {
                      console.log(`[Viewpoints] Inspecting model ${uuid}:`, group.userData);
                      if (group.userData.isLocal && group.userData.dbKey) {
@@ -5084,28 +5101,25 @@ function setupViewpoints() {
              return models;
         },
         restoreLoadedModels: async (savedModels) => {
-             const isMap = fragments.groups instanceof Map;
-             const currentUUIDs = new Set(isMap ? fragments.groups.keys() : Object.keys(fragments.groups || {}));
+             // Use fragments.list as primary source
+             const source = (fragments.list && fragments.list.size > 0) ? fragments.list : fragments.groups;
+             const isMap = source instanceof Map;
+             
+             const currentUUIDs = new Set(isMap ? source.keys() : Object.keys(source || {}));
              const savedUUIDs = new Set(savedModels.map(m => m.uuid));
              
-             // Unload extra models
+             // Sync visibility: Hide models not in the view, Show models that are.
              for (const uuid of currentUUIDs) {
-                 if (!savedUUIDs.has(uuid)) {
-                     const group = isMap ? fragments.groups.get(uuid) : (fragments.groups as any)[uuid];
-                     if (group) {
-                         if ((fragments as any).disposeGroup) {
-                             (fragments as any).disposeGroup(group);
-                         } else {
-                             // Fallback manual disposal
-                             world.scene.three.remove(group);
-                             if (group.dispose) group.dispose();
-                             if (isMap) {
-                                fragments.groups.delete(uuid);
-                             } else {
-                                delete (fragments.groups as any)[uuid];
-                             }
-                         }
+                 const group = isMap ? source.get(uuid) : (source as any)[uuid];
+                 if (group) {
+                     const shouldBeVisible = savedUUIDs.has(uuid);
+                     if (group.object) {
+                         group.object.visible = shouldBeVisible;
                      }
+                     if (group.visible !== undefined) {
+                         group.visible = shouldBeVisible;
+                     }
+                     console.log(`[Viewpoints] Sync visibility for ${uuid}: ${shouldBeVisible}`);
                  }
              }
              
