@@ -245,7 +245,7 @@ export default defineConfig({
   build: {
     target: 'esnext', // Enable top-level await
     outDir: '../docs/VSR_IFC', // Deploys to docs/VSR_IFC for GitHub Pages
-    emptyOutDir: true,
+    emptyOutDir: false,
     rollupOptions: {
       input: {
         main: './index.html'

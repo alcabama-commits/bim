@@ -373,7 +373,7 @@ setTimeout(patchAcceleratedRaycast, 1000);
 // But for "Edges", we can try to find if there is an alternative.
 // Since we are fixing the build, we will remove the calls to missing components for now.
 
-console.log('VSR_IFC Version: 2026-02-03-Fix-v13-BuildFix');
+console.log('VSR_IFC Version: v2026-03-09-v33-LoadedModelsFix');
 const versionDiv = document.createElement('div');
 versionDiv.style.position = 'fixed';
 versionDiv.style.bottom = '10px';
@@ -385,7 +385,7 @@ versionDiv.style.zIndex = '10000';
 versionDiv.style.borderRadius = '4px';
 versionDiv.style.fontFamily = 'monospace';
 versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-02-26-v31-ClipStyler';
+versionDiv.textContent = 'v2026-03-09-v33-LoadedModelsFix';
 document.body.appendChild(versionDiv);
 
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
