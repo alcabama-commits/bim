@@ -1,27 +1,25 @@
 // ==========================================
 // GOOGLE APPS SCRIPT CODE FOR VSR_IFC VIEWPOINTS
-// VERSION: 1.3.0 (Robust Delete)
+// VERSION: 1.3.1 (CORS Fix)
 // ==========================================
 // INSTRUCCIONES DE DESPLIEGUE:
 // 1. Ve a https://script.google.com/home
-// 2. Crea un "Nuevo proyecto".
-// 3. Borra todo el código en el editor (Code.gs) y pega este contenido.
-// 4. Guarda el proyecto con el nombre "VSR Viewpoints API".
-// 5. Haz clic en el botón azul "Implementar" (arriba derecha) > "Nueva implementación".
-// 6. Selecciona el tipo: "Aplicación web" (icono de engranaje).
-// 7. Configura los siguientes campos EXACTAMENTE así:
-//    - Descripción: "V3 - Robust Delete"
-//    - Ejecutar como: "Yo" (tu cuenta de Google)
-//    - Quién tiene acceso: "Cualquier persona" (IMPORTANTE: Esto permite que la app acceda sin login de Google)
-// 8. Haz clic en "Implementar".
-// 9. Copia la "URL de la aplicación web" (termina en /exec).
-// 10. Pega esa URL en el archivo `src/config.ts` de tu proyecto VSR_IFC (si cambia).
+// 2. Abre tu proyecto existente.
+// 3. Borra todo el código en el editor (Code.gs) y pega este contenido ACTUALIZADO.
+// 4. Guarda el proyecto (Ctrl+S).
+// 5. Haz clic en el botón azul "Implementar" (arriba derecha) > "Gestionar implementaciones".
+// 6. Haz clic en el icono de "Lápiz" (Editar) en la implementación activa.
+// 7. En "Versión", selecciona "Nueva versión".
+// 8. En "Quién tiene acceso", selecciona "Cualquier persona" (Anyone). 
+//    (IMPORTANTE: Si dice "Solo yo", fallará con error CORS).
+// 9. Haz clic en "Implementar".
+// 10. La URL NO debería cambiar, pero si cambia, actualízala en `src/config.ts`.
 // ==========================================
 
 // ID de la carpeta de Google Drive donde se guardarán los JSONs
 // Carpeta: "VSR_VIEWPOINTS_STORAGE" (https://drive.google.com/drive/folders/1ylvuOsv0zzWCthbGT1IwsCSD5nEBM8Kl)
 const FOLDER_ID = "1ylvuOsv0zzWCthbGT1IwsCSD5nEBM8Kl";
-const API_VERSION = "1.3.0";
+const API_VERSION = "1.3.1";
 
 function doGet(e) {
   return handleRequest(e);

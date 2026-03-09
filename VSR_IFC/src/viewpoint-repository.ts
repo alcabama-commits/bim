@@ -32,7 +32,8 @@ export class ViewpointRepository {
         // 1. Try Cloud
         if (VIEWPOINTS_API_URL) {
             try {
-                const response = await fetch(`${VIEWPOINTS_API_URL}?action=list`);
+                // Add timestamp to prevent caching
+                const response = await fetch(`${VIEWPOINTS_API_URL}?action=list&t=${Date.now()}`);
                 if (response.ok) {
                     const data = await response.json();
                     if (Array.isArray(data)) {
@@ -82,9 +83,9 @@ export class ViewpointRepository {
         try {
             // Check if it's a full URL (cloud) or relative path
             let url = fileUrl;
-            if (!fileUrl.startsWith('http')) {
-                 url = `${fileUrl}?t=${Date.now()}`;
-            }
+            // Append timestamp for cache busting
+            const separator = url.includes('?') ? '&' : '?';
+            url = `${url}${separator}t=${Date.now()}`;
 
             const response = await fetch(url);
             
