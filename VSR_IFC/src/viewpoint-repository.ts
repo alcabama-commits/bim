@@ -54,6 +54,61 @@ export class ViewpointRepository {
             }
         }
 
+        if (VIEWPOINTS_API_URL && userId && cloudData.length === 0) {
+            try {
+                const response = await fetch(`${VIEWPOINTS_API_URL}?action=list&t=${Date.now()}`);
+                if (response.ok) {
+                    const all = await response.json();
+                    if (Array.isArray(all)) {
+                        const normalizedUserId = String(userId).trim().toLowerCase();
+                        const byIndexMetadata = all.filter((v: any) => {
+                            const owner = String(v?.userId || '').trim().toLowerCase();
+                            if (owner && owner === normalizedUserId) return true;
+                            if (Array.isArray(v?.sharedWith)) {
+                                return v.sharedWith
+                                    .map((x: any) => String(x || '').trim().toLowerCase())
+                                    .includes(normalizedUserId);
+                            }
+                            return false;
+                        });
+
+                        if (byIndexMetadata.length > 0) {
+                            cloudData = byIndexMetadata;
+                        } else {
+                            const candidates = all.filter((v: any) => String(v?.userId || '').trim().toLowerCase() !== normalizedUserId);
+                            const limit = Math.min(150, candidates.length);
+                            const enriched: ViewpointIndexItem[] = [];
+                            for (let i = 0; i < limit; i++) {
+                                const item = candidates[i];
+                                if (!item?.file) continue;
+                                const data = await this.loadViewpointData(String(item.file), userId);
+                                if (!data) continue;
+                                const sharedWith = Array.isArray(data.sharedWith)
+                                    ? data.sharedWith.map(v => String(v || '').trim().toLowerCase())
+                                    : [];
+                                if (!sharedWith.includes(normalizedUserId)) continue;
+                                enriched.push({
+                                    id: String(item.id || data.id),
+                                    title: String(item.title || data.title || 'Vista'),
+                                    description: String(item.description || data.description || ''),
+                                    category: String(item.category || data.category || 'General'),
+                                    userId: String(item.userId || data.userId || 'anonymous'),
+                                    date: Number(item.date || data.date || Date.now()),
+                                    file: String(item.file),
+                                    sharedWith: data.sharedWith || []
+                                });
+                            }
+                            if (enriched.length > 0) {
+                                cloudData = enriched;
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[Repository] Cloud shared fallback list failed:', e);
+            }
+        }
+
         // 2. Try Local/Static
         try {
             // Add timestamp to prevent caching
