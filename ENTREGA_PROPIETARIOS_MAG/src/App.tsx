@@ -29,6 +29,12 @@ interface Tower {
   apartments: Apartment[];
 }
 
+interface PendingChange {
+  towerId: number;
+  aptNumber: string;
+  status: Status;
+}
+
 // --- Constants & Mock Data Generation ---
 
 const TOTAL_TOWERS = 21;
@@ -156,6 +162,10 @@ const TowerCard = ({
     total: tower.apartments.filter(a => a.status !== 'special').length,
   }), [tower]);
 
+  const ownerPercentage = towerStats.total > 0
+    ? Math.round((towerStats.owner / towerStats.total) * 100)
+    : 0;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -164,7 +174,7 @@ const TowerCard = ({
       className="bg-white rounded-xl shadow-lg overflow-hidden border border-alcabama-light-grey flex flex-col"
     >
       <div className="bg-alcabama-black text-white py-2 px-4 text-center font-bold text-sm tracking-wider">
-        {tower.name}
+        {tower.name} - {ownerPercentage}%
       </div>
       
       <div className="p-3 flex-1">
@@ -284,7 +294,7 @@ export default function App() {
   const [pendingStatus, setPendingStatus] = useState<Status | null>(null);
   const [error, setError] = useState('');
   const [isEditMode, setIsEditMode] = useState(false);
-  const [pendingChanges, setPendingChanges] = useState<Map<string, {towerId: number, aptNumber: string, status: Status}>>(new Map());
+  const [pendingChanges, setPendingChanges] = useState<Map<string, PendingChange>>(new Map());
   const [isSaving, setIsSaving] = useState(false);
 
   // Warn before unload if there are pending changes
@@ -344,7 +354,7 @@ export default function App() {
       // Process all pending changes
       // Since GAS API (as implemented) handles one by one, we loop.
       // Ideally we would update GAS to handle batch, but for now we loop.
-      const changes = Array.from(pendingChanges.values());
+      const changes: PendingChange[] = Array.from(pendingChanges.values());
       let successCount = 0;
       
       // Execute sequentially to avoid overwhelming the script/rate limits if any
