@@ -16,6 +16,7 @@ import { API_CONFIG } from './config';
 
 type Status = 'owner_delivered' | 'post_construction_delivered' | 'notarized' | 'weekly_goal' | 'in_process' | 'special' | 'under_construction';
 type Tab = 'towers' | 'charts';
+type PendingChange = { towerId: number; aptNumber: string; status: Status };
 
 interface Apartment {
   id: string;
@@ -156,6 +157,9 @@ const TowerCard = ({
     total: tower.apartments.filter(a => a.status !== 'special').length,
   }), [tower]);
 
+  const delivered = towerStats.owner + towerStats.post;
+  const deliveredPercent = towerStats.total > 0 ? Math.round((delivered / towerStats.total) * 100) : 0;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -164,7 +168,7 @@ const TowerCard = ({
       className="bg-white rounded-xl shadow-lg overflow-hidden border border-alcabama-light-grey flex flex-col"
     >
       <div className="bg-alcabama-black text-white py-2 px-4 text-center font-bold text-sm tracking-wider">
-        {tower.name}
+        {tower.name} - {deliveredPercent}%
       </div>
       
       <div className="p-3 flex-1">
@@ -284,7 +288,7 @@ export default function App() {
   const [pendingStatus, setPendingStatus] = useState<Status | null>(null);
   const [error, setError] = useState('');
   const [isEditMode, setIsEditMode] = useState(false);
-  const [pendingChanges, setPendingChanges] = useState<Map<string, {towerId: number, aptNumber: string, status: Status}>>(new Map());
+  const [pendingChanges, setPendingChanges] = useState<Map<string, PendingChange>>(() => new Map<string, PendingChange>());
   const [isSaving, setIsSaving] = useState(false);
 
   // Warn before unload if there are pending changes
@@ -344,7 +348,7 @@ export default function App() {
       // Process all pending changes
       // Since GAS API (as implemented) handles one by one, we loop.
       // Ideally we would update GAS to handle batch, but for now we loop.
-      const changes = Array.from(pendingChanges.values());
+      const changes = Array.from(pendingChanges.values()) as PendingChange[];
       let successCount = 0;
       
       // Execute sequentially to avoid overwhelming the script/rate limits if any
@@ -403,16 +407,18 @@ export default function App() {
     const weeklyGoal = allTowers.reduce((acc, t) => acc + t.apartments.filter(a => a.status === 'weekly_goal').length, 0);
     const inProcess = allTowers.reduce((acc, t) => acc + t.apartments.filter(a => a.status === 'in_process').length, 0);
     const underConstruction = allTowers.reduce((acc, t) => acc + t.apartments.filter(a => a.status === 'under_construction').length, 0);
+    const delivered = ownerDelivered + postConstruction;
     
     return {
       total,
       ownerDelivered,
       postConstruction,
+      delivered,
       notarized,
       weeklyGoal,
       inProcess,
       underConstruction,
-      percentage: Math.round((ownerDelivered / total) * 100)
+      percentage: total > 0 ? Math.round((delivered / total) * 100) : 0
     };
   }, [allTowers]);
 
@@ -522,7 +528,7 @@ export default function App() {
               <div className="flex flex-col gap-4">
                 <div className="flex justify-between items-end mb-1">
                    <h3 className="text-sm font-bold uppercase tracking-wider text-alcabama-grey">Progreso General</h3>
-                   <span className="text-xs font-medium text-alcabama-light-grey">{stats.ownerDelivered} / {stats.total} Entregados</span>
+                   <span className="text-xs font-medium text-alcabama-light-grey">{stats.delivered} / {stats.total} Entregados</span>
                 </div>
                 
                 {/* The Progress Bar Container */}

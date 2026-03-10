@@ -57,6 +57,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     // UI
     private _container: HTMLElement | null = null;
     private _listContainer: HTMLElement | null = null;
+    private _activeUsersById = new Map<string, string>();
+    private _activeUsersLoading: Promise<void> | null = null;
 
     constructor(components: OBC.Components, world: OBC.World, stateProvider?: ViewpointStateProvider) {
         super(components);
@@ -93,6 +95,28 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             console.error('Auth Middleware Error:', e);
             this._currentUserId = 'guest';
         }
+    }
+
+    private normalizeUserId(value: any): string {
+        return String(value || '').trim().toLowerCase();
+    }
+
+    private async ensureActiveUsersLoaded() {
+        if (this._activeUsersLoading) return this._activeUsersLoading;
+        this._activeUsersLoading = (async () => {
+            try {
+                const users = await this._repository.loadActiveUsers();
+                this._activeUsersById.clear();
+                for (const u of users) {
+                    const id = this.normalizeUserId(u.id);
+                    if (!id) continue;
+                    const name = String(u.name || u.id).trim();
+                    this._activeUsersById.set(id, name);
+                }
+            } catch {
+            }
+        })();
+        return this._activeUsersLoading;
     }
 
     // Middleware: Authorization Check
@@ -152,12 +176,16 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
             let loadedCount = 0;
             for (const item of index) {
-                const isOwner = item.userId === this._currentUserId;
-                const isShared = Array.isArray((item as any).sharedWith) && (item as any).sharedWith.includes(this._currentUserId);
-                if (!isOwner && !isShared) {
-                    continue;
-                }
                 try {
+                    const normalizedCurrent = this.normalizeUserId(this._currentUserId);
+                    const isCloud = /^https?:\/\//.test(String((item as any).file || ''));
+                    if (!isCloud) {
+                        const isOwner = this.normalizeUserId(item.userId) === normalizedCurrent;
+                        const sharedWith = Array.isArray((item as any).sharedWith) ? (item as any).sharedWith : [];
+                        const isShared = sharedWith.map((x: any) => this.normalizeUserId(x)).includes(normalizedCurrent);
+                        if (!isOwner && !isShared) continue;
+                    }
+
                     const fullView = await this._repository.loadViewpointData(item.file, this._currentUserId);
                     if (fullView) {
                         const existingIdx = this._savedViewpoints.findIndex(v => v.id === fullView.id);
@@ -653,6 +681,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         }
 
         this.renderList();
+        void this.ensureActiveUsersLoaded().then(() => this.renderList());
     }
 
     private renderList(filterTerm: string = '') {
@@ -710,11 +739,20 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 
                 // Format date
                 const date = new Date(v.date).toLocaleDateString();
+                const normalizedCurrent = this.normalizeUserId(this._currentUserId);
+                const isOwner = this.normalizeUserId(v.userId) === normalizedCurrent;
+                const sharedWithIds = Array.isArray(v.sharedWith) ? v.sharedWith.map(x => this.normalizeUserId(x)).filter(Boolean) : [];
+                const sharedUnique = Array.from(new Set(sharedWithIds)).filter(id => id !== normalizedCurrent);
+                const sharedNames = sharedUnique.map(id => this._activeUsersById.get(id) || id);
+                const sharedLine = isOwner && sharedUnique.length > 0
+                    ? `<span class="vp-shared-with" data-view-id="${v.id}" style="font-size: 10px; color: #ffcc80; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${sharedNames.join(', ')}">Compartida con: ${sharedNames.slice(0, 2).join(', ')}${sharedNames.length > 2 ? ` +${sharedNames.length - 2}` : ''}</span>`
+                    : (!isOwner && sharedWithIds.includes(normalizedCurrent) ? `<span style="font-size: 10px; color: #ffcc80; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${v.userId}">Compartida por: ${v.userId}</span>` : '');
                 
                 item.innerHTML = `
                     <div style="display: flex; flex-direction: column; overflow: hidden; width: 60%;">
                         <span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${v.title}</span>
                         <span style="font-size: 10px; color: #aaa;">${date}</span>
+                        ${sharedLine}
                     </div>
                     <div style="display: flex; gap: 5px;">
                         ${v.userId === this._currentUserId ? `<button class="share-view-btn" title="Compartir" style="background:none; border:none; color: #ff9800; cursor: pointer;"><i class="fa-solid fa-share-nodes"></i></button>` : ``}
@@ -745,6 +783,14 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 const shareBtn = item.querySelector('.share-view-btn');
                 if (shareBtn) {
                     shareBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        await this.shareViewpoint(v.id);
+                    });
+                }
+
+                const sharedWithEl = item.querySelector('.vp-shared-with');
+                if (sharedWithEl) {
+                    sharedWithEl.addEventListener('click', async (e) => {
                         e.stopPropagation();
                         await this.shareViewpoint(v.id);
                     });
@@ -798,8 +844,9 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 // Verify ownership integrity on load (Middleware check)
                 this._savedViewpoints = this._savedViewpoints.filter(v => {
                     if (!this._currentUserId || this._currentUserId === 'guest') return false;
-                    if (v.userId === this._currentUserId) return true;
-                    if (Array.isArray(v.sharedWith) && v.sharedWith.includes(this._currentUserId)) return true;
+                    const normalizedCurrent = this.normalizeUserId(this._currentUserId);
+                    if (this.normalizeUserId(v.userId) === normalizedCurrent) return true;
+                    if (Array.isArray(v.sharedWith) && v.sharedWith.map(x => this.normalizeUserId(x)).includes(normalizedCurrent)) return true;
                     console.warn(`[Security] Filtered out unauthorized view ${v.id} belonging to ${v.userId}`);
                     return false;
                 });
@@ -830,6 +877,12 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             users = await this._repository.loadActiveUsers();
         } catch (e) {
             console.warn('[Viewpoints] No se pudo cargar la lista de usuarios activos:', e);
+        }
+        for (const u of users) {
+            const uid = this.normalizeUserId(u.id);
+            if (!uid) continue;
+            const name = String(u.name || u.id).trim();
+            this._activeUsersById.set(uid, name);
         }
 
         const currentList = Array.isArray(view.sharedWith) ? view.sharedWith : [];
