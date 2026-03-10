@@ -9,6 +9,7 @@ export interface ViewpointIndexItem {
     userId: string;
     date: number;
     file: string; // Path to full JSON file or URL
+    sharedWith?: string[];
 }
 
 export class ViewpointRepository {
@@ -26,14 +27,15 @@ export class ViewpointRepository {
      * Loads the index of available viewpoints from the repository.
      * Tries cloud first if configured, falls back to local static file.
      */
-    async loadIndex(): Promise<ViewpointIndexItem[]> {
+    async loadIndex(userId?: string): Promise<ViewpointIndexItem[]> {
         let cloudData: ViewpointIndexItem[] = [];
         
         // 1. Try Cloud
         if (VIEWPOINTS_API_URL) {
             try {
                 // Add timestamp to prevent caching
-                const response = await fetch(`${VIEWPOINTS_API_URL}?action=list&t=${Date.now()}`);
+                const userQuery = userId ? `&userId=${encodeURIComponent(userId)}` : '';
+                const response = await fetch(`${VIEWPOINTS_API_URL}?action=list${userQuery}&t=${Date.now()}`);
                 if (response.ok) {
                     const data = await response.json();
                     if (Array.isArray(data)) {
@@ -79,13 +81,16 @@ export class ViewpointRepository {
      * Fetches the full data for a specific viewpoint.
      * @param fileUrl Relative path or full URL to the JSON file
      */
-    async loadViewpointData(fileUrl: string): Promise<ViewpointData | null> {
+    async loadViewpointData(fileUrl: string, userId?: string): Promise<ViewpointData | null> {
         try {
             // Check if it's a full URL (cloud) or relative path
             let url = fileUrl;
             // Append timestamp for cache busting
             const separator = url.includes('?') ? '&' : '?';
             url = `${url}${separator}t=${Date.now()}`;
+            if (userId && !url.includes('userId=')) {
+                url += `&userId=${encodeURIComponent(userId)}`;
+            }
 
             const response = await fetch(url);
             
@@ -227,5 +232,52 @@ export class ViewpointRepository {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+
+    async loadActiveUsers(): Promise<string[]> {
+        if (!VIEWPOINTS_API_URL) {
+            return [];
+        }
+
+        try {
+            const response = await fetch(`${VIEWPOINTS_API_URL}?action=users&t=${Date.now()}`);
+            if (!response.ok) return [];
+            const data = await response.json();
+            if (Array.isArray(data)) {
+                return data.map(v => String(v).trim().toLowerCase()).filter(Boolean);
+            }
+            return [];
+        } catch (e) {
+            console.warn('[Repository] Failed to load users list:', e);
+            return [];
+        }
+    }
+
+    async shareViewpointToCloud(id: string, requesterUserId: string, sharedWith: string[]): Promise<boolean> {
+        if (!VIEWPOINTS_API_URL) {
+            return false;
+        }
+
+        try {
+            const response = await fetch(VIEWPOINTS_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'text/plain;charset=utf-8',
+                },
+                body: JSON.stringify({
+                    action: 'share',
+                    id,
+                    userId: requesterUserId,
+                    sharedWith
+                })
+            });
+
+            if (!response.ok) return false;
+            const result = await response.json();
+            return result.status === 'success';
+        } catch (e) {
+            console.error('[Repository] Error sharing viewpoint to cloud:', e);
+            return false;
+        }
     }
 }

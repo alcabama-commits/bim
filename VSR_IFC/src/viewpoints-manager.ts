@@ -22,6 +22,7 @@ export interface ViewpointData {
     annotations: any[]; // Serialized measurements/annotations
     clippingPlanes: { normal: number[], constant: number }[]; // Serialized clipping planes
     loadedModels: { uuid: string, url: string }[]; // List of loaded models
+    sharedWith?: string[]; // Emails/userIds that can access this viewpoint
 }
 
 export interface ViewpointStateProvider {
@@ -142,7 +143,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     async loadFromRepository() {
         console.log('[Viewpoints] Loading from repository...');
         try {
-            const index = await this._repository.loadIndex();
+            const index = await this._repository.loadIndex(this._currentUserId);
             
             if (index.length === 0) {
                 console.log('[Viewpoints] No views found in repository.');
@@ -150,20 +151,13 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
             let loadedCount = 0;
             for (const item of index) {
-                // Check if we already have this ID loaded locally (prefer local edit? or prefer repo?)
-                // Let's prefer repo as source of truth, unless local is newer? 
-                // For simplicity: If ID exists, skip or overwrite. 
-                // Let's overwrite to ensure sync.
-                
-                // Only load if user has access? 
-                // If the view is in the public repo, maybe it's public? 
-                // Or we filter by userId here too.
-                if (item.userId && item.userId !== this._currentUserId) {
-                    continue; // Skip views not belonging to this user
+                const isOwner = item.userId === this._currentUserId;
+                const isShared = Array.isArray((item as any).sharedWith) && (item as any).sharedWith.includes(this._currentUserId);
+                if (!isOwner && !isShared) {
+                    continue;
                 }
-
                 try {
-                    const fullView = await this._repository.loadViewpointData(item.file);
+                    const fullView = await this._repository.loadViewpointData(item.file, this._currentUserId);
                     if (fullView) {
                         const existingIdx = this._savedViewpoints.findIndex(v => v.id === fullView.id);
                         if (existingIdx !== -1) {
@@ -283,7 +277,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             hidden,
             annotations,
             clippingPlanes,
-            loadedModels
+            loadedModels,
+            sharedWith: []
         };
 
         console.log('[Viewpoints] Saving viewpoint data:', JSON.stringify(viewpointData, null, 2));
@@ -721,6 +716,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                         <span style="font-size: 10px; color: #aaa;">${date}</span>
                     </div>
                     <div style="display: flex; gap: 5px;">
+                        ${v.userId === this._currentUserId ? `<button class="share-view-btn" title="Compartir" style="background:none; border:none; color: #ff9800; cursor: pointer;"><i class="fa-solid fa-share-nodes"></i></button>` : ``}
                         <button class="restore-view-btn" title="Restaurar" style="background:none; border:none; color: #4caf50; cursor: pointer;"><i class="fa-solid fa-eye"></i></button>
                         <button class="export-view-btn" title="Exportar a Repositorio" style="background:none; border:none; color: #2196f3; cursor: pointer;"><i class="fa-solid fa-file-export"></i></button>
                         <button class="delete-view-btn" title="Eliminar" style="background:none; border:none; color: #e91e63; cursor: pointer;"><i class="fa-solid fa-trash"></i></button>
@@ -742,6 +738,14 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                     restoreBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
                         this.restoreViewpoint(v.id);
+                    });
+                }
+
+                const shareBtn = item.querySelector('.share-view-btn');
+                if (shareBtn) {
+                    shareBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        await this.shareViewpoint(v.id);
                     });
                 }
 
@@ -792,11 +796,11 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 
                 // Verify ownership integrity on load (Middleware check)
                 this._savedViewpoints = this._savedViewpoints.filter(v => {
-                    if (v.userId && v.userId !== this._currentUserId) {
-                        console.warn(`[Security] Filtered out unauthorized view ${v.id} belonging to ${v.userId}`);
-                        return false;
-                    }
-                    return true;
+                    if (!this._currentUserId || this._currentUserId === 'guest') return false;
+                    if (v.userId === this._currentUserId) return true;
+                    if (Array.isArray(v.sharedWith) && v.sharedWith.includes(this._currentUserId)) return true;
+                    console.warn(`[Security] Filtered out unauthorized view ${v.id} belonging to ${v.userId}`);
+                    return false;
                 });
 
             } catch (e) {
@@ -804,6 +808,64 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             }
         } else {
             this._savedViewpoints = [];
+        }
+    }
+
+    private async shareViewpoint(id: string) {
+        if (!this._currentUserId || this._currentUserId === 'guest') {
+            alert('Debe iniciar sesión para compartir vistas.');
+            return;
+        }
+
+        const view = this._savedViewpoints.find(v => v.id === id);
+        if (!view) return;
+        if (view.userId !== this._currentUserId) {
+            alert('Solo puedes compartir vistas que hayas creado.');
+            return;
+        }
+
+        let users: string[] = [];
+        try {
+            users = await this._repository.loadActiveUsers();
+        } catch (e) {
+            console.warn('[Viewpoints] No se pudo cargar la lista de usuarios activos:', e);
+        }
+
+        const currentList = Array.isArray(view.sharedWith) ? view.sharedWith : [];
+        const suggested = users.filter(u => u && u !== this._currentUserId).slice(0, 10).join(', ');
+        const input = window.prompt(
+            `Compartir vista "${view.title}".\n\nIngresa correos separados por coma.\nDeja vacío para quitar el acceso compartido.\n\nSugerencias: ${suggested}`,
+            currentList.join(', ')
+        );
+        if (input === null) return;
+
+        const recipients = input
+            .split(/[,;\n]+/g)
+            .map(s => s.trim().toLowerCase())
+            .filter(Boolean)
+            .filter(email => email !== this._currentUserId);
+
+        const uniqueRecipients = Array.from(new Set(recipients));
+        view.sharedWith = uniqueRecipients;
+
+        const originalCursor = document.body.style.cursor;
+        document.body.style.cursor = 'wait';
+        try {
+            const ok = await this._repository.shareViewpointToCloud(view.id, this._currentUserId, uniqueRecipients);
+            if (!ok) {
+                alert('No se pudo compartir la vista en la nube. Ver consola.');
+                return;
+            }
+
+            this.saveToStorage();
+            this.renderList();
+            if (uniqueRecipients.length === 0) {
+                alert('Acceso compartido eliminado.');
+            } else {
+                alert(`Vista compartida con: ${uniqueRecipients.join(', ')}`);
+            }
+        } finally {
+            document.body.style.cursor = originalCursor;
         }
     }
 

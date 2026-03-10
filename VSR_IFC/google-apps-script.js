@@ -1,6 +1,6 @@
 // ==========================================
 // GOOGLE APPS SCRIPT CODE FOR VSR_IFC VIEWPOINTS
-// VERSION: 1.3.1 (CORS Fix)
+// VERSION: 1.4.0 (Sharing + Users)
 // ==========================================
 // INSTRUCCIONES DE DESPLIEGUE:
 // 1. Ve a https://script.google.com/home
@@ -19,7 +19,8 @@
 // ID de la carpeta de Google Drive donde se guardarán los JSONs
 // Carpeta: "VSR_VIEWPOINTS_STORAGE" (https://drive.google.com/drive/folders/1ylvuOsv0zzWCthbGT1IwsCSD5nEBM8Kl)
 const FOLDER_ID = "1ylvuOsv0zzWCthbGT1IwsCSD5nEBM8Kl";
-const API_VERSION = "1.3.1";
+const API_VERSION = "1.4.0";
+const USERS_SHEET_ID = "1Jcxc9SwtbDrExyGeS_zy0BVnEER64iEEvzCnzCo5OCg";
 
 function doGet(e) {
   return handleRequest(e);
@@ -55,12 +56,14 @@ function handleRequest(e) {
 
     if (action === "list") {
       // Listar vistas existentes
-      result = listViewpoints();
+      const userId = e.parameter.userId || (payload ? payload.userId : null);
+      result = listViewpoints(userId);
     } else if (action === "get") {
       // Devolver contenido de una vista específica
       const id = e.parameter.id || (payload ? payload.id : null);
+      const userId = e.parameter.userId || (payload ? payload.userId : null);
       if (id) {
-        result = getViewpoint(id);
+        result = getViewpoint(id, userId);
       } else {
         result = { error: "Missing ID" };
       }
@@ -80,6 +83,17 @@ function handleRequest(e) {
       } else {
         result = { status: "error", message: "Missing ID for deletion" };
       }
+    } else if (action === "share") {
+      const id = e.parameter.id || (payload ? payload.id : null);
+      const userId = e.parameter.userId || (payload ? payload.userId : null);
+      const sharedWith = e.parameter.sharedWith || (payload ? payload.sharedWith : null);
+      if (!id || !userId) {
+        result = { status: "error", message: "Missing id/userId" };
+      } else {
+        result = shareViewpoint(id, userId, sharedWith);
+      }
+    } else if (action === "users") {
+      result = listActiveUsers();
     } else {
       result = { status: "error", message: "Invalid action: " + action };
     }
@@ -111,7 +125,7 @@ function getFolder() {
   return DriveApp.getFolderById(FOLDER_ID);
 }
 
-function listViewpoints() {
+function listViewpoints(requestUserId) {
   const folder = getFolder();
   const files = folder.getFiles();
   const list = [];
@@ -124,6 +138,12 @@ function listViewpoints() {
       try {
         const content = file.getBlob().getDataAsString();
         const data = JSON.parse(content);
+
+        if (requestUserId && !canAccessViewpoint(data, requestUserId)) {
+          continue;
+        }
+
+        const userQuery = requestUserId ? `&userId=${encodeURIComponent(requestUserId)}` : "";
         
         list.push({
           id: data.id,
@@ -132,7 +152,8 @@ function listViewpoints() {
           category: data.category || "General",
           userId: data.userId || "anonymous",
           date: data.date || new Date(file.getLastUpdated()).getTime(),
-          file: `${scriptUrl}?action=get&id=${data.id}`
+          sharedWith: data.sharedWith || [],
+          file: `${scriptUrl}?action=get&id=${data.id}${userQuery}`
         });
       } catch (e) {
         // Archivo corrupto o no válido, ignorar
@@ -146,7 +167,7 @@ function listViewpoints() {
   return list;
 }
 
-function getViewpoint(id) {
+function getViewpoint(id, requestUserId) {
   const folder = getFolder();
   const fileName = `${id}.json`;
   const files = folder.getFilesByName(fileName);
@@ -156,7 +177,11 @@ function getViewpoint(id) {
     if (file.isTrashed()) return { error: "Viewpoint is deleted" };
 
     const content = file.getBlob().getDataAsString();
-    return JSON.parse(content);
+    const data = JSON.parse(content);
+    if (requestUserId && !canAccessViewpoint(data, requestUserId)) {
+      return { error: "Unauthorized" };
+    }
+    return data;
   }
   
   return { error: "Not found" };
@@ -224,5 +249,91 @@ function deleteViewpoint(id) {
     return { status: "success", action: "deleted", id: id, count: deletedCount };
   } else {
     return { status: "error", message: "Viewpoint file not found in Drive", id: id };
+  }
+}
+
+function canAccessViewpoint(data, userId) {
+  if (!userId) return true;
+  if (!data) return false;
+  if (data.userId && String(data.userId).toLowerCase() === String(userId).toLowerCase()) return true;
+  const sharedWith = data.sharedWith;
+  if (Array.isArray(sharedWith)) {
+    const set = {};
+    for (let i = 0; i < sharedWith.length; i++) {
+      const v = String(sharedWith[i] || "").trim().toLowerCase();
+      if (v) set[v] = true;
+    }
+    return !!set[String(userId).trim().toLowerCase()];
+  }
+  return false;
+}
+
+function shareViewpoint(id, requesterUserId, sharedWith) {
+  const folder = getFolder();
+  const fileName = `${id}.json`;
+  const files = folder.getFilesByName(fileName);
+  if (!files.hasNext()) {
+    return { status: "error", message: "Viewpoint not found", id };
+  }
+
+  const file = files.next();
+  if (file.isTrashed()) return { status: "error", message: "Viewpoint is deleted", id };
+
+  const content = file.getBlob().getDataAsString();
+  const data = JSON.parse(content);
+
+  const owner = String(data.userId || "").trim().toLowerCase();
+  const requester = String(requesterUserId || "").trim().toLowerCase();
+  if (!owner || owner !== requester) {
+    return { status: "error", message: "Only the owner can share this viewpoint", id };
+  }
+
+  let recipients = [];
+  if (Array.isArray(sharedWith)) {
+    recipients = sharedWith;
+  } else if (typeof sharedWith === "string") {
+    recipients = sharedWith.split(/[,;\n]+/g);
+  }
+
+  const normalized = [];
+  const seen = {};
+  for (let i = 0; i < recipients.length; i++) {
+    const email = String(recipients[i] || "").trim().toLowerCase();
+    if (!email) continue;
+    if (email === requester) continue;
+    if (seen[email]) continue;
+    seen[email] = true;
+    normalized.push(email);
+  }
+
+  data.sharedWith = normalized;
+  file.setContent(JSON.stringify(data, null, 2));
+  return { status: "success", action: "shared", id, sharedWith: normalized };
+}
+
+function listActiveUsers() {
+  try {
+    const ss = SpreadsheetApp.openById(USERS_SHEET_ID);
+    const sheet = ss.getSheets()[0];
+    const values = sheet.getDataRange().getValues();
+
+    const emails = [];
+    const seen = {};
+
+    for (let r = 0; r < values.length; r++) {
+      for (let c = 0; c < values[r].length; c++) {
+        const cell = String(values[r][c] || "").trim().toLowerCase();
+        if (!cell) continue;
+        if (cell.indexOf("@") === -1) continue;
+        if (seen[cell]) continue;
+        seen[cell] = true;
+        emails.push(cell);
+      }
+    }
+
+    emails.sort();
+    return emails;
+  } catch (e) {
+    return { status: "error", message: e.toString() };
   }
 }

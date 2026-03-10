@@ -19,7 +19,7 @@ describe('ViewpointRepository', () => {
 
     it('should load the index correctly', async () => {
         const mockIndex = [
-            { id: '1', title: 'View 1', file: 'VISTAS/view1.json' }
+            { id: '1', title: 'View 1', description: '', category: 'General', userId: 'user@example.com', date: Date.now(), file: 'https://example.com/view1.json' }
         ];
 
         mockFetch.mockResolvedValueOnce({
@@ -27,12 +27,26 @@ describe('ViewpointRepository', () => {
             json: async () => mockIndex
         });
 
-        const index = await repo.loadIndex();
+        mockFetch.mockResolvedValueOnce({
+            ok: false,
+            status: 404,
+            statusText: 'Not Found'
+        });
+
+        const index = await repo.loadIndex('user@example.com');
         expect(index).toEqual(mockIndex);
-        expect(mockFetch).toHaveBeenCalledWith('VISTAS/index.json');
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        expect(String(mockFetch.mock.calls[0][0])).toContain('action=list');
+        expect(String(mockFetch.mock.calls[0][0])).toContain('userId=');
     });
 
     it('should handle 404 when loading index', async () => {
+        mockFetch.mockResolvedValueOnce({
+            ok: false,
+            status: 404,
+            statusText: 'Not Found'
+        });
+
         mockFetch.mockResolvedValueOnce({
             ok: false,
             status: 404,
@@ -56,7 +70,7 @@ describe('ViewpointRepository', () => {
             json: async () => validView
         });
 
-        const data = await repo.loadViewpointData('VISTAS/view1.json');
+        const data = await repo.loadViewpointData('VIEWS/view1.json');
         expect(data).toEqual(validView);
     });
 
@@ -71,13 +85,13 @@ describe('ViewpointRepository', () => {
             json: async () => invalidView
         });
 
-        const data = await repo.loadViewpointData('VISTAS/invalid.json');
+        const data = await repo.loadViewpointData('VIEWS/invalid.json');
         expect(data).toBeNull();
     });
 
     it('should handle fetch errors when loading view', async () => {
         mockFetch.mockRejectedValueOnce(new Error('Network error'));
-        const data = await repo.loadViewpointData('VISTAS/error.json');
+        const data = await repo.loadViewpointData('VIEWS/error.json');
         expect(data).toBeNull();
     });
 });
