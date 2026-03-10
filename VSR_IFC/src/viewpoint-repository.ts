@@ -12,6 +12,12 @@ export interface ViewpointIndexItem {
     sharedWith?: string[];
 }
 
+export interface ActiveUser {
+    id: string;
+    name: string;
+    email?: string;
+}
+
 export class ViewpointRepository {
     private _indexUrl: string = 'VIEWS/index.json';
     private _viewpoints: ViewpointIndexItem[] = [];
@@ -234,7 +240,7 @@ export class ViewpointRepository {
         URL.revokeObjectURL(url);
     }
 
-    async loadActiveUsers(): Promise<string[]> {
+    async loadActiveUsers(): Promise<ActiveUser[]> {
         if (!VIEWPOINTS_API_URL) {
             return [];
         }
@@ -244,7 +250,19 @@ export class ViewpointRepository {
             if (!response.ok) return [];
             const data = await response.json();
             if (Array.isArray(data)) {
-                return data.map(v => String(v).trim().toLowerCase()).filter(Boolean);
+                if (data.length > 0 && typeof data[0] === 'object' && data[0] !== null) {
+                    return data
+                        .map((u: any) => ({
+                            id: String(u.id ?? u.userId ?? u.email ?? '').trim(),
+                            name: String(u.name ?? u.displayName ?? u.email ?? u.id ?? '').trim(),
+                            email: u.email ? String(u.email).trim() : undefined
+                        }))
+                        .filter(u => u.id);
+                }
+                return data
+                    .map(v => String(v).trim())
+                    .filter(Boolean)
+                    .map(v => ({ id: v, name: v }));
             }
             return [];
         } catch (e) {

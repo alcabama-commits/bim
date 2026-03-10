@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import { ViewpointRepository } from './viewpoint-repository';
+import type { ActiveUser } from './viewpoint-repository';
 
 export interface ViewpointData {
     id: string;
@@ -824,7 +825,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             return;
         }
 
-        let users: string[] = [];
+        let users: ActiveUser[] = [];
         try {
             users = await this._repository.loadActiveUsers();
         } catch (e) {
@@ -832,26 +833,15 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         }
 
         const currentList = Array.isArray(view.sharedWith) ? view.sharedWith : [];
-        const suggested = users.filter(u => u && u !== this._currentUserId).slice(0, 10).join(', ');
-        const input = window.prompt(
-            `Compartir vista "${view.title}".\n\nIngresa correos separados por coma.\nDeja vacío para quitar el acceso compartido.\n\nSugerencias: ${suggested}`,
-            currentList.join(', ')
-        );
-        if (input === null) return;
-
-        const recipients = input
-            .split(/[,;\n]+/g)
-            .map(s => s.trim().toLowerCase())
-            .filter(Boolean)
-            .filter(email => email !== this._currentUserId);
-
-        const uniqueRecipients = Array.from(new Set(recipients));
-        view.sharedWith = uniqueRecipients;
+        const selectableUsers = users.filter(u => u?.id && u.id !== this._currentUserId);
+        const selection = await this.openShareUsersModal(view.title, selectableUsers, currentList);
+        if (selection === null) return;
+        view.sharedWith = selection;
 
         const originalCursor = document.body.style.cursor;
         document.body.style.cursor = 'wait';
         try {
-            const ok = await this._repository.shareViewpointToCloud(view.id, this._currentUserId, uniqueRecipients);
+            const ok = await this._repository.shareViewpointToCloud(view.id, this._currentUserId, view.sharedWith || []);
             if (!ok) {
                 alert('No se pudo compartir la vista en la nube. Ver consola.');
                 return;
@@ -859,14 +849,207 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
             this.saveToStorage();
             this.renderList();
-            if (uniqueRecipients.length === 0) {
+            if (!view.sharedWith || view.sharedWith.length === 0) {
                 alert('Acceso compartido eliminado.');
             } else {
-                alert(`Vista compartida con: ${uniqueRecipients.join(', ')}`);
+                alert(`Vista compartida con ${view.sharedWith.length} usuario(s).`);
             }
         } finally {
             document.body.style.cursor = originalCursor;
         }
+    }
+
+    private openShareUsersModal(title: string, users: ActiveUser[], preselected: string[]): Promise<string[] | null> {
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.style.position = 'fixed';
+            overlay.style.inset = '0';
+            overlay.style.background = 'rgba(0,0,0,0.6)';
+            overlay.style.zIndex = '3000';
+            overlay.style.display = 'flex';
+            overlay.style.alignItems = 'center';
+            overlay.style.justifyContent = 'center';
+
+            const panel = document.createElement('div');
+            panel.style.width = '420px';
+            panel.style.maxWidth = '90vw';
+            panel.style.background = '#222';
+            panel.style.border = '1px solid #444';
+            panel.style.borderRadius = '10px';
+            panel.style.boxShadow = '0 4px 18px rgba(0,0,0,0.5)';
+            panel.style.padding = '14px';
+            panel.style.color = '#eee';
+
+            const header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.flexDirection = 'column';
+            header.style.gap = '6px';
+
+            const h = document.createElement('div');
+            h.style.fontWeight = '700';
+            h.textContent = `Compartir: ${title}`;
+
+            const sub = document.createElement('div');
+            sub.style.fontSize = '12px';
+            sub.style.color = '#aaa';
+            sub.textContent = 'Selecciona usuarios dentro de la plataforma (no se envía correo).';
+
+            const search = document.createElement('input');
+            search.type = 'text';
+            search.placeholder = 'Buscar usuario...';
+            search.style.width = '100%';
+            search.style.padding = '8px';
+            search.style.background = '#333';
+            search.style.border = '1px solid #555';
+            search.style.color = '#fff';
+            search.style.borderRadius = '6px';
+
+            header.appendChild(h);
+            header.appendChild(sub);
+            header.appendChild(search);
+
+            const list = document.createElement('div');
+            list.style.marginTop = '10px';
+            list.style.maxHeight = '320px';
+            list.style.overflow = 'auto';
+            list.style.border = '1px solid #333';
+            list.style.borderRadius = '8px';
+            list.style.background = 'rgba(0,0,0,0.2)';
+
+            const selected = new Set((preselected || []).map(v => String(v).trim()).filter(Boolean));
+            const render = (term: string) => {
+                const q = term.trim().toLowerCase();
+                list.innerHTML = '';
+
+                const filtered = users
+                    .filter(u => u?.id)
+                    .filter(u => {
+                        if (!q) return true;
+                        const name = (u.name || '').toLowerCase();
+                        const id = (u.id || '').toLowerCase();
+                        const email = (u.email || '').toLowerCase();
+                        return name.includes(q) || id.includes(q) || email.includes(q);
+                    })
+                    .slice(0, 200);
+
+                if (filtered.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.style.padding = '10px';
+                    empty.style.color = '#888';
+                    empty.textContent = 'No hay usuarios para mostrar.';
+                    list.appendChild(empty);
+                    return;
+                }
+
+                for (const u of filtered) {
+                    const row = document.createElement('label');
+                    row.style.display = 'flex';
+                    row.style.gap = '10px';
+                    row.style.alignItems = 'center';
+                    row.style.padding = '8px 10px';
+                    row.style.borderBottom = '1px solid #333';
+                    row.style.cursor = 'pointer';
+
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.checked = selected.has(u.id);
+                    cb.onchange = () => {
+                        if (cb.checked) selected.add(u.id);
+                        else selected.delete(u.id);
+                    };
+
+                    const text = document.createElement('div');
+                    text.style.display = 'flex';
+                    text.style.flexDirection = 'column';
+                    text.style.overflow = 'hidden';
+
+                    const primary = document.createElement('div');
+                    primary.style.whiteSpace = 'nowrap';
+                    primary.style.overflow = 'hidden';
+                    primary.style.textOverflow = 'ellipsis';
+                    primary.textContent = u.name || u.id;
+
+                    const secondary = document.createElement('div');
+                    secondary.style.fontSize = '11px';
+                    secondary.style.color = '#aaa';
+                    secondary.textContent = u.email && u.email !== u.id ? `${u.id} • ${u.email}` : u.id;
+
+                    text.appendChild(primary);
+                    text.appendChild(secondary);
+
+                    row.appendChild(cb);
+                    row.appendChild(text);
+                    list.appendChild(row);
+                }
+            };
+
+            render('');
+            search.addEventListener('input', () => render(search.value));
+
+            const footer = document.createElement('div');
+            footer.style.display = 'flex';
+            footer.style.justifyContent = 'space-between';
+            footer.style.alignItems = 'center';
+            footer.style.marginTop = '12px';
+
+            const left = document.createElement('div');
+            left.style.fontSize = '12px';
+            left.style.color = '#aaa';
+            left.textContent = `Seleccionados: ${selected.size}`;
+
+            const right = document.createElement('div');
+            right.style.display = 'flex';
+            right.style.gap = '8px';
+
+            const cancel = document.createElement('button');
+            cancel.textContent = 'Cancelar';
+            cancel.style.padding = '8px 12px';
+            cancel.style.background = '#333';
+            cancel.style.border = '1px solid #555';
+            cancel.style.color = '#fff';
+            cancel.style.borderRadius = '8px';
+            cancel.style.cursor = 'pointer';
+
+            const save = document.createElement('button');
+            save.textContent = 'Guardar';
+            save.style.padding = '8px 12px';
+            save.style.background = 'var(--primary-color, #D8005E)';
+            save.style.border = '1px solid rgba(0,0,0,0.2)';
+            save.style.color = '#fff';
+            save.style.borderRadius = '8px';
+            save.style.cursor = 'pointer';
+
+            const cleanup = (result: string[] | null) => {
+                document.body.removeChild(overlay);
+                resolve(result);
+            };
+
+            const updateCount = () => {
+                left.textContent = `Seleccionados: ${selected.size}`;
+            };
+
+            list.addEventListener('change', updateCount);
+
+            cancel.onclick = () => cleanup(null);
+            save.onclick = () => cleanup(Array.from(selected));
+
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) cleanup(null);
+            });
+
+            right.appendChild(cancel);
+            right.appendChild(save);
+            footer.appendChild(left);
+            footer.appendChild(right);
+
+            panel.appendChild(header);
+            panel.appendChild(list);
+            panel.appendChild(footer);
+            overlay.appendChild(panel);
+            document.body.appendChild(overlay);
+
+            search.focus();
+        });
     }
 
     async dispose() {

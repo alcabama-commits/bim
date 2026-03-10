@@ -317,22 +317,70 @@ function listActiveUsers() {
     const sheet = ss.getSheets()[0];
     const values = sheet.getDataRange().getValues();
 
-    const emails = [];
+    if (!values || values.length === 0) return [];
+
+    const header = values[0].map(v => String(v || "").trim().toLowerCase());
+    const findCol = (candidates) => {
+      for (let i = 0; i < candidates.length; i++) {
+        const idx = header.indexOf(candidates[i]);
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    };
+
+    const colId = findCol(["id", "userid", "user_id", "uid"]);
+    const colEmail = findCol(["email", "correo", "mail", "e-mail"]);
+    const colName = findCol(["name", "nombre", "displayname", "display_name", "usuario", "user"]);
+
+    const result = [];
     const seen = {};
 
-    for (let r = 0; r < values.length; r++) {
-      for (let c = 0; c < values[r].length; c++) {
-        const cell = String(values[r][c] || "").trim().toLowerCase();
-        if (!cell) continue;
-        if (cell.indexOf("@") === -1) continue;
-        if (seen[cell]) continue;
-        seen[cell] = true;
-        emails.push(cell);
-      }
+    for (let r = 1; r < values.length; r++) {
+      const row = values[r];
+      if (!row) continue;
+
+      const rawId = colId !== -1 ? String(row[colId] || "").trim() : "";
+      const rawEmail = colEmail !== -1 ? String(row[colEmail] || "").trim() : "";
+      const rawName = colName !== -1 ? String(row[colName] || "").trim() : "";
+
+      let id = rawId || rawEmail || rawName;
+      if (!id) continue;
+      id = String(id).trim();
+
+      const email = rawEmail ? String(rawEmail).trim().toLowerCase() : "";
+      const name = rawName ? String(rawName).trim() : (email || id);
+
+      const key = String(id).trim().toLowerCase();
+      if (seen[key]) continue;
+      seen[key] = true;
+
+      result.push({
+        id: String(id).trim(),
+        name: String(name).trim(),
+        email: email || undefined
+      });
     }
 
-    emails.sort();
-    return emails;
+    if (result.length === 0) {
+      const emails = [];
+      const flatSeen = {};
+      for (let r = 0; r < values.length; r++) {
+        for (let c = 0; c < values[r].length; c++) {
+          const cell = String(values[r][c] || "").trim();
+          if (!cell) continue;
+          if (cell.indexOf("@") === -1) continue;
+          const normalized = cell.toLowerCase();
+          if (flatSeen[normalized]) continue;
+          flatSeen[normalized] = true;
+          emails.push({ id: normalized, name: normalized, email: normalized });
+        }
+      }
+      emails.sort((a, b) => a.id.localeCompare(b.id));
+      return emails;
+    }
+
+    result.sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
+    return result;
   } catch (e) {
     return { status: "error", message: e.toString() };
   }
