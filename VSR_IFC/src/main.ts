@@ -5036,56 +5036,62 @@ function setupViewpoints() {
             console.log('[Viewpoints] Getting clipping planes...');
             const planes: { normal: number[], constant: number }[] = [];
             try {
-                if (!clipper || !clipper.list) {
-                    console.warn('[Viewpoints] Clipper not initialized or list empty');
-                    return [];
-                }
-                
-                console.log(`[Viewpoints] Clipper list size: ${clipper.list.size || clipper.list.length}`);
-                if (clipper.list.size > 0) {
-                     // Iterate using forEach which is safer for Maps
-                     clipper.list.forEach((p, id) => {
-                         console.log(`[Viewpoints] Map.forEach - Plane ${id}:`, p);
-                         
-                         let plane: THREE.Plane | null = null;
-                         const anyP = p as any;
-                         
-                         if (anyP.plane) {
-                              plane = anyP.plane as THREE.Plane;
-                         } else if (anyP.normal && anyP.constant !== undefined) {
-                              plane = anyP;
-                         } else if (anyP.object && anyP.object.plane) {
-                              plane = anyP.object.plane;
-                         }
-    
-                         if (plane) {
-                             console.log(`[Viewpoints] Found plane:`, plane.normal, plane.constant);
-                             planes.push({
-                                 normal: plane.normal.toArray(),
-                                 constant: plane.constant
-                             });
-                         } else {
-                             console.warn('[Viewpoints] Clipper item does not look like a plane:', p);
-                         }
-                     });
-                } else {
-                    console.warn('[Viewpoints] Clipper list is empty (size 0). Are planes created?');
-                }
-                
-                // Fallback: check internal 'planes' array if exists (some versions)
-                if (planes.length === 0 && (clipper as any).planes && Array.isArray((clipper as any).planes)) {
-                     console.log('[Viewpoints] Checking legacy .planes array...');
-                     const legacyPlanes = (clipper as any).planes;
-                     legacyPlanes.forEach((p: any) => {
-                         if (p.normal && p.constant !== undefined) {
-                              planes.push({
-                                  normal: p.normal.toArray(),
-                                  constant: p.constant
-                              });
-                         }
-                     });
+                const rendererPlanes = world?.renderer?.three?.clippingPlanes as unknown as THREE.Plane[] | undefined;
+                if (Array.isArray(rendererPlanes) && rendererPlanes.length > 0) {
+                    console.log(`[Viewpoints] Found ${rendererPlanes.length} clipping planes in renderer.`);
+                    for (const plane of rendererPlanes) {
+                        if (!plane?.normal) continue;
+                        planes.push({
+                            normal: plane.normal.toArray(),
+                            constant: plane.constant
+                        });
+                    }
+                    return planes;
                 }
 
+                if (!clipper || !clipper.list) {
+                    console.warn('[Viewpoints] Clipper not initialized or list unavailable');
+                    return [];
+                }
+
+                console.log(`[Viewpoints] Clipper list size: ${clipper.list.size || clipper.list.length}`);
+                if (clipper.list.size > 0) {
+                    clipper.list.forEach((p, id) => {
+                        console.log(`[Viewpoints] Map.forEach - Plane ${id}:`, p);
+
+                        let plane: THREE.Plane | null = null;
+                        const anyP = p as any;
+
+                        if (anyP.plane) {
+                            plane = anyP.plane as THREE.Plane;
+                        } else if (anyP.normal && anyP.constant !== undefined) {
+                            plane = anyP;
+                        } else if (anyP.object && anyP.object.plane) {
+                            plane = anyP.object.plane;
+                        }
+
+                        if (plane) {
+                            planes.push({
+                                normal: plane.normal.toArray(),
+                                constant: plane.constant
+                            });
+                        }
+                    });
+                }
+
+                if (planes.length === 0 && (clipper as any).planes && Array.isArray((clipper as any).planes)) {
+                    const legacyPlanes = (clipper as any).planes;
+                    for (const p of legacyPlanes) {
+                        if (p?.normal && p?.constant !== undefined) {
+                            planes.push({
+                                normal: p.normal.toArray(),
+                                constant: p.constant
+                            });
+                        }
+                    }
+                }
+
+                console.log(`[Viewpoints] Serialized clipping planes count: ${planes.length}`);
                 return planes;
             } catch (e) {
                 console.error('[Viewpoints] Error getting clipping planes:', e);
@@ -5101,6 +5107,10 @@ function setupViewpoints() {
                 if (clipper.list.size > 0) {
                     console.log(`[Viewpoints] Clearing ${clipper.list.size} existing planes...`);
                     clipper.deleteAll();
+                }
+                if (world?.renderer?.three && Array.isArray((world.renderer.three as any).clippingPlanes)) {
+                    (world.renderer.three as any).clippingPlanes = [];
+                    (world.renderer.three as any).localClippingEnabled = true;
                 }
                 
                 if (!planes || planes.length === 0) {
