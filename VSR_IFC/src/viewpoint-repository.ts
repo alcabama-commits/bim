@@ -1,5 +1,5 @@
 import { ViewpointData } from './viewpoints-manager';
-import { VIEWPOINTS_API_URL } from './config';
+import { VIEWPOINTS_API_URL, USERS_DIRECTORY_API_URL } from './config';
 
 export interface ViewpointIndexItem {
     id: string;
@@ -241,28 +241,22 @@ export class ViewpointRepository {
     }
 
     async loadActiveUsers(): Promise<ActiveUser[]> {
-        if (!VIEWPOINTS_API_URL) {
+        if (!USERS_DIRECTORY_API_URL) {
             return [];
         }
 
         try {
-            const response = await fetch(`${VIEWPOINTS_API_URL}?action=users&t=${Date.now()}`);
+            const response = await fetch(`${USERS_DIRECTORY_API_URL}?t=${Date.now()}`);
             if (!response.ok) return [];
             const data = await response.json();
             if (Array.isArray(data)) {
-                if (data.length > 0 && typeof data[0] === 'object' && data[0] !== null) {
-                    return data
-                        .map((u: any) => ({
-                            id: String(u.id ?? u.userId ?? u.email ?? '').trim(),
-                            name: String(u.name ?? u.displayName ?? u.email ?? u.id ?? '').trim(),
-                            email: u.email ? String(u.email).trim() : undefined
-                        }))
-                        .filter(u => u.id);
-                }
                 return data
-                    .map(v => String(v).trim())
-                    .filter(Boolean)
-                    .map(v => ({ id: v, name: v }));
+                    .map((u: any) => ({
+                        id: String(u.email || u.Email || u.emailAddress || '').trim().toLowerCase(),
+                        name: String(u.nombre || u.Nombre || u.name || u.Name || u.email || '').trim(),
+                        email: String(u.email || u.Email || u.emailAddress || '').trim().toLowerCase() || undefined
+                    }))
+                    .filter(u => u.id);
             }
             return [];
         } catch (e) {
@@ -276,6 +270,11 @@ export class ViewpointRepository {
             return false;
         }
 
+        const normalizedSharedWith = (sharedWith || [])
+            .map(v => String(v || '').trim().toLowerCase())
+            .filter(Boolean)
+            .filter(v => v !== String(requesterUserId || '').trim().toLowerCase());
+
         try {
             const response = await fetch(VIEWPOINTS_API_URL, {
                 method: 'POST',
@@ -286,15 +285,39 @@ export class ViewpointRepository {
                     action: 'share',
                     id,
                     userId: requesterUserId,
-                    sharedWith
+                    sharedWith: normalizedSharedWith
                 })
             });
 
-            if (!response.ok) return false;
-            const result = await response.json();
-            return result.status === 'success';
+            if (response.ok) {
+                const result = await response.json();
+                if (result?.status === 'success') {
+                    return true;
+                }
+            }
         } catch (e) {
-            console.error('[Repository] Error sharing viewpoint to cloud:', e);
+            console.warn('[Repository] Share endpoint not available, trying fallback save:', e);
+        }
+
+        try {
+            const getUrl = `${VIEWPOINTS_API_URL}?action=get&id=${encodeURIComponent(id)}&t=${Date.now()}`;
+            const response = await fetch(getUrl);
+            if (!response.ok) return false;
+            const data = await response.json();
+            if (!this.validateViewpointData(data)) return false;
+
+            const owner = String(data.userId || '').trim().toLowerCase();
+            const requester = String(requesterUserId || '').trim().toLowerCase();
+            if (!owner || owner !== requester) return false;
+
+            const updated: ViewpointData = {
+                ...data,
+                sharedWith: normalizedSharedWith
+            };
+
+            return await this.saveViewpointToCloud(updated);
+        } catch (e) {
+            console.error('[Repository] Error sharing via fallback save:', e);
             return false;
         }
     }
