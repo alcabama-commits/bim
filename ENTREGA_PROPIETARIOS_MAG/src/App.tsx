@@ -16,7 +16,6 @@ import { API_CONFIG } from './config';
 
 type Status = 'owner_delivered' | 'post_construction_delivered' | 'notarized' | 'weekly_goal' | 'in_process' | 'special' | 'under_construction';
 type Tab = 'towers' | 'charts';
-type PendingChange = { towerId: number; aptNumber: string; status: Status };
 
 interface Apartment {
   id: string;
@@ -29,6 +28,25 @@ interface Tower {
   name: string;
   apartments: Apartment[];
 }
+
+interface PendingChange {
+  towerId: number;
+  aptNumber: string;
+  status: Status;
+}
+
+const getStatusLabel = (status: Status) => {
+  switch (status) {
+    case 'owner_delivered': return 'Entregado a propietario';
+    case 'post_construction_delivered': return 'Entregado a Post construcción';
+    case 'notarized': return 'Escriturado';
+    case 'weekly_goal': return 'Lista meta semanal';
+    case 'in_process': return 'Sin proceso';
+    case 'under_construction': return 'En obra';
+    case 'special': return 'Área Especial';
+    default: return '';
+  }
+};
 
 // --- Constants & Mock Data Generation ---
 
@@ -98,19 +116,6 @@ const ApartmentCell = ({
     }
   };
 
-  const getStatusLabel = (status: Status) => {
-    switch (status) {
-      case 'owner_delivered': return 'Entregado a propietario';
-      case 'post_construction_delivered': return 'Entregado a Post construcción';
-      case 'notarized': return 'Escriturado';
-      case 'weekly_goal': return 'Lista meta semanal';
-      case 'in_process': return 'Sin proceso';
-      case 'under_construction': return 'En obra';
-      case 'special': return 'Área Especial';
-      default: return '';
-    }
-  };
-
   return (
     <div
       onClick={() => onClick(apartment)}
@@ -128,10 +133,12 @@ const ApartmentCell = ({
 
 const TowerCard = ({ 
   tower, 
-  onApartmentClick 
+  onApartmentClick,
+  statusFilter
 }: { 
   tower: Tower; 
   onApartmentClick: (apt: Apartment) => void;
+  statusFilter: Status | null;
   key?: string;
 }) => {
   // Group apartments by floor (descending)
@@ -159,16 +166,22 @@ const TowerCard = ({
 
   const delivered = towerStats.owner + towerStats.post;
   const deliveredPercent = towerStats.total > 0 ? Math.round((delivered / towerStats.total) * 100) : 0;
+  const filteredCount = statusFilter
+    ? tower.apartments.filter(a => a.status === statusFilter).length
+    : towerStats.total;
+  const headerText = statusFilter
+    ? `${tower.name} - ${getStatusLabel(statusFilter)} (${filteredCount})`
+    : `${tower.name} - ${deliveredPercent}%`;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -4 }}
-      className="bg-white rounded-xl shadow-lg overflow-hidden border border-alcabama-light-grey flex flex-col"
+      className={`bg-white rounded-xl shadow-lg overflow-hidden border border-alcabama-light-grey flex flex-col ${statusFilter && filteredCount === 0 ? 'opacity-40' : ''}`}
     >
       <div className="bg-alcabama-black text-white py-2 px-4 text-center font-bold text-sm tracking-wider">
-        {tower.name} - {deliveredPercent}%
+        {headerText}
       </div>
       
       <div className="p-3 flex-1">
@@ -193,11 +206,15 @@ const TowerCard = ({
               </div>
               <div className="grid grid-cols-4 gap-1">
                 {apts.map((apt) => (
-                  <ApartmentCell 
-                    key={apt.id} 
-                    apartment={apt} 
-                    onClick={onApartmentClick}
-                  />
+                  statusFilter && apt.status !== statusFilter
+                    ? <div key={apt.id} className="h-8 w-full" />
+                    : (
+                      <ApartmentCell
+                        key={apt.id}
+                        apartment={apt}
+                        onClick={onApartmentClick}
+                      />
+                    )
                 ))}
               </div>
             </React.Fragment>
@@ -237,6 +254,7 @@ const TowerCard = ({
 
 export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<Status | null>(null);
   // activeTab removed
   const [allTowers, setAllTowers] = useState<Tower[]>(() => generateStructure());
   const [editingApartment, setEditingApartment] = useState<{ towerId: number, apartment: Apartment } | null>(null);
@@ -288,7 +306,7 @@ export default function App() {
   const [pendingStatus, setPendingStatus] = useState<Status | null>(null);
   const [error, setError] = useState('');
   const [isEditMode, setIsEditMode] = useState(false);
-  const [pendingChanges, setPendingChanges] = useState<Map<string, PendingChange>>(() => new Map<string, PendingChange>());
+  const [pendingChanges, setPendingChanges] = useState<Map<string, PendingChange>>(() => new Map());
   const [isSaving, setIsSaving] = useState(false);
 
   // Warn before unload if there are pending changes
@@ -593,43 +611,88 @@ export default function App() {
 
               {/* Dashboard Stats */}
               <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-12">
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-alcabama-light-grey flex flex-col items-center text-center">
-                  <div className="w-10 h-10 bg-blue-600 rounded-lg mb-2 flex items-center justify-center text-white font-bold">
-                    {stats.ownerDelivered}
-                  </div>
-                  <p className="text-[10px] text-alcabama-grey uppercase font-bold tracking-wider leading-tight">Entregado Propietario</p>
-                </div>
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-alcabama-light-grey flex flex-col items-center text-center">
-                  <div className="w-10 h-10 bg-green-500 rounded-lg mb-2 flex items-center justify-center text-white font-bold">
-                    {stats.postConstruction}
-                  </div>
-                  <p className="text-[10px] text-alcabama-grey uppercase font-bold tracking-wider leading-tight">Post Construcción</p>
-                </div>
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-alcabama-light-grey flex flex-col items-center text-center">
-                  <div className="w-10 h-10 bg-orange-500 rounded-lg mb-2 flex items-center justify-center text-white font-bold">
-                    {stats.notarized}
-                  </div>
-                  <p className="text-[10px] text-alcabama-grey uppercase font-bold tracking-wider leading-tight">Escriturado</p>
-                </div>
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-alcabama-light-grey flex flex-col items-center text-center">
-                  <div className="w-10 h-10 bg-red-600 rounded-lg mb-2 flex items-center justify-center text-white font-bold">
-                    {stats.weeklyGoal}
-                  </div>
-                  <p className="text-[10px] text-alcabama-grey uppercase font-bold tracking-wider leading-tight">Meta Semanal</p>
-                </div>
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-alcabama-light-grey flex flex-col items-center text-center">
-                  <div className="w-10 h-10 bg-gray-400 rounded-lg mb-2 flex items-center justify-center text-white font-bold">
-                    {stats.underConstruction}
-                  </div>
-                  <p className="text-[10px] text-alcabama-grey uppercase font-bold tracking-wider leading-tight">En Obra</p>
-                </div>
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-alcabama-light-grey flex flex-col items-center text-center">
-                  <div className="w-10 h-10 bg-white border border-alcabama-light-grey rounded-lg mb-2 flex items-center justify-center text-alcabama-black font-bold">
-                    {stats.inProcess}
-                  </div>
-                  <p className="text-[10px] text-alcabama-grey uppercase font-bold tracking-wider leading-tight">Sin Proceso</p>
-                </div>
+                {[
+                  {
+                    status: 'owner_delivered' as const,
+                    count: stats.ownerDelivered,
+                    label: 'Entregado Propietario',
+                    iconClassName: 'w-10 h-10 bg-blue-600 rounded-lg mb-2 flex items-center justify-center text-white font-bold',
+                    activeClassName: 'ring-2 ring-offset-2 ring-blue-600 border-blue-600',
+                    hoverClassName: 'hover:border-blue-600'
+                  },
+                  {
+                    status: 'post_construction_delivered' as const,
+                    count: stats.postConstruction,
+                    label: 'Post Construcción',
+                    iconClassName: 'w-10 h-10 bg-green-500 rounded-lg mb-2 flex items-center justify-center text-white font-bold',
+                    activeClassName: 'ring-2 ring-offset-2 ring-green-500 border-green-500',
+                    hoverClassName: 'hover:border-green-500'
+                  },
+                  {
+                    status: 'notarized' as const,
+                    count: stats.notarized,
+                    label: 'Escriturado',
+                    iconClassName: 'w-10 h-10 bg-orange-500 rounded-lg mb-2 flex items-center justify-center text-white font-bold',
+                    activeClassName: 'ring-2 ring-offset-2 ring-orange-500 border-orange-500',
+                    hoverClassName: 'hover:border-orange-500'
+                  },
+                  {
+                    status: 'weekly_goal' as const,
+                    count: stats.weeklyGoal,
+                    label: 'Meta Semanal',
+                    iconClassName: 'w-10 h-10 bg-red-600 rounded-lg mb-2 flex items-center justify-center text-white font-bold',
+                    activeClassName: 'ring-2 ring-offset-2 ring-red-600 border-red-600',
+                    hoverClassName: 'hover:border-red-600'
+                  },
+                  {
+                    status: 'under_construction' as const,
+                    count: stats.underConstruction,
+                    label: 'En Obra',
+                    iconClassName: 'w-10 h-10 bg-gray-400 rounded-lg mb-2 flex items-center justify-center text-white font-bold',
+                    activeClassName: 'ring-2 ring-offset-2 ring-gray-400 border-gray-500',
+                    hoverClassName: 'hover:border-gray-500'
+                  },
+                  {
+                    status: 'in_process' as const,
+                    count: stats.inProcess,
+                    label: 'Sin Proceso',
+                    iconClassName: 'w-10 h-10 bg-white border border-alcabama-light-grey rounded-lg mb-2 flex items-center justify-center text-alcabama-black font-bold',
+                    activeClassName: 'ring-2 ring-offset-2 ring-alcabama-black border-alcabama-black',
+                    hoverClassName: 'hover:border-alcabama-black'
+                  }
+                ].map((card) => {
+                  const isActive = statusFilter === card.status;
+                  return (
+                    <button
+                      key={card.status}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => setStatusFilter(prev => prev === card.status ? null : card.status)}
+                      className={`bg-white p-4 rounded-xl shadow-sm border border-alcabama-light-grey flex flex-col items-center text-center transition-all ${isActive ? card.activeClassName : card.hoverClassName}`}
+                    >
+                      <div className={card.iconClassName}>
+                        {card.count}
+                      </div>
+                      <p className="text-[10px] text-alcabama-grey uppercase font-bold tracking-wider leading-tight">{card.label}</p>
+                    </button>
+                  );
+                })}
               </div>
+
+              {statusFilter && (
+                <div className="mb-8 flex items-center justify-between gap-4 bg-alcabama-light-grey/5 p-4 rounded-xl border border-alcabama-light-grey/20">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">
+                    Filtro: <span className="text-alcabama-black">{getStatusLabel(statusFilter)}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter(null)}
+                    className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey hover:text-alcabama-black transition-colors"
+                  >
+                    Quitar filtro
+                  </button>
+                </div>
+              )}
 
               {/* Legend */}
               <div className="flex flex-wrap items-center gap-4 mb-8 bg-alcabama-light-grey/5 p-4 rounded-xl border border-alcabama-light-grey/20">
@@ -667,6 +730,7 @@ export default function App() {
                     key={tower.id} 
                     tower={tower} 
                     onApartmentClick={(apt) => setEditingApartment({ towerId: tower.id, apartment: apt })}
+                    statusFilter={statusFilter}
                   />
                 ))}
               </div>
