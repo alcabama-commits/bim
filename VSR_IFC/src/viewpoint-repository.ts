@@ -1,5 +1,5 @@
 import { ViewpointData } from './viewpoints-manager';
-import { VIEWPOINTS_API_URL, USERS_DIRECTORY_API_URL } from './config';
+import { VIEWPOINTS_API_URL } from './config';
 
 export interface ViewpointIndexItem {
     id: string;
@@ -51,64 +51,6 @@ export class ViewpointRepository {
                 }
             } catch (e) {
                 console.warn('[Repository] Cloud load failed, falling back to local:', e);
-            }
-        }
-
-        if (VIEWPOINTS_API_URL && userId) {
-            try {
-                const response = await fetch(`${VIEWPOINTS_API_URL}?action=list&t=${Date.now()}`);
-                if (response.ok) {
-                    const all = await response.json();
-                    if (Array.isArray(all)) {
-                        const normalizedUserId = String(userId).trim().toLowerCase();
-                        const ids = new Set(cloudData.map(i => String(i.id)));
-
-                        for (const item of all) {
-                            const id = String(item?.id || '');
-                            if (!id || ids.has(id)) continue;
-                            const owner = String(item?.userId || '').trim().toLowerCase();
-                            const sharedWith = Array.isArray(item?.sharedWith) ? item.sharedWith : [];
-                            const isOwner = owner && owner === normalizedUserId;
-                            const isShared = sharedWith
-                                .map((x: any) => String(x || '').trim().toLowerCase())
-                                .includes(normalizedUserId);
-                            if (isOwner || isShared) {
-                                cloudData.push(item);
-                                ids.add(id);
-                            }
-                        }
-
-                        const candidates = all.filter((v: any) => v?.file && !ids.has(String(v?.id || '')));
-                        const limit = Math.min(200, candidates.length);
-                        for (let i = 0; i < limit; i++) {
-                            const item = candidates[i];
-                            const file = String(item.file || '');
-                            if (!file) continue;
-                            const data = await this.loadViewpointData(file, userId);
-                            if (!data) continue;
-                            const sharedWith = Array.isArray(data.sharedWith)
-                                ? data.sharedWith.map(v => String(v || '').trim().toLowerCase())
-                                : [];
-                            const owner = String(data.userId || '').trim().toLowerCase();
-                            if (owner !== normalizedUserId && !sharedWith.includes(normalizedUserId)) continue;
-                            const id = String(item.id || data.id);
-                            if (!id || ids.has(id)) continue;
-                            cloudData.push({
-                                id,
-                                title: String(item.title || data.title || 'Vista'),
-                                description: String(item.description || data.description || ''),
-                                category: String(item.category || data.category || 'General'),
-                                userId: String(item.userId || data.userId || 'anonymous'),
-                                date: Number(item.date || data.date || Date.now()),
-                                file: String(item.file),
-                                sharedWith: data.sharedWith || []
-                            });
-                            ids.add(id);
-                        }
-                    }
-                }
-            } catch (e) {
-                console.warn('[Repository] Cloud shared fallback list failed:', e);
             }
         }
 
@@ -299,22 +241,28 @@ export class ViewpointRepository {
     }
 
     async loadActiveUsers(): Promise<ActiveUser[]> {
-        if (!USERS_DIRECTORY_API_URL) {
+        if (!VIEWPOINTS_API_URL) {
             return [];
         }
 
         try {
-            const response = await fetch(`${USERS_DIRECTORY_API_URL}?t=${Date.now()}`);
+            const response = await fetch(`${VIEWPOINTS_API_URL}?action=users&t=${Date.now()}`);
             if (!response.ok) return [];
             const data = await response.json();
             if (Array.isArray(data)) {
+                if (data.length > 0 && typeof data[0] === 'object' && data[0] !== null) {
+                    return data
+                        .map((u: any) => ({
+                            id: String(u.id ?? u.userId ?? u.email ?? '').trim(),
+                            name: String(u.name ?? u.displayName ?? u.email ?? u.id ?? '').trim(),
+                            email: u.email ? String(u.email).trim() : undefined
+                        }))
+                        .filter(u => u.id);
+                }
                 return data
-                    .map((u: any) => ({
-                        id: String(u.email || u.Email || u.emailAddress || '').trim().toLowerCase(),
-                        name: String(u.nombre || u.Nombre || u.name || u.Name || u.email || '').trim(),
-                        email: String(u.email || u.Email || u.emailAddress || '').trim().toLowerCase() || undefined
-                    }))
-                    .filter(u => u.id);
+                    .map(v => String(v).trim())
+                    .filter(Boolean)
+                    .map(v => ({ id: v, name: v }));
             }
             return [];
         } catch (e) {
@@ -328,11 +276,6 @@ export class ViewpointRepository {
             return false;
         }
 
-        const normalizedSharedWith = (sharedWith || [])
-            .map(v => String(v || '').trim().toLowerCase())
-            .filter(Boolean)
-            .filter(v => v !== String(requesterUserId || '').trim().toLowerCase());
-
         try {
             const response = await fetch(VIEWPOINTS_API_URL, {
                 method: 'POST',
@@ -343,39 +286,15 @@ export class ViewpointRepository {
                     action: 'share',
                     id,
                     userId: requesterUserId,
-                    sharedWith: normalizedSharedWith
+                    sharedWith
                 })
             });
 
-            if (response.ok) {
-                const result = await response.json();
-                if (result?.status === 'success') {
-                    return true;
-                }
-            }
-        } catch (e) {
-            console.warn('[Repository] Share endpoint not available, trying fallback save:', e);
-        }
-
-        try {
-            const getUrl = `${VIEWPOINTS_API_URL}?action=get&id=${encodeURIComponent(id)}&t=${Date.now()}`;
-            const response = await fetch(getUrl);
             if (!response.ok) return false;
-            const data = await response.json();
-            if (!this.validateViewpointData(data)) return false;
-
-            const owner = String(data.userId || '').trim().toLowerCase();
-            const requester = String(requesterUserId || '').trim().toLowerCase();
-            if (!owner || owner !== requester) return false;
-
-            const updated: ViewpointData = {
-                ...data,
-                sharedWith: normalizedSharedWith
-            };
-
-            return await this.saveViewpointToCloud(updated);
+            const result = await response.json();
+            return result.status === 'success';
         } catch (e) {
-            console.error('[Repository] Error sharing via fallback save:', e);
+            console.error('[Repository] Error sharing viewpoint to cloud:', e);
             return false;
         }
     }

@@ -1,4 +1,0 @@
-*.frag -filter -diff -merge -text
-*.json -filter -diff -merge -text
-
-629091.ifc filter=lfs diff=lfs merge=lfs -text

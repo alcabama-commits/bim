@@ -28,11 +28,6 @@ describe('ViewpointRepository', () => {
         });
 
         mockFetch.mockResolvedValueOnce({
-            ok: true,
-            json: async () => mockIndex
-        });
-
-        mockFetch.mockResolvedValueOnce({
             ok: false,
             status: 404,
             statusText: 'Not Found'
@@ -40,10 +35,9 @@ describe('ViewpointRepository', () => {
 
         const index = await repo.loadIndex('user@example.com');
         expect(index).toEqual(mockIndex);
-        expect(mockFetch).toHaveBeenCalledTimes(3);
+        expect(mockFetch).toHaveBeenCalledTimes(2);
         expect(String(mockFetch.mock.calls[0][0])).toContain('action=list');
         expect(String(mockFetch.mock.calls[0][0])).toContain('userId=');
-        expect(String(mockFetch.mock.calls[1][0])).toContain('action=list');
     });
 
     it('should handle 404 when loading index', async () => {
