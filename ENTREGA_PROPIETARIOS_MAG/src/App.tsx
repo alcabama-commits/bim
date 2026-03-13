@@ -268,7 +268,7 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<Status | null>(null);
   const [weeklyGoalDateFilter, setWeeklyGoalDateFilter] = useState<string | null>(null);
   const [weeklyGoalDateInput, setWeeklyGoalDateInput] = useState(() => new Date().toISOString().slice(0, 10));
-  const [timelineDateFilter, setTimelineDateFilter] = useState<string | null>(null);
+  const [timelineDateFilter, setTimelineDateFilter] = useState(() => new Date().toISOString().slice(0, 10));
   // activeTab removed
   const [allTowers, setAllTowers] = useState<Tower[]>(() => generateStructure());
   const [editingApartment, setEditingApartment] = useState<{ towerId: number, apartment: Apartment } | null>(null);
@@ -468,7 +468,15 @@ export default function App() {
 
   const weeklyGoalTimeline = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
-    const items = allTowers.flatMap(tower =>
+
+    const isISODate = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+    const addDaysISO = (iso: string, days: number) => {
+      const d = new Date(`${iso}T00:00:00`);
+      d.setDate(d.getDate() + days);
+      return d.toISOString().slice(0, 10);
+    };
+
+    const scheduled = allTowers.flatMap(tower =>
       tower.apartments
         .filter(a => a.status === 'weekly_goal')
         .map(a => ({
@@ -477,39 +485,42 @@ export default function App() {
           aptNumber: a.number,
           date: a.weeklyGoalDate ?? null
         }))
+        .filter(i => isISODate(i.date))
     );
 
-    const filtered = timelineDateFilter ? items.filter(i => i.date === timelineDateFilter) : items;
-
-    const groupsMap = new Map<string, typeof filtered>();
-    for (const item of filtered) {
-      const key = item.date ?? '__NO_DATE__';
-      const current = groupsMap.get(key);
+    const byDate = new Map<string, typeof scheduled>();
+    for (const item of scheduled) {
+      const current = byDate.get(item.date);
       if (current) current.push(item);
-      else groupsMap.set(key, [item]);
+      else byDate.set(item.date, [item]);
     }
 
-    const groups = Array.from(groupsMap.entries()).map(([key, groupItems]) => {
-      const date = key === '__NO_DATE__' ? null : key;
+    const anchor = isISODate(timelineDateFilter) ? timelineDateFilter : today;
+    const start = addDaysISO(anchor, -6);
+
+    const days = Array.from({ length: 13 }, (_, i) => {
+      const date = addDaysISO(start, i);
       const kind =
-        !date ? 'no_date' :
         date < today ? 'overdue' :
         date === today ? 'today' :
         'upcoming';
 
-      return { date, kind, items: groupItems };
+      return {
+        indexLabel: String(i).padStart(2, '0'),
+        date,
+        kind,
+        items: byDate.get(date) ?? []
+      };
     });
 
-    groups.sort((a, b) => {
-      if (a.date === null && b.date === null) return 0;
-      if (a.date === null) return 1;
-      if (b.date === null) return -1;
-      return a.date.localeCompare(b.date);
-    });
+    const selectedDate = isISODate(timelineDateFilter) ? timelineDateFilter : today;
 
     return {
-      total: items.length,
-      groups
+      total: scheduled.length,
+      today,
+      selectedDate,
+      days,
+      byDate
     };
   }, [allTowers, timelineDateFilter]);
 
@@ -800,25 +811,16 @@ export default function App() {
                       <span className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Fecha</span>
                       <input
                         type="date"
-                        value={timelineDateFilter ?? ''}
-                        onChange={(e) => setTimelineDateFilter(e.target.value ? e.target.value : null)}
+                        value={weeklyGoalTimeline.selectedDate}
+                        onChange={(e) => setTimelineDateFilter(e.target.value)}
                         className="h-9 rounded-lg border border-alcabama-light-grey px-3 text-xs text-alcabama-dark-grey"
                       />
                     </div>
-                    {timelineDateFilter && (
-                      <button
-                        type="button"
-                        onClick={() => setTimelineDateFilter(null)}
-                        className="h-9 px-3 rounded-lg border border-alcabama-light-grey text-[10px] font-bold uppercase tracking-wider text-alcabama-grey hover:text-alcabama-black transition-colors"
-                      >
-                        Quitar
-                      </button>
-                    )}
                     <button
                       type="button"
                       onClick={() => {
                         setStatusFilter('weekly_goal');
-                        setWeeklyGoalDateFilter(timelineDateFilter);
+                        setWeeklyGoalDateFilter(weeklyGoalTimeline.selectedDate);
                       }}
                       className="h-9 px-3 rounded-lg bg-alcabama-black text-white text-[10px] font-bold uppercase tracking-wider hover:bg-black transition-colors"
                     >
@@ -827,94 +829,122 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="mt-5 space-y-4">
-                  {weeklyGoalTimeline.groups.length === 0 ? (
-                    <div className="text-sm text-alcabama-grey">No hay entregas pendientes en Lista meta semanal.</div>
-                  ) : (
-                    weeklyGoalTimeline.groups.map((group) => {
-                      const badgeClass =
-                        group.kind === 'overdue'
-                          ? 'bg-red-600 text-white'
-                          : group.kind === 'today'
-                            ? 'bg-orange-500 text-white'
-                            : group.kind === 'upcoming'
-                              ? 'bg-green-500 text-white'
-                              : 'bg-gray-100 text-alcabama-dark-grey border border-alcabama-light-grey';
-
-                      const badgeLabel =
-                        group.kind === 'overdue'
-                          ? 'Vencida'
-                          : group.kind === 'today'
-                            ? 'Hoy'
-                            : group.kind === 'upcoming'
-                              ? 'Próxima'
-                              : 'Sin fecha';
-
-                      const header = (
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-3">
-                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${badgeClass}`}>
-                              {badgeLabel}
-                            </span>
-                            <div className="text-sm font-bold text-alcabama-black">
-                              {group.date ?? 'Sin fecha'}
-                            </div>
-                            <div className="text-xs text-alcabama-grey">
-                              {group.items.length} aptos
-                            </div>
-                          </div>
-                          {group.date && (
-                            <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">
-                              Filtrar
-                            </div>
-                          )}
-                        </div>
-                      );
-
-                      const body = (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {group.items.slice(0, 24).map(item => (
-                            <span
-                              key={`${item.towerId}-${item.aptNumber}`}
-                              className="px-2 py-1 rounded-md text-[10px] font-bold bg-alcabama-light-grey/5 border border-alcabama-light-grey/30 text-alcabama-dark-grey"
-                            >
-                              T{item.towerId}-{item.aptNumber}
-                            </span>
-                          ))}
-                          {group.items.length > 24 && (
-                            <span className="px-2 py-1 rounded-md text-[10px] font-bold bg-white border border-alcabama-light-grey text-alcabama-grey">
-                              +{group.items.length - 24} más
-                            </span>
-                          )}
-                        </div>
-                      );
-
-                      if (!group.date) {
-                        return (
-                          <div key="__NO_DATE__" className="rounded-xl border border-alcabama-light-grey/50 bg-alcabama-light-grey/5 p-4">
-                            {header}
-                            {body}
-                          </div>
-                        );
-                      }
+                <div className="mt-5">
+                  <div className="flex items-start justify-between gap-2">
+                    {weeklyGoalTimeline.days.map((day) => {
+                      const isSelected = weeklyGoalTimeline.selectedDate === day.date;
+                      const labelClass = isSelected
+                        ? 'bg-alcabama-pink text-white border-alcabama-pink'
+                        : 'bg-alcabama-light-grey/10 text-alcabama-dark-grey border-alcabama-light-grey/40';
 
                       return (
                         <button
-                          key={group.date}
+                          key={day.date}
                           type="button"
-                          onClick={() => {
-                            setTimelineDateFilter(group.date);
-                            setStatusFilter('weekly_goal');
-                            setWeeklyGoalDateFilter(group.date);
-                          }}
-                          className="w-full text-left rounded-xl border border-alcabama-light-grey/50 bg-white hover:bg-alcabama-light-grey/5 transition-colors p-4"
+                          onClick={() => setTimelineDateFilter(day.date)}
+                          className="flex-1 flex flex-col items-center gap-2"
                         >
-                          {header}
-                          {body}
+                          <div className={`w-10 h-10 rounded-md border flex items-center justify-center text-xs font-black tracking-wider ${labelClass}`}>
+                            {day.indexLabel}
+                          </div>
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">
+                            {day.date.slice(8, 10)}/{day.date.slice(5, 7)}
+                          </div>
                         </button>
                       );
-                    })
-                  )}
+                    })}
+                  </div>
+
+                  <div className="relative mt-3">
+                    <div className="absolute left-2 right-2 top-1/2 -translate-y-1/2 h-[2px] bg-alcabama-pink/40" />
+                    <div className="flex items-center justify-between gap-2">
+                      {weeklyGoalTimeline.days.map((day) => {
+                        const isSelected = weeklyGoalTimeline.selectedDate === day.date;
+                        const hasItems = day.items.length > 0;
+                        const dotBase =
+                          day.kind === 'overdue'
+                            ? 'bg-red-600 border-red-700'
+                            : day.kind === 'today'
+                              ? 'bg-orange-500 border-orange-600'
+                              : 'bg-alcabama-pink border-alcabama-pink';
+
+                        const dotClass = hasItems
+                          ? `${dotBase} shadow-md`
+                          : 'bg-white border-alcabama-light-grey';
+
+                        const sizeClass = isSelected ? 'w-4 h-4' : hasItems ? 'w-3 h-3' : 'w-2.5 h-2.5';
+
+                        return (
+                          <button
+                            key={`${day.date}-dot`}
+                            type="button"
+                            onClick={() => setTimelineDateFilter(day.date)}
+                            className="flex-1 relative flex items-center justify-center py-4"
+                            aria-label={`Día ${day.date}`}
+                          >
+                            <span className={`rounded-full border ${dotClass} ${sizeClass}`} />
+                            {hasItems && (
+                              <span className={`absolute -top-1 text-[10px] font-black ${isSelected ? 'text-alcabama-black' : 'text-alcabama-grey'}`}>
+                                {day.items.length}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 rounded-xl border border-alcabama-light-grey/50 bg-alcabama-light-grey/5 p-4">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                      <div className="text-sm font-bold text-alcabama-black">
+                        {weeklyGoalTimeline.selectedDate}
+                      </div>
+                      <div className="text-xs text-alcabama-grey">
+                        {weeklyGoalTimeline.byDate.get(weeklyGoalTimeline.selectedDate)?.length ?? 0} aptos programados
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const selectedItems = weeklyGoalTimeline.byDate.get(weeklyGoalTimeline.selectedDate) ?? [];
+                      if (selectedItems.length === 0) {
+                        return <div className="mt-3 text-sm text-alcabama-grey">No hay entregas programadas para este día.</div>;
+                      }
+
+                      const byTower = new Map<number, string[]>();
+                      for (const item of selectedItems) {
+                        const current = byTower.get(item.towerId);
+                        if (current) current.push(item.aptNumber);
+                        else byTower.set(item.towerId, [item.aptNumber]);
+                      }
+
+                      const towers = Array.from(byTower.entries()).sort(([a], [b]) => a - b);
+
+                      return (
+                        <div className="mt-3 space-y-2">
+                          {towers.map(([towerId, apts]) => (
+                            <div key={towerId} className="flex flex-wrap items-center gap-2">
+                              <span className="px-2 py-1 rounded-md text-[10px] font-black bg-alcabama-black text-white">
+                                T{towerId}
+                              </span>
+                              {apts.slice(0, 30).map((apt) => (
+                                <span
+                                  key={`${towerId}-${apt}`}
+                                  className="px-2 py-1 rounded-md text-[10px] font-bold bg-white border border-alcabama-light-grey text-alcabama-dark-grey"
+                                >
+                                  {apt}
+                                </span>
+                              ))}
+                              {apts.length > 30 && (
+                                <span className="px-2 py-1 rounded-md text-[10px] font-bold bg-white border border-alcabama-light-grey text-alcabama-grey">
+                                  +{apts.length - 30} más
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
 
