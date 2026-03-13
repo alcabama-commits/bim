@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Entrega Propietarios Magnolias - Portal BIM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Animación de carga */
+        .loader { border-top-color: #D8005E; -webkit-animation: spinner 1.5s linear infinite; animation: spinner 1.5s linear infinite; }
+        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+    <script>
+        // --- SEGURIDAD ---
+        (function() {
+            const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
+            if (!userAccount) {
+                window.location.href = 'inse.html';
+            }
+        })();
+    </script>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <!-- Header -->
+    <header class="bg-white shadow-md sticky top-0 z-50">
+        <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center">
+                <a href="home.html">
+                    <img alt="Logo Alcabama" class="h-8 mr-4" src="https://i.postimg.cc/HxDQsbNG/Logo-ALCABAMA-SOLO.jpg"/>
+                </a>
+                <h1 class="text-xl font-bold text-gray-700 hidden md:block">Entrega Propietarios - Magnolias</h1>
+            </div>
+            <div>
+                <a href="home.html" class="text-gray-600 hover:text-[#D8005E] font-medium">Volver al Inicio</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        
+        <!-- Leyenda de Colores -->
+        <div class="bg-white p-4 rounded-lg shadow mb-8">
+            <h3 class="text-sm font-bold text-gray-500 uppercase mb-3">Convenciones de Estado</h3>
+            <div class="flex flex-wrap gap-4 text-sm">
+                <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-blue-600 mr-2"></span> Entregado a Propietario</div>
+                <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-green-600 mr-2"></span> Entregado a Post-construcción</div>
+                <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-orange-500 mr-2"></span> Escriturado</div>
+                <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-red-600 mr-2"></span> Lista meta semanal</div>
+                <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-white border border-gray-300 mr-2"></span> En proceso</div>
+            </div>
+        </div>
+
+        <!-- Contenedor de Torres -->
+        <div id="towers-container" class="space-y-8">
+            <div class="flex justify-center py-12">
+                <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12"></div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Modal de Edición -->
+    <div id="edit-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+        <div class="bg-white p-8 rounded-lg shadow-xl w-96">
+            <h3 class="text-lg font-bold mb-4">Actualizar Estado</h3>
+            <p id="modal-info" class="mb-4 text-gray-600">Torre X - Apto Y</p>
+            
+            <div class="space-y-2">
+                <button onclick="saveStatus('Entregado a propietario')" class="w-full text-left px-4 py-2 rounded hover:bg-blue-100 text-blue-800 border-l-4 border-blue-600">Entregado a propietario</button>
+                <button onclick="saveStatus('Entregado a Post construcción')" class="w-full text-left px-4 py-2 rounded hover:bg-green-100 text-green-800 border-l-4 border-green-600">Entregado a Post construcción</button>
+                <button onclick="saveStatus('Escriturado')" class="w-full text-left px-4 py-2 rounded hover:bg-orange-100 text-orange-800 border-l-4 border-orange-500">Escriturado</button>
+                <button onclick="saveStatus('Lista meta semanal')" class="w-full text-left px-4 py-2 rounded hover:bg-red-100 text-red-800 border-l-4 border-red-600">Lista meta semanal</button>
+                <button onclick="saveStatus('En proceso')" class="w-full text-left px-4 py-2 rounded hover:bg-gray-100 text-gray-800 border-l-4 border-gray-300">En proceso</button>
+            </div>
+
+            <div class="mt-6 text-right">
+                <button onclick="closeModal()" class="text-gray-500 hover:text-gray-700">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURACIÓN ---
+        // REEMPLAZA ESTA URL CON LA DE TU SCRIPT DE GOOGLE APPS SCRIPT IMPLEMENTADO
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx4NEpE6EyrC2ggk8To0F0TP5P9y0YnaxiWzCbcIhSR7-KRSy4Wu0PM9hYyNY5y72Q/exec'; 
+        // Nota: He puesto la URL que usas en otros archivos como placeholder, pero asegúrate de que sea la correcta para ESTA hoja nueva.
+
+        let currentData = [];
+        let selectedApto = null;
+
+        const statusStyles = {
+            'Entregado a propietario': 'bg-blue-600 text-white',
+            'Entregado a Post construcción': 'bg-green-600 text-white',
+            'Escriturado': 'bg-orange-500 text-white',
+            'Lista meta semanal': 'bg-red-600 text-white',
+            'En proceso': 'bg-white text-gray-800 border border-gray-200',
+            'default': 'bg-white text-gray-800 border border-gray-200'
+        };
+
+        document.addEventListener('DOMContentLoaded', loadData);
+
+        async function loadData() {
+            const container = document.getElementById('towers-container');
+            try {
+                const response = await fetch(SCRIPT_URL);
+                const data = await response.json();
+                currentData = data;
+                renderData(data);
+            } catch (error) {
+                console.error('Error cargando datos:', error);
+                container.innerHTML = `<div class="text-center text-red-500">Error al cargar los datos. Por favor recarga la página.</div>`;
+            }
+        }
+
+        function renderData(data) {
+            const container = document.getElementById('towers-container');
+            container.innerHTML = '';
+
+            // Agrupar por Torre
+            const towers = {};
+            data.forEach(item => {
+                if (!towers[item.torre]) towers[item.torre] = [];
+                towers[item.torre].push(item);
+            });
+
+            // Ordenar Torres (numérico o alfabético)
+            const sortedTowerKeys = Object.keys(towers).sort((a, b) => a.localeCompare(b, undefined, {numeric: true}));
+
+            if (sortedTowerKeys.length === 0) {
+                container.innerHTML = '<div class="text-center text-gray-500">No hay datos registrados en la hoja de cálculo.</div>';
+                return;
+            }
+
+            sortedTowerKeys.forEach(torreName => {
+                const aptos = towers[torreName];
+                // Ordenar apartamentos
+                aptos.sort((a, b) => a.apartamento.toString().localeCompare(b.apartamento.toString(), undefined, {numeric: true}));
+
+                const towerSection = document.createElement('div');
+                towerSection.className = 'bg-white rounded-lg shadow-md overflow-hidden';
+                
+                const header = document.createElement('div');
+                header.className = 'bg-gray-800 text-white px-6 py-3 font-bold text-lg';
+                header.textContent = `Torre ${torreName}`;
+                
+                const grid = document.createElement('div');
+                grid.className = 'p-6 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4';
+
+                aptos.forEach(apto => {
+                    const btn = document.createElement('button');
+                    const styleClass = statusStyles[apto.estado] || statusStyles['default'];
+                    
+                    btn.className = `${styleClass} h-16 rounded-lg flex flex-col items-center justify-center shadow-sm hover:shadow-md transition-all transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500`;
+                    btn.innerHTML = `
+                        <span class="font-bold text-lg">${apto.apartamento}</span>
+                    `;
+                    btn.onclick = () => openEditModal(apto);
+                    grid.appendChild(btn);
+                });
+
+                towerSection.appendChild(header);
+                towerSection.appendChild(grid);
+                container.appendChild(towerSection);
+            });
+        }
+
+        // --- MODAL Y EDICIÓN ---
+
+        function openEditModal(aptoData) {
+            selectedApto = aptoData;
+            document.getElementById('modal-info').textContent = `Torre ${aptoData.torre} - Apartamento ${aptoData.apartamento}`;
+            document.getElementById('edit-modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('edit-modal').classList.add('hidden');
+            selectedApto = null;
+        }
+
+        async function saveStatus(newStatus) {
+            if (!selectedApto) return;
+
+            const originalStatus = selectedApto.estado;
+            
+            // Actualización Optimista (UI primero)
+            selectedApto.estado = newStatus;
+            renderData(currentData);
+            closeModal();
+
+            // Enviar a Google Sheets
+            try {
+                // Usamos no-cors para evitar problemas simples, aunque no recibiremos respuesta JSON legible
+                // Si tu script maneja CORS correctamente, puedes quitar mode: 'no-cors'
+                await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors', 
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'update',
+                        torre: selectedApto.torre,
+                        apartamento: selectedApto.apartamento,
+                        estado: newStatus
+                    })
+                });
+                
+                // Opcional: Mostrar notificación de éxito
+                console.log('Guardado exitoso');
+
+            } catch (error) {
+                console.error('Error guardando:', error);
+                alert('Hubo un error al guardar en la nube. Verifica tu conexión.');
+                // Revertir cambio si falla
+                selectedApto.estado = originalStatus;
+                renderData(currentData);
+            }
+        }
+
+        // Cerrar modal al hacer clic fuera
+        window.onclick = function(event) {
+            const modal = document.getElementById('edit-modal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+    </script>
+</body>
+</html>

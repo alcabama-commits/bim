@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #000000; }
+::-webkit-scrollbar-thumb { background: #605E62; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #D3045C; }
+
+#root { background-color: #000000; min-height: 100vh; }
+
+.sidebar-panel {
+  background-color: #05050A;
+}
+.theme-light .sidebar-panel {
+  background-color: #FFFFFF;
+}
+
+.viewer-panel {
+  background-color: #000000;
+}
+.theme-light .viewer-panel {
+  background-color: #F5F5F5;
+}
+
+.theme-light .sidebar-panel,
+.theme-light .viewer-panel {
+  color: #605E62;
+}
+
+.theme-light .viewer-panel h3,
+.theme-light .viewer-panel p {
+  color: #605E62;
+}
+
+/* Alcabama Palette Overrides (Tailwind class skins) */
+/* Base grays */
+.bg-slate-950 { background-color: #000000 !important; }
+.bg-slate-900 { background-color: #605E62 !important; }
+.bg-slate-800 { background-color: #827E84 !important; }
+.bg-slate-700 { background-color: #A49FA6 !important; }
+.bg-slate-600 { background-color: #C5C0C8 !important; }
+.border-slate-800 { border-color: #827E84 !important; }
+.border-slate-700 { border-color: #A49FA6 !important; }
+.text-slate-100 { color: #FFFFFF !important; }
+.text-slate-300 { color: #C5C0C8 !important; }
+.text-slate-400 { color: #A49FA6 !important; }
+.text-slate-500 { color: #827E84 !important; }
+.text-slate-900 { color: #000000 !important; }
+
+/* Primary accent (Magenta) */
+.bg-yellow-500,
+.bg-yellow-600,
+.bg-yellow-400,
+.bg-indigo-600,
+.bg-pink-600 { background-color: #D3045C !important; }
+.hover\:bg-yellow-400:hover { background-color: #D3045C !important; }
+.hover\:bg-slate-800:hover { background-color: #827E84 !important; }
+.text-yellow-500, .text-indigo-500, .text-pink-500 { color: #D3045C !important; }
+.text-indigo-600 { color: #D3045C !important; }
+.text-indigo-800 { color: #7A0333 !important; }
+.border-yellow-500, .border-indigo-500, .border-pink-500 { border-color: #D3045C !important; }
+.shadow-yellow-500\/10 { box-shadow: 0 0 0 0 rgba(211,4,92,0.10) !important; }
+.bg-yellow-500\/10 { background-color: rgba(211,4,92,0.10) !important; }
+.border-yellow-500\/20 { border-color: rgba(211,4,92,0.20) !important; }
+.text-slate-950 { color: #000000 !important; }
+
+/* Panel tints */
+.bg-slate-900\/90 { background-color: rgba(96,94,98,0.90) !important; }
+.bg-slate-950\/80 { background-color: rgba(0,0,0,0.80) !important; }
+
+/* Indigo light variants to primary tint */
+.bg-indigo-50 { background-color: rgba(211,4,92,0.06) !important; }
+.border-indigo-100 { border-color: rgba(211,4,92,0.15) !important; }
+.bg-indigo-700 { background-color: #A10444 !important; }
+.text-indigo-800 { color: #7A0333 !important; }
+
+/* Theme-scoped overrides */
+.theme-dark {
+  color: #FFFFFF !important;
+  background-color: #000000 !important;
+}
+.theme-dark .bg-slate-950 { background-color: #000000 !important; }
+.theme-dark .bg-slate-900 { background-color: #111111 !important; }
+.theme-dark .bg-slate-800 { background-color: #1A1A1A !important; }
+.theme-dark .bg-slate-700 { background-color: #222222 !important; }
+.theme-dark .text-slate-400 { color: #A49FA6 !important; }
+.theme-dark .border-slate-800 { border-color: #333333 !important; }
+.theme-dark .border-slate-700 { border-color: #2A2A2A !important; }
+
+.theme-light {
+  color: #000000 !important;
+  background-color: #FFFFFF !important;
+}
+.theme-light .bg-slate-950 { background-color: #FFFFFF !important; }
+.theme-light .bg-slate-900 { background-color: #F5F5F5 !important; }
+.theme-light .bg-slate-800 { background-color: #EEEEEE !important; }
+.theme-light .bg-slate-700 { background-color: #E4E4E4 !important; }
+.theme-light .text-slate-400 { color: #605E62 !important; }
+.theme-light .border-slate-800 { border-color: #DDDDDD !important; }
+.theme-light .border-slate-700 { border-color: #D0D0D0 !important; }

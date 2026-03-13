@@ -17,24 +17,6 @@ import { API_CONFIG } from './config';
 type Status = 'owner_delivered' | 'post_construction_delivered' | 'notarized' | 'weekly_goal' | 'in_process' | 'special' | 'under_construction';
 type Tab = 'towers' | 'charts';
 
-interface Apartment {
-  id: string;
-  number: string;
-  status: Status;
-}
-
-interface Tower {
-  id: number;
-  name: string;
-  apartments: Apartment[];
-}
-
-interface PendingChange {
-  towerId: number;
-  aptNumber: string;
-  status: Status;
-}
-
 const getStatusLabel = (status: Status) => {
   switch (status) {
     case 'owner_delivered': return 'Entregado a propietario';
@@ -47,6 +29,26 @@ const getStatusLabel = (status: Status) => {
     default: return '';
   }
 };
+
+interface Apartment {
+  id: string;
+  number: string;
+  status: Status;
+  weeklyGoalDate?: string | null;
+}
+
+interface Tower {
+  id: number;
+  name: string;
+  apartments: Apartment[];
+}
+
+interface PendingChange {
+  towerId: number;
+  aptNumber: string;
+  status: Status;
+  weeklyGoalDate?: string | null;
+}
 
 // --- Constants & Mock Data Generation ---
 
@@ -124,7 +126,7 @@ const ApartmentCell = ({
         transition-all duration-200 hover:scale-110 hover:z-10 cursor-pointer shadow-sm
         ${getStatusStyles(apartment.status)}
       `}
-      title={`Apartamento ${apartment.number} - ${getStatusLabel(apartment.status)}`}
+      title={`Apartamento ${apartment.number} - ${getStatusLabel(apartment.status)}${apartment.status === 'weekly_goal' && apartment.weeklyGoalDate ? ` (${apartment.weeklyGoalDate})` : ''}`}
     >
       {apartment.number}
     </div>
@@ -134,11 +136,13 @@ const ApartmentCell = ({
 const TowerCard = ({ 
   tower, 
   onApartmentClick,
-  statusFilter
+  statusFilter,
+  weeklyGoalDateFilter
 }: { 
   tower: Tower; 
   onApartmentClick: (apt: Apartment) => void;
   statusFilter: Status | null;
+  weeklyGoalDateFilter: string | null;
   key?: string;
 }) => {
   // Group apartments by floor (descending)
@@ -169,7 +173,10 @@ const TowerCard = ({
     : 0;
 
   const filteredCount = statusFilter
-    ? tower.apartments.filter(a => a.status === statusFilter).length
+    ? tower.apartments.filter(a =>
+        a.status === statusFilter &&
+        (statusFilter !== 'weekly_goal' || !weeklyGoalDateFilter || a.weeklyGoalDate === weeklyGoalDateFilter)
+      ).length
     : towerStats.total;
 
   return (
@@ -177,10 +184,13 @@ const TowerCard = ({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -4 }}
+      data-tower-id={tower.id}
       className={`bg-white rounded-xl shadow-lg overflow-hidden border border-alcabama-light-grey flex flex-col ${statusFilter && filteredCount === 0 ? 'opacity-40' : ''}`}
     >
       <div className="bg-alcabama-black text-white py-2 px-4 text-center font-bold text-sm tracking-wider">
-        {statusFilter ? `${tower.name} - ${getStatusLabel(statusFilter)} (${filteredCount})` : `${tower.name} - ${ownerPercentage}%`}
+        {statusFilter
+          ? `${tower.name} - ${getStatusLabel(statusFilter)}${statusFilter === 'weekly_goal' && weeklyGoalDateFilter ? ` ${weeklyGoalDateFilter}` : ''} (${filteredCount})`
+          : `${tower.name} - ${ownerPercentage}%`}
       </div>
       
       <div className="p-3 flex-1">
@@ -205,7 +215,10 @@ const TowerCard = ({
               </div>
               <div className="grid grid-cols-4 gap-1">
                 {apts.map((apt) => (
-                  statusFilter && apt.status !== statusFilter
+                  statusFilter && (
+                    apt.status !== statusFilter ||
+                    (statusFilter === 'weekly_goal' && weeklyGoalDateFilter && apt.weeklyGoalDate !== weeklyGoalDateFilter)
+                  )
                     ? <div key={apt.id} className="h-8 w-full" />
                     : (
                       <ApartmentCell
@@ -254,10 +267,20 @@ const TowerCard = ({
 export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<Status | null>(null);
+  const [weeklyGoalDateFilter, setWeeklyGoalDateFilter] = useState<string | null>(null);
+  const [weeklyGoalDateInput, setWeeklyGoalDateInput] = useState(() => new Date().toISOString().slice(0, 10));
+  const [timelineDateFilter, setTimelineDateFilter] = useState(() => new Date().toISOString().slice(0, 10));
   // activeTab removed
   const [allTowers, setAllTowers] = useState<Tower[]>(() => generateStructure());
   const [editingApartment, setEditingApartment] = useState<{ towerId: number, apartment: Apartment } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  React.useEffect(() => {
+    if (!editingApartment) return;
+    const d = editingApartment.apartment.weeklyGoalDate;
+    const fallback = new Date().toISOString().slice(0, 10);
+    setWeeklyGoalDateInput(typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : fallback);
+  }, [editingApartment]);
 
   // Load data from Google Sheets
   React.useEffect(() => {
@@ -268,20 +291,24 @@ export default function App() {
         if (data && data.length > 0) {
           setAllTowers(prevTowers => {
             // Create a map for faster lookup: "towerId-aptNumber" -> status
-            const statusMap = new Map();
+            const statusMap = new Map<string, { status: Status; weeklyGoalDate?: string | null }>();
             data.forEach(item => {
-              statusMap.set(`${item.towerId}-${item.aptNumber}`, item.status);
+              const status = item.status as Status;
+              statusMap.set(`${item.towerId}-${item.aptNumber}`, {
+                status,
+                weeklyGoalDate: (item as SheetData).weeklyGoalDate ?? null
+              });
             });
             
             return prevTowers.map(tower => ({
               ...tower,
               apartments: tower.apartments.map(apt => {
                 const key = `${tower.id}-${apt.number}`;
-                const newStatus = statusMap.get(key) as Status;
+                const entry = statusMap.get(key);
                 
                 // Only update if we have a valid status and it's not a special area
-                if (newStatus && apt.status !== 'special') {
-                   return { ...apt, status: newStatus };
+                if (entry?.status && apt.status !== 'special') {
+                   return { ...apt, status: entry.status, weeklyGoalDate: entry.status === 'weekly_goal' ? (entry.weeklyGoalDate ?? null) : null };
                 }
                 return apt;
               })
@@ -332,7 +359,9 @@ export default function App() {
         return {
           ...tower,
           apartments: tower.apartments.map(apt => 
-            apt.id === editingApartment.apartment.id ? { ...apt, status: newStatus } : apt
+            apt.id === editingApartment.apartment.id
+              ? { ...apt, status: newStatus, weeklyGoalDate: newStatus === 'weekly_goal' ? weeklyGoalDateInput : null }
+              : apt
           )
         };
       }));
@@ -344,7 +373,8 @@ export default function App() {
         newMap.set(key, {
           towerId: editingApartment.towerId,
           aptNumber: editingApartment.apartment.number,
-          status: newStatus
+          status: newStatus,
+          weeklyGoalDate: newStatus === 'weekly_goal' ? weeklyGoalDateInput : null
         });
         return newMap;
       });
@@ -370,19 +400,19 @@ export default function App() {
       
       // Execute sequentially to avoid overwhelming the script/rate limits if any
       for (const change of changes) {
-        const success = await updateSheetStatus(change.towerId, change.aptNumber, change.status);
+        const success = await updateSheetStatus(change.towerId, change.aptNumber, change.status, change.weeklyGoalDate);
         if (success) successCount++;
       }
       
       if (successCount === changes.length) {
-        setPendingChanges(new Map());
+        setPendingChanges(new Map<string, PendingChange>());
       } else {
         console.error(`Failed to save ${changes.length - successCount} changes`);
         // We could keep failed changes in the map, but for simplicity let's clear all 
         // and rely on the user to check if something looks wrong or just re-edit.
         // Or better: keep failed ones? 
         // For now, let's clear and assume retries will happen if user notices.
-        setPendingChanges(new Map()); 
+        setPendingChanges(new Map<string, PendingChange>()); 
         alert('Algunos cambios no se pudieron guardar. Por favor verifica.');
       }
     } catch (err) {
@@ -391,6 +421,20 @@ export default function App() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const showTimelineItemInTower = (towerId: number, date: string) => {
+    setTimelineDateFilter(date);
+    setStatusFilter('weekly_goal');
+    setWeeklyGoalDateFilter(date);
+    setSearchTerm(`TORRE ${towerId}`);
+
+    window.setTimeout(() => {
+      const el = document.querySelector(`[data-tower-id="${towerId}"]`);
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
   };
 
   const handleEnableEditMode = () => {
@@ -436,6 +480,153 @@ export default function App() {
       percentage: Math.round((ownerDelivered / total) * 100)
     };
   }, [allTowers]);
+
+  const weeklyGoalTimeline = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+
+    const normalizeToISODate = (v: unknown): string | null => {
+      if (!v) return null;
+
+      if (v instanceof Date && !Number.isNaN(v.getTime())) {
+        return v.toISOString().slice(0, 10);
+      }
+
+      if (typeof v !== 'string') return null;
+
+      const s = v.trim();
+      if (!s) return null;
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+      const isoDateTime = s.match(/^(\d{4}-\d{2}-\d{2})[T ]/);
+      if (isoDateTime) return isoDateTime[1];
+
+      const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (dmy) {
+        const [, dd, mm, yyyy] = dmy;
+        return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+      }
+
+      const parsed = new Date(s);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toISOString().slice(0, 10);
+      }
+
+      return null;
+    };
+
+    const addDaysISO = (iso: string, days: number) => {
+      const d = new Date(`${iso}T00:00:00`);
+      d.setDate(d.getDate() + days);
+      return d.toISOString().slice(0, 10);
+    };
+
+    const scheduled = allTowers.flatMap(tower =>
+      tower.apartments
+        .filter(a => a.status === 'weekly_goal')
+        .map(a => ({
+          towerId: tower.id,
+          towerName: tower.name,
+          aptNumber: a.number,
+          date: normalizeToISODate(a.weeklyGoalDate)
+        }))
+        .filter(i => i.date !== null)
+    );
+
+    const byDate = new Map<string, typeof scheduled>();
+    for (const item of scheduled) {
+      const current = byDate.get(item.date);
+      if (current) current.push(item);
+      else byDate.set(item.date, [item]);
+    }
+
+    for (const items of byDate.values()) {
+      items.sort((a, b) => {
+        if (a.towerId !== b.towerId) return a.towerId - b.towerId;
+        return a.aptNumber.localeCompare(b.aptNumber);
+      });
+    }
+
+    const anchor = normalizeToISODate(timelineDateFilter) ?? today;
+    const start = addDaysISO(anchor, -6);
+
+    const days = Array.from({ length: 13 }, (_, i) => {
+      const date = addDaysISO(start, i);
+      const kind =
+        date < today ? 'overdue' :
+        date === today ? 'today' :
+        'upcoming';
+
+      return {
+        indexLabel: String(i).padStart(2, '0'),
+        date,
+        kind,
+        items: byDate.get(date) ?? []
+      };
+    });
+
+    const selectedDate = normalizeToISODate(timelineDateFilter) ?? today;
+
+    const getWeekStartISO = (iso: string) => {
+      const d = new Date(`${iso}T00:00:00`);
+      const day = d.getDay();
+      const offset = (day + 6) % 7;
+      return addDaysISO(iso, -offset);
+    };
+
+    const weekStart = getWeekStartISO(today);
+    const weekEnd = addDaysISO(weekStart, 6);
+    const weekDays = Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i));
+
+    const thisWeek = weekDays
+      .filter(d => d !== today)
+      .map(d => ({ date: d, items: byDate.get(d) ?? [] }))
+      .filter(d => d.items.length > 0);
+
+    const upcoming = Array.from(byDate.entries())
+      .filter(([d]) => d > weekEnd)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .flatMap(([, items]) => items);
+
+    const upcomingWeeksMap = new Map<string, typeof scheduled>();
+    for (const [d, items] of byDate.entries()) {
+      if (d <= weekEnd) continue;
+      const wk = getWeekStartISO(d);
+      const current = upcomingWeeksMap.get(wk);
+      if (current) current.push(...items);
+      else upcomingWeeksMap.set(wk, [...items]);
+    }
+
+    for (const items of upcomingWeeksMap.values()) {
+      items.sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        if (a.towerId !== b.towerId) return a.towerId - b.towerId;
+        return a.aptNumber.localeCompare(b.aptNumber);
+      });
+    }
+
+    const upcomingWeeks = Array.from(upcomingWeeksMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(0, 4)
+      .map(([wkStart, items]) => ({
+        weekStart: wkStart,
+        weekEnd: addDaysISO(wkStart, 6),
+        items
+      }));
+
+    return {
+      total: scheduled.length,
+      today,
+      selectedDate,
+      weekStart,
+      weekEnd,
+      thisWeek,
+      upcoming,
+      upcomingWeeks,
+      days,
+      byDate
+    };
+  }, [allTowers, timelineDateFilter]);
 
   const pieData = [
     { name: 'Propietario', value: stats.ownerDelivered, color: '#2563eb' },
@@ -664,7 +855,11 @@ export default function App() {
                       key={card.status}
                       type="button"
                       aria-pressed={isActive}
-                      onClick={() => setStatusFilter(prev => prev === card.status ? null : card.status)}
+                      onClick={() => {
+                        const next = statusFilter === card.status ? null : card.status;
+                        setStatusFilter(next);
+                        if (next !== 'weekly_goal') setWeeklyGoalDateFilter(null);
+                      }}
                       className={`bg-white p-4 rounded-xl shadow-sm border border-alcabama-light-grey flex flex-col items-center text-center transition-all ${isActive ? card.activeClassName : card.hoverClassName}`}
                     >
                       <div className={card.iconClassName}>
@@ -678,18 +873,317 @@ export default function App() {
 
               {statusFilter && (
                 <div className="mb-8 flex items-center justify-between gap-4 bg-alcabama-light-grey/5 p-4 rounded-xl border border-alcabama-light-grey/20">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">
-                    Filtro: <span className="text-alcabama-black">{getStatusLabel(statusFilter)}</span>
+                  <div className="flex items-center gap-6">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">
+                      Filtro: <span className="text-alcabama-black">{getStatusLabel(statusFilter)}</span>
+                    </div>
+                    {statusFilter === 'weekly_goal' && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Fecha</span>
+                        <input
+                          type="date"
+                          value={weeklyGoalDateFilter ?? ''}
+                          onChange={(e) => setWeeklyGoalDateFilter(e.target.value ? e.target.value : null)}
+                          className="h-9 rounded-lg border border-alcabama-light-grey px-3 text-xs text-alcabama-dark-grey"
+                        />
+                      </div>
+                    )}
                   </div>
                   <button
                     type="button"
-                    onClick={() => setStatusFilter(null)}
+                    onClick={() => {
+                      setStatusFilter(null);
+                      setWeeklyGoalDateFilter(null);
+                    }}
                     className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey hover:text-alcabama-black transition-colors"
                   >
                     Quitar filtro
                   </button>
                 </div>
               )}
+
+              <div className="mb-8 bg-white rounded-xl shadow-sm border border-alcabama-light-grey p-6">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Línea de tiempo</div>
+                    <div className="text-xs text-alcabama-dark-grey mt-1">
+                      Entregas pendientes (Lista meta semanal): <strong className="font-bold">{weeklyGoalTimeline.total}</strong>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Fecha</span>
+                      <input
+                        type="date"
+                        value={weeklyGoalTimeline.selectedDate}
+                        onChange={(e) => setTimelineDateFilter(e.target.value)}
+                        className="h-9 rounded-lg border border-alcabama-light-grey px-3 text-xs text-alcabama-dark-grey"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter('weekly_goal');
+                        setWeeklyGoalDateFilter(weeklyGoalTimeline.selectedDate);
+                      }}
+                      className="h-9 px-3 rounded-lg bg-alcabama-black text-white text-[10px] font-bold uppercase tracking-wider hover:bg-black transition-colors"
+                    >
+                      Ver en torres
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-5">
+                  {weeklyGoalTimeline.total === 0 && (
+                    <div className="mb-6 rounded-xl border border-alcabama-light-grey/50 bg-alcabama-light-grey/5 p-4 text-sm text-alcabama-grey">
+                      No hay apartamentos en Lista meta semanal con fecha asignada. Recuerda que los que no tienen fecha no aparecen en la línea de tiempo.
+                    </div>
+                  )}
+
+                  <div className="flex items-start justify-between gap-2">
+                    {weeklyGoalTimeline.days.map((day) => {
+                      const isSelected = weeklyGoalTimeline.selectedDate === day.date;
+                      const labelClass = isSelected
+                        ? 'bg-alcabama-pink text-white border-alcabama-pink'
+                        : 'bg-alcabama-light-grey/10 text-alcabama-dark-grey border-alcabama-light-grey/40';
+                      const boxBorder =
+                        day.kind === 'overdue'
+                          ? 'border-red-600/50 hover:border-red-600'
+                          : day.kind === 'today'
+                            ? 'border-orange-500/50 hover:border-orange-500'
+                            : 'border-alcabama-pink/40 hover:border-alcabama-pink';
+
+                      return (
+                        <div
+                          key={day.date}
+                          className="flex-1 flex flex-col items-center gap-2"
+                        >
+                          <div className="min-h-[64px] w-full flex flex-col items-center justify-end gap-1">
+                            {day.items.slice(0, 5).map((item) => (
+                              <button
+                                key={`${day.date}-${item.towerId}-${item.aptNumber}`}
+                                type="button"
+                                onClick={() => showTimelineItemInTower(item.towerId, day.date)}
+                                className={`w-full max-w-[64px] px-1.5 py-1 rounded-md border bg-white text-[9px] font-black text-alcabama-dark-grey shadow-sm ${boxBorder} ${isSelected ? 'ring-1 ring-alcabama-pink/40' : ''}`}
+                                title={`Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                              >
+                                T{item.towerId}-{item.aptNumber}
+                              </button>
+                            ))}
+                            {day.items.length > 5 && (
+                              <div className={`w-full max-w-[64px] px-1.5 py-1 rounded-md border bg-white text-[9px] font-black text-alcabama-grey ${boxBorder}`}>
+                                +{day.items.length - 5}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setTimelineDateFilter(day.date)}
+                            className={`w-10 h-10 rounded-md border flex items-center justify-center text-xs font-black tracking-wider ${labelClass}`}
+                            aria-label={`Seleccionar día ${day.date}`}
+                          >
+                            {day.indexLabel}
+                          </button>
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">
+                            {day.date.slice(8, 10)}/{day.date.slice(5, 7)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div className="rounded-xl border border-alcabama-light-grey/50 bg-white p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Hoy</div>
+                        <div className="text-xs font-bold text-alcabama-black">
+                          {weeklyGoalTimeline.byDate.get(weeklyGoalTimeline.today)?.length ?? 0}
+                        </div>
+                      </div>
+                      <div className="text-xs text-alcabama-grey mt-1">{weeklyGoalTimeline.today}</div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {(weeklyGoalTimeline.byDate.get(weeklyGoalTimeline.today) ?? []).slice(0, 20).map((item) => (
+                          <button
+                            key={`today-${item.towerId}-${item.aptNumber}`}
+                            type="button"
+                            onClick={() => showTimelineItemInTower(item.towerId, weeklyGoalTimeline.today)}
+                            className="px-2 py-1 rounded-md text-[10px] font-black bg-red-600 text-white hover:bg-red-700 transition-colors"
+                            title={`Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                          >
+                            T{item.towerId}-{item.aptNumber}
+                          </button>
+                        ))}
+                        {(weeklyGoalTimeline.byDate.get(weeklyGoalTimeline.today) ?? []).length === 0 && (
+                          <div className="text-sm text-alcabama-grey">No hay entregas para hoy.</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-alcabama-light-grey/50 bg-white p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Esta semana</div>
+                        <div className="text-xs font-bold text-alcabama-black">
+                          {weeklyGoalTimeline.thisWeek.reduce((acc, d) => acc + d.items.length, 0)}
+                        </div>
+                      </div>
+                      <div className="text-xs text-alcabama-grey mt-1">{weeklyGoalTimeline.weekStart} → {weeklyGoalTimeline.weekEnd}</div>
+                      <div className="mt-3 space-y-3">
+                        {weeklyGoalTimeline.thisWeek.length === 0 ? (
+                          <div className="text-sm text-alcabama-grey">No hay más entregas programadas esta semana.</div>
+                        ) : (
+                          weeklyGoalTimeline.thisWeek.map((d) => (
+                            <div key={`wk-${d.date}`}>
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs font-bold text-alcabama-black">{d.date}</div>
+                                <div className="text-xs text-alcabama-grey">{d.items.length}</div>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {d.items.slice(0, 20).map((item) => (
+                                  <button
+                                    key={`${d.date}-${item.towerId}-${item.aptNumber}`}
+                                    type="button"
+                                    onClick={() => showTimelineItemInTower(item.towerId, d.date)}
+                                    className="px-2 py-1 rounded-md text-[10px] font-black bg-alcabama-pink text-white hover:opacity-90 transition-opacity"
+                                    title={`Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                                  >
+                                    T{item.towerId}-{item.aptNumber}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-alcabama-light-grey/50 bg-white p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Próximas</div>
+                        <div className="text-xs font-bold text-alcabama-black">{weeklyGoalTimeline.upcoming.length}</div>
+                      </div>
+                      <div className="text-xs text-alcabama-grey mt-1">Próximas semanas</div>
+                      <div className="mt-3 space-y-3">
+                        {weeklyGoalTimeline.upcomingWeeks.length === 0 ? (
+                          <div className="text-sm text-alcabama-grey">No hay entregas programadas para las próximas semanas.</div>
+                        ) : (
+                          weeklyGoalTimeline.upcomingWeeks.map((w) => (
+                            <div key={`up-${w.weekStart}`} className="rounded-lg border border-alcabama-light-grey/40 bg-alcabama-light-grey/5 p-3">
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs font-bold text-alcabama-black">{w.weekStart} → {w.weekEnd}</div>
+                                <div className="text-xs text-alcabama-grey">{w.items.length}</div>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {w.items.slice(0, 24).map((item) => (
+                                  <button
+                                    key={`up-${item.date}-${item.towerId}-${item.aptNumber}`}
+                                    type="button"
+                                    onClick={() => showTimelineItemInTower(item.towerId, item.date)}
+                                    className="px-2 py-1 rounded-md text-[10px] font-black bg-white border border-alcabama-light-grey text-alcabama-dark-grey hover:border-alcabama-pink transition-colors"
+                                    title={`${item.date} • Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                                  >
+                                    {item.date.slice(8, 10)}/{item.date.slice(5, 7)} T{item.towerId}-{item.aptNumber}
+                                  </button>
+                                ))}
+                                {w.items.length > 24 && (
+                                  <div className="px-2 py-1 rounded-md text-[10px] font-black bg-white border border-alcabama-light-grey text-alcabama-grey">
+                                    +{w.items.length - 24}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="relative mt-3">
+                    <div className="absolute left-2 right-2 top-1/2 -translate-y-1/2 h-[2px] bg-alcabama-pink/40" />
+                    <div className="flex items-center justify-between gap-2">
+                      {weeklyGoalTimeline.days.map((day) => {
+                        const isSelected = weeklyGoalTimeline.selectedDate === day.date;
+                        const hasItems = day.items.length > 0;
+                        const dotBase =
+                          day.kind === 'overdue'
+                            ? 'bg-red-600 border-red-700'
+                            : day.kind === 'today'
+                              ? 'bg-orange-500 border-orange-600'
+                              : 'bg-alcabama-pink border-alcabama-pink';
+
+                        const dotClass = hasItems
+                          ? `${dotBase} shadow-md`
+                          : 'bg-white border-alcabama-light-grey';
+
+                        const sizeClass = isSelected ? 'w-4 h-4' : hasItems ? 'w-3 h-3' : 'w-2.5 h-2.5';
+
+                        return (
+                          <button
+                            key={`${day.date}-dot`}
+                            type="button"
+                            onClick={() => setTimelineDateFilter(day.date)}
+                            className="flex-1 relative flex items-center justify-center py-4"
+                            aria-label={`Día ${day.date}`}
+                          >
+                            <span className={`rounded-full border ${dotClass} ${sizeClass}`} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 rounded-xl border border-alcabama-light-grey/50 bg-alcabama-light-grey/5 p-4">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                      <div className="text-sm font-bold text-alcabama-black">
+                        {weeklyGoalTimeline.selectedDate}
+                      </div>
+                      <div className="text-xs text-alcabama-grey">
+                        {weeklyGoalTimeline.byDate.get(weeklyGoalTimeline.selectedDate)?.length ?? 0} aptos programados
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const selectedItems = weeklyGoalTimeline.byDate.get(weeklyGoalTimeline.selectedDate) ?? [];
+                      if (selectedItems.length === 0) {
+                        return <div className="mt-3 text-sm text-alcabama-grey">No hay entregas programadas para este día.</div>;
+                      }
+
+                      const byTower = new Map<number, string[]>();
+                      for (const item of selectedItems) {
+                        const current = byTower.get(item.towerId);
+                        if (current) current.push(item.aptNumber);
+                        else byTower.set(item.towerId, [item.aptNumber]);
+                      }
+
+                      const towers = Array.from(byTower.entries()).sort(([a], [b]) => a - b);
+
+                      return (
+                        <div className="mt-3 space-y-2">
+                          {towers.map(([towerId, apts]) => (
+                            <div key={towerId} className="flex flex-wrap items-center gap-2">
+                              <span className="px-2 py-1 rounded-md text-[10px] font-black bg-alcabama-black text-white">
+                                T{towerId}
+                              </span>
+                              {apts.slice(0, 30).map((apt) => (
+                                <span
+                                  key={`${towerId}-${apt}`}
+                                  className="px-2 py-1 rounded-md text-[10px] font-bold bg-white border border-alcabama-light-grey text-alcabama-dark-grey"
+                                >
+                                  {apt}
+                                </span>
+                              ))}
+                              {apts.length > 30 && (
+                                <span className="px-2 py-1 rounded-md text-[10px] font-bold bg-white border border-alcabama-light-grey text-alcabama-grey">
+                                  +{apts.length - 30} más
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
 
               {/* Legend */}
               <div className="flex flex-wrap items-center gap-4 mb-8 bg-alcabama-light-grey/5 p-4 rounded-xl border border-alcabama-light-grey/20">
@@ -728,6 +1222,7 @@ export default function App() {
                     tower={tower} 
                     onApartmentClick={(apt) => setEditingApartment({ towerId: tower.id, apartment: apt })}
                     statusFilter={statusFilter}
+                    weeklyGoalDateFilter={weeklyGoalDateFilter}
                   />
                 ))}
               </div>
@@ -807,6 +1302,16 @@ export default function App() {
                   <div className="w-4 h-4 bg-orange-500 rounded-full" />
                   <span className="text-sm font-medium text-alcabama-dark-grey group-hover:text-orange-700">Escriturado</span>
                 </button>
+
+                <div className="w-full flex items-center justify-between gap-4 px-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Fecha meta semanal</span>
+                  <input
+                    type="date"
+                    value={weeklyGoalDateInput}
+                    onChange={(e) => setWeeklyGoalDateInput(e.target.value)}
+                    className="h-9 rounded-lg border border-alcabama-light-grey px-3 text-xs text-alcabama-dark-grey"
+                  />
+                </div>
 
                 <button 
                   onClick={() => handleStatusChange('weekly_goal')}
