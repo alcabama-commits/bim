@@ -4,6 +4,7 @@ export interface SheetData {
   towerId: number | string;
   aptNumber: string;
   status: string;
+  weeklyGoalDate?: string | null;
 }
 
 export const fetchSheetData = async (): Promise<SheetData[]> => {
@@ -25,7 +26,7 @@ export const fetchSheetData = async (): Promise<SheetData[]> => {
   }
 };
 
-export const updateSheetStatus = async (towerId: number, aptNumber: string, status: string): Promise<boolean> => {
+export const updateSheetStatus = async (towerId: number, aptNumber: string, status: string, weeklyGoalDate?: string | null): Promise<boolean> => {
   if (!API_CONFIG.scriptUrl) {
     console.warn('Google Apps Script URL not configured. Change not saved to sheet.');
     return true; // Simulate success so UI updates even without backend
@@ -43,7 +44,8 @@ export const updateSheetStatus = async (towerId: number, aptNumber: string, stat
         action: 'update',
         towerId,
         aptNumber,
-        status
+        status,
+        weeklyGoalDate: status === 'weekly_goal' ? (weeklyGoalDate ?? null) : null
       })
     });
 

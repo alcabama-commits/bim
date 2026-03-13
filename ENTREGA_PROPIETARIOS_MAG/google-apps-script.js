@@ -37,9 +37,9 @@ function handleRequest(e) {
       }
 
       // Actualizar estado de un apartamento
-      const { towerId, aptNumber, status } = params;
+      const { towerId, aptNumber, status, weeklyGoalDate } = params;
       if (towerId && aptNumber && status) {
-        updateApartmentStatus(sheet, towerId, aptNumber, status);
+        updateApartmentStatus(sheet, towerId, aptNumber, status, weeklyGoalDate);
         return responseJSON({ success: true });
       }
     }
@@ -59,17 +59,18 @@ function getAllData(sheet) {
   const lastRow = sheet.getLastRow();
   if (lastRow <= 1) return []; // Solo encabezados o vacía
   
-  const data = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+  const data = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
   // Mapeamos a un formato fácil de consumir
-  // Estructura esperada por el frontend: array de objetos { towerId, aptNumber, status }
+  // Estructura esperada por el frontend: array de objetos { towerId, aptNumber, status, weeklyGoalDate? }
   return data.map(row => ({
     towerId: row[0],
     aptNumber: row[1],
-    status: row[2]
+    status: row[2],
+    weeklyGoalDate: row[2] === 'weekly_goal' ? (row[4] || null) : null
   }));
 }
 
-function updateApartmentStatus(sheet, towerId, aptNumber, status) {
+function updateApartmentStatus(sheet, towerId, aptNumber, status, weeklyGoalDate) {
   const lastRow = sheet.getLastRow();
   const data = sheet.getRange(2, 1, lastRow - 1, 2).getValues(); // Leemos solo columnas Torre y Apto
   
@@ -88,9 +89,10 @@ function updateApartmentStatus(sheet, towerId, aptNumber, status) {
     // Actualizar existente
     sheet.getRange(rowIndex, 3).setValue(status);
     sheet.getRange(rowIndex, 4).setValue(new Date()); // Timestamp
+    sheet.getRange(rowIndex, 5).setValue(status === 'weekly_goal' ? (weeklyGoalDate || '') : '');
   } else {
     // Si no existe (no debería pasar si está inicializado, pero por seguridad)
-    sheet.appendRow([towerId, aptNumber, status, new Date()]);
+    sheet.appendRow([towerId, aptNumber, status, new Date(), status === 'weekly_goal' ? (weeklyGoalDate || '') : '']);
   }
 }
 
@@ -113,7 +115,7 @@ function setupSheet(force = false) {
   }
   
   // Encabezados
-  sheet.getRange(1, 1, 1, 4).setValues([['Torre', 'Apartamento', 'Estado', 'Última Actualización']]);
+  sheet.getRange(1, 1, 1, 5).setValues([['Torre', 'Apartamento', 'Estado', 'Última Actualización', 'Fecha Meta Semanal']]);
   sheet.setFrozenRows(1);
   
   // Generar datos iniciales (Estructura base)
@@ -134,13 +136,13 @@ function setupSheet(force = false) {
           status = 'special';
         }
         
-        data.push([t, aptNumber, status, new Date()]);
+        data.push([t, aptNumber, status, new Date(), '']);
       }
     }
   }
   
   // Escribir en lotes para mejorar rendimiento
   if (data.length > 0) {
-    sheet.getRange(2, 1, data.length, 4).setValues(data);
+    sheet.getRange(2, 1, data.length, 5).setValues(data);
   }
 }
