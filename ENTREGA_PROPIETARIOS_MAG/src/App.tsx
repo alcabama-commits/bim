@@ -484,7 +484,37 @@ export default function App() {
   const weeklyGoalTimeline = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
 
-    const isISODate = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+    const normalizeToISODate = (v: unknown): string | null => {
+      if (!v) return null;
+
+      if (v instanceof Date && !Number.isNaN(v.getTime())) {
+        return v.toISOString().slice(0, 10);
+      }
+
+      if (typeof v !== 'string') return null;
+
+      const s = v.trim();
+      if (!s) return null;
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+      const isoDateTime = s.match(/^(\d{4}-\d{2}-\d{2})[T ]/);
+      if (isoDateTime) return isoDateTime[1];
+
+      const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (dmy) {
+        const [, dd, mm, yyyy] = dmy;
+        return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+      }
+
+      const parsed = new Date(s);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toISOString().slice(0, 10);
+      }
+
+      return null;
+    };
+
     const addDaysISO = (iso: string, days: number) => {
       const d = new Date(`${iso}T00:00:00`);
       d.setDate(d.getDate() + days);
@@ -498,9 +528,9 @@ export default function App() {
           towerId: tower.id,
           towerName: tower.name,
           aptNumber: a.number,
-          date: a.weeklyGoalDate ?? null
+          date: normalizeToISODate(a.weeklyGoalDate)
         }))
-        .filter(i => isISODate(i.date))
+        .filter(i => i.date !== null)
     );
 
     const byDate = new Map<string, typeof scheduled>();
@@ -517,7 +547,7 @@ export default function App() {
       });
     }
 
-    const anchor = isISODate(timelineDateFilter) ? timelineDateFilter : today;
+    const anchor = normalizeToISODate(timelineDateFilter) ?? today;
     const start = addDaysISO(anchor, -6);
 
     const days = Array.from({ length: 13 }, (_, i) => {
@@ -535,12 +565,64 @@ export default function App() {
       };
     });
 
-    const selectedDate = isISODate(timelineDateFilter) ? timelineDateFilter : today;
+    const selectedDate = normalizeToISODate(timelineDateFilter) ?? today;
+
+    const getWeekStartISO = (iso: string) => {
+      const d = new Date(`${iso}T00:00:00`);
+      const day = d.getDay();
+      const offset = (day + 6) % 7;
+      return addDaysISO(iso, -offset);
+    };
+
+    const weekStart = getWeekStartISO(today);
+    const weekEnd = addDaysISO(weekStart, 6);
+    const weekDays = Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i));
+
+    const thisWeek = weekDays
+      .filter(d => d !== today)
+      .map(d => ({ date: d, items: byDate.get(d) ?? [] }))
+      .filter(d => d.items.length > 0);
+
+    const upcoming = Array.from(byDate.entries())
+      .filter(([d]) => d > weekEnd)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .flatMap(([, items]) => items);
+
+    const upcomingWeeksMap = new Map<string, typeof scheduled>();
+    for (const [d, items] of byDate.entries()) {
+      if (d <= weekEnd) continue;
+      const wk = getWeekStartISO(d);
+      const current = upcomingWeeksMap.get(wk);
+      if (current) current.push(...items);
+      else upcomingWeeksMap.set(wk, [...items]);
+    }
+
+    for (const items of upcomingWeeksMap.values()) {
+      items.sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        if (a.towerId !== b.towerId) return a.towerId - b.towerId;
+        return a.aptNumber.localeCompare(b.aptNumber);
+      });
+    }
+
+    const upcomingWeeks = Array.from(upcomingWeeksMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(0, 4)
+      .map(([wkStart, items]) => ({
+        weekStart: wkStart,
+        weekEnd: addDaysISO(wkStart, 6),
+        items
+      }));
 
     return {
       total: scheduled.length,
       today,
       selectedDate,
+      weekStart,
+      weekEnd,
+      thisWeek,
+      upcoming,
+      upcomingWeeks,
       days,
       byDate
     };
@@ -852,6 +934,12 @@ export default function App() {
                 </div>
 
                 <div className="mt-5">
+                  {weeklyGoalTimeline.total === 0 && (
+                    <div className="mb-6 rounded-xl border border-alcabama-light-grey/50 bg-alcabama-light-grey/5 p-4 text-sm text-alcabama-grey">
+                      No hay apartamentos en Lista meta semanal con fecha asignada. Recuerda que los que no tienen fecha no aparecen en la línea de tiempo.
+                    </div>
+                  )}
+
                   <div className="flex items-start justify-between gap-2">
                     {weeklyGoalTimeline.days.map((day) => {
                       const isSelected = weeklyGoalTimeline.selectedDate === day.date;
@@ -871,7 +959,7 @@ export default function App() {
                           className="flex-1 flex flex-col items-center gap-2"
                         >
                           <div className="min-h-[64px] w-full flex flex-col items-center justify-end gap-1">
-                            {day.items.slice(0, 3).map((item) => (
+                            {day.items.slice(0, 5).map((item) => (
                               <button
                                 key={`${day.date}-${item.towerId}-${item.aptNumber}`}
                                 type="button"
@@ -882,9 +970,9 @@ export default function App() {
                                 T{item.towerId}-{item.aptNumber}
                               </button>
                             ))}
-                            {day.items.length > 3 && (
+                            {day.items.length > 5 && (
                               <div className={`w-full max-w-[64px] px-1.5 py-1 rounded-md border bg-white text-[9px] font-black text-alcabama-grey ${boxBorder}`}>
-                                +{day.items.length - 3}
+                                +{day.items.length - 5}
                               </div>
                             )}
                           </div>
@@ -902,6 +990,111 @@ export default function App() {
                         </div>
                       );
                     })}
+                  </div>
+
+                  <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div className="rounded-xl border border-alcabama-light-grey/50 bg-white p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Hoy</div>
+                        <div className="text-xs font-bold text-alcabama-black">
+                          {weeklyGoalTimeline.byDate.get(weeklyGoalTimeline.today)?.length ?? 0}
+                        </div>
+                      </div>
+                      <div className="text-xs text-alcabama-grey mt-1">{weeklyGoalTimeline.today}</div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {(weeklyGoalTimeline.byDate.get(weeklyGoalTimeline.today) ?? []).slice(0, 20).map((item) => (
+                          <button
+                            key={`today-${item.towerId}-${item.aptNumber}`}
+                            type="button"
+                            onClick={() => showTimelineItemInTower(item.towerId, weeklyGoalTimeline.today)}
+                            className="px-2 py-1 rounded-md text-[10px] font-black bg-red-600 text-white hover:bg-red-700 transition-colors"
+                            title={`Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                          >
+                            T{item.towerId}-{item.aptNumber}
+                          </button>
+                        ))}
+                        {(weeklyGoalTimeline.byDate.get(weeklyGoalTimeline.today) ?? []).length === 0 && (
+                          <div className="text-sm text-alcabama-grey">No hay entregas para hoy.</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-alcabama-light-grey/50 bg-white p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Esta semana</div>
+                        <div className="text-xs font-bold text-alcabama-black">
+                          {weeklyGoalTimeline.thisWeek.reduce((acc, d) => acc + d.items.length, 0)}
+                        </div>
+                      </div>
+                      <div className="text-xs text-alcabama-grey mt-1">{weeklyGoalTimeline.weekStart} → {weeklyGoalTimeline.weekEnd}</div>
+                      <div className="mt-3 space-y-3">
+                        {weeklyGoalTimeline.thisWeek.length === 0 ? (
+                          <div className="text-sm text-alcabama-grey">No hay más entregas programadas esta semana.</div>
+                        ) : (
+                          weeklyGoalTimeline.thisWeek.map((d) => (
+                            <div key={`wk-${d.date}`}>
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs font-bold text-alcabama-black">{d.date}</div>
+                                <div className="text-xs text-alcabama-grey">{d.items.length}</div>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {d.items.slice(0, 20).map((item) => (
+                                  <button
+                                    key={`${d.date}-${item.towerId}-${item.aptNumber}`}
+                                    type="button"
+                                    onClick={() => showTimelineItemInTower(item.towerId, d.date)}
+                                    className="px-2 py-1 rounded-md text-[10px] font-black bg-alcabama-pink text-white hover:opacity-90 transition-opacity"
+                                    title={`Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                                  >
+                                    T{item.towerId}-{item.aptNumber}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-alcabama-light-grey/50 bg-white p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Próximas</div>
+                        <div className="text-xs font-bold text-alcabama-black">{weeklyGoalTimeline.upcoming.length}</div>
+                      </div>
+                      <div className="text-xs text-alcabama-grey mt-1">Próximas semanas</div>
+                      <div className="mt-3 space-y-3">
+                        {weeklyGoalTimeline.upcomingWeeks.length === 0 ? (
+                          <div className="text-sm text-alcabama-grey">No hay entregas programadas para las próximas semanas.</div>
+                        ) : (
+                          weeklyGoalTimeline.upcomingWeeks.map((w) => (
+                            <div key={`up-${w.weekStart}`} className="rounded-lg border border-alcabama-light-grey/40 bg-alcabama-light-grey/5 p-3">
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs font-bold text-alcabama-black">{w.weekStart} → {w.weekEnd}</div>
+                                <div className="text-xs text-alcabama-grey">{w.items.length}</div>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {w.items.slice(0, 24).map((item) => (
+                                  <button
+                                    key={`up-${item.date}-${item.towerId}-${item.aptNumber}`}
+                                    type="button"
+                                    onClick={() => showTimelineItemInTower(item.towerId, item.date)}
+                                    className="px-2 py-1 rounded-md text-[10px] font-black bg-white border border-alcabama-light-grey text-alcabama-dark-grey hover:border-alcabama-pink transition-colors"
+                                    title={`${item.date} • Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                                  >
+                                    {item.date.slice(8, 10)}/{item.date.slice(5, 7)} T{item.towerId}-{item.aptNumber}
+                                  </button>
+                                ))}
+                                {w.items.length > 24 && (
+                                  <div className="px-2 py-1 rounded-md text-[10px] font-black bg-white border border-alcabama-light-grey text-alcabama-grey">
+                                    +{w.items.length - 24}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="relative mt-3">
