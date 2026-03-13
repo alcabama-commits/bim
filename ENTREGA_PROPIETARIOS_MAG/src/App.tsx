@@ -184,6 +184,7 @@ const TowerCard = ({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -4 }}
+      data-tower-id={tower.id}
       className={`bg-white rounded-xl shadow-lg overflow-hidden border border-alcabama-light-grey flex flex-col ${statusFilter && filteredCount === 0 ? 'opacity-40' : ''}`}
     >
       <div className="bg-alcabama-black text-white py-2 px-4 text-center font-bold text-sm tracking-wider">
@@ -422,6 +423,20 @@ export default function App() {
     }
   };
 
+  const showTimelineItemInTower = (towerId: number, date: string) => {
+    setTimelineDateFilter(date);
+    setStatusFilter('weekly_goal');
+    setWeeklyGoalDateFilter(date);
+    setSearchTerm(`TORRE ${towerId}`);
+
+    window.setTimeout(() => {
+      const el = document.querySelector(`[data-tower-id="${towerId}"]`);
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
+  };
+
   const handleEnableEditMode = () => {
     setShowPasswordModal(true);
     setPassword('');
@@ -493,6 +508,13 @@ export default function App() {
       const current = byDate.get(item.date);
       if (current) current.push(item);
       else byDate.set(item.date, [item]);
+    }
+
+    for (const items of byDate.values()) {
+      items.sort((a, b) => {
+        if (a.towerId !== b.towerId) return a.towerId - b.towerId;
+        return a.aptNumber.localeCompare(b.aptNumber);
+      });
     }
 
     const anchor = isISODate(timelineDateFilter) ? timelineDateFilter : today;
@@ -836,21 +858,48 @@ export default function App() {
                       const labelClass = isSelected
                         ? 'bg-alcabama-pink text-white border-alcabama-pink'
                         : 'bg-alcabama-light-grey/10 text-alcabama-dark-grey border-alcabama-light-grey/40';
+                      const boxBorder =
+                        day.kind === 'overdue'
+                          ? 'border-red-600/50 hover:border-red-600'
+                          : day.kind === 'today'
+                            ? 'border-orange-500/50 hover:border-orange-500'
+                            : 'border-alcabama-pink/40 hover:border-alcabama-pink';
 
                       return (
-                        <button
+                        <div
                           key={day.date}
-                          type="button"
-                          onClick={() => setTimelineDateFilter(day.date)}
                           className="flex-1 flex flex-col items-center gap-2"
                         >
-                          <div className={`w-10 h-10 rounded-md border flex items-center justify-center text-xs font-black tracking-wider ${labelClass}`}>
-                            {day.indexLabel}
+                          <div className="min-h-[64px] w-full flex flex-col items-center justify-end gap-1">
+                            {day.items.slice(0, 3).map((item) => (
+                              <button
+                                key={`${day.date}-${item.towerId}-${item.aptNumber}`}
+                                type="button"
+                                onClick={() => showTimelineItemInTower(item.towerId, day.date)}
+                                className={`w-full max-w-[64px] px-1.5 py-1 rounded-md border bg-white text-[9px] font-black text-alcabama-dark-grey shadow-sm ${boxBorder} ${isSelected ? 'ring-1 ring-alcabama-pink/40' : ''}`}
+                                title={`Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                              >
+                                T{item.towerId}-{item.aptNumber}
+                              </button>
+                            ))}
+                            {day.items.length > 3 && (
+                              <div className={`w-full max-w-[64px] px-1.5 py-1 rounded-md border bg-white text-[9px] font-black text-alcabama-grey ${boxBorder}`}>
+                                +{day.items.length - 3}
+                              </div>
+                            )}
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => setTimelineDateFilter(day.date)}
+                            className={`w-10 h-10 rounded-md border flex items-center justify-center text-xs font-black tracking-wider ${labelClass}`}
+                            aria-label={`Seleccionar día ${day.date}`}
+                          >
+                            {day.indexLabel}
+                          </button>
                           <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">
                             {day.date.slice(8, 10)}/{day.date.slice(5, 7)}
                           </div>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -883,11 +932,6 @@ export default function App() {
                             aria-label={`Día ${day.date}`}
                           >
                             <span className={`rounded-full border ${dotClass} ${sizeClass}`} />
-                            {hasItems && (
-                              <span className={`absolute -top-1 text-[10px] font-black ${isSelected ? 'text-alcabama-black' : 'text-alcabama-grey'}`}>
-                                {day.items.length}
-                              </span>
-                            )}
                           </button>
                         );
                       })}
