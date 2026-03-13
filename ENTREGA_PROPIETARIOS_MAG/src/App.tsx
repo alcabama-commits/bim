@@ -268,6 +268,7 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<Status | null>(null);
   const [weeklyGoalDateFilter, setWeeklyGoalDateFilter] = useState<string | null>(null);
   const [weeklyGoalDateInput, setWeeklyGoalDateInput] = useState(() => new Date().toISOString().slice(0, 10));
+  const [timelineDateFilter, setTimelineDateFilter] = useState<string | null>(null);
   // activeTab removed
   const [allTowers, setAllTowers] = useState<Tower[]>(() => generateStructure());
   const [editingApartment, setEditingApartment] = useState<{ towerId: number, apartment: Apartment } | null>(null);
@@ -464,6 +465,53 @@ export default function App() {
       percentage: Math.round((ownerDelivered / total) * 100)
     };
   }, [allTowers]);
+
+  const weeklyGoalTimeline = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const items = allTowers.flatMap(tower =>
+      tower.apartments
+        .filter(a => a.status === 'weekly_goal')
+        .map(a => ({
+          towerId: tower.id,
+          towerName: tower.name,
+          aptNumber: a.number,
+          date: a.weeklyGoalDate ?? null
+        }))
+    );
+
+    const filtered = timelineDateFilter ? items.filter(i => i.date === timelineDateFilter) : items;
+
+    const groupsMap = new Map<string, typeof filtered>();
+    for (const item of filtered) {
+      const key = item.date ?? '__NO_DATE__';
+      const current = groupsMap.get(key);
+      if (current) current.push(item);
+      else groupsMap.set(key, [item]);
+    }
+
+    const groups = Array.from(groupsMap.entries()).map(([key, groupItems]) => {
+      const date = key === '__NO_DATE__' ? null : key;
+      const kind =
+        !date ? 'no_date' :
+        date < today ? 'overdue' :
+        date === today ? 'today' :
+        'upcoming';
+
+      return { date, kind, items: groupItems };
+    });
+
+    groups.sort((a, b) => {
+      if (a.date === null && b.date === null) return 0;
+      if (a.date === null) return 1;
+      if (b.date === null) return -1;
+      return a.date.localeCompare(b.date);
+    });
+
+    return {
+      total: items.length,
+      groups
+    };
+  }, [allTowers, timelineDateFilter]);
 
   const pieData = [
     { name: 'Propietario', value: stats.ownerDelivered, color: '#2563eb' },
@@ -738,6 +786,137 @@ export default function App() {
                   </button>
                 </div>
               )}
+
+              <div className="mb-8 bg-white rounded-xl shadow-sm border border-alcabama-light-grey p-6">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Línea de tiempo</div>
+                    <div className="text-xs text-alcabama-dark-grey mt-1">
+                      Entregas pendientes (Lista meta semanal): <strong className="font-bold">{weeklyGoalTimeline.total}</strong>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Fecha</span>
+                      <input
+                        type="date"
+                        value={timelineDateFilter ?? ''}
+                        onChange={(e) => setTimelineDateFilter(e.target.value ? e.target.value : null)}
+                        className="h-9 rounded-lg border border-alcabama-light-grey px-3 text-xs text-alcabama-dark-grey"
+                      />
+                    </div>
+                    {timelineDateFilter && (
+                      <button
+                        type="button"
+                        onClick={() => setTimelineDateFilter(null)}
+                        className="h-9 px-3 rounded-lg border border-alcabama-light-grey text-[10px] font-bold uppercase tracking-wider text-alcabama-grey hover:text-alcabama-black transition-colors"
+                      >
+                        Quitar
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter('weekly_goal');
+                        setWeeklyGoalDateFilter(timelineDateFilter);
+                      }}
+                      className="h-9 px-3 rounded-lg bg-alcabama-black text-white text-[10px] font-bold uppercase tracking-wider hover:bg-black transition-colors"
+                    >
+                      Ver en torres
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-4">
+                  {weeklyGoalTimeline.groups.length === 0 ? (
+                    <div className="text-sm text-alcabama-grey">No hay entregas pendientes en Lista meta semanal.</div>
+                  ) : (
+                    weeklyGoalTimeline.groups.map((group) => {
+                      const badgeClass =
+                        group.kind === 'overdue'
+                          ? 'bg-red-600 text-white'
+                          : group.kind === 'today'
+                            ? 'bg-orange-500 text-white'
+                            : group.kind === 'upcoming'
+                              ? 'bg-green-500 text-white'
+                              : 'bg-gray-100 text-alcabama-dark-grey border border-alcabama-light-grey';
+
+                      const badgeLabel =
+                        group.kind === 'overdue'
+                          ? 'Vencida'
+                          : group.kind === 'today'
+                            ? 'Hoy'
+                            : group.kind === 'upcoming'
+                              ? 'Próxima'
+                              : 'Sin fecha';
+
+                      const header = (
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${badgeClass}`}>
+                              {badgeLabel}
+                            </span>
+                            <div className="text-sm font-bold text-alcabama-black">
+                              {group.date ?? 'Sin fecha'}
+                            </div>
+                            <div className="text-xs text-alcabama-grey">
+                              {group.items.length} aptos
+                            </div>
+                          </div>
+                          {group.date && (
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">
+                              Filtrar
+                            </div>
+                          )}
+                        </div>
+                      );
+
+                      const body = (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {group.items.slice(0, 24).map(item => (
+                            <span
+                              key={`${item.towerId}-${item.aptNumber}`}
+                              className="px-2 py-1 rounded-md text-[10px] font-bold bg-alcabama-light-grey/5 border border-alcabama-light-grey/30 text-alcabama-dark-grey"
+                            >
+                              T{item.towerId}-{item.aptNumber}
+                            </span>
+                          ))}
+                          {group.items.length > 24 && (
+                            <span className="px-2 py-1 rounded-md text-[10px] font-bold bg-white border border-alcabama-light-grey text-alcabama-grey">
+                              +{group.items.length - 24} más
+                            </span>
+                          )}
+                        </div>
+                      );
+
+                      if (!group.date) {
+                        return (
+                          <div key="__NO_DATE__" className="rounded-xl border border-alcabama-light-grey/50 bg-alcabama-light-grey/5 p-4">
+                            {header}
+                            {body}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <button
+                          key={group.date}
+                          type="button"
+                          onClick={() => {
+                            setTimelineDateFilter(group.date);
+                            setStatusFilter('weekly_goal');
+                            setWeeklyGoalDateFilter(group.date);
+                          }}
+                          className="w-full text-left rounded-xl border border-alcabama-light-grey/50 bg-white hover:bg-alcabama-light-grey/5 transition-colors p-4"
+                        >
+                          {header}
+                          {body}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
 
               {/* Legend */}
               <div className="flex flex-wrap items-center gap-4 mb-8 bg-alcabama-light-grey/5 p-4 rounded-xl border border-alcabama-light-grey/20">
