@@ -61,7 +61,7 @@ function getAllData(sheet) {
     towerId: row[0],
     aptNumber: row[1],
     status: row[2],
-    weeklyGoalDate: row[2] === 'weekly_goal' ? (row[4] || null) : null
+    weeklyGoalDate: row[4] || null
   }));
 }
 
