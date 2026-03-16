@@ -936,7 +936,9 @@ export default function App() {
                 <div className="mt-5">
                   {weeklyGoalTimeline.total === 0 && (
                     <div className="mb-6 rounded-xl border border-alcabama-light-grey/50 bg-alcabama-light-grey/5 p-4 text-sm text-alcabama-grey">
-                      No hay apartamentos en Lista meta semanal con fecha asignada. Recuerda que los que no tienen fecha no aparecen en la línea de tiempo.
+                      {stats.weeklyGoal > 0
+                        ? `Se detectaron ${stats.weeklyGoal} apartamentos en Lista meta semanal, pero ninguno llega con “Fecha Meta Semanal” desde Google Sheets. Esto pasa cuando el Apps Script desplegado aún no está devolviendo esa columna.`
+                        : 'No hay apartamentos en Lista meta semanal con fecha asignada. Recuerda que los que no tienen fecha no aparecen en la línea de tiempo.'}
                     </div>
                   )}
 
