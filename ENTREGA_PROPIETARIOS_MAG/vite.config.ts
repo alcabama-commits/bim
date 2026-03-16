@@ -9,7 +9,7 @@ export default defineConfig(({mode}) => {
     plugins: [react(), tailwindcss()],
     base: './', // Ensures relative paths for GitHub Pages
     build: {
-      outDir: '../docs/ENTREGA_PROPIETARIOS_MAG', // Deploys to docs/ENTREGA_PROPIETARIOS_MAG for GitHub Pages
+      outDir: 'docs',
       emptyOutDir: true,
     },
     define: {
