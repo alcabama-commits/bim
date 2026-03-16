@@ -292,9 +292,21 @@ export default function App() {
           setAllTowers(prevTowers => {
             // Create a map for faster lookup: "towerId-aptNumber" -> status
             const statusMap = new Map<string, { status: Status; weeklyGoalDate?: string | null }>();
+            const normalizeStatus = (raw: unknown): Status => {
+              const s = String(raw ?? '').trim().toLowerCase();
+              if (s === 'weekly_goal' || s === 'lista meta semanal') return 'weekly_goal';
+              if (s === 'owner_delivered' || s === 'entregado a propietario') return 'owner_delivered';
+              if (s === 'post_construction_delivered' || s === 'entregado a post construcción' || s === 'entregado a post construccion') return 'post_construction_delivered';
+              if (s === 'notarized' || s === 'escriturado') return 'notarized';
+              if (s === 'under_construction' || s === 'en obra') return 'under_construction';
+              if (s === 'special' || s === 'área especial' || s === 'area especial') return 'special';
+              return 'in_process';
+            };
             data.forEach(item => {
-              const status = item.status as Status;
-              statusMap.set(`${item.towerId}-${item.aptNumber}`, {
+              const status = normalizeStatus(item.status);
+              const towerId = Number(item.towerId);
+              const aptNumber = String(item.aptNumber).trim();
+              statusMap.set(`${towerId}-${aptNumber}`, {
                 status,
                 weeklyGoalDate: (item as SheetData).weeklyGoalDate ?? null
               });

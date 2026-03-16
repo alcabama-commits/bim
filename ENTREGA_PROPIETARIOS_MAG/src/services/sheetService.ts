@@ -14,7 +14,12 @@ export const fetchSheetData = async (): Promise<SheetData[]> => {
   }
 
   try {
-    const response = await fetch(API_CONFIG.scriptUrl);
+    const cacheBustedUrl =
+      API_CONFIG.scriptUrl.includes('?')
+        ? `${API_CONFIG.scriptUrl}&_ts=${Date.now()}`
+        : `${API_CONFIG.scriptUrl}?_ts=${Date.now()}`;
+
+    const response = await fetch(cacheBustedUrl, { cache: 'no-store' });
     if (!response.ok) throw new Error('Network response was not ok');
     
     const data = await response.json();

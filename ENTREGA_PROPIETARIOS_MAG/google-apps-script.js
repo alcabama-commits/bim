@@ -25,6 +25,8 @@ function handleRequest(e) {
       setupSheet();
       sheet = ss.getSheetByName(SHEET_NAME);
     }
+    
+    ensureSheetSchema(sheet);
 
     // Si es una petición POST (Actualización)
     if (e.postData) {
@@ -101,6 +103,16 @@ function responseJSON(data) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+function ensureSheetSchema(sheet) {
+  const headers = sheet.getRange(1, 1, 1, 5).getValues()[0];
+  const expected = ['Torre', 'Apartamento', 'Estado', 'Última Actualización', 'Fecha Meta Semanal'];
+  const needsUpdate = expected.some((v, i) => String(headers[i] ?? '').trim() !== v);
+  if (!needsUpdate) return;
+
+  sheet.getRange(1, 1, 1, 5).setValues([expected]);
+  sheet.setFrozenRows(1);
+}
+
 function setupSheet(force = false) {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   let sheet = ss.getSheetByName(SHEET_NAME);
@@ -110,8 +122,11 @@ function setupSheet(force = false) {
   } else if (force) {
     sheet.clear();
   } else {
-    // Si ya existe y no forzamos, revisamos si tiene datos
-    if (sheet.getLastRow() > 1) return;
+    // Si ya existe y no forzamos, no borramos datos: solo garantizamos el esquema/encabezados
+    if (sheet.getLastRow() > 1) {
+      ensureSheetSchema(sheet);
+      return;
+    }
   }
   
   // Encabezados
