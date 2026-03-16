@@ -1,4 +1,4 @@
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwODJYKce6AASehEt4KTqfyHtrvcL9gtEB7Y9U_HW99oHUvFQAMNiaAYcg6w8cGyDgQ/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzrbdeSInP7WWXpQMiKmdFTjRzJfeQ_3faNuuEO5pE790uOmbPbpP_SjRnxUVRhwa6b/exec';
 
 export const API_CONFIG = {
   scriptUrl: SCRIPT_URL,
