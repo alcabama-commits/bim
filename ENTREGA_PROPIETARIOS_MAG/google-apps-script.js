@@ -18,14 +18,7 @@ function handleRequest(e) {
   
   try {
     const ss = SpreadsheetApp.openById(SHEET_ID);
-    let sheet = ss.getSheetByName(SHEET_NAME);
-    
-    // Si la hoja no existe, la creamos y configuramos
-    if (!sheet) {
-      setupSheet();
-      sheet = ss.getSheetByName(SHEET_NAME);
-    }
-    
+    const sheet = getDataSheet(ss);
     ensureSheetSchema(sheet);
 
     // Si es una petición POST (Actualización)
@@ -101,6 +94,28 @@ function updateApartmentStatus(sheet, towerId, aptNumber, status, weeklyGoalDate
 function responseJSON(data) {
   return ContentService.createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function getDataSheet(ss) {
+  const explicit = ss.getSheetByName(SHEET_NAME);
+  if (explicit) return explicit;
+
+  const sheets = ss.getSheets();
+  for (let i = 0; i < sheets.length; i++) {
+    const sheet = sheets[i];
+    const headerRow = sheet.getRange(1, 1, 1, Math.min(10, sheet.getMaxColumns())).getValues()[0];
+    const header = headerRow.map(v => String(v ?? '').trim().toLowerCase());
+    const hasCoreHeaders =
+      header.includes('torre') &&
+      header.includes('apartamento') &&
+      header.includes('estado');
+    if (hasCoreHeaders) return sheet;
+  }
+
+  if (sheets.length > 0) return sheets[0];
+
+  setupSheet();
+  return ss.getSheetByName(SHEET_NAME);
 }
 
 function ensureSheetSchema(sheet) {
