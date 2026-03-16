@@ -17,6 +17,37 @@ import { API_CONFIG } from './config';
 type Status = 'owner_delivered' | 'post_construction_delivered' | 'notarized' | 'weekly_goal' | 'in_process' | 'special' | 'under_construction';
 type Tab = 'towers' | 'charts';
 
+const normalizeToISODate = (v: unknown): string | null => {
+  if (!v) return null;
+
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    return v.toISOString().slice(0, 10);
+  }
+
+  if (typeof v !== 'string') return null;
+
+  const s = v.trim();
+  if (!s) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  const isoDateTime = s.match(/^(\d{4}-\d{2}-\d{2})[T ]/);
+  if (isoDateTime) return isoDateTime[1];
+
+  const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmy) {
+    const [, dd, mm, yyyy] = dmy;
+    return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+  }
+
+  const parsed = new Date(s);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  return null;
+};
+
 const getStatusLabel = (status: Status) => {
   switch (status) {
     case 'owner_delivered': return 'Entregado a propietario';
@@ -279,7 +310,7 @@ export default function App() {
     if (!editingApartment) return;
     const d = editingApartment.apartment.weeklyGoalDate;
     const fallback = new Date().toISOString().slice(0, 10);
-    setWeeklyGoalDateInput(typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : fallback);
+    setWeeklyGoalDateInput(normalizeToISODate(d) ?? fallback);
   }, [editingApartment]);
 
   // Load data from Google Sheets
@@ -308,7 +339,7 @@ export default function App() {
               const aptNumber = String(item.aptNumber).trim();
               statusMap.set(`${towerId}-${aptNumber}`, {
                 status,
-                weeklyGoalDate: (item as SheetData).weeklyGoalDate ?? null
+                weeklyGoalDate: normalizeToISODate((item as SheetData).weeklyGoalDate) ?? null
               });
             });
             
@@ -495,37 +526,6 @@ export default function App() {
 
   const weeklyGoalTimeline = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
-
-    const normalizeToISODate = (v: unknown): string | null => {
-      if (!v) return null;
-
-      if (v instanceof Date && !Number.isNaN(v.getTime())) {
-        return v.toISOString().slice(0, 10);
-      }
-
-      if (typeof v !== 'string') return null;
-
-      const s = v.trim();
-      if (!s) return null;
-
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-
-      const isoDateTime = s.match(/^(\d{4}-\d{2}-\d{2})[T ]/);
-      if (isoDateTime) return isoDateTime[1];
-
-      const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-      if (dmy) {
-        const [, dd, mm, yyyy] = dmy;
-        return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
-      }
-
-      const parsed = new Date(s);
-      if (!Number.isNaN(parsed.getTime())) {
-        return parsed.toISOString().slice(0, 10);
-      }
-
-      return null;
-    };
 
     const addDaysISO = (iso: string, days: number) => {
       const d = new Date(`${iso}T00:00:00`);
