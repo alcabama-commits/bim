@@ -1,4 +1,5 @@
 const SPREADSHEET_ID = '1IYDpeHQU3TL9YhbjGd49suFObfVcRJhhiB0TqtxfgO4';
+const VERSION = '2026-03-17.1';
 
 const HEADERS = [
   'CÓDIGO',
@@ -11,6 +12,28 @@ const HEADERS = [
   'FORMATO',
   'OBSERVACIONES',
 ];
+
+function doGet(e) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = getTargetSheet_(spreadsheet, e && e.parameter ? e.parameter.projectName : undefined);
+    ensureSheetReady_(sheet);
+
+    const headers = sheet.getRange(1, 1, 1, HEADERS.length).getDisplayValues()[0];
+    return ContentService.createTextOutput(
+      JSON.stringify({ ok: true, version: VERSION, sheetName: sheet.getName(), headers }),
+    ).setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(
+      JSON.stringify({ ok: false, version: VERSION, error: String(error && error.stack ? error.stack : error) }),
+    ).setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
+  }
+}
 
 function doPost(e) {
   const lock = LockService.getScriptLock();
@@ -128,6 +151,7 @@ function ensureSheetReady_(sheet) {
 
   sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
   sheet.setFrozenRows(1);
+  SpreadsheetApp.flush();
 }
 
 function normalizeHeader_(value) {
