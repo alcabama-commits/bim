@@ -22,6 +22,14 @@ function doGet(e) {
     const sheet = getTargetSheet_(spreadsheet, e && e.parameter ? e.parameter.projectName : undefined);
     ensureSheetReady_(sheet);
 
+    const action = e && e.parameter ? String(e.parameter.action || '').trim() : '';
+    if (action === 'backfillCodes') {
+      const result = backfillCodes_(sheet);
+      return ContentService.createTextOutput(
+        JSON.stringify({ ok: true, version: VERSION, sheetName: sheet.getName(), action, result }),
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
     const headers = sheet.getRange(1, 1, 1, HEADERS.length).getDisplayValues()[0];
     return ContentService.createTextOutput(
       JSON.stringify({ ok: true, version: VERSION, sheetName: sheet.getName(), headers }),
@@ -163,23 +171,9 @@ function normalizeHeader_(value) {
 }
 
 function getNextCodigo_(sheet) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return '000';
-
-  const startRow = Math.max(2, lastRow - 2000);
-  const codes = sheet.getRange(startRow, 1, lastRow - startRow + 1, 1).getDisplayValues().flat();
-
-  for (let i = codes.length - 1; i >= 0; i--) {
-    const raw = String(codes[i] || '').trim();
-    if (!raw) continue;
-
-    const parsed = Number.parseInt(raw, 10);
-    if (!Number.isNaN(parsed)) {
-      return String(parsed + 1).padStart(3, '0');
-    }
-  }
-
-  return '000';
+  const maxCodigo = getMaxCodigo_(sheet);
+  if (maxCodigo === null) return '000';
+  return String(maxCodigo + 1).padStart(3, '0');
 }
 
 function buildRows_(payload, codigo, fecha) {
@@ -215,4 +209,86 @@ function buildRows_(payload, codigo, fecha) {
   });
 
   return rows;
+}
+
+function getMaxCodigo_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+
+  const startRow = Math.max(2, lastRow - 5000);
+  const codes = sheet.getRange(startRow, 1, lastRow - startRow + 1, 1).getDisplayValues().flat();
+
+  let maxCodigo = null;
+  for (let i = 0; i < codes.length; i++) {
+    const raw = String(codes[i] || '').trim();
+    if (!raw) continue;
+
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isNaN(parsed)) continue;
+
+    if (maxCodigo === null || parsed > maxCodigo) {
+      maxCodigo = parsed;
+    }
+  }
+
+  return maxCodigo;
+}
+
+function backfillCodes_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return { updatedRows: 0, startingFrom: '000', maxCodigo: null };
+  }
+
+  const values = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getDisplayValues();
+  let maxCodigo = getMaxCodigo_(sheet);
+  let nextCodigo = maxCodigo === null ? 0 : maxCodigo + 1;
+
+  const keyToCodigo = {};
+  let updatedRows = 0;
+
+  for (let i = 0; i < values.length; i++) {
+    const row = values[i];
+    const existing = String(row[0] || '').trim();
+
+    const fecha = String(row[1] || '').trim();
+    const tipo = String(row[2] || '').trim();
+    const responsable = String(row[3] || '').trim();
+    const proposito = String(row[4] || '').trim();
+    const especialidad = String(row[5] || '').trim();
+    const observaciones = String(row[8] || '').trim();
+
+    const key = [fecha, tipo, responsable, proposito, especialidad, observaciones].join('||');
+
+    if (existing) {
+      const parsed = Number.parseInt(existing, 10);
+      if (!Number.isNaN(parsed)) {
+        if (maxCodigo === null || parsed > maxCodigo) {
+          maxCodigo = parsed;
+          nextCodigo = parsed + 1;
+        }
+      }
+      continue;
+    }
+
+    if (!keyToCodigo[key]) {
+      keyToCodigo[key] = String(nextCodigo).padStart(3, '0');
+      nextCodigo += 1;
+    }
+
+    row[0] = keyToCodigo[key];
+    updatedRows += 1;
+  }
+
+  if (updatedRows > 0) {
+    const codes = values.map(r => [r[0]]);
+    sheet.getRange(2, 1, codes.length, 1).setValues(codes);
+    SpreadsheetApp.flush();
+  }
+
+  return {
+    updatedRows,
+    startingFrom: String(maxCodigo === null ? 0 : maxCodigo + 1).padStart(3, '0'),
+    maxCodigo,
+  };
 }
