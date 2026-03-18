@@ -44,7 +44,7 @@ function toErrorString(error: unknown) {
 
 async function getFragmentsWorkerUrl() {
   const res = await fetch(FRAGMENTS_WORKER_URL);
-  if (!res.ok) throw new Error(`Failed to download fragments worker (${res.status})`);
+  if (!res.ok) throw new Error(`No se pudo descargar el worker de fragments (${res.status})`);
   const workerBlob = await res.blob();
   const workerFile = new File([workerBlob], 'worker.mjs', { type: 'text/javascript' });
   return URL.createObjectURL(workerFile);
@@ -165,7 +165,7 @@ async function extractPropertiesJsonBlob(
 
     if (mode === 'all') {
       idsVec = (ifcApi as any).GetAllLines?.(modelID);
-      if (!idsVec) throw new Error('GetAllLines is not available in this WebIFC build');
+      if (!idsVec) throw new Error('GetAllLines no está disponible en esta versión de WebIFC');
       total = idsVec.size();
     } else {
       const ids = new Set<number>();
@@ -277,7 +277,7 @@ async function extractPropertiesJsonBlob(
 export default function App() {
   const [state, setState] = useState<ConversionState>({
     status: 'idle',
-    message: 'Ready to convert your IFC file.'
+    message: 'Listo para convertir tu archivo IFC.'
   });
 
   const [jsonMode, setJsonMode] = useState<JsonMode>('products');
@@ -330,14 +330,14 @@ export default function App() {
     if (!file.name.toLowerCase().endsWith('.ifc')) {
       setState({
         status: 'error',
-        message: 'Please select a valid .ifc file.'
+        message: 'Selecciona un archivo .ifc válido.'
       });
       return;
     }
 
     setState({
       status: 'loading',
-      message: 'Reading file...',
+      message: 'Leyendo archivo...',
       fileName: file.name.replace('.ifc', ''),
       progress: 2,
       errorDetails: undefined
@@ -348,26 +348,26 @@ export default function App() {
       reader.onload = async (e) => {
         try {
           const buffer = e.target?.result as ArrayBuffer;
-          if (!buffer) throw new Error('Failed to read file buffer');
+          if (!buffer) throw new Error('No se pudo leer el contenido del archivo');
 
           setState(prev => ({
             ...prev,
             status: 'converting',
-            message: 'Initializing engine...',
+            message: 'Inicializando motor...',
             progress: clampProgress(prev.progress ?? 0)
           }));
 
-          if (!initPromiseRef.current) throw new Error('Converter is not initialized yet');
+          if (!initPromiseRef.current) throw new Error('El convertidor aún no está inicializado');
           await initPromiseRef.current;
 
           const fragments = fragmentsRef.current;
           const loader = loaderRef.current;
-          if (!fragments || !loader) throw new Error('Converter engine is not ready');
+          if (!fragments || !loader) throw new Error('El motor del convertidor no está listo');
 
           const baseName = file.name.replace(/\.ifc$/i, '');
           const bytes = new Uint8Array(buffer);
 
-          setState(prev => ({ ...prev, message: 'Converting IFC to Fragments...', progress: 10 }));
+          setState(prev => ({ ...prev, message: 'Convirtiendo IFC a FRAG...', progress: 10 }));
 
           const model = await loader.load(bytes, true, baseName, {
             processData: {
@@ -382,20 +382,20 @@ export default function App() {
                   progress: clampProgress(overall),
                   message:
                     data.process === 'attributes'
-                      ? 'Converting (attributes)...'
+                      ? 'Convirtiendo (atributos)...'
                       : data.process === 'relations'
-                        ? 'Converting (relations)...'
-                        : 'Converting (geometry)...'
+                        ? 'Convirtiendo (relaciones)...'
+                        : 'Convirtiendo (geometría)...'
                 }));
               }
             }
           } as any);
 
-          setState(prev => ({ ...prev, message: 'Exporting .FRAG...', progress: 94 }));
+          setState(prev => ({ ...prev, message: 'Exportando .FRAG...', progress: 94 }));
           const fragBuffer = await model.getBuffer(false);
           const fragBlob = new Blob([new Uint8Array(fragBuffer)], { type: 'application/octet-stream' });
 
-          setState(prev => ({ ...prev, message: 'Building .JSON...', progress: 96 }));
+          setState(prev => ({ ...prev, message: 'Generando .JSON...', progress: 96 }));
 
           const jsonBlob = await extractPropertiesJsonBlob(bytes, jsonMode, {
             prettyJson,
@@ -407,7 +407,7 @@ export default function App() {
               const overall = 96 + (p / 100) * 4;
               setState(prev => ({
                 ...prev,
-                message: 'Building .JSON...',
+                message: 'Generando .JSON...',
                 progress: clampProgress(overall)
               }));
             }
@@ -416,7 +416,7 @@ export default function App() {
           setState(prev => ({
             ...prev,
             status: 'success',
-            message: 'Conversion complete!',
+            message: '¡Conversión completada!',
             progress: 100,
             fragBlob,
             jsonBlob,
@@ -428,7 +428,7 @@ export default function App() {
           setState(prev => ({
             ...prev,
             status: 'error',
-            message: 'Conversion failed.',
+            message: 'La conversión falló.',
             errorDetails: toErrorString(error)
           }));
         }
@@ -437,7 +437,7 @@ export default function App() {
       reader.onerror = () => {
         setState({
           status: 'error',
-          message: 'Error reading file.',
+          message: 'Error al leer el archivo.',
           errorDetails: toErrorString(reader.error)
         });
       };
@@ -447,7 +447,7 @@ export default function App() {
     } catch (error) {
       setState({
         status: 'error',
-        message: 'Conversion failed.',
+        message: 'La conversión falló.',
         errorDetails: toErrorString(error)
       });
     }
@@ -472,10 +472,10 @@ export default function App() {
         <header className="mb-12 border-b border-[#141414] pb-6">
           <div className="flex items-center gap-3 mb-2">
             <Box className="w-8 h-8" />
-            <h1 className="text-3xl font-bold tracking-tight uppercase">IFC to FRAG</h1>
+            <h1 className="text-3xl font-bold tracking-tight uppercase">IFC a FRAG</h1>
           </div>
           <p className="font-serif italic text-sm opacity-60">
-            High-performance BIM conversion utility for web visualization.
+            Utilidad de conversión BIM de alto rendimiento para visualización web.
           </p>
         </header>
 
@@ -489,8 +489,8 @@ export default function App() {
                   <FileUp className="w-8 h-8" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold uppercase">Upload IFC</h2>
-                  <p className="text-xs opacity-50 font-mono">Drag & drop or click to select</p>
+                  <h2 className="text-lg font-bold uppercase">Subir IFC</h2>
+                  <p className="text-xs opacity-50 font-mono">Arrastra y suelta o haz clic para seleccionar</p>
                 </div>
                 <input 
                   type="file" 
@@ -513,81 +513,81 @@ export default function App() {
             {/* Status Panel */}
             <div className="border border-[#141414] p-6 bg-white">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">System Status</span>
+                <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Estado del sistema</span>
                 <Terminal className="w-3 h-3 opacity-30" />
               </div>
 
               <div className="mb-4 flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">JSON Detail</span>
+                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Detalle JSON</span>
                   <select
                     value={jsonMode}
                     onChange={(e) => setJsonMode(e.target.value as JsonMode)}
                     className="h-8 border border-[#141414] px-2 text-[10px] font-mono bg-white"
                     disabled={state.status === 'loading' || state.status === 'converting'}
                   >
-                    <option value="products">Products</option>
-                    <option value="all">All</option>
+                    <option value="products">Productos</option>
+                    <option value="all">Todo</option>
                   </select>
                 </div>
 
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Pretty JSON</span>
+                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">JSON formateado</span>
                   <button
                     type="button"
                     onClick={() => setPrettyJson((v) => !v)}
                     className="h-8 border border-[#141414] px-2 text-[10px] font-mono bg-white"
                     disabled={state.status === 'loading' || state.status === 'converting'}
                   >
-                    {prettyJson ? 'ON' : 'OFF'}
+                    {prettyJson ? 'SÍ' : 'NO'}
                   </button>
                 </div>
 
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Include Psets</span>
+                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Incluir Psets</span>
                   <button
                     type="button"
                     onClick={() => setIncludePsets((v) => !v)}
                     className="h-8 border border-[#141414] px-2 text-[10px] font-mono bg-white"
                     disabled={state.status === 'loading' || state.status === 'converting'}
                   >
-                    {includePsets ? 'ON' : 'OFF'}
+                    {includePsets ? 'SÍ' : 'NO'}
                   </button>
                 </div>
 
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Include Spatial</span>
+                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Incluir espacial</span>
                   <button
                     type="button"
                     onClick={() => setIncludeSpatial((v) => !v)}
                     className="h-8 border border-[#141414] px-2 text-[10px] font-mono bg-white"
                     disabled={state.status === 'loading' || state.status === 'converting'}
                   >
-                    {includeSpatial ? 'ON' : 'OFF'}
+                    {includeSpatial ? 'SÍ' : 'NO'}
                   </button>
                 </div>
 
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Optimize All</span>
+                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Optimizar Todo</span>
                   <button
                     type="button"
                     onClick={() => setOptimizeAll((v) => !v)}
                     className="h-8 border border-[#141414] px-2 text-[10px] font-mono bg-white"
                     disabled={state.status === 'loading' || state.status === 'converting'}
                   >
-                    {optimizeAll ? 'ON' : 'OFF'}
+                    {optimizeAll ? 'SÍ' : 'NO'}
                   </button>
                 </div>
 
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Minimal Entity</span>
+                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Entidad mínima</span>
                   <button
                     type="button"
                     onClick={() => setMinimalEntity((v) => !v)}
                     className="h-8 border border-[#141414] px-2 text-[10px] font-mono bg-white"
                     disabled={state.status === 'loading' || state.status === 'converting'}
                   >
-                    {minimalEntity ? 'ON' : 'OFF'}
+                    {minimalEntity ? 'SÍ' : 'NO'}
                   </button>
                 </div>
               </div>
@@ -608,7 +608,7 @@ export default function App() {
                   {(state.status === 'loading' || state.status === 'converting') && typeof state.progress === 'number' && (
                     <div className="mt-3">
                       <div className="flex items-center justify-between text-[10px] font-mono opacity-60 mb-1">
-                        <span>PROGRESS</span>
+                        <span>PROGRESO</span>
                         <span>{Math.round(state.progress)}%</span>
                       </div>
                       <div className="w-full h-2 border border-[#141414]">
@@ -620,7 +620,7 @@ export default function App() {
                     </div>
                   )}
                   {state.fileName && (
-                    <p className="text-[10px] font-mono opacity-50">FILE: {state.fileName}.ifc</p>
+                    <p className="text-[10px] font-mono opacity-50">ARCHIVO: {state.fileName}.ifc</p>
                   )}
                   {state.status === 'error' && state.errorDetails && (
                     <pre className="mt-3 text-[10px] font-mono opacity-70 whitespace-pre-wrap break-words max-h-40 overflow-auto border border-[#141414] p-2">
@@ -636,7 +636,7 @@ export default function App() {
           <section className="space-y-6">
             <div className="border border-[#141414] p-6 bg-[#141414] text-[#E4E3E0] h-full flex flex-col">
               <div className="flex items-center justify-between mb-8">
-                <span className="text-[10px] font-mono uppercase tracking-widest">Output Assets</span>
+                <span className="text-[10px] font-mono uppercase tracking-widest">Archivos de salida</span>
                 <Database className="w-4 h-4" />
               </div>
 
@@ -655,8 +655,8 @@ export default function App() {
                       <div className="flex items-center gap-3">
                         <Box className="w-5 h-5" />
                         <div className="text-left">
-                          <p className="text-xs font-bold uppercase">Geometry Data</p>
-                          <p className="text-[10px] opacity-60 font-mono">.FRAG (Optimized Mesh)</p>
+                          <p className="text-xs font-bold uppercase">Datos de geometría</p>
+                          <p className="text-[10px] opacity-60 font-mono">.FRAG (malla optimizada)</p>
                         </div>
                       </div>
                       <Download className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
@@ -670,8 +670,8 @@ export default function App() {
                       <div className="flex items-center gap-3">
                         <FileJson className="w-5 h-5" />
                         <div className="text-left">
-                          <p className="text-xs font-bold uppercase">Properties Data</p>
-                          <p className="text-[10px] opacity-60 font-mono">.JSON (BIM Metadata)</p>
+                          <p className="text-xs font-bold uppercase">Datos de propiedades</p>
+                          <p className="text-[10px] opacity-60 font-mono">.JSON (metadatos BIM)</p>
                         </div>
                       </div>
                       <Download className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
@@ -679,14 +679,14 @@ export default function App() {
 
                     <div className="mt-8 pt-6 border-t border-[#E4E3E0]/20">
                       <p className="text-[10px] font-mono opacity-40 leading-relaxed">
-                        Assets are ready for integration. Use the .frag file for 3D rendering and the .json file for property management in your BIM viewer.
+                        Los archivos están listos para integrar. Usa el .frag para render 3D y el .json para gestión de propiedades en tu visor BIM.
                       </p>
                     </div>
                   </motion.div>
                 ) : (
                   <div className="flex-grow flex flex-col items-center justify-center text-center opacity-20 py-12">
                     <Database className="w-12 h-12 mb-4" />
-                    <p className="text-xs font-mono uppercase">Waiting for input...</p>
+                    <p className="text-xs font-mono uppercase">Esperando archivo...</p>
                   </div>
                 )}
               </AnimatePresence>
@@ -697,16 +697,16 @@ export default function App() {
         {/* Footer Info */}
         <footer className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 text-[10px] font-mono opacity-40 border-t border-[#141414] pt-8">
           <div>
-            <p className="font-bold uppercase mb-2">Technology</p>
-            <p>Powered by That Open Engine & Web-IFC. Optimized for high-performance web-based BIM visualization.</p>
+            <p className="font-bold uppercase mb-2">Tecnología</p>
+            <p>Impulsado por That Open Engine y Web-IFC. Optimizado para visualización BIM web de alto rendimiento.</p>
           </div>
           <div>
-            <p className="font-bold uppercase mb-2">Format Details</p>
-            <p>.FRAG is a binary format that stores geometry as fragments, allowing for massive model loading with minimal memory footprint.</p>
+            <p className="font-bold uppercase mb-2">Detalles del formato</p>
+            <p>.FRAG es un formato binario que guarda la geometría como fragmentos, permitiendo cargar modelos grandes con un uso mínimo de memoria.</p>
           </div>
           <div>
-            <p className="font-bold uppercase mb-2">Data Extraction</p>
-            <p>Properties are extracted directly from the IFC schema and mapped to a JSON structure compatible with standard BIM viewers.</p>
+            <p className="font-bold uppercase mb-2">Extracción de datos</p>
+            <p>Las propiedades se extraen directamente del esquema IFC y se mapean a una estructura JSON compatible con visores BIM estándar.</p>
           </div>
         </footer>
       </div>
