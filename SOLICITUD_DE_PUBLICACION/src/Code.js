@@ -35,18 +35,24 @@ function doPost(e) {
       lastRow = 1;
     }
 
-    // 3. Generar código automático (000, 001, 002...)
-    var nextId = "000";
-    if (lastRow > 1) {
-      // Obtenemos el valor de la primera columna (CÓDIGO) de la última fila
-      var lastId = sheet.getRange(lastRow, 1).getValue();
-      var num = parseInt(lastId, 10);
+    // 3. Generar código automático (000, 001, 002...) de forma robusta
+    var nextId;
+    if (lastRow < 2) { // Si solo hay encabezado o la hoja está vacía
+      nextId = "000";
+    } else {
+      // Obtenemos todos los valores de la columna de CÓDIGO para encontrar el máximo
+      var codeValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      var maxNum = -1;
       
-      if (!isNaN(num)) {
-        var nextNum = num + 1;
-        // Formatear a 3 dígitos (rellenar con ceros a la izquierda)
-        nextId = nextNum.toString().padStart(3, '0');
-      }
+      codeValues.forEach(function(row) {
+        var num = parseInt(row[0], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      });
+      
+      var nextNum = maxNum + 1;
+      nextId = nextNum.toString().padStart(3, '0');
     }
 
     // 4. Parsear los datos recibidos del formulario
@@ -91,6 +97,8 @@ function doPost(e) {
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
+    // Es útil registrar el error para verlo en los logs de Apps Script
+    Logger.log(error.toString());
     return ContentService.createTextOutput(JSON.stringify({"result": "error", "message": error.toString()}))
       .setMimeType(ContentService.MimeType.JSON);
   } finally {
