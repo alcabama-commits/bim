@@ -91,7 +91,7 @@ async function extractPropertiesJson(bytes: Uint8Array, mode: JsonMode) {
         try {
           const line = ifcApi.GetLine(modelID, id, false);
           if (!line) continue;
-          const entity: Record<string, any> = { ...line };
+          const entity: Record<string, any> = pickEntityFields(line);
           const typeCode = (line as any).type;
           if (typeof typeCode === 'number') {
             const typeName = ifcApi.GetNameFromTypeCode(typeCode);
@@ -138,7 +138,8 @@ export default function App() {
     message: 'Ready to convert your IFC file.'
   });
 
-  const jsonMode: JsonMode = 'all';
+  const [jsonMode, setJsonMode] = useState<JsonMode>('products');
+  const [prettyJson, setPrettyJson] = useState<boolean>(true);
 
   const componentsRef = useRef<OBC.Components | null>(null);
   const fragmentsRef = useRef<OBC.FragmentsManager | null>(null);
@@ -251,7 +252,24 @@ export default function App() {
           setState(prev => ({ ...prev, message: 'Building .JSON...', progress: 96 }));
 
           const properties = await extractPropertiesJson(bytes, jsonMode);
-          const jsonBlob = new Blob([JSON.stringify(properties, null, 2)], { type: 'application/json' });
+          let jsonText: string;
+          try {
+            jsonText = JSON.stringify(properties, null, prettyJson ? 2 : undefined);
+          } catch (error) {
+            try {
+              jsonText = JSON.stringify(properties);
+              setState(prev => ({
+                ...prev,
+                message: 'JSON is too large to pretty-print; generated compact JSON instead.',
+                progress: clampProgress(prev.progress ?? 0)
+              }));
+            } catch (fallbackError) {
+              throw new Error(
+                `Failed to serialize JSON (too large for browser memory). Try exporting only products or use the Node converter. Details: ${toErrorString(fallbackError)}`
+              );
+            }
+          }
+          const jsonBlob = new Blob([jsonText], { type: 'application/json' });
 
           setState(prev => ({
             ...prev,
@@ -355,6 +373,33 @@ export default function App() {
               <div className="flex items-center justify-between mb-4">
                 <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">System Status</span>
                 <Terminal className="w-3 h-3 opacity-30" />
+              </div>
+
+              <div className="mb-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">JSON Detail</span>
+                  <select
+                    value={jsonMode}
+                    onChange={(e) => setJsonMode(e.target.value as JsonMode)}
+                    className="h-8 border border-[#141414] px-2 text-[10px] font-mono bg-white"
+                    disabled={state.status === 'loading' || state.status === 'converting'}
+                  >
+                    <option value="products">Products</option>
+                    <option value="all">All</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Pretty JSON</span>
+                  <button
+                    type="button"
+                    onClick={() => setPrettyJson((v) => !v)}
+                    className="h-8 border border-[#141414] px-2 text-[10px] font-mono bg-white"
+                    disabled={state.status === 'loading' || state.status === 'converting'}
+                  >
+                    {prettyJson ? 'ON' : 'OFF'}
+                  </button>
+                </div>
               </div>
               
               <div className="flex items-start gap-3">
