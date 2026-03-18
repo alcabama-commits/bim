@@ -6,13 +6,13 @@ import * as FRAGS from '@thatopen/fragments';
 import { BIMElement } from '../types';
 import { Box, Loader2 } from 'lucide-react';
 
-const FRAGMENTS_WORKER_URL = 'https://unpkg.com/@thatopen/fragments@3.3.6/dist/fragments-worker.js';
+const FRAGMENTS_WORKER_URL = 'https://thatopen.github.io/engine_fragment/resources/worker.mjs';
 
 async function getFragmentsWorkerUrl() {
   const res = await fetch(FRAGMENTS_WORKER_URL);
   if (!res.ok) throw new Error(`No se pudo descargar el worker de fragments (${res.status})`);
   const blob = await res.blob();
-  const file = new File([blob], 'fragments-worker.js', { type: 'text/javascript' });
+  const file = new File([blob], 'worker.mjs', { type: 'text/javascript' });
   return URL.createObjectURL(file);
 }
 
