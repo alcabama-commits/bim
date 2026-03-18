@@ -91,10 +91,8 @@ async function extractPropertiesJson(bytes: Uint8Array, mode: JsonMode) {
         try {
           const line = ifcApi.GetLine(modelID, id, false);
           if (!line) continue;
-          const entity = pickEntityFields(line);
-          if (typeof (line as any).type === 'number') {
-            entity.ifcType = ifcApi.GetNameFromTypeCode((line as any).type);
-          }
+          const entity: Record<string, any> = { ...line };
+          if (typeof (line as any).type === 'number') entity.ifcType = ifcApi.GetNameFromTypeCode((line as any).type);
           out[String(id)] = entity;
         } catch {
         }
@@ -130,7 +128,7 @@ export default function App() {
     message: 'Ready to convert your IFC file.'
   });
 
-  const jsonMode: JsonMode = 'products';
+  const jsonMode: JsonMode = 'all';
 
   const componentsRef = useRef<OBC.Components | null>(null);
   const fragmentsRef = useRef<OBC.FragmentsManager | null>(null);
@@ -242,13 +240,8 @@ export default function App() {
 
           setState(prev => ({ ...prev, message: 'Building .JSON...', progress: 96 }));
 
-          const modelAny = model as any;
-          const propsFromLoader = modelAny?.properties;
-          const properties =
-            propsFromLoader && typeof propsFromLoader === 'object' && Object.keys(propsFromLoader).length > 0
-              ? propsFromLoader
-              : await extractPropertiesJson(bytes, jsonMode);
-          const jsonBlob = new Blob([JSON.stringify(properties)], { type: 'application/json' });
+          const properties = await extractPropertiesJson(bytes, jsonMode);
+          const jsonBlob = new Blob([JSON.stringify(properties, null, 2)], { type: 'application/json' });
 
           setState(prev => ({
             ...prev,
