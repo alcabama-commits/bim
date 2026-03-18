@@ -106,6 +106,43 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
     };
 
     const setupFragmentEvents = () => {
+      const list: Map<string, any> | undefined = (fragments as any).list;
+
+      const getAllModels = () => Array.from(list?.values?.() ?? []);
+
+      const getModelById = (id: string) => {
+        if (!id) return undefined;
+        const direct = list?.get?.(id);
+        if (direct) return direct;
+
+        for (const m of getAllModels()) {
+          const keys = [m?.uuid, m?.id, m?.modelId].filter(Boolean).map(String);
+          if (keys.includes(String(id))) return m;
+        }
+        return undefined;
+      };
+
+      const getWorld = () => {
+        const worlds = components.get(OBC.Worlds);
+        return Array.from(worlds.list.values())[0] as any;
+      };
+
+      const fitToVisible = () => {
+        const w = getWorld();
+        if (!w?.camera?.hasCameraControls?.()) return;
+        const box = new THREE.Box3();
+        let hasMeshes = false;
+        w.scene.three.traverse((obj: any) => {
+          if (obj?.isMesh && obj.visible) {
+            box.expandByObject(obj);
+            hasMeshes = true;
+          }
+        });
+        if (hasMeshes && !box.isEmpty()) {
+          w.camera.controls.fitToBox(box, true);
+        }
+      };
+
       // Suscribirse a eventos de selección
       if (highlighter.events.select) {
         highlighter.events.select.onHighlight.add(async (modelIdMap) => {
@@ -113,11 +150,8 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
           const itemIds = modelIdMap[modelId];
           const itemId = Array.from(itemIds)[0];
           
-          const model = (fragments as any).groups.get(modelId);
-          if (model) {
-            // En v3, los datos se obtienen de forma diferente o se asumen del ID
-            onElementSelect(itemId.toString());
-          }
+          getModelById(modelId);
+          onElementSelect(itemId.toString());
         });
 
         highlighter.events.select.onClear.add(() => {
@@ -138,14 +172,7 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
             onElementSelect(null);
             break;
           case 'f':
-            if (world.camera.hasCameraControls()) {
-              const models = Array.from((fragments as any).groups.values()) as any[];
-              if (models.length > 0) {
-                const fragmentIdMap = (fragments as any).getFragmentIdMap(models.map(m => Array.from(m.items.keys())).flat());
-                const bbox = (fragments as any).getBoundingBox(fragmentIdMap);
-                world.camera.controls.fitToBox(bbox, true);
-              }
-            }
+            fitToVisible();
             break;
         }
       };
@@ -153,11 +180,7 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
       window.addEventListener('keydown', handleKeyDown);
       (components as any)._shortcutsCleanup = () => window.removeEventListener('keydown', handleKeyDown);
       
-      // Listeners de carga de fragmentos (v3)
-      fragments.onFragmentsLoaded.add((model) => {
-        console.log("Modelo cargado:", model.uuid);
-        world.scene.three.add(model);
-      });
+      void getAllModels();
     };
 
     initFragments();
@@ -192,74 +215,27 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
     const fragments = componentsRef.current.get(OBC.FragmentsManager);
     
     const updateVisibility = async () => {
-      if ((fragments as any).groups.size === 0) return;
+      const list: Map<string, any> | undefined = (fragments as any).list;
+      const models = Array.from(list?.values?.() ?? []);
+      if (models.length === 0) return;
 
-      // Determine which elements should be visible
-      let visibleElements = elements;
-      
-      // If isolation mode is active and there is a selection, show only the selection
+      for (const model of models) {
+        const obj = model?.object ?? model;
+        if (obj) obj.visible = true;
+      }
+
       const hasSelection = selectedElementId || (selectedElementIds && selectedElementIds.length > 0);
-      if (isIsolateMode && hasSelection) {
-        const selectionSet = new Set(selectedElementIds || (selectedElementId ? [selectedElementId] : []));
-        visibleElements = elements.filter(el => selectionSet.has(el.id));
-      }
+      if (!isIsolateMode || !hasSelection) return;
 
-      if (visibleElements.length === 0) {
-        for (const [, model] of (fragments as any).groups) {
-          (model as any).visible = false;
-        }
-        return;
-      }
+      const selectionSet = new Set(selectedElementIds || (selectedElementId ? [selectedElementId] : []));
+      const visibleElements = elements.filter(el => selectionSet.has(el.id));
+      const visibleModelIds = new Set(visibleElements.map(el => String(el.modelId)).filter(Boolean));
+      if (visibleModelIds.size === 0) return;
 
-      // Group visible IDs by model
-      const modelIdToLocalIds: Record<string, number[]> = {};
-      visibleElements.forEach(el => {
-        if (el.modelId && el.localId !== undefined) {
-          if (!modelIdToLocalIds[el.modelId]) {
-            modelIdToLocalIds[el.modelId] = [];
-          }
-          modelIdToLocalIds[el.modelId].push(el.localId);
-        }
-      });
-
-      for (const [modelId, model] of (fragments as any).groups) {
-        const visibleLocalIds = modelIdToLocalIds[modelId] || [];
-        
-        if (visibleLocalIds.length === 0) {
-          (model as any).visible = false;
-        } else {
-          (model as any).visible = true;
-          // En v3, setVisibility se maneja diferente o se asume visibilidad de fragmentos
-          // Para simplificar, si hay elementos visibles, mostramos el modelo
-          // En una implementación real, filtraríamos fragmentos específicos
-          // En v3, FragmentGroup tiene un método setVisibility
-          try {
-            (model as any).setVisibility(true, visibleLocalIds);
-          } catch (e) {
-            // Fallback si no existe
-          }
-        }
-      }
-      
-      // Automatic zoom to visible elements
-      const worlds = componentsRef.current!.get(OBC.Worlds);
-      const world = Array.from(worlds.list.values())[0] as any;
-      if (world && world.camera && world.camera.hasCameraControls()) {
-        const finalFragmentIdMap: Record<string, Set<number>> = {};
-        for (const [modelId, model] of (fragments as any).groups) {
-          const localIds = modelIdToLocalIds[modelId] || [];
-          if (localIds.length > 0) {
-            const fragmentIdMap = (model as any).getFragmentIdMap(localIds);
-            for (const fragId in fragmentIdMap) {
-              if (!finalFragmentIdMap[fragId]) finalFragmentIdMap[fragId] = new Set();
-              fragmentIdMap[fragId].forEach(id => finalFragmentIdMap[fragId].add(id));
-            }
-          }
-        }
-        if (Object.keys(finalFragmentIdMap).length > 0) {
-          const bbox = (fragments as any).getBoundingBox(finalFragmentIdMap);
-          world.camera.controls.fitToBox(bbox, true);
-        }
+      for (const model of models) {
+        const key = String(model?.uuid || model?.id || model?.modelId || '');
+        const obj = model?.object ?? model;
+        if (obj) obj.visible = visibleModelIds.has(key);
       }
     };
 
@@ -313,7 +289,13 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
       // Para cada modelo, obtener el FragmentIdMap real (mapeo de fragmentos internos)
       console.log("Modelos involucrados:", Object.keys(modelIdToLocalIds));
         for (const modelId in modelIdToLocalIds) {
-        const model = (fragments as any).groups.get(modelId);
+        const list: Map<string, any> | undefined = (fragments as any).list;
+        const model =
+          list?.get?.(modelId) ??
+          Array.from(list?.values?.() ?? []).find((m: any) => {
+            const keys = [m?.uuid, m?.id, m?.modelId].filter(Boolean).map(String);
+            return keys.includes(String(modelId));
+          });
         if (model) {
           const localIds = Array.from(modelIdToLocalIds[modelId]);
           console.log(`Obteniendo FragmentIdMap para modelo ${modelId} con ${localIds.length} IDs locales.`);
@@ -335,11 +317,8 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
       // Si no encontramos nada con el mapeo rápido, intentamos la búsqueda lenta (fallback)
       if (!foundAny) {
         console.log("Buscando elementos manualmente (lento)...");
-        for (const [modelId, model] of (fragments as any).groups) {
-          const ids = Array.from((model as any).items.keys());
-          // En v3, itemsData se obtiene de forma diferente si es necesario
-          // Por ahora, asumimos que localId es el ExpressID
-        }
+        const list: Map<string, any> | undefined = (fragments as any).list;
+        void Array.from(list?.values?.() ?? []);
       }
 
       if (foundAny) {
@@ -389,34 +368,20 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
         <button 
           onClick={() => {
             if (componentsRef.current && elements.length > 0) {
-              const fragments = componentsRef.current.get(OBC.FragmentsManager);
               const worlds = componentsRef.current.get(OBC.Worlds);
               const world = Array.from(worlds.list.values())[0] as any;
               
               if (world && world.camera && "hasCameraControls" in world.camera && world.camera.hasCameraControls()) {
-                const modelIdToLocalIds: Record<string, number[]> = {};
-                elements.forEach(el => {
-                  if (el.modelId && el.localId !== undefined) {
-                    if (!modelIdToLocalIds[el.modelId]) modelIdToLocalIds[el.modelId] = [];
-                    modelIdToLocalIds[el.modelId].push(el.localId);
+                const box = new THREE.Box3();
+                let hasMeshes = false;
+                world.scene.three.traverse((obj: any) => {
+                  if (obj?.isMesh && obj.visible) {
+                    box.expandByObject(obj);
+                    hasMeshes = true;
                   }
                 });
-
-                const finalFragmentIdMap: Record<string, Set<number>> = {};
-                for (const [modelId, model] of fragments.groups) {
-                  const localIds = modelIdToLocalIds[modelId] || [];
-                  if (localIds.length > 0) {
-                    const fragmentIdMap = model.getFragmentIdMap(localIds);
-                    for (const fragId in fragmentIdMap) {
-                      if (!finalFragmentIdMap[fragId]) finalFragmentIdMap[fragId] = new Set();
-                      fragmentIdMap[fragId].forEach(id => finalFragmentIdMap[fragId].add(id));
-                    }
-                  }
-                }
-
-                if (Object.keys(finalFragmentIdMap).length > 0) {
-                  const bbox = fragments.getBounds(finalFragmentIdMap);
-                  world.camera.controls.fitToBox(bbox, true);
+                if (hasMeshes && !box.isEmpty()) {
+                  world.camera.controls.fitToBox(box, true);
                 }
               }
             }

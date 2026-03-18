@@ -272,7 +272,7 @@ export default function App() {
           volume: volume,
           unit: 'm³',
           properties: { ...data, ...integratedProps },
-          modelId: model.id,
+          modelId: model.uuid || model.id || model.modelId,
           localId: localId
         });
 
