@@ -20,6 +20,19 @@ const PRIORITY_PROPS = [
   "CLASIFICACIÓN"
 ];
 
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
 export default function App() {
   const [elements, setElements] = useState<BIMElement[]>([]);
   const [summaries, setSummaries] = useState<CategorySummary[]>([]);
@@ -293,7 +306,7 @@ export default function App() {
     const fragments = componentsRef.current.get(OBC.FragmentsManager);
     
     // En v3, usamos fragments.list y fragments.core.disposeModel()
-    const modelIds = Array.from(fragments.list.keys());
+    const modelIds = Array.from((fragments as any).list?.keys?.() ?? []);
     for (const id of modelIds) {
       await fragments.core.disposeModel(id);
     }
@@ -523,11 +536,18 @@ export default function App() {
             await new Promise(resolve => setTimeout(resolve, 500));
             attempts++;
           }
+          if (!fragments.initialized) {
+            throw new Error("No se pudo inicializar FragmentsManager. Revisa la carga del worker.");
+          }
         }
 
         const buffer = await fragFile.arrayBuffer();
         const data = new Uint8Array(buffer);
-        const model = await fragments.core.load(data, { modelId: fragFile.name });
+        const model = await withTimeout<any>(
+          fragments.core.load(data, { modelId: fragFile.name }),
+          60000,
+          "Tiempo de espera agotado cargando el archivo .frag"
+        );
         
         if (model) {
           const worlds = componentsRef.current.get(OBC.Worlds);

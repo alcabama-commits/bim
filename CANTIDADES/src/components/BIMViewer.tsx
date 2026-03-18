@@ -6,6 +6,16 @@ import * as FRAGS from '@thatopen/fragments';
 import { BIMElement } from '../types';
 import { Box, Loader2 } from 'lucide-react';
 
+const FRAGMENTS_WORKER_URL = 'https://unpkg.com/@thatopen/fragments@3.3.6/dist/fragments-worker.js';
+
+async function getFragmentsWorkerUrl() {
+  const res = await fetch(FRAGMENTS_WORKER_URL);
+  if (!res.ok) throw new Error(`No se pudo descargar el worker de fragments (${res.status})`);
+  const blob = await res.blob();
+  const file = new File([blob], 'fragments-worker.js', { type: 'text/javascript' });
+  return URL.createObjectURL(file);
+}
+
 interface BIMViewerProps {
   onModelLoaded: (components: OBC.Components) => void;
   elements: BIMElement[];
@@ -19,6 +29,7 @@ interface BIMViewerProps {
 export default function BIMViewer({ onModelLoaded, elements, selectedElementId, selectedElementIds, onElementSelect, isLoading, isIsolateMode }: BIMViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const componentsRef = useRef<OBC.Components | null>(null);
+  const workerUrlRef = useRef<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
@@ -71,8 +82,9 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
       
       console.log("Iniciando FragmentsManager...");
       try {
-        // Usar worker compatible con v3
-        fragments.init("https://unpkg.com/@thatopen/fragments@3.3.6/dist/fragments-worker.js"); 
+        const workerUrl = await getFragmentsWorkerUrl();
+        workerUrlRef.current = workerUrl;
+        await fragments.init(workerUrl);
         console.log("FragmentsManager inicializado.");
         setIsInitialized(true);
         
@@ -168,6 +180,7 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
       window.removeEventListener('resize', handleResize);
       resizeObserver.disconnect();
       if ((components as any)._shortcutsCleanup) (components as any)._shortcutsCleanup();
+      if (workerUrlRef.current) URL.revokeObjectURL(workerUrlRef.current);
       components.dispose();
     };
   }, []);
