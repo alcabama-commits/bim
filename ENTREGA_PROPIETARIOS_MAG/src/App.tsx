@@ -533,6 +533,13 @@ export default function App() {
       return d.toISOString().slice(0, 10);
     };
 
+    const getDayOfWeekLabel = (iso: string) => {
+      const d = new Date(`${iso}T00:00:00`);
+      const day = d.getDay();
+      const labels = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'];
+      return labels[day] ?? '';
+    };
+
     const scheduled = allTowers.flatMap(tower =>
       tower.apartments
         .filter(a => a.status === 'weekly_goal')
@@ -570,7 +577,7 @@ export default function App() {
         'upcoming';
 
       return {
-        indexLabel: String(i).padStart(2, '0'),
+        indexLabel: getDayOfWeekLabel(date),
         date,
         kind,
         items: byDate.get(date) ?? []
