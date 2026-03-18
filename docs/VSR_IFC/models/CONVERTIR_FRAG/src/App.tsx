@@ -76,60 +76,202 @@ function pickEntityFields(entity: any) {
   return keep;
 }
 
-async function extractPropertiesJson(bytes: Uint8Array, mode: JsonMode) {
+function getIfcValue(val: any) {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'object' && 'value' in val) return (val as any).value;
+  return val;
+}
+
+function getIfcString(line: any, propName: string) {
+  if (!line || !line[propName]) return null;
+  return getIfcValue(line[propName]);
+}
+
+function shouldKeepType(typeName: string, optimizeAll: boolean) {
+  if (!optimizeAll) return true;
+  const EXCLUDE_TYPES_PATTERN =
+    /POINT|DIRECTION|PLACEMENT|SHAPE|SOLID|FACE|LOOP|VERTEX|EDGE|CURVE|SURFACE|VECTOR|STYLE|COLOR|COLOUR|CONTEXT|REPRESENTATION|UNIT|MEASURE|DIMENSION/;
+  const FORCE_KEEP_PATTERN = /PROPERTY|REL|QUANTITY|MATERIAL|TYPE|STYLE|PRESENTATION/;
+
+  const upperType = typeName.toUpperCase();
+  if (FORCE_KEEP_PATTERN.test(upperType)) return true;
+  if (
+    upperType.includes('PROJECT') ||
+    upperType.includes('SITE') ||
+    upperType.includes('BUILDING') ||
+    upperType.includes('STOREY')
+  ) {
+    return true;
+  }
+
+  return !EXCLUDE_TYPES_PATTERN.test(upperType);
+}
+
+async function buildRelDefinesByPropertiesMap(ifcApi: WEBIFC.IfcAPI, modelID: number) {
+  const relMap = new Map<number, number[]>();
+  const relLines = ifcApi.GetLineIDsWithType(modelID, WEBIFC.IFCRELDEFINESBYPROPERTIES);
+  const count = relLines.size();
+  for (let i = 0; i < count; i++) {
+    const id = relLines.get(i);
+    try {
+      const rel = ifcApi.GetLine(modelID, id, false);
+      if (!rel || !rel.RelatedObjects || !rel.RelatingPropertyDefinition) continue;
+
+      const psetId = getIfcValue(rel.RelatingPropertyDefinition);
+      if (typeof psetId !== 'number') continue;
+
+      for (const related of rel.RelatedObjects) {
+        const objId = getIfcValue(related);
+        if (typeof objId !== 'number') continue;
+        const list = relMap.get(objId);
+        if (list) list.push(psetId);
+        else relMap.set(objId, [psetId]);
+      }
+    } catch {
+    }
+  }
+  if ((relLines as any).delete) (relLines as any).delete();
+  return relMap;
+}
+
+async function extractPropertiesJsonBlob(
+  bytes: Uint8Array,
+  mode: JsonMode,
+  options: {
+    prettyJson: boolean;
+    includePsets: boolean;
+    optimizeAll: boolean;
+    includeSpatialInProducts: boolean;
+    minimalEntity: boolean;
+    onProgress?: (value: number) => void;
+  }
+) {
   const ifcApi = new WEBIFC.IfcAPI();
   ifcApi.SetWasmPath(WEB_IFC_WASM_PATH, true);
   await ifcApi.Init();
 
   const modelID = ifcApi.OpenModel(bytes);
-  const out: Record<string, any> = {};
+  const relMap = options.includePsets ? await buildRelDefinesByPropertiesMap(ifcApi, modelID) : null;
+  const parts: string[] = [];
+  const pretty = options.prettyJson;
+  let isFirst = true;
 
   try {
+    parts.push(pretty ? '{\n' : '{');
+
+    let idsVec: any | null = null;
+    let idsList: number[] | null = null;
+    let total = 0;
+
     if (mode === 'all') {
-      const maxId = ifcApi.GetMaxExpressID(modelID);
-      for (let id = 1; id <= maxId; id++) {
-        try {
-          const line = ifcApi.GetLine(modelID, id, false);
-          if (!line) continue;
-          const entity: Record<string, any> = pickEntityFields(line);
-          const typeCode = (line as any).type;
-          if (typeof typeCode === 'number') {
-            const typeName = ifcApi.GetNameFromTypeCode(typeCode);
-            entity.typeCode = typeCode;
-            entity.type = typeName;
-            entity.ifcType = typeName;
-          }
-          out[String(id)] = entity;
-        } catch {
-        }
-      }
+      idsVec = (ifcApi as any).GetAllLines?.(modelID);
+      if (!idsVec) throw new Error('GetAllLines is not available in this WebIFC build');
+      total = idsVec.size();
     } else {
-      const ids = ifcApi.GetLineIDsWithType(modelID, WEBIFC.IFCPRODUCT, true);
-      const count = ids.size();
-      for (let i = 0; i < count; i++) {
-        const id = ids.get(i);
-        try {
-          const line = ifcApi.GetLine(modelID, id, false);
-          if (!line) continue;
-          const entity: Record<string, any> = { ...line };
-          const typeCode = (line as any).type;
-          if (typeof typeCode === 'number') {
-            const typeName = ifcApi.GetNameFromTypeCode(typeCode);
-            entity.typeCode = typeCode;
-            entity.type = typeName;
-            entity.ifcType = typeName;
+      const ids = new Set<number>();
+      const addFrom = (vec: any) => {
+        const c = vec.size();
+        for (let i = 0; i < c; i++) ids.add(vec.get(i));
+        if (vec.delete) vec.delete();
+      };
+
+      addFrom(ifcApi.GetLineIDsWithType(modelID, WEBIFC.IFCPRODUCT, true));
+      if (options.includeSpatialInProducts) {
+        addFrom(ifcApi.GetLineIDsWithType(modelID, WEBIFC.IFCPROJECT, true));
+        addFrom(ifcApi.GetLineIDsWithType(modelID, WEBIFC.IFCSITE, true));
+        addFrom(ifcApi.GetLineIDsWithType(modelID, WEBIFC.IFCBUILDING, true));
+        addFrom(ifcApi.GetLineIDsWithType(modelID, WEBIFC.IFCBUILDINGSTOREY, true));
+      }
+
+      idsList = Array.from(ids);
+      total = idsList.length;
+    }
+
+    const pushEntity = (id: number, entity: Record<string, any>) => {
+      const key = JSON.stringify(String(id));
+      const value = JSON.stringify(entity, null, pretty ? 2 : undefined);
+      if (pretty) {
+        parts.push(isFirst ? `  ${key}: ${value}` : `,\n  ${key}: ${value}`);
+      } else {
+        parts.push(isFirst ? `${key}:${value}` : `,${key}:${value}`);
+      }
+      isFirst = false;
+    };
+
+    const extractAndPush = (id: number) => {
+      const line = ifcApi.GetLine(modelID, id, false);
+      if (!line) return;
+
+      const typeCode = (line as any).type;
+      if (typeof typeCode !== 'number') return;
+      const typeName = ifcApi.GetNameFromTypeCode(typeCode);
+      if (!typeName) return;
+      if (mode === 'all' && !shouldKeepType(typeName, options.optimizeAll)) return;
+
+      const baseEntity = options.minimalEntity ? pickEntityFields(line) : { ...line };
+      const entity: Record<string, any> = { ...baseEntity };
+      entity.typeCode = typeCode;
+      entity.type = typeName;
+      entity.ifcType = typeName;
+
+      if (relMap?.has(id)) {
+        const psetIds = relMap.get(id) ?? [];
+        const psets: Record<string, Record<string, any>> = {};
+        for (const psetId of psetIds) {
+          try {
+            const pset = ifcApi.GetLine(modelID, psetId, false);
+            if (!pset) continue;
+            const psetName = getIfcString(pset, 'Name') || `Pset_${psetId}`;
+            const props: Record<string, any> = {};
+            if (pset.HasProperties) {
+              for (const propRef of pset.HasProperties) {
+                const propId = getIfcValue(propRef);
+                if (typeof propId !== 'number') continue;
+                const prop = ifcApi.GetLine(modelID, propId, false);
+                if (prop && prop.Name && prop.NominalValue) {
+                  const propName = getIfcString(prop, 'Name');
+                  if (!propName) continue;
+                  props[propName] = getIfcValue(prop.NominalValue);
+                }
+              }
+            }
+            psets[String(psetName)] = props;
+          } catch {
           }
-          out[String(id)] = entity;
+        }
+        entity.psets = psets;
+      }
+
+      pushEntity(id, entity);
+    };
+
+    if (mode === 'all') {
+      for (let i = 0; i < total; i++) {
+        const id = idsVec.get(i);
+        try {
+          extractAndPush(id);
         } catch {
         }
+        if (options.onProgress && i % 250 === 0) options.onProgress(clampProgress((i / Math.max(1, total)) * 100));
       }
-      if ((ids as any).delete) (ids as any).delete();
+      if (idsVec.delete) idsVec.delete();
+    } else if (idsList) {
+      for (let i = 0; i < total; i++) {
+        const id = idsList[i];
+        try {
+          extractAndPush(id);
+        } catch {
+        }
+        if (options.onProgress && i % 250 === 0) options.onProgress(clampProgress((i / Math.max(1, total)) * 100));
+      }
     }
+
+    parts.push(pretty ? '\n}\n' : '}');
   } finally {
     ifcApi.CloseModel(modelID);
   }
 
-  return out;
+  return new Blob(parts, { type: 'application/json' });
 }
 
 export default function App() {
@@ -140,6 +282,10 @@ export default function App() {
 
   const [jsonMode, setJsonMode] = useState<JsonMode>('products');
   const [prettyJson, setPrettyJson] = useState<boolean>(true);
+  const [includePsets, setIncludePsets] = useState<boolean>(true);
+  const [includeSpatial, setIncludeSpatial] = useState<boolean>(true);
+  const [optimizeAll, setOptimizeAll] = useState<boolean>(true);
+  const [minimalEntity, setMinimalEntity] = useState<boolean>(false);
 
   const componentsRef = useRef<OBC.Components | null>(null);
   const fragmentsRef = useRef<OBC.FragmentsManager | null>(null);
@@ -251,25 +397,21 @@ export default function App() {
 
           setState(prev => ({ ...prev, message: 'Building .JSON...', progress: 96 }));
 
-          const properties = await extractPropertiesJson(bytes, jsonMode);
-          let jsonText: string;
-          try {
-            jsonText = JSON.stringify(properties, null, prettyJson ? 2 : undefined);
-          } catch (error) {
-            try {
-              jsonText = JSON.stringify(properties);
+          const jsonBlob = await extractPropertiesJsonBlob(bytes, jsonMode, {
+            prettyJson,
+            includePsets,
+            optimizeAll,
+            includeSpatialInProducts: includeSpatial,
+            minimalEntity,
+            onProgress: (p) => {
+              const overall = 96 + (p / 100) * 4;
               setState(prev => ({
                 ...prev,
-                message: 'JSON is too large to pretty-print; generated compact JSON instead.',
-                progress: clampProgress(prev.progress ?? 0)
+                message: 'Building .JSON...',
+                progress: clampProgress(overall)
               }));
-            } catch (fallbackError) {
-              throw new Error(
-                `Failed to serialize JSON (too large for browser memory). Try exporting only products or use the Node converter. Details: ${toErrorString(fallbackError)}`
-              );
             }
-          }
-          const jsonBlob = new Blob([jsonText], { type: 'application/json' });
+          });
 
           setState(prev => ({
             ...prev,
@@ -398,6 +540,54 @@ export default function App() {
                     disabled={state.status === 'loading' || state.status === 'converting'}
                   >
                     {prettyJson ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Include Psets</span>
+                  <button
+                    type="button"
+                    onClick={() => setIncludePsets((v) => !v)}
+                    className="h-8 border border-[#141414] px-2 text-[10px] font-mono bg-white"
+                    disabled={state.status === 'loading' || state.status === 'converting'}
+                  >
+                    {includePsets ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Include Spatial</span>
+                  <button
+                    type="button"
+                    onClick={() => setIncludeSpatial((v) => !v)}
+                    className="h-8 border border-[#141414] px-2 text-[10px] font-mono bg-white"
+                    disabled={state.status === 'loading' || state.status === 'converting'}
+                  >
+                    {includeSpatial ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Optimize All</span>
+                  <button
+                    type="button"
+                    onClick={() => setOptimizeAll((v) => !v)}
+                    className="h-8 border border-[#141414] px-2 text-[10px] font-mono bg-white"
+                    disabled={state.status === 'loading' || state.status === 'converting'}
+                  >
+                    {optimizeAll ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Minimal Entity</span>
+                  <button
+                    type="button"
+                    onClick={() => setMinimalEntity((v) => !v)}
+                    className="h-8 border border-[#141414] px-2 text-[10px] font-mono bg-white"
+                    disabled={state.status === 'loading' || state.status === 'converting'}
+                  >
+                    {minimalEntity ? 'ON' : 'OFF'}
                   </button>
                 </div>
               </div>
