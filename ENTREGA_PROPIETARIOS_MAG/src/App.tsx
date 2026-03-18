@@ -306,6 +306,13 @@ export default function App() {
   const [editingApartment, setEditingApartment] = useState<{ towerId: number, apartment: Apartment } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const clearAllFilters = () => {
+    setStatusFilter(null);
+    setWeeklyGoalDateFilter(null);
+    setSearchTerm('');
+    setTimelineDateFilter(new Date().toISOString().slice(0, 10));
+  };
+
   React.useEffect(() => {
     if (!editingApartment) return;
     const d = editingApartment.apartment.weeklyGoalDate;
@@ -689,7 +696,7 @@ export default function App() {
       {/* Secondary Header for Stats & Search */}
       <div className="bg-alcabama-light-grey/5 border-b border-alcabama-light-grey/20 py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="flex flex-col md:flex-row justify-start items-center gap-6">
             <div className="flex items-center gap-8">
               <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                 {/* Save Button */}
@@ -723,17 +730,6 @@ export default function App() {
                   {isEditMode ? 'Edición Activa' : 'Habilitar Edición'}
                 </button>
               </div>
-            </div>
-
-            <div className="relative w-full md:w-auto">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-alcabama-grey" size={14} />
-                <input 
-                  type="text" 
-                  placeholder="Buscar torre..."
-                  className="bg-white border border-alcabama-light-grey rounded-full py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-alcabama-pink transition-all w-full md:w-64 shadow-sm"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
             </div>
           </div>
         </div>
@@ -910,10 +906,7 @@ export default function App() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      setStatusFilter(null);
-                      setWeeklyGoalDateFilter(null);
-                    }}
+                    onClick={clearAllFilters}
                     className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey hover:text-alcabama-black transition-colors"
                   >
                     Quitar filtro
@@ -930,6 +923,16 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
+                    <div className="relative w-full sm:w-72">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-alcabama-grey" size={14} />
+                      <input
+                        type="text"
+                        placeholder="Buscar torre..."
+                        className="h-9 w-full rounded-full border border-alcabama-light-grey bg-white pl-10 pr-4 text-sm text-alcabama-dark-grey shadow-sm transition-all focus:outline-none focus:ring-1 focus:ring-alcabama-pink"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                    </div>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Fecha</span>
                       <input
