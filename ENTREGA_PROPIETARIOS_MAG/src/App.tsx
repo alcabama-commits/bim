@@ -657,7 +657,7 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col bg-alcabama-white">
+    <div className="min-h-screen flex flex-col bg-alcabama-white overflow-x-hidden">
       {/* Navigation / Header */}
       <header className="bg-white border-b border-alcabama-light-grey sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -691,13 +691,13 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-8">
-              <div className="hidden sm:flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                 {/* Save Button */}
                 {isEditMode && pendingChanges.size > 0 && (
                   <button
                     onClick={handleSaveChanges}
                     disabled={isSaving}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-blue-600 text-white shadow-lg shadow-blue-600/30 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed"
+                    className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-blue-600 text-white shadow-lg shadow-blue-600/30 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed w-full sm:w-auto"
                   >
                     {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                     {isSaving ? 'Guardando...' : `Guardar (${pendingChanges.size})`}
@@ -713,7 +713,7 @@ export default function App() {
                       handleEnableEditMode();
                     }
                   }}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                  className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all w-full sm:w-auto ${
                     isEditMode 
                       ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' 
                       : 'bg-white text-alcabama-grey border border-alcabama-light-grey hover:bg-alcabama-light-grey/10'
@@ -956,61 +956,60 @@ export default function App() {
                   {weeklyGoalTimeline.total === 0 && (
                     <div className="mb-6 rounded-xl border border-alcabama-light-grey/50 bg-alcabama-light-grey/5 p-4 text-sm text-alcabama-grey">
                       {stats.weeklyGoal > 0
-                        ? `Se detectaron ${stats.weeklyGoal} apartamentos en Lista meta semanal, pero ninguno llega con “Fecha Meta Semanal” desde Google Sheets. Esto pasa cuando el Apps Script desplegado aún no está devolviendo esa columna.`
+                        ? `Se detectaron ${stats.weeklyGoal} entregas sin fecha definida.`
                         : 'No hay apartamentos en Lista meta semanal con fecha asignada. Recuerda que los que no tienen fecha no aparecen en la línea de tiempo.'}
                     </div>
                   )}
 
-                  <div className="flex items-start justify-between gap-2">
-                    {weeklyGoalTimeline.days.map((day) => {
-                      const isSelected = weeklyGoalTimeline.selectedDate === day.date;
-                      const labelClass = isSelected
-                        ? 'bg-alcabama-pink text-white border-alcabama-pink'
-                        : 'bg-alcabama-light-grey/10 text-alcabama-dark-grey border-alcabama-light-grey/40';
-                      const boxBorder =
-                        day.kind === 'overdue'
-                          ? 'border-red-600/50 hover:border-red-600'
-                          : day.kind === 'today'
-                            ? 'border-orange-500/50 hover:border-orange-500'
-                            : 'border-alcabama-pink/40 hover:border-alcabama-pink';
+                  <div className="w-full overflow-x-auto overscroll-x-contain">
+                    <div className="flex items-start gap-2 px-1 min-w-max">
+                      {weeklyGoalTimeline.days.map((day) => {
+                        const isSelected = weeklyGoalTimeline.selectedDate === day.date;
+                        const labelClass = isSelected
+                          ? 'bg-alcabama-pink text-white border-alcabama-pink'
+                          : 'bg-alcabama-light-grey/10 text-alcabama-dark-grey border-alcabama-light-grey/40';
+                        const boxBorder =
+                          day.kind === 'overdue'
+                            ? 'border-red-600/50 hover:border-red-600'
+                            : day.kind === 'today'
+                              ? 'border-orange-500/50 hover:border-orange-500'
+                              : 'border-alcabama-pink/40 hover:border-alcabama-pink';
 
-                      return (
-                        <div
-                          key={day.date}
-                          className="flex-1 flex flex-col items-center gap-2"
-                        >
-                          <div className="min-h-[64px] w-full flex flex-col items-center justify-end gap-1">
-                            {day.items.slice(0, 5).map((item) => (
-                              <button
-                                key={`${day.date}-${item.towerId}-${item.aptNumber}`}
-                                type="button"
-                                onClick={() => showTimelineItemInTower(item.towerId, day.date)}
-                                className={`w-full max-w-[64px] px-1.5 py-1 rounded-md border bg-white text-[9px] font-black text-alcabama-dark-grey shadow-sm ${boxBorder} ${isSelected ? 'ring-1 ring-alcabama-pink/40' : ''}`}
-                                title={`Torre ${item.towerId} • Apt ${item.aptNumber}`}
-                              >
-                                T{item.towerId}-{item.aptNumber}
-                              </button>
-                            ))}
-                            {day.items.length > 5 && (
-                              <div className={`w-full max-w-[64px] px-1.5 py-1 rounded-md border bg-white text-[9px] font-black text-alcabama-grey ${boxBorder}`}>
-                                +{day.items.length - 5}
-                              </div>
-                            )}
+                        return (
+                          <div key={day.date} className="w-[64px] shrink-0 flex flex-col items-center gap-2">
+                            <div className="min-h-[64px] w-full flex flex-col items-center justify-end gap-1">
+                              {day.items.slice(0, 5).map((item) => (
+                                <button
+                                  key={`${day.date}-${item.towerId}-${item.aptNumber}`}
+                                  type="button"
+                                  onClick={() => showTimelineItemInTower(item.towerId, day.date)}
+                                  className={`w-full px-1.5 py-1 rounded-md border bg-white text-[9px] font-black text-alcabama-dark-grey shadow-sm ${boxBorder} ${isSelected ? 'ring-1 ring-alcabama-pink/40' : ''}`}
+                                  title={`Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                                >
+                                  T{item.towerId}-{item.aptNumber}
+                                </button>
+                              ))}
+                              {day.items.length > 5 && (
+                                <div className={`w-full px-1.5 py-1 rounded-md border bg-white text-[9px] font-black text-alcabama-grey ${boxBorder}`}>
+                                  +{day.items.length - 5}
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setTimelineDateFilter(day.date)}
+                              className={`w-10 h-10 rounded-md border flex items-center justify-center text-xs font-black tracking-wider ${labelClass}`}
+                              aria-label={`Seleccionar día ${day.date}`}
+                            >
+                              {day.indexLabel}
+                            </button>
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">
+                              {day.date.slice(8, 10)}/{day.date.slice(5, 7)}
+                            </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setTimelineDateFilter(day.date)}
-                            className={`w-10 h-10 rounded-md border flex items-center justify-center text-xs font-black tracking-wider ${labelClass}`}
-                            aria-label={`Seleccionar día ${day.date}`}
-                          >
-                            {day.indexLabel}
-                          </button>
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">
-                            {day.date.slice(8, 10)}/{day.date.slice(5, 7)}
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -1288,17 +1287,60 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+              className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[calc(100vh-2rem)] flex flex-col"
             >
               <div className="bg-alcabama-black p-6 text-white">
-                <h3 className="text-xl font-bold">Actualizar Estado</h3>
+                <h3 className="text-xl font-bold">{isEditMode ? 'Actualizar Estado' : 'Detalle'}</h3>
                 <p className="text-xs text-white/60 uppercase tracking-widest mt-1">
                   Torre {editingApartment.towerId} • Apartamento {editingApartment.apartment.number}
                 </p>
               </div>
               
-              <div className="p-6 space-y-3">
-                <p className="text-[10px] font-bold uppercase text-alcabama-grey mb-4">Selecciona el nuevo estado:</p>
+              <div className="p-6 space-y-3 overflow-y-auto flex-1">
+                {!isEditMode && (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-alcabama-light-grey bg-white p-4">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Estado actual</div>
+                      <div className="mt-2 flex items-center gap-2">
+                        <span
+                          className={`inline-block w-2.5 h-2.5 rounded-full ${
+                            editingApartment.apartment.status === 'owner_delivered'
+                              ? 'bg-blue-600'
+                              : editingApartment.apartment.status === 'post_construction_delivered'
+                                ? 'bg-green-500'
+                                : editingApartment.apartment.status === 'notarized'
+                                  ? 'bg-orange-500'
+                                  : editingApartment.apartment.status === 'weekly_goal'
+                                    ? 'bg-red-600'
+                                    : editingApartment.apartment.status === 'under_construction'
+                                      ? 'bg-gray-400'
+                                      : 'bg-alcabama-light-grey'
+                          }`}
+                        />
+                        <div className="text-sm font-bold text-alcabama-dark-grey">
+                          {getStatusLabel(editingApartment.apartment.status)}
+                        </div>
+                      </div>
+                      {editingApartment.apartment.status === 'weekly_goal' && (
+                        <div className="mt-2 text-xs text-alcabama-grey">
+                          {editingApartment.apartment.weeklyGoalDate
+                            ? `Fecha meta semanal: ${normalizeToISODate(editingApartment.apartment.weeklyGoalDate)}`
+                            : 'Fecha meta semanal: sin fecha definida'}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setEditingApartment(null)}
+                      className="w-full py-3 text-xs font-bold uppercase tracking-widest text-alcabama-grey hover:text-alcabama-black transition-colors"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                )}
+
+                {isEditMode && (
+                  <>
+                    <p className="text-[10px] font-bold uppercase text-alcabama-grey mb-4">Selecciona el nuevo estado:</p>
                 
                 <button 
                   onClick={() => handleStatusChange('owner_delivered')}
@@ -1366,6 +1408,8 @@ export default function App() {
                     Cancelar
                   </button>
                 </div>
+                  </>
+                )}
               </div>
             </motion.div>
           </div>
