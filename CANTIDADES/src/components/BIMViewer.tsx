@@ -30,6 +30,7 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
   const containerRef = useRef<HTMLDivElement>(null);
   const componentsRef = useRef<OBC.Components | null>(null);
   const workerUrlRef = useRef<string | null>(null);
+  const syncCleanupRef = useRef<null | (() => void)>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
@@ -87,6 +88,17 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
         await fragments.init(workerUrl);
         console.log("FragmentsManager inicializado.");
         setIsInitialized(true);
+
+        if (world.camera.hasCameraControls()) {
+          const sync = () => {
+            try {
+              fragments.core.update(true);
+            } catch {
+            }
+          };
+          world.camera.controls.addEventListener('rest', sync);
+          syncCleanupRef.current = () => world.camera.controls.removeEventListener('rest', sync);
+        }
         
         // Configurar Highlighter
         highlighter.setup({ world });
@@ -203,6 +215,7 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
       window.removeEventListener('resize', handleResize);
       resizeObserver.disconnect();
       if ((components as any)._shortcutsCleanup) (components as any)._shortcutsCleanup();
+      if (syncCleanupRef.current) syncCleanupRef.current();
       if (workerUrlRef.current) URL.revokeObjectURL(workerUrlRef.current);
       components.dispose();
     };

@@ -553,14 +553,62 @@ export default function App() {
           const worlds = componentsRef.current.get(OBC.Worlds);
           const world = worlds.list.values().next().value;
           if (world) {
-            if (!world.scene.three.children.includes(model.object)) {
-              world.scene.three.add(model.object);
+            const modelObject = model.object ?? model;
+
+            try {
+              if (model.uuid !== fragFile.name) {
+                model.uuid = fragFile.name;
+              }
+            } catch {
             }
+
+            try {
+              if (typeof model.useCamera === 'function') {
+                model.useCamera(world.camera.three);
+              }
+            } catch {
+            }
+
+            try {
+              const list = (fragments as any).list;
+              if (list?.set && !list.has?.(model.uuid)) {
+                list.set(model.uuid, model);
+              }
+            } catch {
+            }
+
+            if (!world.scene.three.children.includes(modelObject)) {
+              world.scene.three.add(modelObject);
+            }
+
+            try {
+              (modelObject as any).traverse?.((child: any) => {
+                if (child?.isMesh) {
+                  world.meshes?.add?.(child);
+                  if (componentsRef.current?.meshes && Array.isArray((componentsRef.current as any).meshes)) {
+                    (componentsRef.current as any).meshes.push(child);
+                  }
+                }
+              });
+            } catch {
+            }
+
+            try {
+              await fragments.core.update(true);
+            } catch {
+            }
+
             setTimeout(() => {
               if (world.camera.hasCameraControls()) {
-                world.camera.controls.fitToSphere(model.object, true);
+                const bbox = new THREE.Box3().setFromObject(modelObject);
+                const sphere = new THREE.Sphere();
+                bbox.getBoundingSphere(sphere);
+                world.camera.controls.fitToSphere(sphere, true);
               }
-              fragments.core.update(true);
+              try {
+                fragments.core.update(true);
+              } catch {
+              }
             }, 500);
           }
           await processModel(model);
