@@ -92,7 +92,13 @@ async function extractPropertiesJson(bytes: Uint8Array, mode: JsonMode) {
           const line = ifcApi.GetLine(modelID, id, false);
           if (!line) continue;
           const entity: Record<string, any> = { ...line };
-          if (typeof (line as any).type === 'number') entity.ifcType = ifcApi.GetNameFromTypeCode((line as any).type);
+          const typeCode = (line as any).type;
+          if (typeof typeCode === 'number') {
+            const typeName = ifcApi.GetNameFromTypeCode(typeCode);
+            entity.typeCode = typeCode;
+            entity.type = typeName;
+            entity.ifcType = typeName;
+          }
           out[String(id)] = entity;
         } catch {
         }
@@ -105,9 +111,13 @@ async function extractPropertiesJson(bytes: Uint8Array, mode: JsonMode) {
         try {
           const line = ifcApi.GetLine(modelID, id, false);
           if (!line) continue;
-          const entity = pickEntityFields(line);
-          if (typeof (line as any).type === 'number') {
-            entity.ifcType = ifcApi.GetNameFromTypeCode((line as any).type);
+          const entity: Record<string, any> = { ...line };
+          const typeCode = (line as any).type;
+          if (typeof typeCode === 'number') {
+            const typeName = ifcApi.GetNameFromTypeCode(typeCode);
+            entity.typeCode = typeCode;
+            entity.type = typeName;
+            entity.ifcType = typeName;
           }
           out[String(id)] = entity;
         } catch {
