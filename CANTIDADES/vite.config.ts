@@ -5,14 +5,13 @@ import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
-  const repoName = process.env.GITHUB_REPOSITORY?.split('/')[1];
-  const base =
-    env.VITE_BASE ||
-    ((process.env.GITHUB_PAGES === 'true' || process.env.GITHUB_ACTIONS === 'true') && repoName
-      ? `/${repoName}/`
-      : '/');
+  const outDir = process.env.VITE_OUTDIR ?? path.resolve(__dirname, '../docs/CANTIDADES');
   return {
-    base,
+    base: env.VITE_BASE || './',
+    build: {
+      outDir,
+      emptyOutDir: true,
+    },
     plugins: [react(), tailwindcss()],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
