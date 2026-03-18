@@ -16,6 +16,7 @@ function doPost(e) {
     // 1. Definir los encabezados solicitados
     var headers = [
       "CÓDIGO", 
+      "PROYECTO",
       "FECHA", 
       "TIPO DE SOLICITUD", 
       "RESPONSABLE", 
@@ -81,6 +82,7 @@ function doPost(e) {
     // Crear la fila con el orden exacto de columnas
     var newRow = [
       nextId,                       // CÓDIGO
+      data.projectName,             // PROYECTO
       new Date(),                   // FECHA
       data.tipoRequest,             // TIPO DE SOLICITUD
       data.responsable,             // RESPONSABLE
