@@ -262,56 +262,21 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
     const highlighter = componentsRef.current.get(OBCF.Highlighter);
     const hider = componentsRef.current.get(OBC.Hider);
     
-    const getModelFromList = (list: Map<string, any>, modelId: string) => {
-      return (
-        list.get(modelId) ??
-        Array.from(list.values()).find((m: any) => {
-          const keys = [m?.uuid, m?.id, m?.modelId].filter(Boolean).map(String);
-          return keys.includes(String(modelId));
-        })
-      );
-    };
-
-    const mergeMap = (target: Record<string, Set<number>>, source: Record<string, any>) => {
-      for (const fragId in source) {
-        if (!target[fragId]) target[fragId] = new Set<number>();
-        const ids = source[fragId];
-        if (ids instanceof Set) {
-          ids.forEach((id: number) => target[fragId].add(id));
-        } else if (Array.isArray(ids)) {
-          ids.forEach((id: number) => target[fragId].add(id));
-        } else if (ids && typeof ids[Symbol.iterator] === 'function') {
-          for (const id of ids as any) target[fragId].add(Number(id));
-        }
-      }
-    };
-
-    const buildFragmentIdMapFromElements = (elementsToShow: BIMElement[]) => {
-      const list: Map<string, any> | undefined = (fragments as any).list;
-      const models = Array.from(list?.values?.() ?? []);
-      if (!list || models.length === 0) return { map: null as Record<string, Set<number>> | null, hasAny: false };
-
-      const modelIdToLocalIds: Record<string, Set<number>> = {};
-      for (const el of elementsToShow) {
-        if (!el.modelId || el.localId === undefined) continue;
-        const modelId = String(el.modelId);
-        if (!modelIdToLocalIds[modelId]) modelIdToLocalIds[modelId] = new Set();
-        modelIdToLocalIds[modelId].add(el.localId);
-      }
-
-      const final: Record<string, Set<number>> = {};
+    const buildModelIdMapFromElements = (elementsToMap: BIMElement[]) => {
+      const map: OBC.ModelIdMap = {};
       let hasAny = false;
-      for (const modelId of Object.keys(modelIdToLocalIds)) {
-        const model = getModelFromList(list, modelId);
-        if (!model) continue;
-        const localIds = Array.from(modelIdToLocalIds[modelId]);
-        if (localIds.length === 0) continue;
-        const fragmentIdMap = (model as any).getFragmentIdMap(localIds);
-        mergeMap(final, fragmentIdMap);
-        hasAny = hasAny || Object.keys(fragmentIdMap).length > 0;
+
+      for (const el of elementsToMap) {
+        const modelId = el.modelId ? String(el.modelId) : '';
+        if (!modelId) continue;
+        const localId = el.localId !== undefined ? Number(el.localId) : Number(el.id);
+        if (!Number.isFinite(localId)) continue;
+        if (!map[modelId]) map[modelId] = new Set<number>();
+        map[modelId].add(localId);
+        hasAny = true;
       }
 
-      return { map: final, hasAny };
+      return { map, hasAny };
     };
 
     const update = async () => {
@@ -348,12 +313,11 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         } catch {
         }
       } else if (visibleCount === 0) {
-        for (const model of models) {
-          const obj = model?.object ?? model;
-          if (obj) obj.visible = false;
+        try {
+          await hider.set(false);
+        } catch {
         }
       } else {
-        const visibleElementsForMap = finalVisible;
         const hiddenIsSmaller = hiddenCount > 0 && hiddenCount < visibleCount;
 
         try {
@@ -362,18 +326,18 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         }
 
         if (!hiddenIsSmaller) {
-          const { map, hasAny } = buildFragmentIdMapFromElements(visibleElementsForMap);
-          if (map && hasAny) {
+          const { map, hasAny } = buildModelIdMapFromElements(finalVisible);
+          if (hasAny) {
             try {
               await hider.isolate(map);
             } catch {
             }
           }
         } else {
-          const visibleSet = new Set(visibleElementsForMap.map((x) => x.id));
+          const visibleSet = new Set(finalVisible.map((x) => x.id));
           const hidden = allElements.filter((e) => !visibleSet.has(e.id));
-          const { map, hasAny } = buildFragmentIdMapFromElements(hidden);
-          if (map && hasAny) {
+          const { map, hasAny } = buildModelIdMapFromElements(hidden);
+          if (hasAny) {
             try {
               await hider.set(false, map);
             } catch {
@@ -383,7 +347,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       }
 
       try {
-        highlighter.clear();
+        await highlighter.clear();
       } catch {
       }
 
@@ -426,20 +390,20 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         if (!enabled) continue;
         const els = byStatus[key];
         if (!els || els.length === 0) continue;
-        const { map, hasAny } = buildFragmentIdMapFromElements(els);
-        if (!map || !hasAny) continue;
+        const { map, hasAny } = buildModelIdMapFromElements(els);
+        if (!hasAny) continue;
         try {
-          highlighter.highlight(style, false, false, map);
+          await highlighter.highlightByID(style, map, true, false, null, false);
         } catch {
         }
       }
 
       if (hasSelection) {
         const selectedElements = allElements.filter((e) => selectedIdSet.has(e.id));
-        const { map, hasAny } = buildFragmentIdMapFromElements(selectedElements);
-        if (map && hasAny) {
+        const { map, hasAny } = buildModelIdMapFromElements(selectedElements);
+        if (hasAny) {
           try {
-            highlighter.highlight("select", true, false, map);
+            await highlighter.highlightByID("select", map, true, false, null, false);
           } catch {
           }
         }
