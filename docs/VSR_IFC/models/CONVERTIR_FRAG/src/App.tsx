@@ -27,7 +27,7 @@ interface ConversionState {
   errorDetails?: string;
 }
 
-type JsonMode = 'products' | 'all';
+type JsonMode = 'products' | 'all' | 'hidrosanitario';
 
 const WEB_IFC_WASM_PATH = 'https://unpkg.com/web-ifc@0.0.77/';
 const FRAGMENTS_WORKER_URL = 'https://thatopen.github.io/engine_fragment/resources/worker.mjs';
@@ -353,7 +353,6 @@ export default function App() {
   const [includeSpatial, setIncludeSpatial] = useState<boolean>(true);
   const [optimizeAll, setOptimizeAll] = useState<boolean>(true);
   const [minimalEntity, setMinimalEntity] = useState<boolean>(false);
-  const [hidrosanitario, setHidrosanitario] = useState<boolean>(false);
 
   const componentsRef = useRef<OBC.Components | null>(null);
   const fragmentsRef = useRef<OBC.FragmentsManager | null>(null);
@@ -465,13 +464,16 @@ export default function App() {
 
           setState(prev => ({ ...prev, message: 'Generando .JSON...', progress: 96 }));
 
-          const jsonBlob = await extractPropertiesJsonBlob(bytes, jsonMode, {
+          const isHidrosanitario = jsonMode === 'hidrosanitario';
+          const effectiveMode: JsonMode = isHidrosanitario ? 'products' : jsonMode;
+
+          const jsonBlob = await extractPropertiesJsonBlob(bytes, effectiveMode, {
             prettyJson,
-            includePsets: hidrosanitario ? true : includePsets,
+            includePsets: isHidrosanitario ? true : includePsets,
             optimizeAll,
             includeSpatialInProducts: includeSpatial,
             minimalEntity,
-            hidrosanitario,
+            hidrosanitario: isHidrosanitario,
             onProgress: (p) => {
               const overall = 96 + (p / 100) * 4;
               setState(prev => ({
@@ -597,6 +599,7 @@ export default function App() {
                   >
                     <option value="products">Productos</option>
                     <option value="all">Todo</option>
+                    <option value="hidrosanitario">Hidrosanitario</option>
                   </select>
                 </div>
 
@@ -657,24 +660,6 @@ export default function App() {
                     disabled={state.status === 'loading' || state.status === 'converting'}
                   >
                     {minimalEntity ? 'SÍ' : 'NO'}
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Hidrosanitario</span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setHidrosanitario((v) => {
-                        const next = !v;
-                        if (next) setIncludePsets(true);
-                        return next;
-                      })
-                    }
-                    className="h-8 border border-[#141414] px-2 text-[10px] font-mono bg-white"
-                    disabled={state.status === 'loading' || state.status === 'converting'}
-                  >
-                    {hidrosanitario ? 'SÍ' : 'NO'}
                   </button>
                 </div>
               </div>
