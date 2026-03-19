@@ -58,6 +58,14 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [showWelcome, setShowWelcome] = useState(true);
   const componentsRef = useRef<OBC.Components | null>(null);
+  const remoteCacheRef = useRef<{
+    fragBytesByUrl: Map<string, Uint8Array>;
+    jsonTextByUrl: Map<string, string>;
+  }>({
+    fragBytesByUrl: new Map(),
+    jsonTextByUrl: new Map()
+  });
+  const loadAbortRef = useRef<AbortController | null>(null);
 
   const [availableModels, setAvailableModels] = useState<RemoteModel[]>([]);
   const [modelsError, setModelsError] = useState<string | null>(null);
@@ -307,37 +315,6 @@ export default function App() {
         return attr;
       };
 
-      // Búsqueda profunda de parámetros integrados para asegurar que estén disponibles en el nivel superior
-      const findDeep = (obj: any, target: string): any => {
-        if (!obj || typeof obj !== 'object') return undefined;
-        
-        // 1. Buscar coincidencia exacta o normalizada en el nivel actual
-        const normalizedTarget = target.trim().toLowerCase();
-        for (const key in obj) {
-          if (key === target || key.trim().toLowerCase() === normalizedTarget) {
-            return getValue(obj[key]);
-          }
-        }
-
-        // 2. Recorrer recursivamente
-        for (const key in obj) {
-          const val = obj[key];
-          if (val && typeof val === 'object' && !Array.isArray(val)) {
-            // Evitar recursión infinita o en objetos de valor simple
-            if (!('value' in val) && !('NominalValue' in val) && !('QuantityValue' in val)) {
-              const found = findDeep(val, target);
-              if (found !== undefined) return found;
-            }
-          } else if (Array.isArray(val)) {
-            for (const item of val) {
-              const found = findDeep(item, target);
-              if (found !== undefined) return found;
-            }
-          }
-        }
-        return undefined;
-      };
-
       for (let i = 0; i < ids.length; i++) {
         const localId = ids[i];
         const data = itemsData[i] || {};
@@ -349,50 +326,20 @@ export default function App() {
         const rawGlobalId = getValue(data.GlobalId || data.globalId || data.guid || data.Guid || data.GlobalID);
         const globalId = rawGlobalId?.toString();
         
-        const category = getValue(data.type || data.Category || data.ObjectType || 'Elemento').toString();
-        
-        // Extraer parámetros prioritarios al nivel superior de propiedades
-        const integratedProps: any = {};
-        PRIORITY_PROPS.forEach(p => {
-          const val = findDeep(data, p);
-          if (val !== undefined) integratedProps[p] = val;
-        });
-
-        // Prioridad a NOMBRE INTEGRADO
-        const name = integratedProps["NOMBRE INTEGRADO"] || getValue(data.Name || data.name || `${category} - ${expressId}`).toString();
-        
-        // Intentar extraer volumen si está en el frag
-        let volume = 0;
-        const volVal = integratedProps["VOLUMEN INTEGRADO"];
-        if (volVal !== undefined) {
-          if (typeof volVal === 'number' && volVal > 0) volume = volVal;
-          else if (!isNaN(Number(volVal)) && Number(volVal) > 0) volume = Number(volVal);
-        }
-
-        if (volume === 0) {
-          const findVol = (obj: any): number | null => {
-            if (!obj || typeof obj !== 'object') return null;
-            for (const key in obj) {
-              const k = key.toLowerCase();
-              if (k.includes('volume') || k.includes('volumen')) {
-                const val = getValue(obj[key]);
-                if (typeof val === 'number' && val > 0) return val;
-                if (!isNaN(Number(val)) && Number(val) > 0) return Number(val);
-              }
-            }
-            return null;
-          };
-          volume = findVol(data) || 0;
-        }
+        const rawCategory = getValue(data.type || data.ifcType || data.Category || data.ObjectType || 'Elemento');
+        const category = (rawCategory !== undefined && rawCategory !== null ? rawCategory : 'Elemento').toString();
+        const rawName = getValue(data.Name || data.name);
+        const name = (rawName !== undefined && rawName !== null ? rawName : `${category} - ${expressId}`).toString();
+        const volume = 0;
 
         extractedElements.push({
           id: expressId, 
           globalId: globalId,
-          name: volume > 0 ? name : `${name} (Cargando datos...)`,
+          name,
           category,
           volume: volume,
           unit: 'm³',
-          properties: { ...data, ...integratedProps },
+          properties: { ...data },
           modelId: model.uuid || model.id || model.modelId,
           localId: localId
         });
@@ -466,6 +413,95 @@ export default function App() {
       propertiesMap = rawData;
     }
 
+    const targetsLowerToOriginal = PRIORITY_PROPS.reduce<Record<string, string>>((acc, p) => {
+      acc[p.trim().toLowerCase()] = p;
+      return acc;
+    }, {});
+    const targetKeySet = new Set(Object.keys(targetsLowerToOriginal));
+
+    const unwrap = (attr: any) => {
+      if (attr === undefined || attr === null) return undefined;
+      if (typeof attr === 'object') {
+        if ('value' in attr) return attr.value;
+        if ('NominalValue' in attr) {
+          const nv = attr.NominalValue;
+          return (nv && typeof nv === 'object' && 'value' in nv) ? nv.value : nv;
+        }
+        if ('QuantityValue' in attr) {
+          const qv = attr.QuantityValue;
+          return (qv && typeof qv === 'object' && 'value' in qv) ? qv.value : qv;
+        }
+      }
+      return attr;
+    };
+
+    const extractIntegrated = (root: any) => {
+      const integratedProps: Record<string, any> = {};
+      let foundVolume: number | null = null;
+      let foundName: string | null = null;
+
+      const stack: any[] = [root];
+      const seen = new WeakSet<object>();
+      let nodes = 0;
+      const maxNodes = 8000;
+
+      while (stack.length > 0 && nodes < maxNodes) {
+        const cur = stack.pop();
+        if (!cur) continue;
+        const t = typeof cur;
+        if (t !== 'object') continue;
+        if (seen.has(cur as object)) continue;
+        seen.add(cur as object);
+        nodes++;
+
+        if (Array.isArray(cur)) {
+          for (let i = 0; i < cur.length; i++) stack.push(cur[i]);
+          continue;
+        }
+
+        for (const key in cur) {
+          const rawVal = (cur as any)[key];
+          const kl = key.trim().toLowerCase();
+
+          if (targetKeySet.has(kl)) {
+            const original = targetsLowerToOriginal[kl];
+            if (integratedProps[original] === undefined) {
+              const v = unwrap(rawVal);
+              if (v !== undefined) integratedProps[original] = v;
+            }
+          }
+
+          if (foundVolume === null && (kl.includes('volumen') || kl.includes('volume'))) {
+            const v = unwrap(rawVal);
+            const n = typeof v === 'number' ? v : Number(v);
+            if (Number.isFinite(n) && n > 0) foundVolume = n;
+          }
+
+          if (foundName === null && kl.includes('nombre') && (kl.includes('integrado') || kl === 'nombre')) {
+            const v = unwrap(rawVal);
+            if (v !== undefined && v !== null) foundName = String(v);
+          }
+
+          if (rawVal && typeof rawVal === 'object') stack.push(rawVal);
+        }
+
+        if (Object.keys(integratedProps).length >= PRIORITY_PROPS.length && foundVolume !== null && foundName !== null) {
+          break;
+        }
+      }
+
+      const volVal = integratedProps["VOLUMEN INTEGRADO"];
+      if (volVal !== undefined) {
+        const n = typeof volVal === 'number' ? volVal : Number(volVal);
+        if (Number.isFinite(n) && n > 0) foundVolume = n;
+      }
+
+      const nameVal = integratedProps["NOMBRE INTEGRADO"];
+      if (nameVal !== undefined && nameVal !== null) foundName = String(nameVal);
+
+      return { integratedProps, foundVolume, foundName };
+    };
+
     setElements(prevElements => {
       if (prevElements.length === 0) return prevElements;
 
@@ -475,95 +511,17 @@ export default function App() {
           props = propertiesMap[el.globalId];
         }
         if (!props) return el;
-
-        const getValueLocal = (attr: any) => {
-          if (attr === undefined || attr === null) return undefined;
-          if (typeof attr === 'object') {
-            if ('value' in attr) return attr.value;
-            if ('NominalValue' in attr) {
-              const nv = attr.NominalValue;
-              return (nv && typeof nv === 'object' && 'value' in nv) ? nv.value : nv;
-            }
-            if ('QuantityValue' in attr) {
-              const qv = attr.QuantityValue;
-              return (qv && typeof qv === 'object' && 'value' in qv) ? qv.value : qv;
-            }
-          }
-          return attr;
-        };
-
-        const findDeepLocal = (obj: any, target: string): any => {
-          if (!obj || typeof obj !== 'object') return undefined;
-          const normalizedTarget = target.trim().toLowerCase();
-          for (const key in obj) {
-            if (key === target || key.trim().toLowerCase() === normalizedTarget) {
-              return getValueLocal(obj[key]);
-            }
-          }
-          for (const key in obj) {
-            const val = obj[key];
-            if (val && typeof val === 'object' && !Array.isArray(val)) {
-              if (!('value' in val) && !('NominalValue' in val) && !('QuantityValue' in val)) {
-                const found = findDeepLocal(val, target);
-                if (found !== undefined) return found;
-              }
-            } else if (Array.isArray(val)) {
-              for (const item of val) {
-                const found = findDeepLocal(item, target);
-                if (found !== undefined) return found;
-              }
-            }
-          }
-          return undefined;
-        };
-
-        const integratedProps: any = {};
-        PRIORITY_PROPS.forEach(p => {
-          const val = findDeepLocal(props, p);
-          if (val !== undefined) integratedProps[p] = val;
-        });
-
-        const findVolume = (obj: any): number | null => {
-          if (!obj || typeof obj !== 'object') return null;
-          const volVal = integratedProps["VOLUMEN INTEGRADO"];
-          if (volVal !== undefined) {
-            if (typeof volVal === 'number' && volVal > 0) return volVal;
-            if (!isNaN(Number(volVal)) && Number(volVal) > 0) return Number(volVal);
-          }
-          for (const key in obj) {
-            const k = key.toLowerCase();
-            if (k.includes('volume') || k.includes('volumen')) {
-              const val = getValueLocal(obj[key]);
-              if (typeof val === 'number' && val > 0) return val;
-              if (!isNaN(Number(val)) && Number(val) > 0) return Number(val);
-            }
-          }
-          for (const key in obj) {
-            const val = obj[key];
-            if (val && typeof val === 'object' && !Array.isArray(val)) {
-              const found = findVolume(val);
-              if (found !== null) return found;
-            } else if (Array.isArray(val)) {
-              for (const item of val) {
-                const found = findVolume(item);
-                if (found !== null) return found;
-              }
-            }
-          }
-          return null;
-        };
-
-        const realVolume = findVolume(props);
+        const { integratedProps, foundVolume, foundName } = extractIntegrated(props);
         const updatedEl = {
           ...el,
           properties: { ...el.properties, ...props, ...integratedProps }
         };
 
-        if (realVolume !== null) {
-          updatedEl.volume = realVolume;
-          updatedEl.name = (integratedProps["NOMBRE INTEGRADO"] || el.name).replace(' (Cargando datos...)', '');
-        } else if (integratedProps["NOMBRE INTEGRADO"]) {
-          updatedEl.name = integratedProps["NOMBRE INTEGRADO"];
+        if (foundVolume !== null) {
+          updatedEl.volume = foundVolume;
+        }
+        if (foundName) {
+          updatedEl.name = foundName;
         }
 
         return updatedEl;
@@ -683,30 +641,108 @@ export default function App() {
     return model;
   }, [processModel]);
 
+  const putLru = <T,>(map: Map<string, T>, key: string, value: T, maxEntries: number) => {
+    if (map.has(key)) map.delete(key);
+    map.set(key, value);
+    while (map.size > maxEntries) {
+      const firstKey = map.keys().next().value as string | undefined;
+      if (firstKey === undefined) break;
+      map.delete(firstKey);
+    }
+  };
+
+  const fetchArrayBufferCached = useCallback(async (url: string, signal?: AbortSignal) => {
+    const mem = remoteCacheRef.current.fragBytesByUrl.get(url);
+    if (mem) return mem;
+
+    if ('caches' in window) {
+      try {
+        const cache = await caches.open('cantidades-models-v1');
+        const match = await cache.match(url);
+        if (match) {
+          const bytes = new Uint8Array(await match.arrayBuffer());
+          putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 2);
+          return bytes;
+        }
+      } catch {
+      }
+    }
+
+    const res = await fetch(url, { signal });
+    if (!res.ok) throw new Error(`No se pudo descargar ${url} (${res.status})`);
+    if ('caches' in window) {
+      try {
+        const cache = await caches.open('cantidades-models-v1');
+        await cache.put(url, res.clone());
+      } catch {
+      }
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 2);
+    return bytes;
+  }, []);
+
+  const fetchTextCached = useCallback(async (url: string, signal?: AbortSignal) => {
+    const mem = remoteCacheRef.current.jsonTextByUrl.get(url);
+    if (mem) return mem;
+
+    if ('caches' in window) {
+      try {
+        const cache = await caches.open('cantidades-models-v1');
+        const match = await cache.match(url);
+        if (match) {
+          const text = await match.text();
+          putLru(remoteCacheRef.current.jsonTextByUrl, url, text, 2);
+          return text;
+        }
+      } catch {
+      }
+    }
+
+    const res = await fetch(url, { signal });
+    if (!res.ok) throw new Error(`No se pudo descargar ${url} (${res.status})`);
+    if ('caches' in window) {
+      try {
+        const cache = await caches.open('cantidades-models-v1');
+        await cache.put(url, res.clone());
+      } catch {
+      }
+    }
+    const text = await res.text();
+    putLru(remoteCacheRef.current.jsonTextByUrl, url, text, 2);
+    return text;
+  }, []);
+
   const loadRemoteModel = useCallback(async (remote: RemoteModel) => {
     if (!componentsRef.current) return;
+    if (loadAbortRef.current) {
+      loadAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
     setIsLoading(true);
     setShowWelcome(false);
     setSelectedRemoteModelName(remote.name);
     try {
-      const fragRes = await fetch(remote.fragUrl);
-      if (!fragRes.ok) throw new Error(`No se pudo descargar ${remote.name}`);
-      const fragBytes = new Uint8Array(await fragRes.arrayBuffer());
+      const fragPromise = fetchArrayBufferCached(remote.fragUrl, controller.signal);
+      const jsonPromise = remote.jsonUrl ? fetchTextCached(remote.jsonUrl, controller.signal) : Promise.resolve<string | null>(null);
+      const [fragBytes, jsonText] = await Promise.all([fragPromise, jsonPromise]);
+
+      if (controller.signal.aborted) return;
       await loadFragBytes(remote.name, fragBytes);
 
-      if (remote.jsonUrl) {
-        const jsonRes = await fetch(remote.jsonUrl);
-        if (jsonRes.ok) {
-          await applyJsonText(await jsonRes.text());
-        }
+      if (controller.signal.aborted) return;
+      if (jsonText) {
+        await applyJsonText(jsonText);
       }
     } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return;
       console.error('Error cargando modelo remoto:', e);
       alert(e instanceof Error ? e.message : 'Error cargando modelo remoto');
     } finally {
       setIsLoading(false);
     }
-  }, [applyJsonText, loadFragBytes]);
+  }, [applyJsonText, fetchArrayBufferCached, fetchTextCached, loadFragBytes]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;

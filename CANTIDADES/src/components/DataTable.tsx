@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BIMElement } from '../types';
 
 interface DataTableProps {
@@ -8,6 +8,27 @@ interface DataTableProps {
 }
 
 export default function DataTable({ elements, onSelectElement, selectedElementId }: DataTableProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(400);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onScroll = () => setScrollTop(el.scrollTop);
+    el.addEventListener('scroll', onScroll, { passive: true });
+
+    const ro = new ResizeObserver(() => setContainerHeight(el.clientHeight));
+    ro.observe(el);
+
+    setContainerHeight(el.clientHeight);
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      ro.disconnect();
+    };
+  }, []);
+
   const getProp = (el: BIMElement, key: string) => {
     if (!el.properties) return '-';
     const val = el.properties[key];
@@ -28,8 +49,26 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     return String(val);
   };
 
+  const rowHeight = 24;
+  const overscan = 20;
+  const totalRows = elements.length;
+
+  const { paddingTop, paddingBottom, visibleElements } = useMemo(() => {
+    const safeScrollTop = Math.max(0, scrollTop);
+    const start = Math.max(0, Math.floor(safeScrollTop / rowHeight) - overscan);
+    const visibleCount = Math.ceil(containerHeight / rowHeight) + overscan * 2;
+    const end = Math.min(totalRows, start + visibleCount);
+    const top = start * rowHeight;
+    const bottom = Math.max(0, (totalRows - end) * rowHeight);
+    return {
+      paddingTop: top,
+      paddingBottom: bottom,
+      visibleElements: elements.slice(start, end)
+    };
+  }, [containerHeight, elements, scrollTop, totalRows]);
+
   return (
-    <div className="flex-1 overflow-auto bg-white">
+    <div ref={containerRef} className="flex-1 overflow-auto bg-white">
       <table className="w-full text-left border-collapse min-w-[1000px]">
         <thead className="sticky top-0 bg-[#003d4d] text-white z-10">
           <tr>
@@ -45,7 +84,13 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {elements.map((el) => {
+          {paddingTop > 0 && (
+            <tr style={{ height: paddingTop }}>
+              <td colSpan={9} />
+            </tr>
+          )}
+
+          {visibleElements.map((el) => {
             const isSelected = selectedElementId === el.id;
             return (
               <tr 
@@ -67,7 +112,14 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
               </tr>
             );
           })}
-          {elements.length === 0 && (
+
+          {paddingBottom > 0 && (
+            <tr style={{ height: paddingBottom }}>
+              <td colSpan={9} />
+            </tr>
+          )}
+
+          {totalRows === 0 && (
             <tr>
               <td colSpan={9} className="px-4 py-8 text-center text-slate-400 text-xs italic">
                 No hay datos para mostrar con los filtros actuales.
