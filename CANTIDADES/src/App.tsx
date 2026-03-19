@@ -267,6 +267,22 @@ export default function App() {
     fetchAvailableModels();
   }, [fetchAvailableModels]);
 
+  const filteredElements = useMemo(() => {
+    return elements.filter(el => {
+      const classif = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
+      const nombreIntegrado = getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name;
+      const level = getProp(el, "NIVEL INTEGRADO") || "";
+      const diameter = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]) || "";
+
+      const classificationMatch = selectedClassifications.length === 0 || selectedClassifications.includes(classif);
+      const categoryMatch = selectedCategories.length === 0 || selectedCategories.includes(nombreIntegrado);
+      const levelMatch = selectedLevels.length === 0 || selectedLevels.includes(level);
+      const diameterMatch = selectedDiameter === 'Todos' || diameter === selectedDiameter;
+
+      return classificationMatch && categoryMatch && levelMatch && diameterMatch;
+    });
+  }, [elements, getFirstProp, selectedClassifications, selectedCategories, selectedDiameter, selectedLevels]);
+
   const elementsWithVolume = useMemo(() => {
     const toNumber = (v: unknown) => {
       if (v === undefined || v === null) return null;
@@ -285,35 +301,12 @@ export default function App() {
     });
   }, [elements, getFirstProp]);
 
-  const filteredElements = useMemo(() => {
-    return elementsWithVolume.filter(el => {
-      const classif = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
-      const nombreIntegrado = getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name;
-      const level = getProp(el, "NIVEL INTEGRADO") || "";
-      const diameter = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]) || "";
-
-      const classificationMatch = selectedClassifications.length === 0 || selectedClassifications.includes(classif);
-      const categoryMatch = selectedCategories.length === 0 || selectedCategories.includes(nombreIntegrado);
-      const levelMatch = selectedLevels.length === 0 || selectedLevels.includes(level);
-      const diameterMatch = selectedDiameter === 'Todos' || diameter === selectedDiameter;
-
-      return classificationMatch && categoryMatch && levelMatch && diameterMatch;
-    });
-  }, [elementsWithVolume, getFirstProp, selectedClassifications, selectedCategories, selectedDiameter, selectedLevels]);
-
   const sidebarData = useMemo(() => {
-    const normalize = (v: string) =>
-      v
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .trim()
-        .toUpperCase();
     const classificationMap: Record<string, Set<string>> = {};
     
     elementsWithVolume.forEach(el => {
       const classification = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
       const nombreIntegrado = getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name;
-      if (normalize(classification) === 'SIN CLASIFICAR') return;
 
       if (!classificationMap[classification]) classificationMap[classification] = new Set();
       classificationMap[classification].add(nombreIntegrado);
@@ -330,28 +323,18 @@ export default function App() {
     })).sort((a, b) => a.name.localeCompare(b.name));
   }, [elementsWithVolume, getFirstProp]);
 
-  useEffect(() => {
-    const normalize = (v: string) =>
-      v
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .trim()
-        .toUpperCase();
-    setSelectedClassifications((prev) => prev.filter((c) => normalize(c) !== 'SIN CLASIFICAR'));
-  }, [elementsWithVolume]);
-
   const levels = useMemo(() => {
     const levelSet = new Set<string>();
-    elementsWithVolume.forEach(el => {
+    elements.forEach(el => {
       const level = getProp(el, "NIVEL INTEGRADO");
       if (level) levelSet.add(level);
     });
     return Array.from(levelSet);
-  }, [elementsWithVolume]);
+  }, [elements]);
 
   const diameters = useMemo(() => {
     const diameterSet = new Set<string>();
-    elementsWithVolume.forEach(el => {
+    elements.forEach(el => {
       const diameter = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]);
       if (diameter) diameterSet.add(diameter);
     });
@@ -367,7 +350,7 @@ export default function App() {
       if (nb !== null) return 1;
       return a.localeCompare(b, 'es');
     });
-  }, [elementsWithVolume, getFirstProp]);
+  }, [elements, getFirstProp]);
 
   const toggleClassification = (name: string) => {
     setSelectedClassifications(prev => 
