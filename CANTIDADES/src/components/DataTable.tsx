@@ -1,21 +1,28 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BIMElement } from '../types';
 
-type PurchaseStatus = 'PENDIENTE' | 'COMPRADO' | 'EN SITIO';
+type PurchaseStatus = 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'EN BODEGA' | 'INSTALADO';
 
 interface DataTableProps {
   elements: BIMElement[];
   onSelectElement: (id: string | null) => void;
   selectedElementId?: string;
+  selectedElementIds?: string[];
+  onSetSelectedElementIds?: (ids: string[]) => void;
   statuses: Record<string, PurchaseStatus | undefined>;
   onChangeStatus: (id: string, status: PurchaseStatus) => void;
+  onChangeStatusMany?: (ids: string[], status: PurchaseStatus) => void;
 }
 
-export default function DataTable({ elements, onSelectElement, selectedElementId, statuses, onChangeStatus }: DataTableProps) {
+export default function DataTable({ elements, onSelectElement, selectedElementId, selectedElementIds, onSetSelectedElementIds, statuses, onChangeStatus, onChangeStatusMany }: DataTableProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(400);
   const [activeTab, setActiveTab] = useState<'DETALLE' | 'ESTADOS'>('DETALLE');
+  const [bulkStatus, setBulkStatus] = useState<PurchaseStatus>('COMPRADO');
+  const selectedSet = useMemo(() => new Set(selectedElementIds ?? []), [selectedElementIds]);
+
+  const STATUS_ORDER: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'EN BODEGA', 'INSTALADO'];
 
   useEffect(() => {
     const el = containerRef.current;
@@ -97,8 +104,10 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
   const statusTotals = useMemo(() => {
     const base: Record<PurchaseStatus, { count: number; area: number; length: number; volume: number }> = {
       PENDIENTE: { count: 0, area: 0, length: 0, volume: 0 },
+      PEDIDO: { count: 0, area: 0, length: 0, volume: 0 },
       COMPRADO: { count: 0, area: 0, length: 0, volume: 0 },
-      'EN SITIO': { count: 0, area: 0, length: 0, volume: 0 }
+      'EN BODEGA': { count: 0, area: 0, length: 0, volume: 0 },
+      INSTALADO: { count: 0, area: 0, length: 0, volume: 0 }
     };
     for (const el of elements) {
       const st = statuses[el.id] ?? 'PENDIENTE';
@@ -130,6 +139,45 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       visibleElements: elements.slice(start, end)
     };
   }, [containerHeight, elements, scrollTop, totalRows]);
+
+  const statusRowBg = (st: PurchaseStatus) => {
+    switch (st) {
+      case 'PENDIENTE':
+        return 'bg-slate-100';
+      case 'PEDIDO':
+        return 'bg-blue-100';
+      case 'COMPRADO':
+        return 'bg-amber-100';
+      case 'EN BODEGA':
+        return 'bg-violet-100';
+      case 'INSTALADO':
+        return 'bg-emerald-100';
+    }
+  };
+
+  const statusTint = (st: PurchaseStatus) => {
+    switch (st) {
+      case 'PENDIENTE':
+        return { row: 'bg-slate-50', hover: 'hover:bg-slate-100', pill: 'bg-slate-200 text-slate-700' };
+      case 'PEDIDO':
+        return { row: 'bg-blue-50', hover: 'hover:bg-blue-100', pill: 'bg-blue-200 text-blue-900' };
+      case 'COMPRADO':
+        return { row: 'bg-amber-50', hover: 'hover:bg-amber-100', pill: 'bg-amber-200 text-amber-900' };
+      case 'EN BODEGA':
+        return { row: 'bg-violet-50', hover: 'hover:bg-violet-100', pill: 'bg-violet-200 text-violet-900' };
+      case 'INSTALADO':
+        return { row: 'bg-emerald-50', hover: 'hover:bg-emerald-100', pill: 'bg-emerald-200 text-emerald-900' };
+    }
+  };
+
+  const nextStatus = (cur: PurchaseStatus): PurchaseStatus => {
+    const idx = STATUS_ORDER.indexOf(cur);
+    return STATUS_ORDER[(idx + 1) % STATUS_ORDER.length] ?? 'PENDIENTE';
+  };
+
+  const allIds = useMemo(() => elements.map((e) => e.id), [elements]);
+  const isAllSelected = selectedElementIds && selectedElementIds.length > 0 && selectedElementIds.length === allIds.length;
+  const selectedCount = selectedElementIds?.length ?? 0;
 
   return (
     <div className="flex flex-col h-full bg-white overflow-hidden">
@@ -167,6 +215,70 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
         </div>
       </div>
 
+      <div className="h-10 px-4 border-b border-slate-100 bg-white flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+            <input
+              type="checkbox"
+              checked={Boolean(isAllSelected)}
+              onChange={(e) => {
+                if (!onSetSelectedElementIds) return;
+                if (e.target.checked) onSetSelectedElementIds(allIds);
+                else onSetSelectedElementIds([]);
+              }}
+              className="accent-[#003d4d]"
+            />
+            Seleccionar todo
+          </label>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+            Seleccionados: {selectedCount.toLocaleString('es-CO')}
+          </span>
+          <button
+            type="button"
+            onClick={() => onSetSelectedElementIds?.([])}
+            className="px-2 py-1 rounded border border-slate-200 text-[10px] font-bold uppercase tracking-widest text-slate-600 hover:bg-slate-50"
+          >
+            Limpiar
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <select
+            value={bulkStatus}
+            onChange={(e) => setBulkStatus(e.target.value as PurchaseStatus)}
+            className="bg-white border border-slate-200 rounded px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-slate-600"
+          >
+            {STATUS_ORDER.map((st) => (
+              <option key={st} value={st}>{st}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => {
+              if (!onChangeStatusMany) return;
+              if (!selectedElementIds || selectedElementIds.length === 0) return;
+              onChangeStatusMany(selectedElementIds, bulkStatus);
+            }}
+            className="px-3 py-1 rounded bg-[#003d4d] text-white text-[10px] font-bold uppercase tracking-widest hover:opacity-90 disabled:opacity-40"
+            disabled={!onChangeStatusMany || !selectedElementIds || selectedElementIds.length === 0}
+          >
+            Aplicar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!onChangeStatusMany) return;
+              if (!selectedElementIds || selectedElementIds.length === 0) return;
+              onChangeStatusMany(selectedElementIds, 'COMPRADO');
+            }}
+            className="px-3 py-1 rounded bg-amber-500 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-amber-600 disabled:opacity-40"
+            disabled={!onChangeStatusMany || !selectedElementIds || selectedElementIds.length === 0}
+          >
+            Comprar
+          </button>
+        </div>
+      </div>
+
       {activeTab === 'ESTADOS' ? (
         <div className="flex-1 overflow-auto">
           <table className="w-full text-left border-collapse">
@@ -180,14 +292,9 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {(Object.keys(statusTotals) as PurchaseStatus[]).map((st) => {
+              {STATUS_ORDER.map((st) => {
                 const v = statusTotals[st];
-                const bg =
-                  st === 'PENDIENTE'
-                    ? 'bg-slate-100'
-                    : st === 'COMPRADO'
-                      ? 'bg-amber-100'
-                      : 'bg-emerald-100';
+                const bg = statusRowBg(st);
                 return (
                   <tr key={st} className={bg}>
                     <td className="px-4 py-2 text-xs font-bold text-slate-700">{st}</td>
@@ -213,6 +320,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
           <table className="w-full text-left border-collapse min-w-[1100px]">
             <thead className="sticky top-0 bg-[#003d4d] text-white z-10">
               <tr>
+                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Sel</th>
                 <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Estado</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Clasificación</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Categoría</th>
@@ -228,41 +336,39 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
             <tbody className="divide-y divide-slate-100">
               {paddingTop > 0 && (
                 <tr style={{ height: paddingTop }}>
-                  <td colSpan={10} />
+                  <td colSpan={11} />
                 </tr>
               )}
 
               {visibleElements.map((el) => {
                 const isSelected = selectedElementId === el.id;
                 const st: PurchaseStatus = statuses[el.id] ?? 'PENDIENTE';
-                const rowTint =
-                  st === 'PENDIENTE'
-                    ? 'bg-slate-50'
-                    : st === 'COMPRADO'
-                      ? 'bg-amber-50'
-                      : 'bg-emerald-50';
-                const hover =
-                  st === 'PENDIENTE'
-                    ? 'hover:bg-slate-100'
-                    : st === 'COMPRADO'
-                      ? 'hover:bg-amber-100'
-                      : 'hover:bg-emerald-100';
-                const pill =
-                  st === 'PENDIENTE'
-                    ? 'bg-slate-200 text-slate-700'
-                    : st === 'COMPRADO'
-                      ? 'bg-amber-200 text-amber-900'
-                      : 'bg-emerald-200 text-emerald-900';
-
-                const nextStatus = (cur: PurchaseStatus): PurchaseStatus =>
-                  cur === 'PENDIENTE' ? 'COMPRADO' : cur === 'COMPRADO' ? 'EN SITIO' : 'PENDIENTE';
+                const tint = statusTint(st);
+                const isChecked = selectedSet.has(el.id);
 
                 return (
                   <tr
                     key={el.id}
-                    className={`${rowTint} ${hover} cursor-pointer transition-colors ${isSelected ? 'outline outline-2 outline-blue-300' : ''}`}
+                    className={`${tint.row} ${tint.hover} cursor-pointer transition-colors ${isSelected ? 'outline outline-2 outline-blue-300' : ''}`}
                     onClick={() => onSelectElement(el.id)}
                   >
+                    <td className="px-3 py-1.5">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          if (!onSetSelectedElementIds) return;
+                          const prev = selectedElementIds ?? [];
+                          if (e.target.checked) {
+                            if (!selectedSet.has(el.id)) onSetSelectedElementIds([...prev, el.id]);
+                          } else {
+                            onSetSelectedElementIds(prev.filter((id) => id !== el.id));
+                          }
+                        }}
+                        className="accent-[#003d4d]"
+                      />
+                    </td>
                     <td className="px-3 py-1.5">
                       <button
                         type="button"
@@ -270,7 +376,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                           e.stopPropagation();
                           onChangeStatus(el.id, nextStatus(st));
                         }}
-                        className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${pill}`}
+                        className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${tint.pill}`}
                         title="Cambiar estado"
                       >
                         {st}
@@ -298,13 +404,13 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
 
               {paddingBottom > 0 && (
                 <tr style={{ height: paddingBottom }}>
-                  <td colSpan={10} />
+                  <td colSpan={11} />
                 </tr>
               )}
 
               {totalRows === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-slate-400 text-xs italic">
+                  <td colSpan={11} className="px-4 py-8 text-center text-slate-400 text-xs italic">
                     No hay datos para mostrar con los filtros actuales.
                   </td>
                 </tr>

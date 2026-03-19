@@ -40,7 +40,7 @@ type RemoteModel = {
   group: string;
 };
 
-type PurchaseStatus = 'PENDIENTE' | 'COMPRADO' | 'EN SITIO';
+type PurchaseStatus = 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'EN BODEGA' | 'INSTALADO';
 
 const GITHUB_REPO = {
   owner: 'alcabama-commits',
@@ -110,9 +110,25 @@ export default function App() {
         setElementStatuses({});
         return;
       }
-      const parsed = JSON.parse(raw) as Record<string, PurchaseStatus>;
-      if (parsed && typeof parsed === 'object') setElementStatuses(parsed);
-      else setElementStatuses({});
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const allowed: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'EN BODEGA', 'INSTALADO'];
+      const normalize = (v: unknown): PurchaseStatus | null => {
+        const s = String(v ?? '').trim().toUpperCase();
+        if (s === 'EN SITIO') return 'INSTALADO';
+        if (s === 'EN_BODEGA') return 'EN BODEGA';
+        if (allowed.includes(s as PurchaseStatus)) return s as PurchaseStatus;
+        return null;
+      };
+      if (parsed && typeof parsed === 'object') {
+        const next: Record<string, PurchaseStatus> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          const st = normalize(v);
+          if (st) next[k] = st;
+        }
+        setElementStatuses(next);
+      } else {
+        setElementStatuses({});
+      }
     } catch {
       setElementStatuses({});
     }
@@ -1015,6 +1031,19 @@ export default function App() {
     });
   }, []);
 
+  const handleChangeStatusMany = useCallback((ids: string[], status: PurchaseStatus) => {
+    setElementStatuses((prev) => {
+      let next: Record<string, PurchaseStatus> | null = null;
+      for (const id of ids) {
+        if (prev[id] !== status) {
+          if (!next) next = { ...prev };
+          next[id] = status;
+        }
+      }
+      return next ?? prev;
+    });
+  }, []);
+
   const [expandedModelGroups, setExpandedModelGroups] = useState<Record<string, boolean>>({
     ESTRUCTURA: true,
     GENERAL: true
@@ -1237,8 +1266,11 @@ export default function App() {
                   elements={filteredElements}
                   onSelectElement={setSelectedElementId}
                   selectedElementId={selectedElementId || undefined}
+                  selectedElementIds={selectedElementIds}
+                  onSetSelectedElementIds={setSelectedElementIds}
                   statuses={elementStatuses}
                   onChangeStatus={handleChangeStatus}
+                  onChangeStatusMany={handleChangeStatusMany}
                 />
               </div>
             </div>
@@ -1290,8 +1322,11 @@ export default function App() {
               elements={filteredElements}
               onSelectElement={setSelectedElementId}
               selectedElementId={selectedElementId || undefined}
+              selectedElementIds={selectedElementIds}
+              onSetSelectedElementIds={setSelectedElementIds}
               statuses={elementStatuses}
               onChangeStatus={handleChangeStatus}
+              onChangeStatusMany={handleChangeStatusMany}
             />
           </div>
         )}
