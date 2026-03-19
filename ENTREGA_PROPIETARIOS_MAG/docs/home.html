@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Portal BIM Alcabama</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#D8005E",
+            "background-light": "#FFFFFF",
+            "background-dark": "#343434",
+            "text-light": "#111827",
+            "text-dark": "#F3F4F6",
+            "card-light": "#FFFFFF",
+            "card-dark": "#374151",
+            "border-light": "#E5E7EB",
+            "border-dark": "#4B5563"
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            'source-sans-pro': ['"Source Sans Pro"', 'sans-serif']
+          },
+          borderRadius: {
+            DEFAULT: "0.5rem",
+          },
+        },
+      },
+    };
+  </script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<!-- Enlace al manifiesto de la PWA (ruta relativa) -->
+<link rel="manifest" href="manifest.json">
+<style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
+<div class="relative min-h-screen bg-background-light dark:bg-background-dark">
+<header class="absolute top-0 left-0 w-full z-10 px-8 py-4">
+    <div class="container mx-auto flex items-center justify-between">
+        <div class="flex items-center">
+            <!-- Logo para modo claro -->
+            <img alt="Portal BIM Alcabama Logo" class="h-12 dark:hidden" src="https://i.postimg.cc/wMDNvJB5/Portal-BIM-Alcabama-7-1.png"/>
+            <!-- Logo para modo oscuro -->
+            <img alt="Portal BIM Alcabama Logo" class="h-12 hidden dark:block" src="https://i.postimg.cc/mgpPTVwf/Portal-BIM-Alcabama-7-2.png"/>
+        </div>
+        <div class="flex items-center space-x-4">
+            <button id="theme-toggle" aria-label="Cambiar tema" class="text-text-light dark:text-white hover:text-primary"><span class="material-symbols-outlined">dark_mode</span></button>
+            <div id="auth-container" class="flex items-center space-x-4"><a href="https://alcabama-commits.github.io/bim/inse.html" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Iniciar sesión</a></div>
+        </div>
+    </div>
+</header>
+<main>
+<section class="relative flex min-h-[calc(100vh-6rem)] pt-24">
+    <!-- Panel Izquierdo (30%) con color sólido -->
+    <div class="w-[30%] bg-[#f6f6f6]">
+    </div>
+    <!-- Panel Derecho (70%) con imagen -->
+    <div class="w-[70%] bg-cover bg-center" style="background-image: url('https://i.postimg.cc/MZr8NLjq/1752525357-ciien-00000-mejora-de-color-8.png');">
+    </div>
+</section>
+<section class="bg-background-light dark:bg-background-dark py-16 px-8">
+<div class="container mx-auto">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
+<div>
+<h2 class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">Proyectos</h2>
+<ul class="space-y-2">
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Arboré</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="blue_project_plans.html">Blue</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Ciudadela armonía</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Gardenias</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Iris</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">La figeroa</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Madero</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Magnolias</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Orión</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Trevoly</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Ventura</a></li>
+</ul>
+</div>
+<div>
+<h2 class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">Publicaciones</h2>
+<ul class="space-y-2" id="link-publicaciones">
+<li><a class="hover:text-primary dark:hover:text-primary" href="https://alcabama-commits.github.io/bim/Publicaciones.html">Publicaciones por proyecto</a></li>
+</ul>
+</div>
+<div>
+<h2 class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">Solicitudes</h2>
+<ul class="space-y-2">
+<li id="link-solicitud-cde"><a class="hover:text-primary dark:hover:text-primary" href="https://alcabama-commits.github.io/bim/index.html">Solicitud de acceso a CDE</a></li>
+<li id="link-admin-usuarios"><a class="hover:text-primary dark:hover:text-primary" href="https://alcabama-commits.github.io/bim/addusuarios.html">Administrar Usuarios</a></li>
+<li id="link-lista-usuarios"><a class="hover:text-primary dark:hover:text-primary" href="https://alcabama-commits.github.io/bim/lista_usuarios.html">Listar Usuarios</a></li>
+</ul>
+</div>
+<div>
+<h2 class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">Métricas</h2>
+<ul class="space-y-2">
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Auditorías</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Incidencias</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Seguimiento de proyectos</a></li>
+</ul>
+</div>
+</div>
+</div>
+</section>
+</main>
+<footer class="bg-background-light dark:bg-background-dark py-8 px-8 mt-auto">
+<div class="container mx-auto text-center text-gray-500 dark:text-gray-400">
+<!-- Logo para modo claro -->
+<img alt="Alcabama logo" class="h-8 mx-auto mb-4 dark:hidden" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png"/>
+<!-- Logo para modo oscuro -->
+<img alt="Alcabama logo" class="h-8 mx-auto mb-4 hidden dark:block" src="https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png"/>
+<p class="text-sm">© 2023 Portal BIM Alcabama - Todos los derechos reservados.</p>
+</div>
+</footer>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const authContainer = document.getElementById('auth-container');
+        // Buscar usuario en sessionStorage y luego en localStorage
+        const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
+
+        // --- GESTIÓN DE AUTENTICACIÓN ---
+        if (userAccount) {
+            authContainer.innerHTML = `
+                <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
+                <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
+            `;
+            document.getElementById('logout-button').addEventListener('click', () => {
+                sessionStorage.removeItem('userAccount'); // Limpiar ambas ubicaciones
+                localStorage.removeItem('userAccount');
+                window.location.reload();
+            });
+        }
+
+        // --- CONTROL DE ACCESO POR USUARIO ---
+        if (userAccount) {
+            const userRole = userAccount.role;
+            console.log('User role:', userRole);
+
+            // Definir permisos por rol para cada enlace
+            const permissions = {
+                'link-solicitud-cde': ['EDGE', 'COMBOS Y REFORMAS', 'ARQUITECTURA', 'ADMINISTRADOR'],
+                'link-publicaciones': ['COMBOS Y REFORMAS', 'ACÚSTICA', 'ADMINISTRADOR'],
+                'link-admin-usuarios': ['ADMINISTRADOR'],
+                'link-lista-usuarios': ['ADMINISTRADOR']
+            };
+
+            // Función para mostrar/ocultar enlaces
+            const checkPermissions = (elementId, allowedRoles) => {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    if (userRole && allowedRoles.includes(userRole)) {
+                        element.classList.remove('hidden');
+                    } else {
+                        element.classList.add('hidden');
+                    }
+                }
+            };
+            
+            // Aplicar permisos a todos los enlaces
+            Object.keys(permissions).forEach(elementId => {
+                checkPermissions(elementId, permissions[elementId]);
+            });
+        } else {
+            // Si no hay usuario, ocultar todos los enlaces protegidos
+            document.getElementById('link-solicitud-cde')?.classList.add('hidden');
+            document.getElementById('link-publicaciones')?.classList.add('hidden');
+            document.getElementById('link-admin-usuarios')?.classList.add('hidden');
+            document.getElementById('link-lista-usuarios')?.classList.add('hidden');
+        }
+
+        // --- GESTIÓN DEL TEMA (MODO OSCURO/CLARO) ---
+        const themeToggle = document.getElementById('theme-toggle');
+        const htmlEl = document.documentElement;
+
+        const applyTheme = (theme) => {
+          if (theme === 'dark') {
+            htmlEl.classList.add('dark');
+            themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode';
+          } else {
+            htmlEl.classList.remove('dark');
+            themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode';
+          }
+        };
+
+        const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        applyTheme(savedTheme);
+
+        themeToggle.addEventListener('click', () => {
+          const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
+          localStorage.setItem('theme', newTheme);
+          applyTheme(newTheme);
+        });
+
+        // --- REGISTRO DEL SERVICE WORKER (DESACTIVADO TEMPORALMENTE PARA PRUEBAS) ---
+        // if ('serviceWorker' in navigator) {
+        //     window.addEventListener('load', () => {
+        //         navigator.serviceWorker.register('sw.js')
+        //             .then(registration => {
+        //                 console.log('ServiceWorker registrado con éxito:', registration.scope);
+        //             })
+        //             .catch(error => {
+        //                 console.log('Fallo en el registro de ServiceWorker:', error);
+        //             });
+        //     });
+        // }
+    });
+</script>
+</body></html>

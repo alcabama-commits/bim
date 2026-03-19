@@ -1,10 +1,10 @@
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
 import BIMViewer from './components/BIMViewer';
 import { BIMElement, CategorySummary } from './types';
-import { Upload, Box } from 'lucide-react';
+import { Upload, Box, Folder, File, ChevronDown, ChevronRight, RefreshCw, Eye, Loader2, Maximize2, Minimize2 } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import LevelGrid from './components/LevelGrid';
 import DataTable from './components/DataTable';
@@ -33,6 +33,23 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: 
   }
 };
 
+type RemoteModel = {
+  name: string;
+  fragUrl: string;
+  jsonUrl?: string;
+  group: string;
+};
+
+const GITHUB_REPO = {
+  owner: 'alcabama-commits',
+  repo: 'bim',
+  branch: 'main',
+  modelsPath: 'docs/VSR_IFC/models'
+};
+
+const rawUrlFor = (path: string) =>
+  `https://raw.githubusercontent.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/${GITHUB_REPO.branch}/${path.split('/').map(encodeURIComponent).join('/')}`;
+
 export default function App() {
   const [elements, setElements] = useState<BIMElement[]>([]);
   const [summaries, setSummaries] = useState<CategorySummary[]>([]);
@@ -42,6 +59,25 @@ export default function App() {
   const [showWelcome, setShowWelcome] = useState(true);
   const componentsRef = useRef<OBC.Components | null>(null);
 
+  const [availableModels, setAvailableModels] = useState<RemoteModel[]>([]);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [isModelsLoading, setIsModelsLoading] = useState(false);
+  const [selectedRemoteModelName, setSelectedRemoteModelName] = useState<string | null>(null);
+
+  const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
+    const stored = Number(localStorage.getItem('cantidades:leftPanelWidth'));
+    return Number.isFinite(stored) && stored > 0 ? stored : 300;
+  });
+  const [rightPanelWidth, setRightPanelWidth] = useState(() => {
+    const stored = Number(localStorage.getItem('cantidades:rightPanelWidth'));
+    return Number.isFinite(stored) && stored > 0 ? stored : 320;
+  });
+  const [tablePanelHeight, setTablePanelHeight] = useState(() => {
+    const stored = Number(localStorage.getItem('cantidades:tablePanelHeight'));
+    return Number.isFinite(stored) && stored > 0 ? stored : 320;
+  });
+  const [isTableMaximized, setIsTableMaximized] = useState(false);
+
   // Filter states
   const [selectedClassifications, setSelectedClassifications] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -49,6 +85,42 @@ export default function App() {
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
   const [selectedMaterial, setSelectedMaterial] = useState<string>('Todas');
   const [isIsolateMode, setIsIsolateMode] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('cantidades:leftPanelWidth', String(leftPanelWidth));
+  }, [leftPanelWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('cantidades:rightPanelWidth', String(rightPanelWidth));
+  }, [rightPanelWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('cantidades:tablePanelHeight', String(tablePanelHeight));
+  }, [tablePanelHeight]);
+
+  const startHorizontalDrag = useCallback((startEvent: React.PointerEvent, onDeltaX: (dx: number) => void) => {
+    startEvent.preventDefault();
+    const startX = startEvent.clientX;
+    const move = (e: PointerEvent) => onDeltaX(e.clientX - startX);
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }, []);
+
+  const startVerticalDrag = useCallback((startEvent: React.PointerEvent, onDeltaY: (dy: number) => void) => {
+    startEvent.preventDefault();
+    const startY = startEvent.clientY;
+    const move = (e: PointerEvent) => onDeltaY(e.clientY - startY);
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }, []);
 
   const getProp = (el: BIMElement, key: string) => {
     if (!el.properties) return undefined;
@@ -69,6 +141,55 @@ export default function App() {
     }
     return String(val);
   };
+
+  const fetchAvailableModels = useCallback(async () => {
+    setIsModelsLoading(true);
+    setModelsError(null);
+    try {
+      const url = `https://api.github.com/repos/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/contents/${GITHUB_REPO.modelsPath}?ref=${GITHUB_REPO.branch}`;
+      const res = await fetch(url, {
+        headers: { Accept: 'application/vnd.github+json' }
+      });
+      if (!res.ok) {
+        throw new Error(`No se pudo listar modelos (${res.status})`);
+      }
+      const data = (await res.json()) as Array<{ type: string; name: string; path: string }>;
+      const files = data.filter((item) => item.type === 'file');
+      const fragFiles = files.filter((f) => f.name.toLowerCase().endsWith('.frag'));
+      const jsonByBase = new Map<string, string>();
+      files
+        .filter((f) => f.name.toLowerCase().endsWith('.json'))
+        .forEach((f) => {
+          const base = f.name.slice(0, -'.json'.length);
+          jsonByBase.set(base.toLowerCase(), f.path);
+        });
+
+      const nextModels: RemoteModel[] = fragFiles
+        .map((f) => {
+          const base = f.name.slice(0, -'.frag'.length);
+          const jsonPath = jsonByBase.get(base.toLowerCase());
+          const group = /estructura/i.test(f.name) ? 'ESTRUCTURA' : 'GENERAL';
+          return {
+            name: f.name,
+            fragUrl: rawUrlFor(f.path),
+            jsonUrl: jsonPath ? rawUrlFor(jsonPath) : undefined,
+            group
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+
+      setAvailableModels(nextModels);
+    } catch (e) {
+      setModelsError(e instanceof Error ? e.message : 'Error cargando modelos');
+      setAvailableModels([]);
+    } finally {
+      setIsModelsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAvailableModels();
+  }, [fetchAvailableModels]);
 
   const filteredElements = useMemo(() => {
     return elements.filter(el => {
@@ -330,181 +451,262 @@ export default function App() {
     setSummaries([]);
   };
 
+  const applyJsonText = useCallback(async (text: string) => {
+    const rawData = JSON.parse(text);
+    let propertiesMap: Record<string, any> = {};
+
+    if (Array.isArray(rawData)) {
+      rawData.forEach(item => {
+        const id = item.ExpressID || item.expressID || item.id || item.Id || item.GlobalId || item.globalId || item.Guid || item.GUID;
+        if (id !== undefined && id !== null) {
+          propertiesMap[id.toString()] = item;
+        }
+      });
+    } else {
+      propertiesMap = rawData;
+    }
+
+    setElements(prevElements => {
+      if (prevElements.length === 0) return prevElements;
+
+      const updatedElements = prevElements.map(el => {
+        let props = propertiesMap[el.id];
+        if (!props && el.globalId) {
+          props = propertiesMap[el.globalId];
+        }
+        if (!props) return el;
+
+        const getValueLocal = (attr: any) => {
+          if (attr === undefined || attr === null) return undefined;
+          if (typeof attr === 'object') {
+            if ('value' in attr) return attr.value;
+            if ('NominalValue' in attr) {
+              const nv = attr.NominalValue;
+              return (nv && typeof nv === 'object' && 'value' in nv) ? nv.value : nv;
+            }
+            if ('QuantityValue' in attr) {
+              const qv = attr.QuantityValue;
+              return (qv && typeof qv === 'object' && 'value' in qv) ? qv.value : qv;
+            }
+          }
+          return attr;
+        };
+
+        const findDeepLocal = (obj: any, target: string): any => {
+          if (!obj || typeof obj !== 'object') return undefined;
+          const normalizedTarget = target.trim().toLowerCase();
+          for (const key in obj) {
+            if (key === target || key.trim().toLowerCase() === normalizedTarget) {
+              return getValueLocal(obj[key]);
+            }
+          }
+          for (const key in obj) {
+            const val = obj[key];
+            if (val && typeof val === 'object' && !Array.isArray(val)) {
+              if (!('value' in val) && !('NominalValue' in val) && !('QuantityValue' in val)) {
+                const found = findDeepLocal(val, target);
+                if (found !== undefined) return found;
+              }
+            } else if (Array.isArray(val)) {
+              for (const item of val) {
+                const found = findDeepLocal(item, target);
+                if (found !== undefined) return found;
+              }
+            }
+          }
+          return undefined;
+        };
+
+        const integratedProps: any = {};
+        PRIORITY_PROPS.forEach(p => {
+          const val = findDeepLocal(props, p);
+          if (val !== undefined) integratedProps[p] = val;
+        });
+
+        const findVolume = (obj: any): number | null => {
+          if (!obj || typeof obj !== 'object') return null;
+          const volVal = integratedProps["VOLUMEN INTEGRADO"];
+          if (volVal !== undefined) {
+            if (typeof volVal === 'number' && volVal > 0) return volVal;
+            if (!isNaN(Number(volVal)) && Number(volVal) > 0) return Number(volVal);
+          }
+          for (const key in obj) {
+            const k = key.toLowerCase();
+            if (k.includes('volume') || k.includes('volumen')) {
+              const val = getValueLocal(obj[key]);
+              if (typeof val === 'number' && val > 0) return val;
+              if (!isNaN(Number(val)) && Number(val) > 0) return Number(val);
+            }
+          }
+          for (const key in obj) {
+            const val = obj[key];
+            if (val && typeof val === 'object' && !Array.isArray(val)) {
+              const found = findVolume(val);
+              if (found !== null) return found;
+            } else if (Array.isArray(val)) {
+              for (const item of val) {
+                const found = findVolume(item);
+                if (found !== null) return found;
+              }
+            }
+          }
+          return null;
+        };
+
+        const realVolume = findVolume(props);
+        const updatedEl = {
+          ...el,
+          properties: { ...el.properties, ...props, ...integratedProps }
+        };
+
+        if (realVolume !== null) {
+          updatedEl.volume = realVolume;
+          updatedEl.name = (integratedProps["NOMBRE INTEGRADO"] || el.name).replace(' (Cargando datos...)', '');
+        } else if (integratedProps["NOMBRE INTEGRADO"]) {
+          updatedEl.name = integratedProps["NOMBRE INTEGRADO"];
+        }
+
+        return updatedEl;
+      });
+
+      const newCategoryMap: Record<string, { totalVolume: number; count: number }> = {};
+      updatedElements.forEach(el => {
+        if (!newCategoryMap[el.category]) {
+          newCategoryMap[el.category] = { totalVolume: 0, count: 0 };
+        }
+        newCategoryMap[el.category].totalVolume += el.volume;
+        newCategoryMap[el.category].count += 1;
+      });
+
+      setSummaries(Object.entries(newCategoryMap).map(([category, data]) => ({
+        category,
+        totalVolume: data.totalVolume,
+        count: data.count
+      })));
+
+      return updatedElements;
+    });
+  }, []);
+
   const handleJsonUpload = async (file: File) => {
-    console.log("Procesando JSON de propiedades...");
     setIsLoading(true);
     try {
-      const text = await file.text();
-      const rawData = JSON.parse(text);
-      
-      let propertiesMap: Record<string, any> = {};
-      
-      // Normalizar JSON: si es un arreglo, convertirlo a mapa por ID
-      if (Array.isArray(rawData)) {
-        console.log(`JSON es un arreglo con ${rawData.length} elementos.`);
-        rawData.forEach(item => {
-          const id = item.ExpressID || item.expressID || item.id || item.Id || item.GlobalId || item.globalId || item.Guid || item.GUID;
-          if (id !== undefined && id !== null) {
-            propertiesMap[id.toString()] = item;
-          }
-        });
-      } else {
-        propertiesMap = rawData;
-      }
-      
-      const jsonKeys = Object.keys(propertiesMap);
-      console.log(`Mapa de propiedades listo con ${jsonKeys.length} llaves.`);
-      
-      setElements(prevElements => {
-        if (prevElements.length === 0) {
-          console.warn("No hay elementos cargados en el visor para vincular.");
-          return prevElements;
-        }
-
-        console.log(`Intentando vincular ${prevElements.length} elementos del visor con el JSON.`);
-        let matchCount = 0;
-
-        const updatedElements = prevElements.map(el => {
-          // Intentar vincular por ExpressID (el.id) o por GlobalID (el.globalId)
-          let props = propertiesMap[el.id];
-          if (!props && el.globalId) {
-            props = propertiesMap[el.globalId];
-          }
-          
-          if (!props) return el;
-
-          matchCount++;
-          
-          const getValueLocal = (attr: any) => {
-            if (attr === undefined || attr === null) return undefined;
-            if (typeof attr === 'object') {
-              if ('value' in attr) return attr.value;
-              if ('NominalValue' in attr) {
-                const nv = attr.NominalValue;
-                return (nv && typeof nv === 'object' && 'value' in nv) ? nv.value : nv;
-              }
-              if ('QuantityValue' in attr) {
-                const qv = attr.QuantityValue;
-                return (qv && typeof qv === 'object' && 'value' in qv) ? qv.value : qv;
-              }
-            }
-            return attr;
-          };
-
-          // Búsqueda profunda de parámetros integrados en el JSON
-          const findDeepLocal = (obj: any, target: string): any => {
-            if (!obj || typeof obj !== 'object') return undefined;
-            
-            const normalizedTarget = target.trim().toLowerCase();
-            for (const key in obj) {
-              if (key === target || key.trim().toLowerCase() === normalizedTarget) {
-                return getValueLocal(obj[key]);
-              }
-            }
-            
-            for (const key in obj) {
-              const val = obj[key];
-              if (val && typeof val === 'object' && !Array.isArray(val)) {
-                if (!('value' in val) && !('NominalValue' in val) && !('QuantityValue' in val)) {
-                  const found = findDeepLocal(val, target);
-                  if (found !== undefined) return found;
-                }
-              } else if (Array.isArray(val)) {
-                for (const item of val) {
-                  const found = findDeepLocal(item, target);
-                  if (found !== undefined) return found;
-                }
-              }
-            }
-            return undefined;
-          };
-
-          const integratedProps: any = {};
-          PRIORITY_PROPS.forEach(p => {
-            const val = findDeepLocal(props, p);
-            if (val !== undefined) integratedProps[p] = val;
-          });
-
-          const findVolume = (obj: any): number | null => {
-            if (!obj || typeof obj !== 'object') return null;
-            
-            // Prioridad a VOLUMEN INTEGRADO
-            const volVal = integratedProps["VOLUMEN INTEGRADO"];
-            if (volVal !== undefined) {
-              if (typeof volVal === 'number' && volVal > 0) return volVal;
-              if (!isNaN(Number(volVal)) && Number(volVal) > 0) return Number(volVal);
-            }
-
-            // 1. Buscar directamente en el objeto
-            for (const key in obj) {
-              const k = key.toLowerCase();
-              if (k.includes('volume') || k.includes('volumen')) {
-                const val = getValueLocal(obj[key]);
-                if (typeof val === 'number' && val > 0) return val;
-                if (!isNaN(Number(val)) && Number(val) > 0) return Number(val);
-              }
-            }
-
-            // 2. Recorrer recursivamente
-            for (const key in obj) {
-              const val = obj[key];
-              if (val && typeof val === 'object' && !Array.isArray(val)) {
-                const found = findVolume(val);
-                if (found !== null) return found;
-              } else if (Array.isArray(val)) {
-                for (const item of val) {
-                  const found = findVolume(item);
-                  if (found !== null) return found;
-                }
-              }
-            }
-            return null;
-          };
-
-          const realVolume = findVolume(props);
-          const updatedEl = {
-            ...el,
-            properties: { ...el.properties, ...props, ...integratedProps }
-          };
-
-          if (realVolume !== null) {
-            updatedEl.volume = realVolume;
-            updatedEl.name = (integratedProps["NOMBRE INTEGRADO"] || el.name).replace(' (Cargando datos...)', '');
-          } else if (integratedProps["NOMBRE INTEGRADO"]) {
-            updatedEl.name = integratedProps["NOMBRE INTEGRADO"];
-          }
-
-          return updatedEl;
-        });
-
-        console.log(`Vinculación exitosa: ${matchCount} de ${prevElements.length} elementos encontrados en el JSON.`);
-        if (matchCount === 0) {
-          console.warn("¡ATENCIÓN! Ningún ID del visor coincidió con las llaves del JSON. Comprueba si el JSON usa ExpressID o GlobalID.");
-        }
-
-        const newCategoryMap: Record<string, { totalVolume: number; count: number }> = {};
-        updatedElements.forEach(el => {
-          if (!newCategoryMap[el.category]) {
-            newCategoryMap[el.category] = { totalVolume: 0, count: 0 };
-          }
-          newCategoryMap[el.category].totalVolume += el.volume;
-          newCategoryMap[el.category].count += 1;
-        });
-
-        setSummaries(Object.entries(newCategoryMap).map(([category, data]) => ({
-          category,
-          totalVolume: data.totalVolume,
-          count: data.count
-        })));
-
-        return updatedElements;
-      });
+      await applyJsonText(await file.text());
     } catch (error) {
       console.error("Error procesando JSON:", error);
     } finally {
       setIsLoading(false);
     }
   };
+
+  const loadFragBytes = useCallback(async (fragName: string, bytes: Uint8Array) => {
+    if (!componentsRef.current) return null;
+    await clearScene();
+    const fragments = componentsRef.current.get(OBC.FragmentsManager);
+
+    if (!fragments.initialized) {
+      let attempts = 0;
+      while (!fragments.initialized && attempts < 10) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        attempts++;
+      }
+      if (!fragments.initialized) {
+        throw new Error("No se pudo inicializar FragmentsManager. Revisa la carga del worker.");
+      }
+    }
+
+    const model = await withTimeout<any>(
+      fragments.core.load(bytes, { modelId: fragName }),
+      60000,
+      "Tiempo de espera agotado cargando el archivo .frag"
+    );
+
+    if (!model) return null;
+
+    const worlds = componentsRef.current.get(OBC.Worlds);
+    const world = worlds.list.values().next().value;
+    if (!world) return model;
+
+    const modelObject = model.object ?? model;
+
+    try {
+      if (model.uuid !== fragName) model.uuid = fragName;
+    } catch {
+    }
+
+    try {
+      if (typeof model.useCamera === 'function') model.useCamera(world.camera.three);
+    } catch {
+    }
+
+    try {
+      const list = (fragments as any).list;
+      if (list?.set && !list.has?.(model.uuid)) list.set(model.uuid, model);
+    } catch {
+    }
+
+    if (!world.scene.three.children.includes(modelObject)) {
+      world.scene.three.add(modelObject);
+    }
+
+    try {
+      (modelObject as any).traverse?.((child: any) => {
+        if (child?.isMesh) {
+          world.meshes?.add?.(child);
+          if (componentsRef.current?.meshes && Array.isArray((componentsRef.current as any).meshes)) {
+            (componentsRef.current as any).meshes.push(child);
+          }
+        }
+      });
+    } catch {
+    }
+
+    try {
+      await fragments.core.update(true);
+    } catch {
+    }
+
+    setTimeout(() => {
+      if (world.camera.hasCameraControls()) {
+        const bbox = new THREE.Box3().setFromObject(modelObject);
+        const sphere = new THREE.Sphere();
+        bbox.getBoundingSphere(sphere);
+        world.camera.controls.fitToSphere(sphere, true);
+      }
+      try {
+        fragments.core.update(true);
+      } catch {
+      }
+    }, 300);
+
+    await processModel(model);
+    return model;
+  }, [processModel]);
+
+  const loadRemoteModel = useCallback(async (remote: RemoteModel) => {
+    if (!componentsRef.current) return;
+    setIsLoading(true);
+    setShowWelcome(false);
+    setSelectedRemoteModelName(remote.name);
+    try {
+      const fragRes = await fetch(remote.fragUrl);
+      if (!fragRes.ok) throw new Error(`No se pudo descargar ${remote.name}`);
+      const fragBytes = new Uint8Array(await fragRes.arrayBuffer());
+      await loadFragBytes(remote.name, fragBytes);
+
+      if (remote.jsonUrl) {
+        const jsonRes = await fetch(remote.jsonUrl);
+        if (jsonRes.ok) {
+          await applyJsonText(await jsonRes.text());
+        }
+      }
+    } catch (e) {
+      console.error('Error cargando modelo remoto:', e);
+      alert(e instanceof Error ? e.message : 'Error cargando modelo remoto');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [applyJsonText, loadFragBytes]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -523,103 +725,12 @@ export default function App() {
     setShowWelcome(false);
 
     try {
-      // 1. Si hay un FRAG, cargarlo primero
       if (fragFile) {
-        console.log("Cargando archivo FRAG:", fragFile.name);
-        await clearScene();
-        const fragments = componentsRef.current.get(OBC.FragmentsManager);
-        
-        if (!fragments.initialized) {
-          console.log("Esperando inicialización de FragmentsManager...");
-          let attempts = 0;
-          while (!fragments.initialized && attempts < 10) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            attempts++;
-          }
-          if (!fragments.initialized) {
-            throw new Error("No se pudo inicializar FragmentsManager. Revisa la carga del worker.");
-          }
-        }
-
-        const buffer = await fragFile.arrayBuffer();
-        const data = new Uint8Array(buffer);
-        const model = await withTimeout<any>(
-          fragments.core.load(data, { modelId: fragFile.name }),
-          60000,
-          "Tiempo de espera agotado cargando el archivo .frag"
-        );
-        
-        if (model) {
-          const worlds = componentsRef.current.get(OBC.Worlds);
-          const world = worlds.list.values().next().value;
-          if (world) {
-            const modelObject = model.object ?? model;
-
-            try {
-              if (model.uuid !== fragFile.name) {
-                model.uuid = fragFile.name;
-              }
-            } catch {
-            }
-
-            try {
-              if (typeof model.useCamera === 'function') {
-                model.useCamera(world.camera.three);
-              }
-            } catch {
-            }
-
-            try {
-              const list = (fragments as any).list;
-              if (list?.set && !list.has?.(model.uuid)) {
-                list.set(model.uuid, model);
-              }
-            } catch {
-            }
-
-            if (!world.scene.three.children.includes(modelObject)) {
-              world.scene.three.add(modelObject);
-            }
-
-            try {
-              (modelObject as any).traverse?.((child: any) => {
-                if (child?.isMesh) {
-                  world.meshes?.add?.(child);
-                  if (componentsRef.current?.meshes && Array.isArray((componentsRef.current as any).meshes)) {
-                    (componentsRef.current as any).meshes.push(child);
-                  }
-                }
-              });
-            } catch {
-            }
-
-            try {
-              await fragments.core.update(true);
-            } catch {
-            }
-
-            setTimeout(() => {
-              if (world.camera.hasCameraControls()) {
-                const bbox = new THREE.Box3().setFromObject(modelObject);
-                const sphere = new THREE.Sphere();
-                bbox.getBoundingSphere(sphere);
-                world.camera.controls.fitToSphere(sphere, true);
-              }
-              try {
-                fragments.core.update(true);
-              } catch {
-              }
-            }, 500);
-          }
-          await processModel(model);
-        }
+        await loadFragBytes(fragFile.name, new Uint8Array(await fragFile.arrayBuffer()));
       }
 
-      // 2. Si hay un JSON, procesarlo después (para que tenga elementos a los cuales asignar datos)
       if (jsonFile) {
-        // Pequeña espera para asegurar que el procesamiento del modelo terminó
-        await new Promise(resolve => setTimeout(resolve, 500));
-        await handleJsonUpload(jsonFile);
+        await applyJsonText(await jsonFile.text());
       }
     } catch (error) {
       console.error('Error en la carga combinada:', error);
@@ -724,6 +835,11 @@ export default function App() {
     setSelectedMaterial('Todas');
   };
 
+  const [expandedModelGroups, setExpandedModelGroups] = useState<Record<string, boolean>>({
+    ESTRUCTURA: true,
+    GENERAL: true
+  });
+
   return (
     <div className="flex flex-col h-screen w-screen bg-white overflow-hidden font-sans">
       {/* Header */}
@@ -735,9 +851,9 @@ export default function App() {
           </div>
         </div>
         
-        <div className="flex-1 max-w-2xl mx-8">
+        <div className="flex-1 max-w-3xl mx-8">
           <div className="bg-[#003d4d] text-white py-1.5 px-6 rounded-sm text-center font-bold uppercase tracking-widest text-sm shadow-inner">
-            ESTRUCTURA - TORRE 1
+            {selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'CANTIDADES'}
           </div>
         </div>
 
@@ -752,101 +868,249 @@ export default function App() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar */}
-        <Sidebar 
-          categories={sidebarData}
-          selectedClassifications={selectedClassifications}
-          selectedCategories={selectedCategories}
-          selectedSubCategories={selectedSubCategories}
-          onToggleClassification={toggleClassification}
-          onToggleCategory={toggleCategory}
-          onToggleSubCategory={toggleSubCategory}
-          materials={materials}
-          selectedMaterial={selectedMaterial}
-          onMaterialChange={setSelectedMaterial}
-          onResetFilters={resetFilters}
-        />
-
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden relative">
-          {/* 3D Viewer */}
-          <div className="flex-1 relative bg-slate-50">
-            {showWelcome && !isLoading && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-                <div className="bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-slate-200 max-w-md text-center pointer-events-auto">
-                  <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                    <Box className="w-8 h-8 text-blue-600" />
-                  </div>
-                  <h2 className="text-2xl font-light text-slate-900 mb-2">Extractor de Cantidades</h2>
-                  <p className="text-slate-500 text-sm mb-8">
-                    Carga un archivo <b>.frag</b> y <b>.json</b> para filtrar por parámetros integrados.
-                  </p>
-                  <div className="flex flex-col gap-3">
-                    <button 
-                      onClick={loadSample}
-                      className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
-                    >
-                      Cargar Modelo de Ejemplo
-                    </button>
-                    <label className="w-full py-3 bg-white text-slate-700 border border-slate-200 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-slate-50 transition-all cursor-pointer">
-                      Subir Archivos
-                      <input type="file" accept=".frag,.json" multiple className="hidden" onChange={handleFileUpload} />
-                    </label>
-                  </div>
-                </div>
+        {!isTableMaximized && (
+          <>
+            <div
+              className="bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden"
+              style={{ width: leftPanelWidth }}
+            >
+              <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Modelos IFC</h3>
+                <button
+                  type="button"
+                  onClick={fetchAvailableModels}
+                  className="p-1 hover:bg-slate-200 rounded transition-colors"
+                  title="Actualizar lista"
+                >
+                  {isModelsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                </button>
               </div>
-            )}
-            
-            <BIMViewer 
-              onModelLoaded={handleModelLoaded} 
-              elements={filteredElements}
-              isLoading={isLoading}
-              selectedElementId={selectedElementId || undefined}
-              selectedElementIds={selectedElementIds}
-              onElementSelect={setSelectedElementId}
-              isIsolateMode={isIsolateMode}
+
+              <div className="flex-1 overflow-y-auto p-2">
+                {modelsError && (
+                  <div className="p-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
+                    {modelsError}
+                  </div>
+                )}
+
+                {!modelsError && availableModels.length === 0 && !isModelsLoading && (
+                  <div className="p-3 text-xs text-slate-500">
+                    No se encontraron modelos en {GITHUB_REPO.modelsPath}.
+                  </div>
+                )}
+
+                {(['ESTRUCTURA', 'GENERAL'] as const).map((group) => {
+                  const items = availableModels.filter((m) => m.group === group);
+                  if (items.length === 0) return null;
+                  const expanded = expandedModelGroups[group];
+                  return (
+                    <div key={group} className="mb-3">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedModelGroups((prev) => ({ ...prev, [group]: !prev[group] }))}
+                        className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 text-left"
+                      >
+                        <Folder className="w-4 h-4 text-slate-500" />
+                        <span className="flex-1 text-[10px] font-black text-slate-600 uppercase tracking-widest">{group}</span>
+                        {expanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                      </button>
+
+                      {expanded && (
+                        <div className="mt-1 space-y-1">
+                          {items.map((m) => {
+                            const isSelected = selectedRemoteModelName === m.name;
+                            const isRowLoading = isLoading && isSelected;
+                            return (
+                              <button
+                                key={m.name}
+                                type="button"
+                                onClick={() => loadRemoteModel(m)}
+                                className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg border text-left transition-colors ${
+                                  isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-transparent hover:bg-slate-50'
+                                }`}
+                                title={m.name}
+                              >
+                                <File className="w-4 h-4 text-slate-500" />
+                                <span className="flex-1 text-[11px] text-slate-700 truncate">
+                                  {m.name.replace(/\.frag$/i, '')}
+                                </span>
+                                {isRowLoading ? (
+                                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                                ) : isSelected ? (
+                                  <Eye className="w-4 h-4 text-blue-600" />
+                                ) : (
+                                  <div className="w-4 h-4" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div
+              className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
+              onPointerDown={(e) => {
+                const start = leftPanelWidth;
+                startHorizontalDrag(e, (dx) => {
+                  const next = Math.min(520, Math.max(220, start + dx));
+                  setLeftPanelWidth(next);
+                });
+              }}
             />
 
-            {/* Floating Controls */}
-            <div className="absolute top-4 right-4 flex flex-col gap-2">
-              <button 
-                onClick={() => setIsIsolateMode(!isIsolateMode)}
-                className={`p-2 rounded-lg shadow border transition-all flex items-center gap-2 ${isIsolateMode ? 'bg-blue-600 text-white border-blue-500' : 'bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white'}`}
-                title={isIsolateMode ? "Desactivar Aislamiento" : "Activar Aislamiento"}
-              >
-                <div className={`w-2 h-2 rounded-full ${isIsolateMode ? 'bg-white animate-pulse' : 'bg-slate-300'}`} />
-                <span className="text-[10px] font-bold uppercase tracking-widest">Aislar Selección</span>
-              </button>
-              <button 
-                onClick={loadSample}
-                className="p-2 bg-white/90 backdrop-blur-md text-slate-700 rounded-lg shadow border border-slate-200 hover:bg-white transition-all"
-                title="Cargar Ejemplo"
-              >
-                <Box className="w-5 h-5 text-blue-600" />
-              </button>
-              <label className="p-2 bg-blue-600 text-white rounded-lg shadow shadow-blue-600/20 hover:bg-blue-700 transition-all cursor-pointer" title="Subir Archivos">
-                <Upload className="w-5 h-5" />
-                <input type="file" accept=".frag,.json" multiple className="hidden" onChange={handleFileUpload} />
-              </label>
+            <div className="flex-1 flex flex-col overflow-hidden relative">
+              <div className="flex-1 relative bg-slate-50">
+                {showWelcome && !isLoading && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+                    <div className="bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-slate-200 max-w-md text-center pointer-events-auto">
+                      <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <Box className="w-8 h-8 text-blue-600" />
+                      </div>
+                      <h2 className="text-2xl font-light text-slate-900 mb-2">Extractor de Cantidades</h2>
+                      <p className="text-slate-500 text-sm mb-8">
+                        Selecciona un modelo del menú izquierdo o carga archivos <b>.frag</b> + <b>.json</b>.
+                      </p>
+                      <div className="flex flex-col gap-3">
+                        <button
+                          onClick={loadSample}
+                          className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+                        >
+                          Cargar Modelo de Ejemplo
+                        </button>
+                        <label className="w-full py-3 bg-white text-slate-700 border border-slate-200 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-slate-50 transition-all cursor-pointer">
+                          Subir Archivos
+                          <input type="file" accept=".frag,.json" multiple className="hidden" onChange={handleFileUpload} />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <BIMViewer
+                  onModelLoaded={handleModelLoaded}
+                  elements={filteredElements}
+                  isLoading={isLoading}
+                  selectedElementId={selectedElementId || undefined}
+                  selectedElementIds={selectedElementIds}
+                  onElementSelect={setSelectedElementId}
+                  isIsolateMode={isIsolateMode}
+                />
+
+                <div className="absolute top-4 right-4 flex flex-col gap-2">
+                  <button
+                    onClick={() => setIsIsolateMode(!isIsolateMode)}
+                    className={`p-2 rounded-lg shadow border transition-all flex items-center gap-2 ${isIsolateMode ? 'bg-blue-600 text-white border-blue-500' : 'bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white'}`}
+                    title={isIsolateMode ? "Desactivar Aislamiento" : "Activar Aislamiento"}
+                  >
+                    <div className={`w-2 h-2 rounded-full ${isIsolateMode ? 'bg-white animate-pulse' : 'bg-slate-300'}`} />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Aislar Selección</span>
+                  </button>
+                  <button
+                    onClick={loadSample}
+                    className="p-2 bg-white/90 backdrop-blur-md text-slate-700 rounded-lg shadow border border-slate-200 hover:bg-white transition-all"
+                    title="Cargar Ejemplo"
+                  >
+                    <Box className="w-5 h-5 text-blue-600" />
+                  </button>
+                  <label className="p-2 bg-blue-600 text-white rounded-lg shadow shadow-blue-600/20 hover:bg-blue-700 transition-all cursor-pointer" title="Subir Archivos">
+                    <Upload className="w-5 h-5" />
+                    <input type="file" accept=".frag,.json" multiple className="hidden" onChange={handleFileUpload} />
+                  </label>
+                </div>
+              </div>
+
+              <LevelGrid
+                levels={levels}
+                selectedLevels={selectedLevels}
+                onToggleLevel={toggleLevel}
+              />
+
+              <div
+                className="h-2 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-row-resize"
+                onPointerDown={(e) => {
+                  const start = tablePanelHeight;
+                  startVerticalDrag(e, (dy) => {
+                    const next = Math.min(600, Math.max(220, start - dy));
+                    setTablePanelHeight(next);
+                  });
+                }}
+              />
+
+              <div className="flex flex-col border-t border-slate-200" style={{ height: tablePanelHeight }}>
+                <div className="h-10 px-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
+                  <button
+                    type="button"
+                    onClick={() => setIsTableMaximized(true)}
+                    className="p-1 hover:bg-slate-200 rounded transition-colors"
+                    title="Maximizar"
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <DataTable
+                  elements={filteredElements}
+                  onSelectElement={setSelectedElementId}
+                  selectedElementId={selectedElementId || undefined}
+                />
+              </div>
             </div>
-          </div>
 
-          {/* Level Grid */}
-          <LevelGrid 
-            levels={levels}
-            selectedLevels={selectedLevels}
-            onToggleLevel={toggleLevel}
-          />
+            <div
+              className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
+              onPointerDown={(e) => {
+                const start = rightPanelWidth;
+                startHorizontalDrag(e, (dx) => {
+                  const next = Math.min(520, Math.max(260, start - dx));
+                  setRightPanelWidth(next);
+                });
+              }}
+            />
 
-          {/* Data Table */}
-          <div className="h-1/3 min-h-[250px] flex flex-col border-t border-slate-200">
-            <DataTable 
+            <div style={{ width: rightPanelWidth }} className="h-full overflow-hidden">
+              <Sidebar
+                categories={sidebarData}
+                selectedClassifications={selectedClassifications}
+                selectedCategories={selectedCategories}
+                selectedSubCategories={selectedSubCategories}
+                onToggleClassification={toggleClassification}
+                onToggleCategory={toggleCategory}
+                onToggleSubCategory={toggleSubCategory}
+                materials={materials}
+                selectedMaterial={selectedMaterial}
+                onMaterialChange={setSelectedMaterial}
+                onResetFilters={resetFilters}
+              />
+            </div>
+          </>
+        )}
+
+        {isTableMaximized && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="h-12 px-6 border-b border-slate-200 bg-white flex items-center justify-between">
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
+              <button
+                type="button"
+                onClick={() => setIsTableMaximized(false)}
+                className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                title="Minimizar"
+              >
+                <Minimize2 className="w-4 h-4 text-slate-600" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Volver</span>
+              </button>
+            </div>
+            <DataTable
               elements={filteredElements}
               onSelectElement={setSelectedElementId}
               selectedElementId={selectedElementId || undefined}
             />
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

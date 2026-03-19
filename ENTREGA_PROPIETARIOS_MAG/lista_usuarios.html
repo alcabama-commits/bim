@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Lista de Usuarios - BIM Alcabama</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#374151",
+              "background-light": "#FFFFFF",
+              "background-dark": "#111827",
+            },
+          },
+        },
+      };
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .loader { border-top-color: #374151; }
+    </style>
+    <script>
+        // --- SCRIPT DE SEGURIDAD ---
+        (function() {
+            const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
+            if (!userAccount) {
+                alert('Acceso denegado. Por favor, inicie sesión.');
+                window.location.href = 'https://alcabama-commits.github.io/bim/inse.html';
+                return;
+            }
+            if (userAccount.role !== 'ADMINISTRADOR') {
+                alert('Acceso denegado. No tiene permisos para ver esta página.');
+                window.location.href = 'https://alcabama-commits.github.io/bim/home.html';
+            }
+        })();
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-gray-900 dark:text-gray-100">
+<div class="flex flex-col min-h-screen">
+    <header class="py-6 px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <img alt="BIM Logo" class="h-10 w-auto" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCrmYsDxOkD_ioE_I3x-UxFh3dPRE3Ze6h07IcBC0o8k83W9i8CvT4m0l7lYQrkblksjE6b_GTJl0Y4Zq9e77x0OgF3v5ZQrqqzQ3Khb6GEGEsgqgMfxyf2BGpKh42XdLnWUkJxJi2eVWIkNDWPjGdNeqIL2KjCVnTmfPReKR1NbuMH_VNqCl9Ewi0TCyqBNupy4Nwt06DqMA-A5Q0NNOryqfKAnqL21ZSYeO3JmPs0JBMYH1-LhlQg0KcK7LaF2XycmvVbUTPOnH86"/>
+                <span class="border-l border-gray-300 dark:border-gray-600 h-10"></span>
+                <h1 class="text-xl text-gray-600 dark:text-gray-300">Lista de Usuarios del Sistema</h1>
+            </div>
+            <a href="https://alcabama-commits.github.io/bim/home.html" class="text-sm text-primary dark:text-gray-300 hover:underline">Volver al Home</a>
+        </div>
+    </header>
+
+    <main class="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-700 dark:text-gray-200">Usuarios Registrados</h2>
+                <button id="export-excel" class="bg-green-600 text-white font-bold py-2 px-6 rounded-md hover:bg-green-700 transition duration-300">
+                    Descargar Excel
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left" id="users-table">
+                    <thead class="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 uppercase text-sm leading-normal">
+                        <tr>
+                            <th class="py-3 px-6">Nombre</th>
+                            <th class="py-3 px-6">Correo</th>
+                            <th class="py-3 px-6">Empresa</th>
+                            <th class="py-3 px-6">Rol</th>
+                            <th class="py-3 px-6">Especialidad</th>
+                            <th class="py-3 px-6 text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-gray-700 dark:text-gray-200 text-sm font-light">
+                        <!-- Loader -->
+                        <tr><td colspan="6" class="text-center py-10"><div class="loader animate-spin rounded-full h-12 w-12 border-4 border-gray-300 dark:border-gray-600 mx-auto"></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <footer class="py-6 px-4 sm:px-6 lg:px-8 mt-auto">
+        <div class="flex flex-col items-center justify-center">
+            <p class="text-xs text-gray-500 dark:text-gray-400">© 2025 Portal BIM Alcabama. Todos los derechos reservados.</p>
+        </div>
+    </footer>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const tableBody = document.querySelector('#users-table tbody');
+    const exportBtn = document.getElementById('export-excel');
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx4NEpE6EyrC2ggk8To0F0TP5P9y0YnaxiWzCbcIhSR7-KRSy4Wu0PM9hYyNY5y72Q/exec';
+
+    async function loadUsers() {
+        try {
+            const response = await fetch(SCRIPT_URL);
+            if (!response.ok) throw new Error(`Error en la respuesta de la red: ${response.statusText}`);
+            const users = await response.json();
+            
+            tableBody.innerHTML = ''; // Limpiar loader o datos antiguos
+
+            if (!users || users.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="6" class="text-center py-10">No hay usuarios registrados.</td></tr>';
+                return;
+            }
+
+            users.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '')); // 'nombre' es la clave correcta
+
+            users.forEach(user => {
+                if (!user.email) return; // Omitir filas sin email
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600';
+                row.innerHTML = `
+                    <td class="py-3 px-6">${user.nombre || ''}</td>
+                    <td class="py-3 px-6">${user.email || ''}</td>
+                    <td class="py-3 px-6">${user.empresa || ''}</td>
+                    <td class="py-3 px-6">${user.rol || ''}</td>
+                    <td class="py-3 px-6">${user.especialidad || ''}</td>
+                    <td class="py-3 px-6 text-center">
+                        <a href="formulario_usuarios.html?email=${encodeURIComponent(user.email)}" class="bg-blue-600 text-white py-1 px-3 rounded-md hover:bg-blue-700 text-xs mr-2">Editar</a>
+                        <button onclick="deleteUser('${user.email}')" class="bg-red-600 text-white py-1 px-3 rounded-md hover:bg-red-700 text-xs">Eliminar</button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+        } catch (error) {
+            tableBody.innerHTML = `<tr><td colspan="6" class="text-center py-10 text-red-500">Error al cargar los usuarios: ${error.message}</td></tr>`;
+            console.error('Error fetching users:', error);
+        }
+    }
+
+    window.deleteUser = async (email) => {
+        if (!confirm(`¿Estás seguro de que deseas eliminar al usuario ${email}? Esta acción no se puede deshacer.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(SCRIPT_URL, {
+                method: 'POST',
+                mode: 'cors',
+                cache: 'no-cache',
+                body: JSON.stringify({ action: 'delete', email: email })
+            });
+
+            // Asumimos éxito y recargamos la tabla para ver el cambio.
+            alert('Usuario eliminado correctamente.');
+            loadUsers();
+
+        } catch (error) {
+            console.error('Error al eliminar el usuario:', error);
+            alert(`Error al intentar eliminar el usuario: ${error.message}`);
+        }
+    };
+
+    exportBtn.addEventListener('click', () => {
+        const table = document.getElementById('users-table');
+        // Clonar la tabla para no modificar la original en la página
+        const tableClone = table.cloneNode(true);
+        
+        // Eliminar la última columna (Acciones) de la tabla clonada
+        Array.from(tableClone.rows).forEach(row => {
+            row.deleteCell(-1);
+        });
+
+        const wb = XLSX.utils.table_to_book(tableClone, { sheet: "Usuarios" });
+        XLSX.writeFile(wb, 'Lista_Usuarios_BIM.xlsx');
+    });
+
+    loadUsers();
+});
+</script>
+</body>
+</html>

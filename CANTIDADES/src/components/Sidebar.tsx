@@ -45,7 +45,7 @@ export default function Sidebar({
   };
 
   return (
-    <div className="w-72 bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden">
+    <div className="bg-white border-l border-slate-200 flex flex-col h-full overflow-hidden">
       <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Clasificación / Categoría</h3>
         <button 

@@ -1,0 +1,5 @@
+{
+  "name": "BIM Quantity Takeoff Dashboard",
+  "description": "A dashboard for extracting and visualizing volume quantities from BIM models (.frag format).",
+  "requestFramePermissions": []
+}
