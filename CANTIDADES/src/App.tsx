@@ -40,6 +40,8 @@ type RemoteModel = {
   group: string;
 };
 
+type PurchaseStatus = 'PENDIENTE' | 'COMPRADO' | 'EN SITIO';
+
 const GITHUB_REPO = {
   owner: 'alcabama-commits',
   repo: 'bim',
@@ -71,6 +73,7 @@ export default function App() {
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [isModelsLoading, setIsModelsLoading] = useState(false);
   const [selectedRemoteModelName, setSelectedRemoteModelName] = useState<string | null>(null);
+  const [elementStatuses, setElementStatuses] = useState<Record<string, PurchaseStatus>>({});
 
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
     const stored = Number(localStorage.getItem('cantidades:leftPanelWidth'));
@@ -93,6 +96,34 @@ export default function App() {
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
   const [selectedDiameter, setSelectedDiameter] = useState<string>('Todos');
   const [isIsolateMode, setIsIsolateMode] = useState(false);
+
+  const statusStorageKey = useMemo(() => {
+    const base = selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'local';
+    const safe = base.trim().toLowerCase();
+    return `cantidades:statuses:${safe}`;
+  }, [selectedRemoteModelName]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(statusStorageKey);
+      if (!raw) {
+        setElementStatuses({});
+        return;
+      }
+      const parsed = JSON.parse(raw) as Record<string, PurchaseStatus>;
+      if (parsed && typeof parsed === 'object') setElementStatuses(parsed);
+      else setElementStatuses({});
+    } catch {
+      setElementStatuses({});
+    }
+  }, [statusStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(statusStorageKey, JSON.stringify(elementStatuses));
+    } catch {
+    }
+  }, [elementStatuses, statusStorageKey]);
 
   useEffect(() => {
     localStorage.setItem('cantidades:leftPanelWidth', String(leftPanelWidth));
@@ -977,6 +1008,13 @@ export default function App() {
     setSelectedDiameter('Todos');
   };
 
+  const handleChangeStatus = useCallback((id: string, status: PurchaseStatus) => {
+    setElementStatuses((prev) => {
+      if (prev[id] === status) return prev;
+      return { ...prev, [id]: status };
+    });
+  }, []);
+
   const [expandedModelGroups, setExpandedModelGroups] = useState<Record<string, boolean>>({
     ESTRUCTURA: true,
     GENERAL: true
@@ -1199,6 +1237,8 @@ export default function App() {
                   elements={filteredElements}
                   onSelectElement={setSelectedElementId}
                   selectedElementId={selectedElementId || undefined}
+                  statuses={elementStatuses}
+                  onChangeStatus={handleChangeStatus}
                 />
               </div>
             </div>
@@ -1250,6 +1290,8 @@ export default function App() {
               elements={filteredElements}
               onSelectElement={setSelectedElementId}
               selectedElementId={selectedElementId || undefined}
+              statuses={elementStatuses}
+              onChangeStatus={handleChangeStatus}
             />
           </div>
         )}
