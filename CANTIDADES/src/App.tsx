@@ -52,6 +52,21 @@ const GITHUB_REPO = {
 const rawUrlFor = (path: string) =>
   `https://raw.githubusercontent.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/${GITHUB_REPO.branch}/${path.split('/').map(encodeURIComponent).join('/')}`;
 
+const normalizeClassification = (v: string) =>
+  v
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+
+const isSinClasificar = (v: string | undefined | null) => {
+  if (!v) return true;
+  const n = normalizeClassification(String(v));
+  return n === 'SIN CLASIFICAR' || n === 'SINCLASIFICAR' || n === 'SIN CLASIFICACION' || n === 'SINCLASIFICACION';
+};
+
 export default function App() {
   const [elements, setElements] = useState<BIMElement[]>([]);
   const [summaries, setSummaries] = useState<CategorySummary[]>([]);
@@ -190,7 +205,7 @@ export default function App() {
     window.addEventListener('pointercancel', up, true);
   }, []);
 
-  const getProp = (el: BIMElement, key: string) => {
+  const getProp = useCallback((el: BIMElement, key: string) => {
     if (!el.properties) return undefined;
     const val = el.properties[key];
     if (val === undefined || val === null) return undefined;
@@ -208,15 +223,15 @@ export default function App() {
       }
     }
     return String(val);
-  };
+  }, []);
 
-  const getFirstProp = (el: BIMElement, keys: string[]) => {
+  const getFirstProp = useCallback((el: BIMElement, keys: string[]) => {
     for (const key of keys) {
       const v = getProp(el, key);
       if (v !== undefined && v !== null && String(v).trim() !== '') return String(v);
     }
     return undefined;
-  };
+  }, [getProp]);
 
   const fetchAvailableModels = useCallback(async () => {
     setIsModelsLoading(true);
@@ -267,8 +282,19 @@ export default function App() {
     fetchAvailableModels();
   }, [fetchAvailableModels]);
 
+  const baseElements = useMemo(() => {
+    return elements.filter((el) => {
+      const classifRaw = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]);
+      return !isSinClasificar(classifRaw);
+    });
+  }, [elements, getFirstProp]);
+
+  useEffect(() => {
+    setSelectedClassifications((prev) => prev.filter((c) => !isSinClasificar(c)));
+  }, [baseElements]);
+
   const filteredElements = useMemo(() => {
-    return elements.filter(el => {
+    return baseElements.filter(el => {
       const classif = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
       const nombreIntegrado = getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name;
       const level = getProp(el, "NIVEL INTEGRADO") || "";
@@ -281,7 +307,7 @@ export default function App() {
 
       return classificationMatch && categoryMatch && levelMatch && diameterMatch;
     });
-  }, [elements, getFirstProp, selectedClassifications, selectedCategories, selectedDiameter, selectedLevels]);
+  }, [baseElements, getFirstProp, getProp, selectedClassifications, selectedCategories, selectedDiameter, selectedLevels]);
 
   const elementsWithVolume = useMemo(() => {
     const toNumber = (v: unknown) => {
@@ -293,13 +319,13 @@ export default function App() {
       return Number.isFinite(n) ? n : null;
     };
 
-    return elements.filter((el) => {
+    return baseElements.filter((el) => {
       const vRaw = getFirstProp(el, ["VOLUMEN INTEGRADO", "VOLUMEN", "VOLUME"]);
       const v = toNumber(vRaw);
       const fallback = Number.isFinite(el.volume) ? el.volume : 0;
       return (v ?? fallback) > 0;
     });
-  }, [elements, getFirstProp]);
+  }, [baseElements, getFirstProp]);
 
   const sidebarData = useMemo(() => {
     const classificationMap: Record<string, Set<string>> = {};
@@ -325,16 +351,16 @@ export default function App() {
 
   const levels = useMemo(() => {
     const levelSet = new Set<string>();
-    elements.forEach(el => {
+    baseElements.forEach(el => {
       const level = getProp(el, "NIVEL INTEGRADO");
       if (level) levelSet.add(level);
     });
     return Array.from(levelSet);
-  }, [elements]);
+  }, [baseElements, getProp]);
 
   const diameters = useMemo(() => {
     const diameterSet = new Set<string>();
-    elements.forEach(el => {
+    baseElements.forEach(el => {
       const diameter = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]);
       if (diameter) diameterSet.add(diameter);
     });
@@ -350,7 +376,7 @@ export default function App() {
       if (nb !== null) return 1;
       return a.localeCompare(b, 'es');
     });
-  }, [elements, getFirstProp]);
+  }, [baseElements, getFirstProp]);
 
   const toggleClassification = (name: string) => {
     setSelectedClassifications(prev => 
@@ -1240,7 +1266,7 @@ export default function App() {
 
                 <BIMViewer
                   onModelLoaded={handleModelLoaded}
-                  allElements={elements}
+                  allElements={baseElements}
                   visibleElements={filteredElements}
                   statuses={elementStatuses}
                   statusColorsEnabled={statusColorsEnabled}
