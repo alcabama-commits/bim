@@ -55,6 +55,65 @@ function clampProgress(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
+const HIDROSANITARIO_KEYS = [
+  'AREA INTEGRADO',
+  'CLASIFICACION',
+  'LONGITUD INTEGRADO',
+  'MATERIAL INTEGRADO',
+  'NIVEL INTEGRADO',
+  'NOMBRE INTEGRADO',
+  'VOLUMEN INTEGRADO',
+  'Tamaño',
+];
+
+function normalizePropKey(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function pickHidrosanitarioFields(entity: any) {
+  if (!entity || typeof entity !== 'object') return null;
+
+  const direct: Record<string, any> = entity;
+  const psets: Record<string, any> | null =
+    direct.psets && typeof direct.psets === 'object' ? direct.psets : null;
+
+  const directIndex = new Map<string, string>();
+  for (const k of Object.keys(direct)) directIndex.set(normalizePropKey(k), k);
+
+  const psetPropIndex = new Map<string, { psetName: string; propName: string }>();
+  if (psets) {
+    for (const [psetName, props] of Object.entries(psets)) {
+      if (!props || typeof props !== 'object') continue;
+      for (const propName of Object.keys(props as any)) {
+        const nk = normalizePropKey(propName);
+        if (!psetPropIndex.has(nk)) psetPropIndex.set(nk, { psetName, propName });
+      }
+    }
+  }
+
+  const out: Record<string, any> = {};
+  for (const wantedKey of HIDROSANITARIO_KEYS) {
+    const normalizedWanted = normalizePropKey(wantedKey);
+    const directKey = directIndex.get(normalizedWanted);
+    if (directKey) {
+      const val = direct[directKey];
+      if (val !== undefined && val !== null) out[wantedKey] = val;
+      continue;
+    }
+    const psetMatch = psetPropIndex.get(normalizedWanted);
+    if (psetMatch) {
+      const val = (psets as any)[psetMatch.psetName]?.[psetMatch.propName];
+      if (val !== undefined && val !== null) out[wantedKey] = val;
+    }
+  }
+
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 function pickEntityFields(entity: any) {
   if (!entity || typeof entity !== 'object') return entity;
   const keep: Record<string, any> = {};
@@ -143,6 +202,7 @@ async function extractPropertiesJsonBlob(
     optimizeAll: boolean;
     includeSpatialInProducts: boolean;
     minimalEntity: boolean;
+    hidrosanitario: boolean;
     onProgress?: (value: number) => void;
   }
 ) {
@@ -242,6 +302,13 @@ async function extractPropertiesJsonBlob(
         entity.psets = psets;
       }
 
+      if (options.hidrosanitario) {
+        const filtered = pickHidrosanitarioFields(entity);
+        if (!filtered) return;
+        pushEntity(id, filtered);
+        return;
+      }
+
       pushEntity(id, entity);
     };
 
@@ -286,6 +353,7 @@ export default function App() {
   const [includeSpatial, setIncludeSpatial] = useState<boolean>(true);
   const [optimizeAll, setOptimizeAll] = useState<boolean>(true);
   const [minimalEntity, setMinimalEntity] = useState<boolean>(false);
+  const [hidrosanitario, setHidrosanitario] = useState<boolean>(false);
 
   const componentsRef = useRef<OBC.Components | null>(null);
   const fragmentsRef = useRef<OBC.FragmentsManager | null>(null);
@@ -399,10 +467,11 @@ export default function App() {
 
           const jsonBlob = await extractPropertiesJsonBlob(bytes, jsonMode, {
             prettyJson,
-            includePsets,
+            includePsets: hidrosanitario ? true : includePsets,
             optimizeAll,
             includeSpatialInProducts: includeSpatial,
             minimalEntity,
+            hidrosanitario,
             onProgress: (p) => {
               const overall = 96 + (p / 100) * 4;
               setState(prev => ({
@@ -588,6 +657,24 @@ export default function App() {
                     disabled={state.status === 'loading' || state.status === 'converting'}
                   >
                     {minimalEntity ? 'SÍ' : 'NO'}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Hidrosanitario</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setHidrosanitario((v) => {
+                        const next = !v;
+                        if (next) setIncludePsets(true);
+                        return next;
+                      })
+                    }
+                    className="h-8 border border-[#141414] px-2 text-[10px] font-mono bg-white"
+                    disabled={state.status === 'loading' || state.status === 'converting'}
+                  >
+                    {hidrosanitario ? 'SÍ' : 'NO'}
                   </button>
                 </div>
               </div>
