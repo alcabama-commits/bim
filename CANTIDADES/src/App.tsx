@@ -199,7 +199,7 @@ export default function App() {
     window.addEventListener('pointercancel', up, true);
   }, []);
 
-  const getProp = (el: BIMElement, key: string) => {
+  const getProp = useCallback((el: BIMElement, key: string) => {
     if (!el.properties) return undefined;
     const val = el.properties[key];
     if (val === undefined || val === null) return undefined;
@@ -217,15 +217,15 @@ export default function App() {
       }
     }
     return String(val);
-  };
+  }, []);
 
-  const getFirstProp = (el: BIMElement, keys: string[]) => {
+  const getFirstProp = useCallback((el: BIMElement, keys: string[]) => {
     for (const key of keys) {
       const v = getProp(el, key);
       if (v !== undefined && v !== null && String(v).trim() !== '') return String(v);
     }
     return undefined;
-  };
+  }, [getProp]);
 
   const fetchAvailableModels = useCallback(async () => {
     setIsModelsLoading(true);
