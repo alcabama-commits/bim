@@ -18,7 +18,9 @@ async function getFragmentsWorkerUrl() {
 
 interface BIMViewerProps {
   onModelLoaded: (components: OBC.Components) => void;
-  elements: BIMElement[];
+  allElements: BIMElement[];
+  visibleElements: BIMElement[];
+  statuses: Record<string, 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'EN BODEGA' | 'INSTALADO' | undefined>;
   selectedElementId?: string;
   selectedElementIds?: string[];
   onElementSelect: (id: string | null) => void;
@@ -26,7 +28,7 @@ interface BIMViewerProps {
   isIsolateMode?: boolean;
 }
 
-export default function BIMViewer({ onModelLoaded, elements, selectedElementId, selectedElementIds, onElementSelect, isLoading, isIsolateMode }: BIMViewerProps) {
+export default function BIMViewer({ onModelLoaded, allElements, visibleElements, statuses, selectedElementId, selectedElementIds, onElementSelect, isLoading, isIsolateMode }: BIMViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const componentsRef = useRef<OBC.Components | null>(null);
   const workerUrlRef = useRef<string | null>(null);
@@ -106,6 +108,37 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
         highlighter.styles.set("select", { 
           color: new THREE.Color(0x3b82f6),
           opacity: 0.5,
+          transparent: true,
+          renderedFaces: FRAGS.RenderedFaces.TWO
+        });
+
+        highlighter.styles.set("status_PEDIDO", { 
+          color: new THREE.Color(0x3b82f6),
+          opacity: 0.25,
+          transparent: true,
+          renderedFaces: FRAGS.RenderedFaces.TWO
+        });
+        highlighter.styles.set("status_COMPRADO", { 
+          color: new THREE.Color(0xf59e0b),
+          opacity: 0.25,
+          transparent: true,
+          renderedFaces: FRAGS.RenderedFaces.TWO
+        });
+        highlighter.styles.set("status_EN_BODEGA", { 
+          color: new THREE.Color(0xa78bfa),
+          opacity: 0.25,
+          transparent: true,
+          renderedFaces: FRAGS.RenderedFaces.TWO
+        });
+        highlighter.styles.set("status_INSTALADO", { 
+          color: new THREE.Color(0x22c55e),
+          opacity: 0.25,
+          transparent: true,
+          renderedFaces: FRAGS.RenderedFaces.TWO
+        });
+        highlighter.styles.set("status_PENDIENTE", { 
+          color: new THREE.Color(0x9ca3af),
+          opacity: 0.18,
           transparent: true,
           renderedFaces: FRAGS.RenderedFaces.TWO
         });
@@ -221,13 +254,67 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
     };
   }, []);
 
-  // Handle visibility based on filtered elements and isolation mode
+  // Handle visibility, status coloring and selection highlighting
   useEffect(() => {
     if (!componentsRef.current || !isInitialized) return;
     
     const fragments = componentsRef.current.get(OBC.FragmentsManager);
+    const highlighter = componentsRef.current.get(OBCF.Highlighter);
+    const hider = componentsRef.current.get(OBC.Hider);
     
-    const updateVisibility = async () => {
+    const getModelFromList = (list: Map<string, any>, modelId: string) => {
+      return (
+        list.get(modelId) ??
+        Array.from(list.values()).find((m: any) => {
+          const keys = [m?.uuid, m?.id, m?.modelId].filter(Boolean).map(String);
+          return keys.includes(String(modelId));
+        })
+      );
+    };
+
+    const mergeMap = (target: Record<string, Set<number>>, source: Record<string, any>) => {
+      for (const fragId in source) {
+        if (!target[fragId]) target[fragId] = new Set<number>();
+        const ids = source[fragId];
+        if (ids instanceof Set) {
+          ids.forEach((id: number) => target[fragId].add(id));
+        } else if (Array.isArray(ids)) {
+          ids.forEach((id: number) => target[fragId].add(id));
+        } else if (ids && typeof ids[Symbol.iterator] === 'function') {
+          for (const id of ids as any) target[fragId].add(Number(id));
+        }
+      }
+    };
+
+    const buildFragmentIdMapFromElements = (elementsToShow: BIMElement[]) => {
+      const list: Map<string, any> | undefined = (fragments as any).list;
+      const models = Array.from(list?.values?.() ?? []);
+      if (!list || models.length === 0) return { map: null as Record<string, Set<number>> | null, hasAny: false };
+
+      const modelIdToLocalIds: Record<string, Set<number>> = {};
+      for (const el of elementsToShow) {
+        if (!el.modelId || el.localId === undefined) continue;
+        const modelId = String(el.modelId);
+        if (!modelIdToLocalIds[modelId]) modelIdToLocalIds[modelId] = new Set();
+        modelIdToLocalIds[modelId].add(el.localId);
+      }
+
+      const final: Record<string, Set<number>> = {};
+      let hasAny = false;
+      for (const modelId of Object.keys(modelIdToLocalIds)) {
+        const model = getModelFromList(list, modelId);
+        if (!model) continue;
+        const localIds = Array.from(modelIdToLocalIds[modelId]);
+        if (localIds.length === 0) continue;
+        const fragmentIdMap = (model as any).getFragmentIdMap(localIds);
+        mergeMap(final, fragmentIdMap);
+        hasAny = hasAny || Object.keys(fragmentIdMap).length > 0;
+      }
+
+      return { map: final, hasAny };
+    };
+
+    const update = async () => {
       const list: Map<string, any> | undefined = (fragments as any).list;
       const models = Array.from(list?.values?.() ?? []);
       if (models.length === 0) return;
@@ -237,119 +324,130 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
         if (obj) obj.visible = true;
       }
 
-      const hasSelection = selectedElementId || (selectedElementIds && selectedElementIds.length > 0);
-      if (!isIsolateMode || !hasSelection) return;
+      const filterActive = visibleElements.length !== allElements.length;
+      const selectionIds = selectedElementIds && selectedElementIds.length > 0 ? selectedElementIds : (selectedElementId ? [selectedElementId] : []);
+      const hasSelection = selectionIds.length > 0;
+      const isolateSelection = Boolean(isIsolateMode && hasSelection);
 
-      const selectionSet = new Set(selectedElementIds || (selectedElementId ? [selectedElementId] : []));
-      const visibleElements = elements.filter(el => selectionSet.has(el.id));
-      const visibleModelIds = new Set(visibleElements.map(el => String(el.modelId)).filter(Boolean));
-      if (visibleModelIds.size === 0) return;
+      const visibleIdSet = new Set(visibleElements.map((e) => e.id));
+      const selectedIdSet = new Set(selectionIds);
 
-      for (const model of models) {
-        const key = String(model?.uuid || model?.id || model?.modelId || '');
-        const obj = model?.object ?? model;
-        if (obj) obj.visible = visibleModelIds.has(key);
-      }
-    };
-
-    updateVisibility();
-  }, [elements, isInitialized, isIsolateMode, selectedElementId, selectedElementIds]);
-
-  // Handle selection highlighting from parent (Table or Group)
-  useEffect(() => {
-    if (!componentsRef.current || !isInitialized) return;
-    
-    const highlighter = componentsRef.current.get(OBCF.Highlighter);
-    const fragments = componentsRef.current.get(OBC.FragmentsManager);
-
-    if (!selectedElementId && (!selectedElementIds || selectedElementIds.length === 0)) {
-      highlighter.clear();
-      return;
-    }
-
-    const highlightElements = async () => {
-      const targetIds = selectedElementIds || (selectedElementId ? [selectedElementId] : []);
-      console.log("Iniciando resaltado para IDs:", targetIds.length, targetIds);
-      
-      if (targetIds.length === 0) {
-        console.log("No hay IDs para resaltar, limpiando...");
-        highlighter.clear();
-        return;
+      let finalVisible: BIMElement[] = visibleElements;
+      if (isolateSelection) {
+        finalVisible = allElements.filter((e) => selectedIdSet.has(e.id) && (!filterActive || visibleIdSet.has(e.id)));
       }
 
-      const finalFragmentIdMap: Record<string, Set<number>> = {};
-      let foundAny = false;
+      const totalCount = allElements.length;
+      const visibleCount = finalVisible.length;
+      const hiddenCount = Math.max(0, totalCount - visibleCount);
 
-      // Agrupar IDs por modelo para procesarlos eficientemente
-      const modelIdToLocalIds: Record<string, Set<number>> = {};
-      
-      console.log("Total elementos en visor:", elements.length);
-      
-      targetIds.forEach(targetId => {
-        const el = elements.find(e => e.id === targetId);
-        if (el && el.modelId && el.localId !== undefined) {
-          if (!modelIdToLocalIds[el.modelId]) {
-            modelIdToLocalIds[el.modelId] = new Set();
-          }
-          modelIdToLocalIds[el.modelId].add(el.localId);
-        } else if (el) {
-          console.warn(`Elemento ${targetId} encontrado pero sin modelId o localId.`, el);
-        } else {
-          // console.warn(`Elemento ${targetId} no encontrado en la lista de elementos.`);
-        }
-      });
-
-      // Para cada modelo, obtener el FragmentIdMap real (mapeo de fragmentos internos)
-      console.log("Modelos involucrados:", Object.keys(modelIdToLocalIds));
-        for (const modelId in modelIdToLocalIds) {
-        const list: Map<string, any> | undefined = (fragments as any).list;
-        const model =
-          list?.get?.(modelId) ??
-          Array.from(list?.values?.() ?? []).find((m: any) => {
-            const keys = [m?.uuid, m?.id, m?.modelId].filter(Boolean).map(String);
-            return keys.includes(String(modelId));
-          });
-        if (model) {
-          const localIds = Array.from(modelIdToLocalIds[modelId]);
-          console.log(`Obteniendo FragmentIdMap para modelo ${modelId} con ${localIds.length} IDs locales.`);
-          const fragmentIdMap = (model as any).getFragmentIdMap(localIds);
-          
-          // Combinar con el mapa final
-          for (const fragId in fragmentIdMap) {
-            if (!finalFragmentIdMap[fragId]) {
-              finalFragmentIdMap[fragId] = new Set();
-            }
-            fragmentIdMap[fragId].forEach(id => finalFragmentIdMap[fragId].add(id));
-            foundAny = true;
-          }
-        } else {
-          console.error(`Modelo ${modelId} no encontrado en FragmentsManager.`);
-        }
-      }
-
-      // Si no encontramos nada con el mapeo rápido, intentamos la búsqueda lenta (fallback)
-      if (!foundAny) {
-        console.log("Buscando elementos manualmente (lento)...");
-        const list: Map<string, any> | undefined = (fragments as any).list;
-        void Array.from(list?.values?.() ?? []);
-      }
-
-      if (foundAny) {
-        console.log("Aplicando resaltado a FragmentIdMap:", finalFragmentIdMap);
+      const shouldShowAll = !filterActive && !isolateSelection;
+      if (shouldShowAll) {
         try {
-          // En v3, se puede usar highlight con el mapa directamente
-          highlighter.highlight("select", true, true, finalFragmentIdMap);
-          console.log("Resaltado aplicado con éxito.");
-        } catch (err) {
-          console.error("Error al aplicar resaltado:", err);
+          await hider.set(true);
+        } catch {
+        }
+      } else if (visibleCount === 0) {
+        for (const model of models) {
+          const obj = model?.object ?? model;
+          if (obj) obj.visible = false;
         }
       } else {
-        console.warn("No se encontraron elementos para resaltar en los modelos cargados.");
+        const visibleElementsForMap = finalVisible;
+        const hiddenIsSmaller = hiddenCount > 0 && hiddenCount < visibleCount;
+
+        try {
+          await hider.set(true);
+        } catch {
+        }
+
+        if (!hiddenIsSmaller) {
+          const { map, hasAny } = buildFragmentIdMapFromElements(visibleElementsForMap);
+          if (map && hasAny) {
+            try {
+              await hider.isolate(map);
+            } catch {
+            }
+          }
+        } else {
+          const visibleSet = new Set(visibleElementsForMap.map((x) => x.id));
+          const hidden = allElements.filter((e) => !visibleSet.has(e.id));
+          const { map, hasAny } = buildFragmentIdMapFromElements(hidden);
+          if (map && hasAny) {
+            try {
+              await hider.set(false, map);
+            } catch {
+            }
+          }
+        }
+      }
+
+      try {
+        highlighter.clear();
+      } catch {
+      }
+
+      const visibleForColors = finalVisible;
+      const byStatus: Record<string, BIMElement[]> = {
+        PEDIDO: [],
+        COMPRADO: [],
+        'EN BODEGA': [],
+        INSTALADO: [],
+        PENDIENTE: []
+      };
+
+      for (const el of visibleForColors) {
+        const st = statuses[el.id] ?? 'PENDIENTE';
+        if (st === 'PENDIENTE') {
+          byStatus.PENDIENTE.push(el);
+        } else if (st === 'PEDIDO') {
+          byStatus.PEDIDO.push(el);
+        } else if (st === 'COMPRADO') {
+          byStatus.COMPRADO.push(el);
+        } else if (st === 'EN BODEGA') {
+          byStatus['EN BODEGA'].push(el);
+        } else if (st === 'INSTALADO') {
+          byStatus.INSTALADO.push(el);
+        } else {
+          byStatus.PENDIENTE.push(el);
+        }
+      }
+
+      const pendingLimit = 50000;
+      const statusToStyle: Array<{ key: keyof typeof byStatus; style: string; enabled: boolean }> = [
+        { key: 'PEDIDO', style: 'status_PEDIDO', enabled: true },
+        { key: 'COMPRADO', style: 'status_COMPRADO', enabled: true },
+        { key: 'EN BODEGA', style: 'status_EN_BODEGA', enabled: true },
+        { key: 'INSTALADO', style: 'status_INSTALADO', enabled: true },
+        { key: 'PENDIENTE', style: 'status_PENDIENTE', enabled: byStatus.PENDIENTE.length <= pendingLimit }
+      ];
+
+      for (const { key, style, enabled } of statusToStyle) {
+        if (!enabled) continue;
+        const els = byStatus[key];
+        if (!els || els.length === 0) continue;
+        const { map, hasAny } = buildFragmentIdMapFromElements(els);
+        if (!map || !hasAny) continue;
+        try {
+          highlighter.highlight(style, false, false, map);
+        } catch {
+        }
+      }
+
+      if (hasSelection) {
+        const selectedElements = allElements.filter((e) => selectedIdSet.has(e.id));
+        const { map, hasAny } = buildFragmentIdMapFromElements(selectedElements);
+        if (map && hasAny) {
+          try {
+            highlighter.highlight("select", true, false, map);
+          } catch {
+          }
+        }
       }
     };
 
-    highlightElements();
-  }, [selectedElementId, selectedElementIds, elements, isInitialized]);
+    void update();
+  }, [allElements, isInitialized, isIsolateMode, selectedElementId, selectedElementIds, statuses, visibleElements]);
 
   return (
     <div className="relative w-full h-full bg-slate-100">
@@ -380,7 +478,7 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
       <div className="absolute bottom-6 right-6 flex gap-2">
         <button 
           onClick={() => {
-            if (componentsRef.current && elements.length > 0) {
+            if (componentsRef.current && visibleElements.length > 0) {
               const worlds = componentsRef.current.get(OBC.Worlds);
               const world = Array.from(worlds.list.values())[0] as any;
               

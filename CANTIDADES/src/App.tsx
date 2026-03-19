@@ -1201,7 +1201,9 @@ export default function App() {
 
                 <BIMViewer
                   onModelLoaded={handleModelLoaded}
-                  elements={filteredElements}
+                  allElements={elements}
+                  visibleElements={filteredElements}
+                  statuses={elementStatuses}
                   isLoading={isLoading}
                   selectedElementId={selectedElementId || undefined}
                   selectedElementIds={selectedElementIds}
