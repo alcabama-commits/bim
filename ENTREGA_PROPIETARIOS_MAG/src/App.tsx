@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Building2, CheckCircle2, Clock, Info, Search, Lock, Save, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Building2, CheckCircle2, Clock, Info, Search, Lock, Save, Loader2, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { 
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell 
 } from 'recharts';
@@ -116,6 +116,64 @@ const generateStructure = (): Tower[] => {
     });
   }
   return towers;
+};
+
+const DATA_CACHE_KEY = 'entrega_propi_mag_cache_v1';
+
+const readCachedTowers = (): { savedAt: number; towers: Tower[] } | null => {
+  try {
+    const raw = localStorage.getItem(DATA_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { savedAt?: unknown; towers?: unknown };
+    if (typeof parsed?.savedAt !== 'number') return null;
+    if (!Array.isArray(parsed?.towers)) return null;
+    return { savedAt: parsed.savedAt, towers: parsed.towers as Tower[] };
+  } catch {
+    return null;
+  }
+};
+
+const writeCachedTowers = (towers: Tower[]) => {
+  try {
+    localStorage.setItem(DATA_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), towers }));
+  } catch {}
+};
+
+const mergeSheetDataIntoTowers = (baseTowers: Tower[], data: SheetData[]): Tower[] => {
+  const statusMap = new Map<string, { status: Status; weeklyGoalDate?: string | null }>();
+  const normalizeStatus = (raw: unknown): Status => {
+    const s = String(raw ?? '').trim().toLowerCase();
+    if (s === 'weekly_goal' || s === 'lista meta semanal') return 'weekly_goal';
+    if (s === 'owner_delivered' || s === 'entregado a propietario') return 'owner_delivered';
+    if (s === 'post_construction_delivered' || s === 'entregado a post construcción' || s === 'entregado a post construccion') return 'post_construction_delivered';
+    if (s === 'notarized' || s === 'escriturado') return 'notarized';
+    if (s === 'under_construction' || s === 'en obra') return 'under_construction';
+    if (s === 'special' || s === 'área especial' || s === 'area especial') return 'special';
+    return 'in_process';
+  };
+
+  for (const item of data) {
+    const status = normalizeStatus(item.status);
+    const towerId = Number(item.towerId);
+    const aptNumber = String(item.aptNumber).trim();
+    statusMap.set(`${towerId}-${aptNumber}`, {
+      status,
+      weeklyGoalDate: normalizeToISODate((item as SheetData).weeklyGoalDate) ?? null
+    });
+  }
+
+  return baseTowers.map(tower => ({
+    ...tower,
+    apartments: tower.apartments.map(apt => {
+      const key = `${tower.id}-${apt.number}`;
+      const entry = statusMap.get(key);
+
+      if (entry?.status && apt.status !== 'special') {
+        return { ...apt, status: entry.status, weeklyGoalDate: entry.status === 'weekly_goal' ? (entry.weeklyGoalDate ?? null) : null };
+      }
+      return apt;
+    })
+  }));
 };
 
 // --- Components ---
@@ -305,6 +363,10 @@ export default function App() {
   const [allTowers, setAllTowers] = useState<Tower[]>(() => generateStructure());
   const [editingApartment, setEditingApartment] = useState<{ towerId: number, apartment: Apartment } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isUsingCachedData, setIsUsingCachedData] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
 
   const clearAllFilters = () => {
     setStatusFilter(null);
@@ -320,60 +382,50 @@ export default function App() {
     setWeeklyGoalDateInput(normalizeToISODate(d) ?? fallback);
   }, [editingApartment]);
 
-  // Load data from Google Sheets
   React.useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      try {
-        const data = await fetchSheetData();
-        if (data && data.length > 0) {
-          setAllTowers(prevTowers => {
-            // Create a map for faster lookup: "towerId-aptNumber" -> status
-            const statusMap = new Map<string, { status: Status; weeklyGoalDate?: string | null }>();
-            const normalizeStatus = (raw: unknown): Status => {
-              const s = String(raw ?? '').trim().toLowerCase();
-              if (s === 'weekly_goal' || s === 'lista meta semanal') return 'weekly_goal';
-              if (s === 'owner_delivered' || s === 'entregado a propietario') return 'owner_delivered';
-              if (s === 'post_construction_delivered' || s === 'entregado a post construcción' || s === 'entregado a post construccion') return 'post_construction_delivered';
-              if (s === 'notarized' || s === 'escriturado') return 'notarized';
-              if (s === 'under_construction' || s === 'en obra') return 'under_construction';
-              if (s === 'special' || s === 'área especial' || s === 'area especial') return 'special';
-              return 'in_process';
-            };
-            data.forEach(item => {
-              const status = normalizeStatus(item.status);
-              const towerId = Number(item.towerId);
-              const aptNumber = String(item.aptNumber).trim();
-              statusMap.set(`${towerId}-${aptNumber}`, {
-                status,
-                weeklyGoalDate: normalizeToISODate((item as SheetData).weeklyGoalDate) ?? null
-              });
-            });
-            
-            return prevTowers.map(tower => ({
-              ...tower,
-              apartments: tower.apartments.map(apt => {
-                const key = `${tower.id}-${apt.number}`;
-                const entry = statusMap.get(key);
-                
-                // Only update if we have a valid status and it's not a special area
-                if (entry?.status && apt.status !== 'special') {
-                   return { ...apt, status: entry.status, weeklyGoalDate: entry.status === 'weekly_goal' ? (entry.weeklyGoalDate ?? null) : null };
-                }
-                return apt;
-              })
-            }));
-          });
-        }
-      } catch (error) {
-        console.error('Failed to load data:', error);
-      } finally {
-        setIsLoading(false);
-      }
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
-    
-    loadData();
   }, []);
+
+  const refreshData = React.useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const data = await fetchSheetData();
+      if (!data || data.length === 0) throw new Error('No data received');
+      const merged = mergeSheetDataIntoTowers(generateStructure(), data);
+      setAllTowers(merged);
+      writeCachedTowers(merged);
+      setIsUsingCachedData(false);
+      setLastUpdatedAt(Date.now());
+    } catch {
+      const cached = readCachedTowers();
+      if (cached) {
+        setAllTowers(cached.towers);
+        setIsUsingCachedData(true);
+        setLastUpdatedAt(cached.savedAt);
+      }
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const cached = readCachedTowers();
+    if (cached) {
+      setAllTowers(cached.towers);
+      setIsUsingCachedData(true);
+      setLastUpdatedAt(cached.savedAt);
+      setIsLoading(false);
+    }
+    refreshData();
+  }, [refreshData]);
 
   // Password Protection State
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -456,6 +508,9 @@ export default function App() {
       
       if (successCount === changes.length) {
         setPendingChanges(new Map<string, PendingChange>());
+        writeCachedTowers(allTowers);
+        setIsUsingCachedData(false);
+        setLastUpdatedAt(Date.now());
       } else {
         console.error(`Failed to save ${changes.length - successCount} changes`);
         // We could keep failed changes in the map, but for simplicity let's clear all 
@@ -729,6 +784,37 @@ export default function App() {
                   <Lock size={14} className={isEditMode ? 'text-white' : 'text-alcabama-grey'} />
                   {isEditMode ? 'Edición Activa' : 'Habilitar Edición'}
                 </button>
+              </div>
+            </div>
+
+            <div className="w-full md:w-auto">
+              <div className="flex flex-col sm:flex-row items-stretch gap-3 w-full md:w-auto">
+                <div className="relative flex-1 md:flex-none md:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-alcabama-grey" size={14} />
+                  <input 
+                    type="text" 
+                    placeholder="Buscar torre..."
+                    className="bg-white border border-alcabama-light-grey rounded-full py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-alcabama-pink transition-all w-full shadow-sm"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={refreshData}
+                  disabled={isRefreshing}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold bg-white border border-alcabama-light-grey hover:bg-alcabama-light-grey/10 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="Actualizar información"
+                >
+                  {isRefreshing ? <Loader2 size={16} className="animate-spin text-alcabama-grey" /> : <RefreshCw size={16} className="text-alcabama-grey" />}
+                  Actualizar
+                </button>
+              </div>
+
+              <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">
+                {isUsingCachedData ? 'Mostrando última información guardada' : (isOnline ? 'En línea' : 'Sin señal')}
+                {lastUpdatedAt ? ` • Última: ${new Date(lastUpdatedAt).toLocaleString('es-CO', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
               </div>
             </div>
           </div>
