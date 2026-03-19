@@ -12,15 +12,21 @@ interface DataTableProps {
   statuses: Record<string, PurchaseStatus | undefined>;
   onChangeStatus: (id: string, status: PurchaseStatus) => void;
   onChangeStatusMany?: (ids: string[], status: PurchaseStatus) => void;
+  onClearFilters?: () => void;
 }
 
-export default function DataTable({ elements, onSelectElement, selectedElementId, selectedElementIds, onSetSelectedElementIds, statuses, onChangeStatus, onChangeStatusMany }: DataTableProps) {
+export default function DataTable({ elements, onSelectElement, selectedElementId, selectedElementIds, onSetSelectedElementIds, statuses, onChangeStatus, onChangeStatusMany, onClearFilters }: DataTableProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(400);
   const [activeTab, setActiveTab] = useState<'DETALLE' | 'ESTADOS'>('DETALLE');
   const [bulkStatus, setBulkStatus] = useState<PurchaseStatus>('COMPRADO');
+  const [rowHeight, setRowHeight] = useState(() => {
+    const stored = Number(localStorage.getItem('cantidades:tableRowHeight'));
+    return Number.isFinite(stored) && stored >= 18 && stored <= 40 ? stored : 24;
+  });
   const selectedSet = useMemo(() => new Set(selectedElementIds ?? []), [selectedElementIds]);
+  const lastAnchorIndexRef = useRef<number | null>(null);
 
   const STATUS_ORDER: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'EN BODEGA', 'INSTALADO'];
 
@@ -122,11 +128,17 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
 
   const format2 = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  const rowHeight = 24;
   const overscan = 20;
   const totalRows = elements.length;
 
-  const { paddingTop, paddingBottom, visibleElements } = useMemo(() => {
+  useEffect(() => {
+    try {
+      localStorage.setItem('cantidades:tableRowHeight', String(rowHeight));
+    } catch {
+    }
+  }, [rowHeight]);
+
+  const { paddingTop, paddingBottom, visibleElements, startIndex } = useMemo(() => {
     const safeScrollTop = Math.max(0, scrollTop);
     const start = Math.max(0, Math.floor(safeScrollTop / rowHeight) - overscan);
     const visibleCount = Math.ceil(containerHeight / rowHeight) + overscan * 2;
@@ -136,9 +148,10 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     return {
       paddingTop: top,
       paddingBottom: bottom,
-      visibleElements: elements.slice(start, end)
+      visibleElements: elements.slice(start, end),
+      startIndex: start
     };
-  }, [containerHeight, elements, scrollTop, totalRows]);
+  }, [containerHeight, elements, rowHeight, scrollTop, totalRows]);
 
   const statusRowBg = (st: PurchaseStatus) => {
     switch (st) {
@@ -178,6 +191,33 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
   const allIds = useMemo(() => elements.map((e) => e.id), [elements]);
   const isAllSelected = selectedElementIds && selectedElementIds.length > 0 && selectedElementIds.length === allIds.length;
   const selectedCount = selectedElementIds?.length ?? 0;
+
+  const applySelectionAtIndex = (absoluteIndex: number, shouldSelect: boolean, isRange: boolean) => {
+    if (!onSetSelectedElementIds) return;
+    const current = selectedElementIds ?? [];
+    const anchor = lastAnchorIndexRef.current;
+    const next = new Set(current);
+
+    if (isRange && anchor !== null) {
+      const from = Math.min(anchor, absoluteIndex);
+      const to = Math.max(anchor, absoluteIndex);
+      for (let i = from; i <= to; i += 1) {
+        const id = elements[i]?.id;
+        if (!id) continue;
+        if (shouldSelect) next.add(id);
+        else next.delete(id);
+      }
+    } else {
+      const id = elements[absoluteIndex]?.id;
+      if (id) {
+        if (shouldSelect) next.add(id);
+        else next.delete(id);
+      }
+    }
+
+    lastAnchorIndexRef.current = absoluteIndex;
+    onSetSelectedElementIds(Array.from(next));
+  };
 
   return (
     <div className="flex flex-col h-full bg-white overflow-hidden">
@@ -238,11 +278,29 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
             onClick={() => onSetSelectedElementIds?.([])}
             className="px-2 py-1 rounded border border-slate-200 text-[10px] font-bold uppercase tracking-widest text-slate-600 hover:bg-slate-50"
           >
-            Limpiar
+            Limpiar selección
+          </button>
+          <button
+            type="button"
+            onClick={onClearFilters}
+            className="px-2 py-1 rounded border border-slate-200 text-[10px] font-bold uppercase tracking-widest text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+            disabled={!onClearFilters}
+          >
+            Limpiar filtros
           </button>
         </div>
 
         <div className="flex items-center gap-2">
+          <select
+            value={String(rowHeight)}
+            onChange={(e) => setRowHeight(Number(e.target.value))}
+            className="bg-white border border-slate-200 rounded px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-slate-600"
+            title="Tamaño de filas"
+          >
+            <option value="20">Compacto</option>
+            <option value="24">Normal</option>
+            <option value="32">Grande</option>
+          </select>
           <select
             value={bulkStatus}
             onChange={(e) => setBulkStatus(e.target.value as PurchaseStatus)}
@@ -340,31 +398,35 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                 </tr>
               )}
 
-              {visibleElements.map((el) => {
+              {visibleElements.map((el, idx) => {
                 const isSelected = selectedElementId === el.id;
                 const st: PurchaseStatus = statuses[el.id] ?? 'PENDIENTE';
                 const tint = statusTint(st);
                 const isChecked = selectedSet.has(el.id);
+                const absoluteIndex = startIndex + idx;
 
                 return (
                   <tr
                     key={el.id}
                     className={`${tint.row} ${tint.hover} cursor-pointer transition-colors ${isSelected ? 'outline outline-2 outline-blue-300' : ''}`}
-                    onClick={() => onSelectElement(el.id)}
+                    onClick={(e) => {
+                      if (e.shiftKey) {
+                        applySelectionAtIndex(absoluteIndex, true, true);
+                        return;
+                      }
+                      lastAnchorIndexRef.current = absoluteIndex;
+                      onSelectElement(el.id);
+                    }}
                   >
                     <td className="px-3 py-1.5">
                       <input
                         type="checkbox"
                         checked={isChecked}
-                        onChange={(e) => {
+                        onChange={() => {}}
+                        onClick={(e) => {
                           e.stopPropagation();
-                          if (!onSetSelectedElementIds) return;
-                          const prev = selectedElementIds ?? [];
-                          if (e.target.checked) {
-                            if (!selectedSet.has(el.id)) onSetSelectedElementIds([...prev, el.id]);
-                          } else {
-                            onSetSelectedElementIds(prev.filter((id) => id !== el.id));
-                          }
+                          const target = e.currentTarget;
+                          applySelectionAtIndex(absoluteIndex, target.checked, e.shiftKey);
                         }}
                         className="accent-[#003d4d]"
                       />

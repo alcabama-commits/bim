@@ -1077,12 +1077,11 @@ export default function App() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {!isTableMaximized && (
-          <>
-            <div
-              className="bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden"
-              style={{ width: leftPanelWidth }}
-            >
+        <>
+          <div
+            className="bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden"
+            style={{ width: leftPanelWidth }}
+          >
               <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Modelos IFC</h3>
                 <button
@@ -1159,21 +1158,21 @@ export default function App() {
                   );
                 })}
               </div>
-            </div>
+          </div>
 
-            <div
-              className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
-              onPointerDown={(e) => {
-                const start = leftPanelWidth;
-                startHorizontalDrag(e, (dx) => {
-                  const next = Math.min(520, Math.max(220, start + dx));
-                  setLeftPanelWidth(next);
-                });
-              }}
-            />
+          <div
+            className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
+            onPointerDown={(e) => {
+              const start = leftPanelWidth;
+              startHorizontalDrag(e, (dx) => {
+                const next = Math.min(520, Math.max(220, start + dx));
+                setLeftPanelWidth(next);
+              });
+            }}
+          />
 
-            <div className="flex-1 flex flex-col overflow-hidden relative">
-              <div className="flex-1 relative bg-slate-50">
+          <div className="flex-1 flex flex-col overflow-hidden relative">
+            <div className="flex-1 relative bg-slate-50">
                 {showWelcome && !isLoading && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
                     <div className="bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-slate-200 max-w-md text-center pointer-events-auto">
@@ -1231,26 +1230,26 @@ export default function App() {
                     <input type="file" accept=".frag,.json" multiple className="hidden" onChange={handleFileUpload} />
                   </label>
                 </div>
-              </div>
+            </div>
 
-              <LevelGrid
-                levels={levels}
-                selectedLevels={selectedLevels}
-                onToggleLevel={toggleLevel}
-              />
+            <LevelGrid
+              levels={levels}
+              selectedLevels={selectedLevels}
+              onToggleLevel={toggleLevel}
+            />
 
-              <div
-                className="h-2 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-row-resize"
-                onPointerDown={(e) => {
-                  const start = tablePanelHeight;
-                  startVerticalDrag(e, (dy) => {
-                    const next = Math.min(600, Math.max(220, start - dy));
-                    setTablePanelHeight(next);
-                  });
-                }}
-              />
+            <div
+              className="h-3 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-row-resize"
+              onPointerDown={(e) => {
+                const start = tablePanelHeight;
+                startVerticalDrag(e, (dy) => {
+                  const next = Math.min(900, Math.max(180, start - dy));
+                  setTablePanelHeight(next);
+                });
+              }}
+            />
 
-              <div className="flex flex-col border-t border-slate-200" style={{ height: tablePanelHeight }}>
+            <div className="flex flex-col border-t border-slate-200" style={{ height: tablePanelHeight }}>
                 <div className="h-10 px-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                   <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
                   <button
@@ -1262,57 +1261,59 @@ export default function App() {
                     <Maximize2 className="w-4 h-4" />
                   </button>
                 </div>
-                <DataTable
-                  elements={filteredElements}
-                  onSelectElement={setSelectedElementId}
-                  selectedElementId={selectedElementId || undefined}
-                  selectedElementIds={selectedElementIds}
-                  onSetSelectedElementIds={setSelectedElementIds}
-                  statuses={elementStatuses}
-                  onChangeStatus={handleChangeStatus}
-                  onChangeStatusMany={handleChangeStatusMany}
-                />
-              </div>
+                {!isTableMaximized && (
+                  <DataTable
+                    elements={filteredElements}
+                    onSelectElement={setSelectedElementId}
+                    selectedElementId={selectedElementId || undefined}
+                    selectedElementIds={selectedElementIds}
+                    onSetSelectedElementIds={setSelectedElementIds}
+                    statuses={elementStatuses}
+                    onChangeStatus={handleChangeStatus}
+                    onChangeStatusMany={handleChangeStatusMany}
+                    onClearFilters={resetFilters}
+                  />
+                )}
             </div>
+          </div>
 
-            <div
-              className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
-              onPointerDown={(e) => {
-                const start = rightPanelWidth;
-                startHorizontalDrag(e, (dx) => {
-                  const next = Math.min(520, Math.max(260, start - dx));
-                  setRightPanelWidth(next);
-                });
-              }}
+          <div
+            className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
+            onPointerDown={(e) => {
+              const start = rightPanelWidth;
+              startHorizontalDrag(e, (dx) => {
+                const next = Math.min(520, Math.max(260, start - dx));
+                setRightPanelWidth(next);
+              });
+            }}
+          />
+
+          <div style={{ width: rightPanelWidth }} className="h-full overflow-hidden">
+            <Sidebar
+              categories={sidebarData}
+              selectedClassifications={selectedClassifications}
+              selectedCategories={selectedCategories}
+              selectedSubCategories={selectedSubCategories}
+              onToggleClassification={toggleClassification}
+              onToggleCategory={toggleCategory}
+              onToggleSubCategory={toggleSubCategory}
+              diameters={diameters}
+              selectedDiameter={selectedDiameter}
+              onDiameterChange={setSelectedDiameter}
+              onResetFilters={resetFilters}
             />
-
-            <div style={{ width: rightPanelWidth }} className="h-full overflow-hidden">
-              <Sidebar
-                categories={sidebarData}
-                selectedClassifications={selectedClassifications}
-                selectedCategories={selectedCategories}
-                selectedSubCategories={selectedSubCategories}
-                onToggleClassification={toggleClassification}
-                onToggleCategory={toggleCategory}
-                onToggleSubCategory={toggleSubCategory}
-                diameters={diameters}
-                selectedDiameter={selectedDiameter}
-                onDiameterChange={setSelectedDiameter}
-                onResetFilters={resetFilters}
-              />
-            </div>
-          </>
-        )}
+          </div>
+        </>
 
         {isTableMaximized && (
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="fixed inset-0 z-50 bg-white flex flex-col">
             <div className="h-12 px-6 border-b border-slate-200 bg-white flex items-center justify-between">
               <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
               <button
                 type="button"
                 onClick={() => setIsTableMaximized(false)}
                 className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2"
-                title="Minimizar"
+                title="Volver"
               >
                 <Minimize2 className="w-4 h-4 text-slate-600" />
                 <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Volver</span>
@@ -1327,6 +1328,7 @@ export default function App() {
               statuses={elementStatuses}
               onChangeStatus={handleChangeStatus}
               onChangeStatusMany={handleChangeStatusMany}
+              onClearFilters={resetFilters}
             />
           </div>
         )}
