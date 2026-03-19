@@ -302,11 +302,18 @@ export default function App() {
   }, [elementsWithVolume, getFirstProp, selectedClassifications, selectedCategories, selectedDiameter, selectedLevels]);
 
   const sidebarData = useMemo(() => {
+    const normalize = (v: string) =>
+      v
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase();
     const classificationMap: Record<string, Set<string>> = {};
     
     elementsWithVolume.forEach(el => {
       const classification = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
       const nombreIntegrado = getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name;
+      if (normalize(classification) === 'SIN CLASIFICAR') return;
 
       if (!classificationMap[classification]) classificationMap[classification] = new Set();
       classificationMap[classification].add(nombreIntegrado);
@@ -322,6 +329,16 @@ export default function App() {
         }))
     })).sort((a, b) => a.name.localeCompare(b.name));
   }, [elementsWithVolume, getFirstProp]);
+
+  useEffect(() => {
+    const normalize = (v: string) =>
+      v
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase();
+    setSelectedClassifications((prev) => prev.filter((c) => normalize(c) !== 'SIN CLASIFICAR'));
+  }, [elementsWithVolume]);
 
   const levels = useMemo(() => {
     const levelSet = new Set<string>();
