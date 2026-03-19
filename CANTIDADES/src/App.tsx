@@ -283,10 +283,28 @@ export default function App() {
     });
   }, [elements, getFirstProp, selectedClassifications, selectedCategories, selectedDiameter, selectedLevels]);
 
+  const elementsWithVolume = useMemo(() => {
+    const toNumber = (v: unknown) => {
+      if (v === undefined || v === null) return null;
+      const s = String(v).trim();
+      if (!s) return null;
+      const normalized = s.replace(',', '.').replace(/[^\d.\-]/g, '');
+      const n = Number(normalized);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    return elements.filter((el) => {
+      const vRaw = getFirstProp(el, ["VOLUMEN INTEGRADO", "VOLUMEN", "VOLUME"]);
+      const v = toNumber(vRaw);
+      const fallback = Number.isFinite(el.volume) ? el.volume : 0;
+      return (v ?? fallback) > 0;
+    });
+  }, [elements, getFirstProp]);
+
   const sidebarData = useMemo(() => {
     const classificationMap: Record<string, Set<string>> = {};
     
-    elements.forEach(el => {
+    elementsWithVolume.forEach(el => {
       const classification = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
       const nombreIntegrado = getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name;
 
@@ -303,7 +321,7 @@ export default function App() {
           children: []
         }))
     })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [elements, getFirstProp]);
+  }, [elementsWithVolume, getFirstProp]);
 
   const levels = useMemo(() => {
     const levelSet = new Set<string>();
