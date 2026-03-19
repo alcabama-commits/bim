@@ -49,6 +49,14 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     return String(val);
   };
 
+  const getFirstProp = (el: BIMElement, keys: string[]) => {
+    for (const key of keys) {
+      const v = getProp(el, key);
+      if (v !== '-' && v !== '') return v;
+    }
+    return '-';
+  };
+
   const rowHeight = 24;
   const overscan = 20;
   const totalRows = elements.length;
@@ -98,7 +106,12 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                 className={`hover:bg-blue-50 cursor-pointer transition-colors ${isSelected ? 'bg-blue-100' : ''}`}
                 onClick={() => onSelectElement(el.id)}
               >
-                <td className="px-4 py-1.5 text-[10px] text-slate-600 uppercase font-bold">{getProp(el, "CLASIFICACIÓN") || 'SIN CLASIFICAR'}</td>
+                <td className="px-4 py-1.5 text-[10px] text-slate-600 uppercase font-bold">
+                  {(() => {
+                    const v = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]);
+                    return v !== '-' ? v : 'SIN CLASIFICAR';
+                  })()}
+                </td>
                 <td className="px-4 py-1.5 text-[10px] text-slate-600 uppercase">{el.category}</td>
                 <td className="px-4 py-1.5 text-[10px] text-slate-600 uppercase font-medium">{getProp(el, "NOMBRE INTEGRADO") || el.name}</td>
                 <td className="px-4 py-1.5 text-[10px] text-slate-600 uppercase">{getProp(el, "DETALLE") || '-'}</td>

@@ -19,9 +19,9 @@ interface SidebarProps {
   onToggleClassification: (name: string) => void;
   onToggleCategory: (name: string) => void;
   onToggleSubCategory: (name: string) => void;
-  materials: string[];
-  selectedMaterial: string;
-  onMaterialChange: (material: string) => void;
+  diameters: string[];
+  selectedDiameter: string;
+  onDiameterChange: (diameter: string) => void;
   onResetFilters: () => void;
 }
 
@@ -33,9 +33,9 @@ export default function Sidebar({
   onToggleClassification,
   onToggleCategory,
   onToggleSubCategory,
-  materials,
-  selectedMaterial,
-  onMaterialChange,
+  diameters,
+  selectedDiameter,
+  onDiameterChange,
   onResetFilters
 }: SidebarProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -91,12 +91,16 @@ export default function Sidebar({
                 {classif.categories.map(cat => (
                   <div key={cat.name} className="mb-1">
                     <div className="flex items-center gap-1 py-1 px-2 hover:bg-slate-50 rounded cursor-pointer group">
-                      <button 
-                        onClick={() => toggleExpand(`${classif.name}-${cat.name}`)}
-                        className="p-0.5 text-slate-400 hover:text-slate-600"
-                      >
-                        {expanded[`${classif.name}-${cat.name}`] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                      </button>
+                      {cat.children.length > 0 ? (
+                        <button 
+                          onClick={() => toggleExpand(`${classif.name}-${cat.name}`)}
+                          className="p-0.5 text-slate-400 hover:text-slate-600"
+                        >
+                          {expanded[`${classif.name}-${cat.name}`] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        </button>
+                      ) : (
+                        <div className="w-5" />
+                      )}
                       <button 
                         onClick={() => onToggleCategory(cat.name)}
                         className="flex items-center gap-2 flex-1 text-left"
@@ -110,7 +114,7 @@ export default function Sidebar({
                       </button>
                     </div>
                     
-                    {expanded[`${classif.name}-${cat.name}`] && (
+                    {cat.children.length > 0 && expanded[`${classif.name}-${cat.name}`] && (
                       <div className="ml-8 mt-1 space-y-1">
                         {cat.children.map(sub => (
                           <button 
@@ -137,15 +141,15 @@ export default function Sidebar({
       </div>
 
       <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Material</h3>
+        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Diámetros</h3>
         <select 
-          value={selectedMaterial}
-          onChange={(e) => onMaterialChange(e.target.value)}
+          value={selectedDiameter}
+          onChange={(e) => onDiameterChange(e.target.value)}
           className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
         >
-          <option value="Todas">Todas</option>
-          {materials.map(m => (
-            <option key={m} value={m}>{m}</option>
+          <option value="Todos">Todos</option>
+          {diameters.map((d) => (
+            <option key={d} value={d}>{d}</option>
           ))}
         </select>
       </div>

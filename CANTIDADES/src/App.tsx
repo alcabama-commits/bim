@@ -91,7 +91,7 @@ export default function App() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedSubCategories, setSelectedSubCategories] = useState<string[]>([]);
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
-  const [selectedMaterial, setSelectedMaterial] = useState<string>('Todas');
+  const [selectedDiameter, setSelectedDiameter] = useState<string>('Todos');
   const [isIsolateMode, setIsIsolateMode] = useState(false);
 
   useEffect(() => {
@@ -150,6 +150,14 @@ export default function App() {
     return String(val);
   };
 
+  const getFirstProp = (el: BIMElement, keys: string[]) => {
+    for (const key of keys) {
+      const v = getProp(el, key);
+      if (v !== undefined && v !== null && String(v).trim() !== '') return String(v);
+    }
+    return undefined;
+  };
+
   const fetchAvailableModels = useCallback(async () => {
     setIsModelsLoading(true);
     setModelsError(null);
@@ -201,47 +209,41 @@ export default function App() {
 
   const filteredElements = useMemo(() => {
     return elements.filter(el => {
-      const classif = getProp(el, "CLASIFICACIÓN") || "SIN CLASIFICAR";
-      const cat = el.category;
-      const subCat = getProp(el, "NOMBRE INTEGRADO") || el.name;
+      const classif = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
+      const nombreIntegrado = getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name;
       const level = getProp(el, "NIVEL INTEGRADO") || "";
-      const material = getProp(el, "MATERIAL INTEGRADO") || "";
+      const diameter = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]) || "";
 
       const classificationMatch = selectedClassifications.length === 0 || selectedClassifications.includes(classif);
-      const categoryMatch = selectedCategories.length === 0 || selectedCategories.includes(cat);
-      const subCategoryMatch = selectedSubCategories.length === 0 || selectedSubCategories.includes(subCat);
+      const categoryMatch = selectedCategories.length === 0 || selectedCategories.includes(nombreIntegrado);
       const levelMatch = selectedLevels.length === 0 || selectedLevels.includes(level);
-      const materialMatch = selectedMaterial === 'Todas' || material === selectedMaterial;
+      const diameterMatch = selectedDiameter === 'Todos' || diameter === selectedDiameter;
 
-      return classificationMatch && categoryMatch && subCategoryMatch && levelMatch && materialMatch;
+      return classificationMatch && categoryMatch && levelMatch && diameterMatch;
     });
-  }, [elements, selectedClassifications, selectedCategories, selectedSubCategories, selectedLevels, selectedMaterial]);
+  }, [elements, getFirstProp, selectedClassifications, selectedCategories, selectedDiameter, selectedLevels]);
 
   const sidebarData = useMemo(() => {
-    const classificationMap: Record<string, Record<string, Set<string>>> = {};
+    const classificationMap: Record<string, Set<string>> = {};
     
     elements.forEach(el => {
-      const classification = getProp(el, "CLASIFICACIÓN") || "SIN CLASIFICAR";
-      const category = el.category;
-      const subCategory = getProp(el, "NOMBRE INTEGRADO") || el.name;
+      const classification = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
+      const nombreIntegrado = getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name;
 
-      if (!classificationMap[classification]) {
-        classificationMap[classification] = {};
-      }
-      if (!classificationMap[classification][category]) {
-        classificationMap[classification][category] = new Set();
-      }
-      classificationMap[classification][category].add(subCategory);
+      if (!classificationMap[classification]) classificationMap[classification] = new Set();
+      classificationMap[classification].add(nombreIntegrado);
     });
 
     return Object.entries(classificationMap).map(([classifName, categories]) => ({
       name: classifName,
-      categories: Object.entries(categories).map(([catName, subCats]) => ({
-        name: catName,
-        children: Array.from(subCats).sort()
-      })).sort((a, b) => a.name.localeCompare(b.name))
+      categories: Array.from(categories)
+        .sort((a, b) => a.localeCompare(b, 'es'))
+        .map((nombre) => ({
+          name: nombre,
+          children: []
+        }))
     })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [elements]);
+  }, [elements, getFirstProp]);
 
   const levels = useMemo(() => {
     const levelSet = new Set<string>();
@@ -252,14 +254,25 @@ export default function App() {
     return Array.from(levelSet);
   }, [elements]);
 
-  const materials = useMemo(() => {
-    const materialSet = new Set<string>();
+  const diameters = useMemo(() => {
+    const diameterSet = new Set<string>();
     elements.forEach(el => {
-      const material = getProp(el, "MATERIAL INTEGRADO");
-      if (material) materialSet.add(material);
+      const diameter = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]);
+      if (diameter) diameterSet.add(diameter);
     });
-    return Array.from(materialSet).sort();
-  }, [elements]);
+    const asNumber = (v: string) => {
+      const n = Number(String(v).replace(',', '.').replace(/[^\d.\-]/g, ''));
+      return Number.isFinite(n) ? n : null;
+    };
+    return Array.from(diameterSet).sort((a, b) => {
+      const na = asNumber(a);
+      const nb = asNumber(b);
+      if (na !== null && nb !== null) return na - nb;
+      if (na !== null) return -1;
+      if (nb !== null) return 1;
+      return a.localeCompare(b, 'es');
+    });
+  }, [elements, getFirstProp]);
 
   const toggleClassification = (name: string) => {
     setSelectedClassifications(prev => 
@@ -651,9 +664,89 @@ export default function App() {
     }
   };
 
+  const idbPromiseRef = useRef<Promise<IDBDatabase> | null>(null);
+
+  const openDiskCache = () => {
+    if (!('indexedDB' in window)) return null;
+    if (idbPromiseRef.current) return idbPromiseRef.current;
+
+    idbPromiseRef.current = new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('cantidades-model-cache-v1', 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('frag')) db.createObjectStore('frag', { keyPath: 'url' });
+        if (!db.objectStoreNames.contains('json')) db.createObjectStore('json', { keyPath: 'url' });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+
+    return idbPromiseRef.current;
+  };
+
+  const idbGet = async <T,>(storeName: 'frag' | 'json', url: string): Promise<T | null> => {
+    try {
+      const dbPromise = openDiskCache();
+      if (!dbPromise) return null;
+      const db = await dbPromise;
+      return await new Promise<T | null>((resolve) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        const req = store.get(url);
+        req.onsuccess = () => resolve((req.result as T) ?? null);
+        req.onerror = () => resolve(null);
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  const idbPut = async (storeName: 'frag' | 'json', record: any, maxEntries: number) => {
+    try {
+      const dbPromise = openDiskCache();
+      if (!dbPromise) return;
+      const db = await dbPromise;
+      await new Promise<void>((resolve) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        tx.objectStore(storeName).put(record);
+      });
+
+      const all = await new Promise<any[]>((resolve) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const req = tx.objectStore(storeName).getAll();
+        req.onsuccess = () => resolve((req.result as any[]) ?? []);
+        req.onerror = () => resolve([]);
+      });
+      if (all.length <= maxEntries) return;
+
+      all.sort((a, b) => Number(a?.ts ?? 0) - Number(b?.ts ?? 0));
+      const toDelete = all.slice(0, Math.max(0, all.length - maxEntries));
+      await new Promise<void>((resolve) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        const store = tx.objectStore(storeName);
+        toDelete.forEach((r) => {
+          if (r?.url) store.delete(r.url);
+        });
+      });
+    } catch {
+    }
+  };
+
   const fetchArrayBufferCached = useCallback(async (url: string, signal?: AbortSignal) => {
     const mem = remoteCacheRef.current.fragBytesByUrl.get(url);
     if (mem) return mem;
+
+    const disk = await idbGet<{ url: string; ts: number; data: ArrayBuffer }>('frag', url);
+    if (disk?.data) {
+      const bytes = new Uint8Array(disk.data);
+      putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 2);
+      void idbPut('frag', { url, ts: Date.now(), data: disk.data }, 6);
+      return bytes;
+    }
 
     if ('caches' in window) {
       try {
@@ -662,6 +755,8 @@ export default function App() {
         if (match) {
           const bytes = new Uint8Array(await match.arrayBuffer());
           putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 2);
+          const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+          void idbPut('frag', { url, ts: Date.now(), data: buffer }, 6);
           return bytes;
         }
       } catch {
@@ -679,12 +774,21 @@ export default function App() {
     }
     const bytes = new Uint8Array(await res.arrayBuffer());
     putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 2);
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    void idbPut('frag', { url, ts: Date.now(), data: buffer }, 6);
     return bytes;
   }, []);
 
   const fetchTextCached = useCallback(async (url: string, signal?: AbortSignal) => {
     const mem = remoteCacheRef.current.jsonTextByUrl.get(url);
     if (mem) return mem;
+
+    const disk = await idbGet<{ url: string; ts: number; data: string }>('json', url);
+    if (disk?.data) {
+      putLru(remoteCacheRef.current.jsonTextByUrl, url, disk.data, 2);
+      void idbPut('json', { url, ts: Date.now(), data: disk.data }, 6);
+      return disk.data;
+    }
 
     if ('caches' in window) {
       try {
@@ -693,6 +797,7 @@ export default function App() {
         if (match) {
           const text = await match.text();
           putLru(remoteCacheRef.current.jsonTextByUrl, url, text, 2);
+          void idbPut('json', { url, ts: Date.now(), data: text }, 6);
           return text;
         }
       } catch {
@@ -710,6 +815,7 @@ export default function App() {
     }
     const text = await res.text();
     putLru(remoteCacheRef.current.jsonTextByUrl, url, text, 2);
+    void idbPut('json', { url, ts: Date.now(), data: text }, 6);
     return text;
   }, []);
 
@@ -868,7 +974,7 @@ export default function App() {
     setSelectedCategories([]);
     setSelectedSubCategories([]);
     setSelectedLevels([]);
-    setSelectedMaterial('Todas');
+    setSelectedDiameter('Todos');
   };
 
   const [expandedModelGroups, setExpandedModelGroups] = useState<Record<string, boolean>>({
@@ -1117,9 +1223,9 @@ export default function App() {
                 onToggleClassification={toggleClassification}
                 onToggleCategory={toggleCategory}
                 onToggleSubCategory={toggleSubCategory}
-                materials={materials}
-                selectedMaterial={selectedMaterial}
-                onMaterialChange={setSelectedMaterial}
+                diameters={diameters}
+                selectedDiameter={selectedDiameter}
+                onDiameterChange={setSelectedDiameter}
                 onResetFilters={resetFilters}
               />
             </div>
