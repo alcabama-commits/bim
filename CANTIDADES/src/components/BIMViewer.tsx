@@ -53,10 +53,10 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
 
     // Configurar escena y cámara inmediatamente
     world.scene.setup();
-    world.scene.three.background = new THREE.Color(0xf8fafc);
+    world.scene.three.background = new THREE.Color(0xffffff);
     
     if (world.renderer) {
-      world.renderer.three.setClearColor(0xf8fafc);
+      world.renderer.three.setClearColor(0xffffff);
     }
     
     world.camera.three.position.set(20, 20, 20);
@@ -106,7 +106,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         highlighter.setup({ world });
         highlighter.enabled = true;
         highlighter.styles.set("select", { 
-          color: new THREE.Color(0x3b82f6),
+          color: new THREE.Color(0xffa400),
           opacity: 0.5,
           transparent: true,
           renderedFaces: FRAGS.RenderedFaces.TWO
@@ -119,7 +119,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
           renderedFaces: FRAGS.RenderedFaces.TWO
         });
         highlighter.styles.set("status_COMPRADO", { 
-          color: new THREE.Color(0xf59e0b),
+          color: new THREE.Color(0xffa400),
           opacity: 0.25,
           transparent: true,
           renderedFaces: FRAGS.RenderedFaces.TWO
@@ -414,12 +414,12 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
   }, [allElements, isInitialized, isIsolateMode, selectedElementId, selectedElementIds, statuses, visibleElements]);
 
   return (
-    <div className="relative w-full h-full bg-slate-100">
+    <div className="relative w-full h-full bg-white">
       <div ref={containerRef} className="w-full h-full" />
       
       {isLoading && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm z-50">
-          <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+          <Loader2 className="w-12 h-12 text-[#024959] animate-spin mb-4" />
           <p className="text-slate-600 font-medium">Cargando modelo BIM...</p>
           <p className="text-slate-400 text-xs mt-2">Procesando fragmentos y geometrías</p>
         </div>
@@ -428,7 +428,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       {!isLoading && (
         <div className="absolute top-6 left-6 flex flex-col gap-2">
           <div className="bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-lg border border-white flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white">
+            <div className="w-8 h-8 rounded-lg bg-[#024959] flex items-center justify-center text-white">
               <Box className="w-5 h-5" />
             </div>
             <div>
@@ -461,7 +461,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
               }
             }
           }}
-          className="bg-blue-600 text-white px-4 py-2 rounded-full shadow-lg border border-blue-500 text-[10px] font-bold uppercase tracking-widest hover:bg-blue-700 transition-all"
+          className="bg-[#024959] text-white px-4 py-2 rounded-full shadow-lg border border-[#003E52] text-[10px] font-bold uppercase tracking-widest hover:bg-[#003E52] transition-all"
         >
           Enfocar Filtrados
         </button>
@@ -472,7 +472,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
               console.log("Actualización manual no disponible en v3.");
             }
           }}
-          className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-white text-[10px] font-bold text-blue-600 uppercase tracking-widest hover:bg-white transition-all"
+          className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-white text-[10px] font-bold text-[#024959] uppercase tracking-widest hover:bg-white transition-all"
         >
           Forzar Renderizado
         </button>

@@ -1059,24 +1059,32 @@ export default function App() {
       <header className="h-20 flex items-center justify-between px-8 border-b border-slate-200 bg-white">
         <div className="flex items-center gap-4">
           <div className="h-12 flex items-center">
-             <span className="text-2xl font-black text-[#f27d26] tracking-tighter">ARTIS</span>
-             <span className="text-xs font-bold text-slate-400 ml-1 uppercase tracking-widest mt-2">URBANO</span>
+            <img
+              src="https://i.postimg.cc/RVp8pZwc/artis_urbano.png"
+              alt="Artis Urbano"
+              className="h-10 w-auto object-contain"
+              loading="eager"
+              decoding="async"
+              referrerPolicy="no-referrer"
+            />
           </div>
         </div>
         
         <div className="flex-1 max-w-3xl mx-8">
-          <div className="bg-[#003d4d] text-white py-1.5 px-6 rounded-sm text-center font-bold uppercase tracking-widest text-sm shadow-inner">
+          <div className="bg-[#003E52] text-white py-1.5 px-6 rounded-sm text-center font-bold uppercase tracking-widest text-sm shadow-inner">
             {selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'CANTIDADES'}
           </div>
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="h-10 flex items-center gap-2">
-            <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
-              <div className="w-4 h-4 bg-emerald-500 rounded-full" />
-            </div>
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">TRÉVOLY</span>
-          </div>
+          <img
+            src="https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg"
+            alt="Arboré"
+            className="h-10 w-auto object-contain"
+            loading="eager"
+            decoding="async"
+            referrerPolicy="no-referrer"
+          />
         </div>
       </header>
 
