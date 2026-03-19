@@ -7,10 +7,10 @@ export interface SheetData {
   weeklyGoalDate?: string | null;
 }
 
-export const fetchSheetData = async (): Promise<SheetData[]> => {
+export const fetchSheetData = async (): Promise<SheetData[] | null> => {
   if (!API_CONFIG.scriptUrl) {
     console.warn('Google Apps Script URL not configured. Using local data.');
-    return [];
+    return null;
   }
 
   try {
@@ -27,7 +27,7 @@ export const fetchSheetData = async (): Promise<SheetData[]> => {
     return data.towers || []; 
   } catch (error) {
     console.error('Error fetching data from Google Sheets:', error);
-    return [];
+    return null;
   }
 };
 
