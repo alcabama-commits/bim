@@ -307,9 +307,13 @@ export default function App() {
       const classifRaw = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
       if (isSinClasificar(classifRaw)) return false;
       const vRaw = getFirstProp(el, ["VOLUMEN INTEGRADO", "VOLUMEN", "VOLUME"]);
+      const aRaw = getFirstProp(el, ["AREA INTEGRADO", "AREA", "ÁREA"]);
+      const lRaw = getFirstProp(el, ["LONGITUD INTEGRADO", "LONGITUD", "LENGTH"]);
       const v = toNumber(vRaw);
-      const fallback = Number.isFinite(el.volume) ? el.volume : 0;
-      return (v ?? fallback) > 0;
+      const a = toNumber(aRaw);
+      const l = toNumber(lRaw);
+      const fallbackV = Number.isFinite(el.volume) ? el.volume : 0;
+      return (v ?? fallbackV) > 0 || (a ?? 0) > 0 || (l ?? 0) > 0;
     });
   }, [elements, getFirstProp]);
 
@@ -1226,8 +1230,14 @@ export default function App() {
             />
 
             <div
-              className="h-3 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-row-resize"
+              className="h-3 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-row-resize select-none touch-none relative z-20"
               onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                  (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+                } catch {
+                }
                 const start = tablePanelHeight;
                 startVerticalDrag(e, (dy) => {
                   const next = Math.min(900, Math.max(180, start - dy));
