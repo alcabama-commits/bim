@@ -1229,7 +1229,10 @@ export default function App() {
                   isLoading={isLoading}
                   selectedElementId={selectedElementId || undefined}
                   selectedElementIds={selectedElementIds}
-                  onElementSelect={setSelectedElementId}
+                  onElementSelect={(id) => {
+                    setSelectedElementId(id);
+                    setSelectedElementIds(id ? [id] : []);
+                  }}
                   isIsolateMode={isIsolateMode}
                 />
 

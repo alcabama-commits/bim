@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as OBCF from '@thatopen/components-front';
 import * as FRAGS from '@thatopen/fragments';
 import { BIMElement } from '../types';
-import { Box, Loader2 } from 'lucide-react';
+import { Box, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const FRAGMENTS_WORKER_URL = 'https://thatopen.github.io/engine_fragment/resources/worker.mjs';
 
@@ -38,6 +38,42 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
   const allHiddenRef = useRef(false);
   const updateSeqRef = useRef(0);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [statusVisibility, setStatusVisibility] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem('cantidades:statusVisibility');
+      if (!raw) {
+        return { PENDIENTE: true, PEDIDO: true, COMPRADO: true, 'EN BODEGA': true, INSTALADO: true };
+      }
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const pick = (k: string) => (typeof parsed[k] === 'boolean' ? (parsed[k] as boolean) : true);
+      return {
+        PENDIENTE: pick('PENDIENTE'),
+        PEDIDO: pick('PEDIDO'),
+        COMPRADO: pick('COMPRADO'),
+        'EN BODEGA': pick('EN BODEGA'),
+        INSTALADO: pick('INSTALADO')
+      };
+    } catch {
+      return { PENDIENTE: true, PEDIDO: true, COMPRADO: true, 'EN BODEGA': true, INSTALADO: true };
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('cantidades:statusVisibility', JSON.stringify(statusVisibility));
+    } catch {
+    }
+  }, [statusVisibility]);
+
+  const statusButtons = useMemo(() => {
+    return [
+      { key: 'PENDIENTE', label: 'Pendiente', color: '#9CA3AF' },
+      { key: 'PEDIDO', label: 'Pedido', color: '#3B82F6' },
+      { key: 'COMPRADO', label: 'Comprado', color: '#FFA400' },
+      { key: 'EN BODEGA', label: 'En bodega', color: '#A78BFA' },
+      { key: 'INSTALADO', label: 'Instalado', color: '#22C55E' }
+    ] as const;
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -198,9 +234,10 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
           const modelId = Object.keys(modelIdMap)[0];
           const itemIds = modelIdMap[modelId];
           const itemId = Array.from(itemIds)[0];
-          
+
           getModelById(modelId);
-          onElementSelect(itemId.toString());
+          const resolved = allElements.find((e) => String(e.modelId) === String(modelId) && Number(e.localId) === Number(itemId));
+          onElementSelect(resolved ? resolved.id : itemId.toString());
         });
 
         highlighter.events.select.onClear.add(() => {
@@ -301,6 +338,11 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       if (isolateSelection) {
         finalVisible = allElements.filter((e) => selectedIdSet.has(e.id) && (!filterActive || visibleIdSet.has(e.id)));
       }
+
+      finalVisible = finalVisible.filter((e) => {
+        const st = statuses[e.id] ?? 'PENDIENTE';
+        return statusVisibility[st] !== false;
+      });
 
       const totalCount = allElements.length;
       const visibleCount = finalVisible.length;
@@ -451,7 +493,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
 
     const seq = ++updateSeqRef.current;
     void update(seq);
-  }, [allElements, isInitialized, isIsolateMode, selectedElementId, selectedElementIds, statusColorsEnabled, statuses, visibleElements]);
+  }, [allElements, isInitialized, isIsolateMode, selectedElementId, selectedElementIds, statusColorsEnabled, statusVisibility, statuses, visibleElements]);
 
   return (
     <div className="relative w-full h-full bg-white">
@@ -519,6 +561,27 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         <div className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-white text-[10px] font-bold text-slate-500 uppercase tracking-widest">
           Orbit: Left Click | Pan: Right Click | Zoom: Scroll
         </div>
+      </div>
+
+      <div className="absolute bottom-6 left-6 flex gap-2">
+        {statusButtons.map((s) => {
+          const enabled = statusVisibility[s.key] !== false;
+          return (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setStatusVisibility((prev) => ({ ...prev, [s.key]: !(prev[s.key] !== false) }))}
+              className={`px-3 py-2 rounded-full shadow-lg border text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${
+                enabled ? 'bg-white/90 backdrop-blur-md border-white text-slate-700' : 'bg-white/70 backdrop-blur-md border-white text-slate-400'
+              }`}
+              title={enabled ? `Ocultar ${s.label}` : `Mostrar ${s.label}`}
+            >
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+              <span>{s.label}</span>
+              {enabled ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
