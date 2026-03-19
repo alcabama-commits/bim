@@ -21,6 +21,7 @@ interface BIMViewerProps {
   allElements: BIMElement[];
   visibleElements: BIMElement[];
   statuses: Record<string, 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'EN BODEGA' | 'INSTALADO' | undefined>;
+  statusColorsEnabled?: boolean;
   selectedElementId?: string;
   selectedElementIds?: string[];
   onElementSelect: (id: string | null) => void;
@@ -28,11 +29,14 @@ interface BIMViewerProps {
   isIsolateMode?: boolean;
 }
 
-export default function BIMViewer({ onModelLoaded, allElements, visibleElements, statuses, selectedElementId, selectedElementIds, onElementSelect, isLoading, isIsolateMode }: BIMViewerProps) {
+export default function BIMViewer({ onModelLoaded, allElements, visibleElements, statuses, statusColorsEnabled = true, selectedElementId, selectedElementIds, onElementSelect, isLoading, isIsolateMode }: BIMViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const componentsRef = useRef<OBC.Components | null>(null);
   const workerUrlRef = useRef<string | null>(null);
   const syncCleanupRef = useRef<null | (() => void)>(null);
+  const hiddenMapRef = useRef<OBC.ModelIdMap>({});
+  const allHiddenRef = useRef(false);
+  const updateSeqRef = useRef(0);
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
@@ -107,39 +111,39 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         highlighter.enabled = true;
         highlighter.styles.set("select", { 
           color: new THREE.Color(0xffa400),
-          opacity: 0.5,
-          transparent: true,
+          opacity: 1,
+          transparent: false,
           renderedFaces: FRAGS.RenderedFaces.TWO
         });
 
         highlighter.styles.set("status_PEDIDO", { 
           color: new THREE.Color(0x3b82f6),
-          opacity: 0.25,
-          transparent: true,
+          opacity: 1,
+          transparent: false,
           renderedFaces: FRAGS.RenderedFaces.TWO
         });
         highlighter.styles.set("status_COMPRADO", { 
           color: new THREE.Color(0xffa400),
-          opacity: 0.25,
-          transparent: true,
+          opacity: 1,
+          transparent: false,
           renderedFaces: FRAGS.RenderedFaces.TWO
         });
         highlighter.styles.set("status_EN_BODEGA", { 
           color: new THREE.Color(0xa78bfa),
-          opacity: 0.25,
-          transparent: true,
+          opacity: 1,
+          transparent: false,
           renderedFaces: FRAGS.RenderedFaces.TWO
         });
         highlighter.styles.set("status_INSTALADO", { 
           color: new THREE.Color(0x22c55e),
-          opacity: 0.25,
-          transparent: true,
+          opacity: 1,
+          transparent: false,
           renderedFaces: FRAGS.RenderedFaces.TWO
         });
         highlighter.styles.set("status_PENDIENTE", { 
           color: new THREE.Color(0x9ca3af),
-          opacity: 0.18,
-          transparent: true,
+          opacity: 1,
+          transparent: false,
           renderedFaces: FRAGS.RenderedFaces.TWO
         });
         
@@ -279,15 +283,11 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       return { map, hasAny };
     };
 
-    const update = async () => {
+    const update = async (seq: number) => {
+      if (seq !== updateSeqRef.current) return;
       const list: Map<string, any> | undefined = (fragments as any).list;
       const models = Array.from(list?.values?.() ?? []);
       if (models.length === 0) return;
-
-      for (const model of models) {
-        const obj = model?.object ?? model;
-        if (obj) obj.visible = true;
-      }
 
       const filterActive = visibleElements.length !== allElements.length;
       const selectionIds = selectedElementIds && selectedElementIds.length > 0 ? selectedElementIds : (selectedElementId ? [selectedElementId] : []);
@@ -308,46 +308,74 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
 
       const shouldShowAll = !filterActive && !isolateSelection;
       if (shouldShowAll) {
-        try {
-          await hider.set(true);
-        } catch {
+        if (seq !== updateSeqRef.current) return;
+        if (allHiddenRef.current) {
+          try {
+            await hider.set(true);
+          } catch {
+          }
+          allHiddenRef.current = false;
+          hiddenMapRef.current = {};
+        } else if (!OBC.ModelIdMapUtils.isEmpty(hiddenMapRef.current)) {
+          try {
+            await hider.set(true, hiddenMapRef.current);
+          } catch {
+          }
+          hiddenMapRef.current = {};
         }
       } else if (visibleCount === 0) {
+        if (seq !== updateSeqRef.current) return;
         try {
           await hider.set(false);
         } catch {
         }
+        allHiddenRef.current = true;
+        hiddenMapRef.current = {};
       } else {
-        const hiddenIsSmaller = hiddenCount > 0 && hiddenCount < visibleCount;
+        const visibleSet = new Set(finalVisible.map((x) => x.id));
+        const hiddenElements = allElements.filter((e) => !visibleSet.has(e.id));
+        const { map: visibleMap, hasAny: hasAnyVisible } = buildModelIdMapFromElements(finalVisible);
+        const { map: nextHiddenMap } = buildModelIdMapFromElements(hiddenElements);
 
-        try {
-          await hider.set(true);
-        } catch {
-        }
+        if (seq !== updateSeqRef.current) return;
 
-        if (!hiddenIsSmaller) {
-          const { map, hasAny } = buildModelIdMapFromElements(finalVisible);
-          if (hasAny) {
+        if (allHiddenRef.current) {
+          if (hasAnyVisible) {
             try {
-              await hider.isolate(map);
+              await hider.set(true, visibleMap);
             } catch {
             }
           }
+          allHiddenRef.current = false;
+          hiddenMapRef.current = nextHiddenMap;
         } else {
-          const visibleSet = new Set(finalVisible.map((x) => x.id));
-          const hidden = allElements.filter((e) => !visibleSet.has(e.id));
-          const { map, hasAny } = buildModelIdMapFromElements(hidden);
-          if (hasAny) {
+          const prevHidden = hiddenMapRef.current;
+          const toShow = OBC.ModelIdMapUtils.clone(prevHidden);
+          OBC.ModelIdMapUtils.remove(toShow, nextHiddenMap);
+
+          const toHide = OBC.ModelIdMapUtils.clone(nextHiddenMap);
+          OBC.ModelIdMapUtils.remove(toHide, prevHidden);
+
+          if (seq !== updateSeqRef.current) return;
+          if (!OBC.ModelIdMapUtils.isEmpty(toShow)) {
             try {
-              await hider.set(false, map);
+              await hider.set(true, toShow);
             } catch {
             }
           }
+          if (seq !== updateSeqRef.current) return;
+          if (!OBC.ModelIdMapUtils.isEmpty(toHide)) {
+            try {
+              await hider.set(false, toHide);
+            } catch {
+            }
+          }
+          hiddenMapRef.current = nextHiddenMap;
         }
       }
 
       try {
-        await highlighter.clear();
+        await highlighter.clear('select');
       } catch {
       }
 
@@ -386,15 +414,25 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         { key: 'PENDIENTE', style: 'status_PENDIENTE', enabled: byStatus.PENDIENTE.length <= pendingLimit }
       ];
 
-      for (const { key, style, enabled } of statusToStyle) {
-        if (!enabled) continue;
-        const els = byStatus[key];
-        if (!els || els.length === 0) continue;
-        const { map, hasAny } = buildModelIdMapFromElements(els);
-        if (!hasAny) continue;
+      for (const { style } of statusToStyle) {
         try {
-          await highlighter.highlightByID(style, map, true, false, null, false);
+          await highlighter.clear(style);
         } catch {
+        }
+      }
+
+      if (statusColorsEnabled) {
+        for (const { key, style, enabled } of statusToStyle) {
+          if (!enabled) continue;
+          const els = byStatus[key];
+          if (!els || els.length === 0) continue;
+          const { map, hasAny } = buildModelIdMapFromElements(els);
+          if (!hasAny) continue;
+          if (seq !== updateSeqRef.current) return;
+          try {
+            await highlighter.highlightByID(style, map, true, false, null, false);
+          } catch {
+          }
         }
       }
 
@@ -402,6 +440,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         const selectedElements = allElements.filter((e) => selectedIdSet.has(e.id));
         const { map, hasAny } = buildModelIdMapFromElements(selectedElements);
         if (hasAny) {
+          if (seq !== updateSeqRef.current) return;
           try {
             await highlighter.highlightByID("select", map, true, false, null, false);
           } catch {
@@ -410,8 +449,9 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       }
     };
 
-    void update();
-  }, [allElements, isInitialized, isIsolateMode, selectedElementId, selectedElementIds, statuses, visibleElements]);
+    const seq = ++updateSeqRef.current;
+    void update(seq);
+  }, [allElements, isInitialized, isIsolateMode, selectedElementId, selectedElementIds, statusColorsEnabled, statuses, visibleElements]);
 
   return (
     <div className="relative w-full h-full bg-white">

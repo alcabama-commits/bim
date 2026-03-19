@@ -4,7 +4,7 @@ import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
 import BIMViewer from './components/BIMViewer';
 import { BIMElement, CategorySummary } from './types';
-import { Upload, Box, Folder, File, ChevronDown, ChevronRight, RefreshCw, Eye, Loader2, Maximize2, Minimize2 } from 'lucide-react';
+import { Upload, Box, Folder, File, ChevronDown, ChevronRight, RefreshCw, Eye, Loader2, Maximize2, Minimize2, Palette } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import LevelGrid from './components/LevelGrid';
 import DataTable from './components/DataTable';
@@ -96,6 +96,11 @@ export default function App() {
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
   const [selectedDiameter, setSelectedDiameter] = useState<string>('Todos');
   const [isIsolateMode, setIsIsolateMode] = useState(false);
+  const [statusColorsEnabled, setStatusColorsEnabled] = useState(() => {
+    const raw = localStorage.getItem('cantidades:statusColorsEnabled');
+    if (raw === null) return true;
+    return raw === 'true';
+  });
 
   const statusStorageKey = useMemo(() => {
     const base = selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'local';
@@ -152,6 +157,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('cantidades:tablePanelHeight', String(tablePanelHeight));
   }, [tablePanelHeight]);
+
+  useEffect(() => {
+    localStorage.setItem('cantidades:statusColorsEnabled', String(statusColorsEnabled));
+  }, [statusColorsEnabled]);
 
   const startHorizontalDrag = useCallback((startEvent: React.PointerEvent, onDeltaX: (dx: number) => void) => {
     startEvent.preventDefault();
@@ -1216,6 +1225,7 @@ export default function App() {
                   allElements={elements}
                   visibleElements={filteredElements}
                   statuses={elementStatuses}
+                  statusColorsEnabled={statusColorsEnabled}
                   isLoading={isLoading}
                   selectedElementId={selectedElementId || undefined}
                   selectedElementIds={selectedElementIds}
@@ -1231,6 +1241,14 @@ export default function App() {
                   >
                     <div className={`w-2 h-2 rounded-full ${isIsolateMode ? 'bg-white animate-pulse' : 'bg-slate-300'}`} />
                     <span className="text-[10px] font-bold uppercase tracking-widest">Aislar Selección</span>
+                  </button>
+                  <button
+                    onClick={() => setStatusColorsEnabled((v) => !v)}
+                    className={`p-2 rounded-lg shadow border transition-all flex items-center gap-2 ${statusColorsEnabled ? 'bg-[#024959] text-white border-[#003E52]' : 'bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white'}`}
+                    title={statusColorsEnabled ? 'Apagar colores' : 'Encender colores'}
+                  >
+                    <Palette className="w-4 h-4" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Colores</span>
                   </button>
                   <button
                     onClick={loadSample}
