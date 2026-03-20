@@ -116,7 +116,9 @@ function doPost(e) {
           ];
 
     const startRow = sheet.getLastRow() + 1;
-    sheet.getRange(startRow, 1, rowsToInsert.length, HEADERS.length).setValues(rowsToInsert);
+    const range = sheet.getRange(startRow, 1, rowsToInsert.length, HEADERS.length);
+    range.offset(0, 0, rowsToInsert.length, 1).setNumberFormat('@');
+    range.setValues(rowsToInsert);
 
     return ContentService.createTextOutput(JSON.stringify({ ok: true, codigo })).setMimeType(
       ContentService.MimeType.JSON,
