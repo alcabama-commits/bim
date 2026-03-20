@@ -300,109 +300,33 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         return resolved;
       };
 
-      const computeSelectionFrustum = (camera: THREE.Camera, rect: { left: number; right: number; top: number; bottom: number }) => {
-        const container = containerRef.current;
-        if (!container) return null;
-        const bounds = container.getBoundingClientRect();
-        const width = bounds.width;
-        const height = bounds.height;
-        if (width <= 0 || height <= 0) return null;
-
-        const toNdcX = (x: number) => ((x - bounds.left) / width) * 2 - 1;
-        const toNdcY = (y: number) => -(((y - bounds.top) / height) * 2 - 1);
-
-        const x1 = Math.min(toNdcX(rect.left), toNdcX(rect.right));
-        const x2 = Math.max(toNdcX(rect.left), toNdcX(rect.right));
-        const y1 = Math.min(toNdcY(rect.bottom), toNdcY(rect.top));
-        const y2 = Math.max(toNdcY(rect.bottom), toNdcY(rect.top));
-
-        const cam = camera as THREE.PerspectiveCamera | THREE.OrthographicCamera;
-        cam.updateMatrixWorld();
-        if ('updateProjectionMatrix' in cam) cam.updateProjectionMatrix();
-
-        const camPos = new THREE.Vector3();
-        camPos.setFromMatrixPosition(cam.matrixWorld);
-
-        const ntl = new THREE.Vector3(x1, y2, -1).unproject(cam);
-        const ntr = new THREE.Vector3(x2, y2, -1).unproject(cam);
-        const nbl = new THREE.Vector3(x1, y1, -1).unproject(cam);
-        const nbr = new THREE.Vector3(x2, y1, -1).unproject(cam);
-
-        const full = new THREE.Frustum();
-        const projScreenMatrix = new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
-        full.setFromProjectionMatrix(projScreenMatrix);
-
-        const left = new THREE.Plane().setFromCoplanarPoints(camPos, nbl, ntl);
-        const right = new THREE.Plane().setFromCoplanarPoints(camPos, ntr, nbr);
-        const top = new THREE.Plane().setFromCoplanarPoints(camPos, ntl, ntr);
-        const bottom = new THREE.Plane().setFromCoplanarPoints(camPos, nbr, nbl);
-
-        const testPoint = new THREE.Vector3((x1 + x2) / 2, (y1 + y2) / 2, -1).unproject(cam);
-        const ensureInward = (p: THREE.Plane) => {
-          if (p.distanceToPoint(testPoint) < 0) p.negate();
-          return p;
-        };
-
-        return new THREE.Frustum(
-          ensureInward(left),
-          ensureInward(right),
-          ensureInward(top),
-          ensureInward(bottom),
-          full.planes[4].clone(),
-          full.planes[5].clone()
-        );
-      };
-
-      const isBoxFullyInsideFrustum = (fr: THREE.Frustum, box: THREE.Box3) => {
-        const { min, max } = box;
-        const corners = [
-          new THREE.Vector3(min.x, min.y, min.z),
-          new THREE.Vector3(min.x, min.y, max.z),
-          new THREE.Vector3(min.x, max.y, min.z),
-          new THREE.Vector3(min.x, max.y, max.z),
-          new THREE.Vector3(max.x, min.y, min.z),
-          new THREE.Vector3(max.x, min.y, max.z),
-          new THREE.Vector3(max.x, max.y, min.z),
-          new THREE.Vector3(max.x, max.y, max.z)
-        ];
-
-        for (const c of corners) {
-          if (!fr.containsPoint(c)) return false;
-        }
-        return true;
-      };
-
       const crossingSelect = async (rect: { left: number; right: number; top: number; bottom: number }, fullyIncluded: boolean) => {
         const w = getWorld();
-        const cam = w?.camera?.three as THREE.Camera | undefined;
-        if (!cam) return;
-        const fr = computeSelectionFrustum(cam, rect);
-        if (!fr) return;
+        const cam = w?.camera?.three as THREE.PerspectiveCamera | THREE.OrthographicCamera | undefined;
+        const dom = w?.renderer?.three?.domElement as HTMLCanvasElement | undefined;
+        if (!cam || !dom) return;
+
+        const domBounds = dom.getBoundingClientRect();
+        const topLeft = new THREE.Vector2(rect.left - domBounds.left, rect.top - domBounds.top);
+        const bottomRight = new THREE.Vector2(rect.right - domBounds.left, rect.bottom - domBounds.top);
 
         const selection: OBC.ModelIdMap = {};
         for (const model of getAllModels()) {
-          const modelId = String((model as any).modelId ?? (model as any).id ?? (model as any).uuid ?? '');
-          if (!modelId) continue;
-          const visibleItems: Set<number> | undefined = (model as any).visibleItems;
-          const ids = visibleItems ? Array.from(visibleItems) : [];
-          if (ids.length === 0) continue;
-
-          let boxes: THREE.Box3[] = [];
           try {
-            boxes = await (model as any).getBoxes(ids);
+            const res = await (model as any).rectangleRaycast({
+              camera: cam,
+              dom,
+              topLeft,
+              bottomRight,
+              fullyIncluded
+            } as FRAGS.RectangleRaycastData);
+            if (!res || !res.localIds || res.localIds.length === 0 || !res.fragments) continue;
+            const modelId = String(res.fragments.modelId);
+            if (!modelId) continue;
+            const picked = new Set<number>(res.localIds.map((v: number) => Number(v)).filter((v: number) => Number.isFinite(v)));
+            if (picked.size > 0) selection[modelId] = picked;
           } catch {
-            continue;
           }
-          if (!boxes || boxes.length === 0) continue;
-
-          const picked = new Set<number>();
-          const limit = Math.min(ids.length, boxes.length);
-          for (let i = 0; i < limit; i++) {
-            const box = boxes[i];
-            if (!box) continue;
-            if (fullyIncluded ? isBoxFullyInsideFrustum(fr, box) : fr.intersectsBox(box)) picked.add(ids[i]);
-          }
-          if (picked.size > 0) selection[modelId] = picked;
         }
 
         if (!OBC.ModelIdMapUtils.isEmpty(selection)) {
@@ -410,6 +334,14 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
             await highlighter.highlightByID('select', selection, false, false, null, true);
           } catch {
           }
+          const ids = getSelectionIds(highlighter.selection?.select ?? {});
+          onSelectionChangeRef.current(ids);
+        } else if (!fullyIncluded) {
+          try {
+            await highlighter.clear('select');
+          } catch {
+          }
+          onSelectionChangeRef.current([]);
         }
       };
 
