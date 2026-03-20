@@ -61,6 +61,7 @@ export default function App() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submittedCode, setSubmittedCode] = useState<string | null>(null);
 
   const handleUnitToggle = (unit: string, fileType: typeof FILE_TYPES[number]) => {
     setForm(prev => ({
@@ -80,6 +81,7 @@ export default function App() {
     if (isSubmitting || isSubmitted) return;
 
     setIsSubmitting(true);
+    setSubmittedCode(null);
 
     const dataToSend = {
       ...form,
@@ -97,7 +99,57 @@ export default function App() {
       });
 
       setIsSubmitted(true);
-      setTimeout(() => setIsSubmitted(false), 3000);
+      const fetchLatestCode = (projectName: string) =>
+        new Promise<string | null>((resolve, reject) => {
+          const callback = `__latestCode_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+          const cleanup = (script?: HTMLScriptElement, timeoutId?: number) => {
+            try {
+              if (timeoutId) window.clearTimeout(timeoutId);
+            } catch {
+            }
+            try {
+              if (script && script.parentNode) script.parentNode.removeChild(script);
+            } catch {
+            }
+            try {
+              delete (window as any)[callback];
+            } catch {
+              (window as any)[callback] = undefined;
+            }
+          };
+
+          const sep = SCRIPT_URL.includes('?') ? '&' : '?';
+          const src = `${SCRIPT_URL}${sep}action=latestCode&projectName=${encodeURIComponent(projectName)}&callback=${encodeURIComponent(callback)}`;
+          const script = document.createElement('script');
+          const timeoutId = window.setTimeout(() => {
+            cleanup(script, timeoutId);
+            reject(new Error('Timeout'));
+          }, 5000);
+
+          (window as any)[callback] = (payload: any) => {
+            const codigo = payload && payload.codigo ? String(payload.codigo) : null;
+            cleanup(script, timeoutId);
+            resolve(codigo);
+          };
+
+          script.async = true;
+          script.src = src;
+          script.onerror = () => {
+            cleanup(script, timeoutId);
+            reject(new Error('Error loading script'));
+          };
+
+          document.body.appendChild(script);
+        });
+
+      void fetchLatestCode(selectedProject.name)
+        .then((codigo) => setSubmittedCode(codigo))
+        .catch(() => {});
+
+      window.setTimeout(() => {
+        setIsSubmitted(false);
+        setSubmittedCode(null);
+      }, 3000);
 
     } catch (error) {
       console.error('Error al enviar el formulario:', error);
@@ -373,10 +425,15 @@ export default function App() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
-                        className="flex items-center gap-2"
+                        className="flex flex-col items-center gap-1"
                       >
-                        <CheckCircle2 size={20} />
-                        ¡SOLICITUD ENVIADA!
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 size={20} />
+                          ¡SOLICITUD ENVIADA!
+                        </div>
+                        {submittedCode && (
+                          <div className="text-[10px] font-mono tracking-widest uppercase opacity-90">CÓDIGO: {submittedCode}</div>
+                        )}
                       </motion.div>
                     ) : isSubmitting ? (
                       <motion.div

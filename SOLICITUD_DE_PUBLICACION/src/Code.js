@@ -11,7 +11,9 @@ function doPost(e) {
 
   try {
     var doc = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = doc.getActiveSheet();
+    var data = JSON.parse(e.postData.contents);
+    var projectName = data && data.projectName ? String(data.projectName) : "";
+    var sheet = doc.getSheetByName(projectName) || doc.getActiveSheet();
 
     // 1. Definir los encabezados solicitados
     var headers = [
@@ -36,28 +38,71 @@ function doPost(e) {
       lastRow = 1;
     }
 
-    // 3. Generar código automático (000, 001, 002...) de forma robusta
-    var nextId;
-    if (lastRow < 2) { // Si solo hay encabezado o la hoja está vacía
-      nextId = "000";
-    } else {
-      // Obtenemos todos los valores de la columna de CÓDIGO para encontrar el máximo
-      var codeValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-      var maxNum = -1;
-      
-      codeValues.forEach(function(row) {
-        var num = parseInt(row[0], 10);
-        if (!isNaN(num) && num > maxNum) {
-          maxNum = num;
-        }
-      });
-      
-      var nextNum = maxNum + 1;
-      nextId = nextNum.toString().padStart(3, '0');
-    }
+    var normalizeHeader = function(value) {
+      return String(value || "")
+        .trim()
+        .toUpperCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    };
 
-    // 4. Parsear los datos recibidos del formulario
-    var data = JSON.parse(e.postData.contents);
+    var getProjectPrefix = function(name) {
+      var normalized = normalizeHeader(name);
+      if (!normalized) return "XXX";
+      var mapping = {
+        VENTURA: "VEN",
+        IRIS: "IRI",
+        MADERO: "MAD",
+        MAGNOLIAS: "MAG",
+        BLUE: "BLU",
+        ORION: "ORI"
+      };
+      if (mapping[normalized]) return mapping[normalized];
+      return normalized.replace(/[^A-Z]/g, "").slice(0, 3) || "XXX";
+    };
+
+    var parseCodigo = function(raw, expectedPrefix, sheetPrefix) {
+      var value = String(raw || "").trim();
+      if (!value) return null;
+      var normalized = normalizeHeader(value);
+      var prefixed = normalized.match(/^([A-Z]{3})(\d+)$/);
+      if (prefixed) {
+        if (prefixed[1] !== expectedPrefix) return null;
+        var n1 = parseInt(prefixed[2], 10);
+        return isNaN(n1) ? null : n1;
+      }
+      var plain = normalized.match(/^(\d+)$/);
+      if (plain && sheetPrefix === expectedPrefix) {
+        var n2 = parseInt(plain[1], 10);
+        return isNaN(n2) ? null : n2;
+      }
+      return null;
+    };
+
+    var getMaxCodigoForPrefix = function(prefix) {
+      var sheets = doc.getSheets();
+      var max = null;
+
+      sheets.forEach(function(sh) {
+        var lr = sh.getLastRow();
+        if (lr < 2) return;
+        var startRow = Math.max(2, lr - 5000);
+        var codes = sh.getRange(startRow, 1, lr - startRow + 1, 1).getDisplayValues();
+        var sheetPrefix = getProjectPrefix(sh.getName());
+        codes.forEach(function(r) {
+          var parsed = parseCodigo(r[0], prefix, sheetPrefix);
+          if (parsed === null) return;
+          if (max === null || parsed > max) max = parsed;
+        });
+      });
+
+      return max;
+    };
+
+    var prefix = getProjectPrefix(projectName);
+    var maxCodigo = getMaxCodigoForPrefix(prefix);
+    var nextNum = maxCodigo === null ? 0 : maxCodigo + 1;
+    var nextId = prefix + String(nextNum).padStart(3, "0");
     
     // Procesar las Unidades y Formatos para que sean legibles en la celda
     var selectedUnits = [];
@@ -82,7 +127,7 @@ function doPost(e) {
     // Crear la fila con el orden exacto de columnas
     var newRow = [
       nextId,                       // CÓDIGO
-      data.projectName,             // PROYECTO
+      projectName,                  // PROYECTO
       new Date(),                   // FECHA
       data.tipoRequest,             // TIPO DE SOLICITUD
       data.responsable,             // RESPONSABLE

@@ -24,17 +24,35 @@ function doGet(e) {
     ensureSheetReady_(sheet);
 
     const action = e && e.parameter ? String(e.parameter.action || '').trim() : '';
+    const callback = e && e.parameter && e.parameter.callback ? String(e.parameter.callback || '').trim() : '';
+
     if (action === 'backfillCodes') {
       const result = backfillCodes_(sheet);
-      return ContentService.createTextOutput(
-        JSON.stringify({ ok: true, version: VERSION, sheetName: sheet.getName(), action, result }),
-      ).setMimeType(ContentService.MimeType.JSON);
+      const payload = { ok: true, version: VERSION, sheetName: sheet.getName(), action, result };
+      return callback
+        ? ContentService.createTextOutput(`${callback}(${JSON.stringify(payload)});`).setMimeType(
+            ContentService.MimeType.JAVASCRIPT,
+          )
+        : ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === 'latestCode') {
+      const codigo = getLatestCodigo_(sheet);
+      const payload = { ok: true, version: VERSION, sheetName: sheet.getName(), action, codigo };
+      return callback
+        ? ContentService.createTextOutput(`${callback}(${JSON.stringify(payload)});`).setMimeType(
+            ContentService.MimeType.JAVASCRIPT,
+          )
+        : ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
     }
 
     const headers = sheet.getRange(1, 1, 1, HEADERS.length).getDisplayValues()[0];
-    return ContentService.createTextOutput(
-      JSON.stringify({ ok: true, version: VERSION, sheetName: sheet.getName(), headers }),
-    ).setMimeType(ContentService.MimeType.JSON);
+    const payload = { ok: true, version: VERSION, sheetName: sheet.getName(), headers };
+    return callback
+      ? ContentService.createTextOutput(`${callback}(${JSON.stringify(payload)});`).setMimeType(
+          ContentService.MimeType.JAVASCRIPT,
+        )
+      : ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
     return ContentService.createTextOutput(
       JSON.stringify({ ok: false, version: VERSION, error: String(error && error.stack ? error.stack : error) }),
@@ -55,7 +73,7 @@ function doPost(e) {
     const sheet = getTargetSheet_(spreadsheet, payload.projectName);
     ensureSheetReady_(sheet);
 
-    const codigo = getNextCodigo_(sheet);
+    const codigo = getNextCodigo_(spreadsheet, payload.projectName);
     const fecha = new Date();
 
     const rows = buildRows_(payload, codigo, fecha);
@@ -177,10 +195,28 @@ function normalizeHeader_(value) {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
-function getNextCodigo_(sheet) {
-  const maxCodigo = getMaxCodigo_(sheet);
-  if (maxCodigo === null) return '000';
-  return String(maxCodigo + 1).padStart(3, '0');
+function getProjectPrefix_(projectName) {
+  const normalized = normalizeHeader_(projectName);
+  if (!normalized) return 'XXX';
+
+  const mapping = {
+    VENTURA: 'VEN',
+    IRIS: 'IRI',
+    MADERO: 'MAD',
+    MAGNOLIAS: 'MAG',
+    BLUE: 'BLU',
+    ORION: 'ORI',
+  };
+
+  if (mapping[normalized]) return mapping[normalized];
+  return normalized.replace(/[^A-Z]/g, '').slice(0, 3) || 'XXX';
+}
+
+function getNextCodigo_(spreadsheet, projectName) {
+  const prefix = getProjectPrefix_(projectName);
+  const maxCodigo = getMaxCodigoForPrefix_(spreadsheet, prefix);
+  const next = maxCodigo === null ? 0 : maxCodigo + 1;
+  return `${prefix}${String(next).padStart(3, '0')}`;
 }
 
 function buildRows_(payload, codigo, fecha) {
@@ -220,37 +256,84 @@ function buildRows_(payload, codigo, fecha) {
   return rows;
 }
 
-function getMaxCodigo_(sheet) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return null;
+function getCodigoColumnIndex_(sheet) {
+  const firstRow = sheet.getRange(1, 1, 1, Math.min(sheet.getMaxColumns(), HEADERS.length)).getDisplayValues()[0];
+  const normalized = firstRow.map(normalizeHeader_);
+  const idx = normalized.indexOf(normalizeHeader_(HEADERS[0]));
+  return idx === -1 ? 1 : idx + 1;
+}
 
-  const startRow = Math.max(2, lastRow - 5000);
-  const codes = sheet.getRange(startRow, 1, lastRow - startRow + 1, 1).getDisplayValues().flat();
+function parseCodigo_(raw, expectedPrefix, sheetPrefix) {
+  const value = String(raw || '').trim();
+  if (!value) return null;
+  const normalized = normalizeHeader_(value);
 
+  const matchPrefixed = normalized.match(/^([A-Z]{3})(\d+)$/);
+  if (matchPrefixed) {
+    const prefix = matchPrefixed[1];
+    if (prefix !== expectedPrefix) return null;
+    const n = Number.parseInt(matchPrefixed[2], 10);
+    return Number.isNaN(n) ? null : n;
+  }
+
+  const matchPlain = normalized.match(/^(\d+)$/);
+  if (matchPlain && sheetPrefix === expectedPrefix) {
+    const n = Number.parseInt(matchPlain[1], 10);
+    return Number.isNaN(n) ? null : n;
+  }
+
+  return null;
+}
+
+function getMaxCodigoForPrefix_(spreadsheet, prefix) {
+  const sheets = spreadsheet.getSheets();
   let maxCodigo = null;
-  for (let i = 0; i < codes.length; i++) {
-    const raw = String(codes[i] || '').trim();
-    if (!raw) continue;
 
-    const parsed = Number.parseInt(raw, 10);
-    if (Number.isNaN(parsed)) continue;
+  for (let s = 0; s < sheets.length; s++) {
+    const sheet = sheets[s];
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) continue;
 
-    if (maxCodigo === null || parsed > maxCodigo) {
-      maxCodigo = parsed;
+    const col = getCodigoColumnIndex_(sheet);
+    const startRow = Math.max(2, lastRow - 5000);
+    const codes = sheet.getRange(startRow, col, lastRow - startRow + 1, 1).getDisplayValues().flat();
+    const sheetPrefix = getProjectPrefix_(sheet.getName());
+
+    for (let i = 0; i < codes.length; i++) {
+      const parsed = parseCodigo_(codes[i], prefix, sheetPrefix);
+      if (parsed === null) continue;
+      if (maxCodigo === null || parsed > maxCodigo) maxCodigo = parsed;
     }
   }
 
   return maxCodigo;
 }
 
+function getLatestCodigo_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  const col = getCodigoColumnIndex_(sheet);
+  const startRow = Math.max(2, lastRow - 200);
+  const codes = sheet.getRange(startRow, col, lastRow - startRow + 1, 1).getDisplayValues().flat();
+  for (let i = codes.length - 1; i >= 0; i--) {
+    const v = String(codes[i] || '').trim();
+    if (v) return v;
+  }
+  return null;
+}
+
 function backfillCodes_(sheet) {
+  const spreadsheet = sheet.getParent();
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) {
-    return { updatedRows: 0, startingFrom: '000', maxCodigo: null };
+    const prefix = getProjectPrefix_(sheet.getName());
+    return { updatedRows: 0, startingFrom: `${prefix}000`, maxCodigo: null };
   }
 
+  const col = getCodigoColumnIndex_(sheet);
+  const prefix = getProjectPrefix_(sheet.getName());
   const values = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getDisplayValues();
-  let maxCodigo = getMaxCodigo_(sheet);
+  let maxCodigo = getMaxCodigoForPrefix_(spreadsheet, prefix);
   let nextCodigo = maxCodigo === null ? 0 : maxCodigo + 1;
 
   const keyToCodigo = {};
@@ -258,7 +341,7 @@ function backfillCodes_(sheet) {
 
   for (let i = 0; i < values.length; i++) {
     const row = values[i];
-    const existing = String(row[0] || '').trim();
+    const existing = String(row[col - 1] || '').trim();
 
     const fecha = String(row[2] || '').trim();
     const tipo = String(row[3] || '').trim();
@@ -270,34 +353,32 @@ function backfillCodes_(sheet) {
     const key = [fecha, tipo, responsable, proposito, especialidad, observaciones].join('||');
 
     if (existing) {
-      const parsed = Number.parseInt(existing, 10);
-      if (!Number.isNaN(parsed)) {
-        if (maxCodigo === null || parsed > maxCodigo) {
-          maxCodigo = parsed;
-          nextCodigo = parsed + 1;
-        }
+      const parsed = parseCodigo_(existing, prefix, prefix);
+      if (parsed !== null && (maxCodigo === null || parsed > maxCodigo)) {
+        maxCodigo = parsed;
+        nextCodigo = parsed + 1;
       }
       continue;
     }
 
     if (!keyToCodigo[key]) {
-      keyToCodigo[key] = String(nextCodigo).padStart(3, '0');
+      keyToCodigo[key] = `${prefix}${String(nextCodigo).padStart(3, '0')}`;
       nextCodigo += 1;
     }
 
-    row[0] = keyToCodigo[key];
+    row[col - 1] = keyToCodigo[key];
     updatedRows += 1;
   }
 
   if (updatedRows > 0) {
     const codes = values.map(r => [r[0]]);
-    sheet.getRange(2, 1, codes.length, 1).setValues(codes);
+    sheet.getRange(2, col, codes.length, 1).setValues(codes);
     SpreadsheetApp.flush();
   }
 
   return {
     updatedRows,
-    startingFrom: String(maxCodigo === null ? 0 : maxCodigo + 1).padStart(3, '0'),
+    startingFrom: `${prefix}${String(maxCodigo === null ? 0 : maxCodigo + 1).padStart(3, '0')}`,
     maxCodigo,
   };
 }
