@@ -205,6 +205,8 @@ function ensureSheetReady_(sheet) {
   }
 
   sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+  const rowsToFormat = Math.max(1000, sheet.getLastRow() + 1000);
+  sheet.getRange(1, 1, rowsToFormat, 1).setNumberFormat('@');
   sheet.setFrozenRows(1);
   SpreadsheetApp.flush();
 }
