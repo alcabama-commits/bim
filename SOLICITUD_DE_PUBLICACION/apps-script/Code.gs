@@ -3,6 +3,7 @@ const VERSION = '2026-03-17.1';
 
 const HEADERS = [
   'CÓDIGO',
+  'PROYECTO',
   'FECHA',
   'TIPO DE SOLICITUD',
   'RESPONSABLE',
@@ -64,6 +65,7 @@ function doPost(e) {
         : [
             [
               codigo,
+              payload.projectName || '',
               fecha,
               payload.tipoRequest || '',
               payload.responsable || '',
@@ -148,9 +150,14 @@ function ensureSheetReady_(sheet) {
     .getDisplayValues()[0]
     .map(normalizeHeader_);
 
+  const hasProyecto = firstRowValues.includes(normalizeHeader_('PROYECTO'));
+  if (!hasProyecto) {
+    sheet.insertColumnAfter(1);
+  }
+
   const hasEspecialidad = firstRowValues.includes(normalizeHeader_('ESPECIALIDAD'));
   if (!hasEspecialidad) {
-    sheet.insertColumnAfter(5);
+    sheet.insertColumnAfter(6);
   }
 
   if (sheet.getMaxColumns() < HEADERS.length) {
@@ -177,6 +184,7 @@ function getNextCodigo_(sheet) {
 }
 
 function buildRows_(payload, codigo, fecha) {
+  const projectName = payload && payload.projectName ? String(payload.projectName) : '';
   const tipoRequest = payload && payload.tipoRequest ? String(payload.tipoRequest) : '';
   const responsable = payload && payload.responsable ? String(payload.responsable) : '';
   const proposito = payload && payload.proposito ? String(payload.proposito) : '';
@@ -196,6 +204,7 @@ function buildRows_(payload, codigo, fecha) {
 
       rows.push([
         codigo,
+        projectName,
         fecha,
         tipoRequest,
         responsable,
@@ -251,12 +260,12 @@ function backfillCodes_(sheet) {
     const row = values[i];
     const existing = String(row[0] || '').trim();
 
-    const fecha = String(row[1] || '').trim();
-    const tipo = String(row[2] || '').trim();
-    const responsable = String(row[3] || '').trim();
-    const proposito = String(row[4] || '').trim();
-    const especialidad = String(row[5] || '').trim();
-    const observaciones = String(row[8] || '').trim();
+    const fecha = String(row[2] || '').trim();
+    const tipo = String(row[3] || '').trim();
+    const responsable = String(row[4] || '').trim();
+    const proposito = String(row[5] || '').trim();
+    const especialidad = String(row[6] || '').trim();
+    const observaciones = String(row[9] || '').trim();
 
     const key = [fecha, tipo, responsable, proposito, especialidad, observaciones].join('||');
 
