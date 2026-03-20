@@ -41,7 +41,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
   const gridRef = useRef<any>(null);
   const suppressSelectClearRef = useRef(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [selectionBox, setSelectionBox] = useState<null | { left: number; top: number; width: number; height: number }>(null);
+  const [selectionBox, setSelectionBox] = useState<null | { left: number; top: number; width: number; height: number; dashed: boolean }>(null);
   const selectionGestureRef = useRef<{
     active: boolean;
     ctrlKey: boolean;
@@ -353,7 +353,26 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         );
       };
 
-      const crossingSelect = async (rect: { left: number; right: number; top: number; bottom: number }) => {
+      const isBoxFullyInsideFrustum = (fr: THREE.Frustum, box: THREE.Box3) => {
+        const { min, max } = box;
+        const corners = [
+          new THREE.Vector3(min.x, min.y, min.z),
+          new THREE.Vector3(min.x, min.y, max.z),
+          new THREE.Vector3(min.x, max.y, min.z),
+          new THREE.Vector3(min.x, max.y, max.z),
+          new THREE.Vector3(max.x, min.y, min.z),
+          new THREE.Vector3(max.x, min.y, max.z),
+          new THREE.Vector3(max.x, max.y, min.z),
+          new THREE.Vector3(max.x, max.y, max.z)
+        ];
+
+        for (const c of corners) {
+          if (!fr.containsPoint(c)) return false;
+        }
+        return true;
+      };
+
+      const crossingSelect = async (rect: { left: number; right: number; top: number; bottom: number }, fullyIncluded: boolean) => {
         const w = getWorld();
         const cam = w?.camera?.three as THREE.Camera | undefined;
         if (!cam) return;
@@ -381,7 +400,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
           for (let i = 0; i < limit; i++) {
             const box = boxes[i];
             if (!box) continue;
-            if (fr.intersectsBox(box)) picked.add(ids[i]);
+            if (fullyIncluded ? isBoxFullyInsideFrustum(fr, box) : fr.intersectsBox(box)) picked.add(ids[i]);
           }
           if (picked.size > 0) selection[modelId] = picked;
         }
@@ -458,6 +477,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         const bottom = Math.min(bounds.bottom, Math.max(selectionGestureRef.current.startY, e.clientY));
         const width = Math.max(0, right - left);
         const height = Math.max(0, bottom - top);
+        const dashed = e.clientX >= selectionGestureRef.current.startX;
 
         if (selectionGestureRef.current.raf !== null) return;
         selectionGestureRef.current.raf = window.requestAnimationFrame(() => {
@@ -466,7 +486,8 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
             left: left - bounds.left,
             top: top - bounds.top,
             width,
-            height
+            height,
+            dashed
           });
         });
       };
@@ -508,12 +529,13 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
 
         if (ctrlKey && moved) {
           setSelectionBox(null);
+          const fullyIncluded = endX < startX;
           void crossingSelect({
             left: Math.min(startX, endX),
             right: Math.max(startX, endX),
             top: Math.min(startY, endY),
             bottom: Math.max(startY, endY)
-          });
+          }, fullyIncluded);
           return;
         }
 
@@ -795,7 +817,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       {selectionBox && (
         <div
           className="absolute border border-blue-500 bg-blue-500/10 pointer-events-none"
-          style={{ left: selectionBox.left, top: selectionBox.top, width: selectionBox.width, height: selectionBox.height }}
+          style={{ left: selectionBox.left, top: selectionBox.top, width: selectionBox.width, height: selectionBox.height, borderStyle: selectionBox.dashed ? 'dashed' : 'solid' }}
         />
       )}
       
