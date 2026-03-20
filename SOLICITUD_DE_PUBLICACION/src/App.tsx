@@ -89,7 +89,7 @@ export default function App() {
     };
 
     // TODO: Reemplace esta URL con la URL de su aplicación web de Apps Script implementada.
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzc__BbNV9_h3epWvBNnLtC_jq3rkHiBBx_Qdmtryl1c3fSIGTae_OAIZCc7aFE2okM/exec";
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwONz1uBR18ynOG9zK2CSkrDSUYFN_t99CsB5KdWseNDH5B4pRXWCfX5aUA9Q0aHTZm/exec";
 
     try {
       await fetch(SCRIPT_URL, {

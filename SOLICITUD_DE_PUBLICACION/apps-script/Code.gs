@@ -1,5 +1,5 @@
 const SPREADSHEET_ID = '1IYDpeHQU3TL9YhbjGd49suFObfVcRJhhiB0TqtxfgO4';
-const VERSION = '2026-03-20.1';
+const VERSION = '2026-03-20.2';
 
 const HEADERS = [
   'CÓDIGO',
@@ -59,6 +59,29 @@ function doGet(e) {
     if (action === 'latestCode') {
       const codigo = getLatestCodigo_(sheet);
       const payload = { ok: true, version: VERSION, sheetName: sheet.getName(), action, codigo };
+      return callback
+        ? ContentService.createTextOutput(`${callback}(${JSON.stringify(payload)});`).setMimeType(
+            ContentService.MimeType.JAVASCRIPT,
+          )
+        : ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === 'debugCodigo') {
+      const projectName = e && e.parameter ? String(e.parameter.projectName || '').trim() : '';
+      const targetSheet = getTargetSheet_(spreadsheet, projectName);
+      const prefix = getProjectPrefix_(projectName || targetSheet.getName());
+      const maxCodigo = getMaxCodigoForPrefix_(spreadsheet, prefix);
+      const codigo = getNextCodigo_(spreadsheet, projectName || targetSheet.getName());
+      const payload = {
+        ok: true,
+        version: VERSION,
+        action,
+        projectName: projectName || null,
+        resolvedSheetName: targetSheet.getName(),
+        prefix,
+        maxCodigo,
+        nextCodigo: codigo,
+      };
       return callback
         ? ContentService.createTextOutput(`${callback}(${JSON.stringify(payload)});`).setMimeType(
             ContentService.MimeType.JAVASCRIPT,
@@ -148,12 +171,22 @@ function parsePayload_(e) {
 }
 
 function getTargetSheet_(spreadsheet, projectName) {
-  const byProject =
-    typeof projectName === 'string' && projectName.trim()
-      ? spreadsheet.getSheetByName(projectName.trim())
-      : null;
+  if (typeof projectName !== 'string' || !projectName.trim()) {
+    return spreadsheet.getSheets()[0];
+  }
 
-  return byProject || spreadsheet.getSheets()[0];
+  const raw = projectName.trim();
+  const exact = spreadsheet.getSheetByName(raw);
+  if (exact) return exact;
+
+  const target = normalizeHeader_(raw);
+  const sheets = spreadsheet.getSheets();
+  for (let i = 0; i < sheets.length; i++) {
+    const s = sheets[i];
+    if (normalizeHeader_(s.getName()) === target) return s;
+  }
+
+  return spreadsheet.getSheets()[0];
 }
 
 function ensureSheetReady_(sheet) {
