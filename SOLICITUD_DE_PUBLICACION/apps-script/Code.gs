@@ -1,5 +1,5 @@
 const SPREADSHEET_ID = '1IYDpeHQU3TL9YhbjGd49suFObfVcRJhhiB0TqtxfgO4';
-const VERSION = '2026-03-20.2';
+const VERSION = '2026-03-20.3';
 
 const HEADERS = [
   'CÓDIGO',
@@ -69,9 +69,9 @@ function doGet(e) {
     if (action === 'debugCodigo') {
       const projectName = e && e.parameter ? String(e.parameter.projectName || '').trim() : '';
       const targetSheet = getTargetSheet_(spreadsheet, projectName);
-      const prefix = getProjectPrefix_(projectName || targetSheet.getName());
+      const prefix = getProjectPrefix_(targetSheet.getName());
       const maxCodigo = getMaxCodigoForPrefix_(spreadsheet, prefix);
-      const codigo = getNextCodigo_(spreadsheet, projectName || targetSheet.getName());
+      const codigo = getNextCodigoForSheet_(spreadsheet, targetSheet);
       const payload = {
         ok: true,
         version: VERSION,
@@ -116,7 +116,7 @@ function doPost(e) {
     const sheet = getTargetSheet_(spreadsheet, payload.projectName);
     ensureSheetReady_(sheet);
 
-    const codigo = getNextCodigo_(spreadsheet, payload.projectName);
+    const codigo = getNextCodigoForSheet_(spreadsheet, sheet);
     const fecha = new Date();
 
     const rows = buildRows_(payload, codigo, fecha);
@@ -271,6 +271,13 @@ function getProjectPrefix_(projectName) {
 
 function getNextCodigo_(spreadsheet, projectName) {
   const prefix = getProjectPrefix_(projectName);
+  const maxCodigo = getMaxCodigoForPrefix_(spreadsheet, prefix);
+  const next = maxCodigo === null ? 0 : maxCodigo + 1;
+  return `${prefix}${String(next).padStart(3, '0')}`;
+}
+
+function getNextCodigoForSheet_(spreadsheet, sheet) {
+  const prefix = getProjectPrefix_(sheet.getName());
   const maxCodigo = getMaxCodigoForPrefix_(spreadsheet, prefix);
   const next = maxCodigo === null ? 0 : maxCodigo + 1;
   return `${prefix}${String(next).padStart(3, '0')}`;
