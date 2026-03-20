@@ -1193,9 +1193,9 @@ export default function App() {
                   isLoading={isLoading}
                   selectedElementId={selectedElementId || undefined}
                   selectedElementIds={selectedElementIds}
-                  onElementSelect={(id) => {
-                    setSelectedElementId(id);
-                    setSelectedElementIds(id ? [id] : []);
+                  onSelectionChange={(ids) => {
+                    setSelectedElementIds(ids);
+                    setSelectedElementId(ids[0] ?? null);
                   }}
                   isIsolateMode={isIsolateMode}
                 />
@@ -1271,7 +1271,10 @@ export default function App() {
                   {!isTableMaximized && (
                     <DataTable
                       elements={filteredElements}
-                      onSelectElement={setSelectedElementId}
+                      onSelectElement={(id) => {
+                        setSelectedElementId(id);
+                        setSelectedElementIds(id ? [id] : []);
+                      }}
                       selectedElementId={selectedElementId || undefined}
                       selectedElementIds={selectedElementIds}
                       onSetSelectedElementIds={setSelectedElementIds}
@@ -1351,7 +1354,10 @@ export default function App() {
             </div>
             <DataTable
               elements={filteredElements}
-              onSelectElement={setSelectedElementId}
+              onSelectElement={(id) => {
+                setSelectedElementId(id);
+                setSelectedElementIds(id ? [id] : []);
+              }}
               selectedElementId={selectedElementId || undefined}
               selectedElementIds={selectedElementIds}
               onSetSelectedElementIds={setSelectedElementIds}

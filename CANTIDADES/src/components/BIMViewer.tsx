@@ -25,12 +25,12 @@ interface BIMViewerProps {
   gridVisible?: boolean;
   selectedElementId?: string;
   selectedElementIds?: string[];
-  onElementSelect: (id: string | null) => void;
+  onSelectionChange: (ids: string[]) => void;
   isLoading: boolean;
   isIsolateMode?: boolean;
 }
 
-export default function BIMViewer({ onModelLoaded, allElements, visibleElements, statuses, statusColorsEnabled = true, gridVisible = true, selectedElementId, selectedElementIds, onElementSelect, isLoading, isIsolateMode }: BIMViewerProps) {
+export default function BIMViewer({ onModelLoaded, allElements, visibleElements, statuses, statusColorsEnabled = true, gridVisible = true, selectedElementId, selectedElementIds, onSelectionChange, isLoading, isIsolateMode }: BIMViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const componentsRef = useRef<OBC.Components | null>(null);
   const workerUrlRef = useRef<string | null>(null);
@@ -41,6 +41,42 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
   const gridRef = useRef<any>(null);
   const suppressSelectClearRef = useRef(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [selectionBox, setSelectionBox] = useState<null | { left: number; top: number; width: number; height: number }>(null);
+  const selectionGestureRef = useRef<{
+    active: boolean;
+    ctrlKey: boolean;
+    pointerId: number | null;
+    startX: number;
+    startY: number;
+    moved: boolean;
+    lastClientX: number;
+    lastClientY: number;
+    raf: number | null;
+    controlsWasEnabled: boolean | null;
+  }>({ active: false, ctrlKey: false, pointerId: null, startX: 0, startY: 0, moved: false, lastClientX: 0, lastClientY: 0, raf: null, controlsWasEnabled: null });
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  const allElementsRef = useRef(allElements);
+  const elementIdIndexRef = useRef<Map<string, string>>(new Map());
+  const selectableIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onSelectionChange]);
+
+  useEffect(() => {
+    allElementsRef.current = allElements;
+    const index = new Map<string, string>();
+    const ids = new Set<string>();
+    for (const el of allElements) {
+      ids.add(el.id);
+      const modelId = el.modelId ? String(el.modelId) : '';
+      const localId = el.localId !== undefined ? Number(el.localId) : NaN;
+      if (!modelId || !Number.isFinite(localId)) continue;
+      index.set(`${modelId}:${localId}`, el.id);
+    }
+    elementIdIndexRef.current = index;
+    selectableIdsRef.current = ids;
+  }, [allElements]);
   const [statusVisibility, setStatusVisibility] = useState<Record<string, boolean>>(() => {
     try {
       const raw = localStorage.getItem('cantidades:statusVisibility');
@@ -163,6 +199,8 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         // Configurar Highlighter
         highlighter.setup({ world });
         highlighter.enabled = true;
+        highlighter.multiple = 'ctrlKey';
+        highlighter.autoToggle.add('select');
         highlighter.styles.set("select", { 
           color: new THREE.Color(0xffa400),
           opacity: 1,
@@ -246,35 +284,254 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         }
       };
 
+      const getSelectionIds = (modelIdMap: OBC.ModelIdMap) => {
+        const resolved: string[] = [];
+        const selectable = selectableIdsRef.current;
+        const index = elementIdIndexRef.current;
+        for (const [modelId, itemIds] of Object.entries(modelIdMap)) {
+          for (const itemId of Array.from(itemIds)) {
+            const key = `${String(modelId)}:${Number(itemId)}`;
+            const elId = index.get(key);
+            if (!elId) continue;
+            if (!selectable.has(elId)) continue;
+            resolved.push(elId);
+          }
+        }
+        return resolved;
+      };
+
+      const computeSelectionFrustum = (camera: THREE.Camera, rect: { left: number; right: number; top: number; bottom: number }) => {
+        const container = containerRef.current;
+        if (!container) return null;
+        const bounds = container.getBoundingClientRect();
+        const width = bounds.width;
+        const height = bounds.height;
+        if (width <= 0 || height <= 0) return null;
+
+        const toNdcX = (x: number) => ((x - bounds.left) / width) * 2 - 1;
+        const toNdcY = (y: number) => -(((y - bounds.top) / height) * 2 - 1);
+
+        const x1 = Math.min(toNdcX(rect.left), toNdcX(rect.right));
+        const x2 = Math.max(toNdcX(rect.left), toNdcX(rect.right));
+        const y1 = Math.min(toNdcY(rect.bottom), toNdcY(rect.top));
+        const y2 = Math.max(toNdcY(rect.bottom), toNdcY(rect.top));
+
+        const cam = camera as THREE.PerspectiveCamera | THREE.OrthographicCamera;
+        cam.updateMatrixWorld();
+        if ('updateProjectionMatrix' in cam) cam.updateProjectionMatrix();
+
+        const camPos = new THREE.Vector3();
+        camPos.setFromMatrixPosition(cam.matrixWorld);
+
+        const ntl = new THREE.Vector3(x1, y2, -1).unproject(cam);
+        const ntr = new THREE.Vector3(x2, y2, -1).unproject(cam);
+        const nbl = new THREE.Vector3(x1, y1, -1).unproject(cam);
+        const nbr = new THREE.Vector3(x2, y1, -1).unproject(cam);
+
+        const full = new THREE.Frustum();
+        const projScreenMatrix = new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+        full.setFromProjectionMatrix(projScreenMatrix);
+
+        const left = new THREE.Plane().setFromCoplanarPoints(camPos, nbl, ntl);
+        const right = new THREE.Plane().setFromCoplanarPoints(camPos, ntr, nbr);
+        const top = new THREE.Plane().setFromCoplanarPoints(camPos, ntl, ntr);
+        const bottom = new THREE.Plane().setFromCoplanarPoints(camPos, nbr, nbl);
+
+        const testPoint = new THREE.Vector3((x1 + x2) / 2, (y1 + y2) / 2, -1).unproject(cam);
+        const ensureInward = (p: THREE.Plane) => {
+          if (p.distanceToPoint(testPoint) < 0) p.negate();
+          return p;
+        };
+
+        return new THREE.Frustum(
+          ensureInward(left),
+          ensureInward(right),
+          ensureInward(top),
+          ensureInward(bottom),
+          full.planes[4].clone(),
+          full.planes[5].clone()
+        );
+      };
+
+      const crossingSelect = async (rect: { left: number; right: number; top: number; bottom: number }) => {
+        const w = getWorld();
+        const cam = w?.camera?.three as THREE.Camera | undefined;
+        if (!cam) return;
+        const fr = computeSelectionFrustum(cam, rect);
+        if (!fr) return;
+
+        const selection: OBC.ModelIdMap = {};
+        for (const model of getAllModels()) {
+          const modelId = String((model as any).modelId ?? (model as any).id ?? (model as any).uuid ?? '');
+          if (!modelId) continue;
+          const visibleItems: Set<number> | undefined = (model as any).visibleItems;
+          const ids = visibleItems ? Array.from(visibleItems) : [];
+          if (ids.length === 0) continue;
+
+          let boxes: THREE.Box3[] = [];
+          try {
+            boxes = await (model as any).getBoxes(ids);
+          } catch {
+            continue;
+          }
+          if (!boxes || boxes.length === 0) continue;
+
+          const picked = new Set<number>();
+          const limit = Math.min(ids.length, boxes.length);
+          for (let i = 0; i < limit; i++) {
+            const box = boxes[i];
+            if (!box) continue;
+            if (fr.intersectsBox(box)) picked.add(ids[i]);
+          }
+          if (picked.size > 0) selection[modelId] = picked;
+        }
+
+        if (!OBC.ModelIdMapUtils.isEmpty(selection)) {
+          try {
+            await highlighter.highlightByID('select', selection, false, false, null, true);
+          } catch {
+          }
+        }
+      };
+
       // Suscribirse a eventos de selección
       if (highlighter.events.select) {
-        highlighter.events.select.onHighlight.add(async (modelIdMap) => {
-          const modelId = Object.keys(modelIdMap)[0];
-          const itemIds = modelIdMap[modelId];
-          const itemId = Array.from(itemIds)[0];
-
-          getModelById(modelId);
-          const resolved = allElements.find((e) => String(e.modelId) === String(modelId) && Number(e.localId) === Number(itemId));
-          onElementSelect(resolved ? resolved.id : itemId.toString());
+        highlighter.events.select.onHighlight.add(async () => {
+          const current = highlighter.selection?.select ?? {};
+          const ids = getSelectionIds(current);
+          onSelectionChangeRef.current(ids);
         });
 
         highlighter.events.select.onClear.add(() => {
           if (suppressSelectClearRef.current) return;
-          onElementSelect(null);
+          onSelectionChangeRef.current([]);
         });
       }
 
-      // Selección al hacer click
-      containerRef.current?.addEventListener("click", () => {
-        highlighter.highlight("select");
-      });
+      const handlePointerDown = (e: PointerEvent) => {
+        if (e.button !== 0) return;
+        const container = containerRef.current;
+        if (!container) return;
+        selectionGestureRef.current.active = true;
+        selectionGestureRef.current.ctrlKey = e.ctrlKey;
+        selectionGestureRef.current.pointerId = e.pointerId;
+        selectionGestureRef.current.startX = e.clientX;
+        selectionGestureRef.current.startY = e.clientY;
+        selectionGestureRef.current.moved = false;
+        selectionGestureRef.current.lastClientX = e.clientX;
+        selectionGestureRef.current.lastClientY = e.clientY;
+
+        try {
+          container.setPointerCapture(e.pointerId);
+        } catch {
+        }
+
+        if (e.ctrlKey) {
+          const w = getWorld();
+          if (w?.camera?.hasCameraControls?.()) {
+            selectionGestureRef.current.controlsWasEnabled = w.camera.controls.enabled;
+            w.camera.controls.enabled = false;
+          } else {
+            selectionGestureRef.current.controlsWasEnabled = null;
+          }
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      };
+
+      const handlePointerMove = (e: PointerEvent) => {
+        if (!selectionGestureRef.current.active) return;
+        if (!selectionGestureRef.current.ctrlKey) return;
+        const dx = e.clientX - selectionGestureRef.current.startX;
+        const dy = e.clientY - selectionGestureRef.current.startY;
+        if (!selectionGestureRef.current.moved && Math.hypot(dx, dy) > 5) selectionGestureRef.current.moved = true;
+        selectionGestureRef.current.lastClientX = e.clientX;
+        selectionGestureRef.current.lastClientY = e.clientY;
+        if (!selectionGestureRef.current.moved) return;
+
+        const container = containerRef.current;
+        if (!container) return;
+        const bounds = container.getBoundingClientRect();
+        const left = Math.max(bounds.left, Math.min(selectionGestureRef.current.startX, e.clientX));
+        const right = Math.min(bounds.right, Math.max(selectionGestureRef.current.startX, e.clientX));
+        const top = Math.max(bounds.top, Math.min(selectionGestureRef.current.startY, e.clientY));
+        const bottom = Math.min(bounds.bottom, Math.max(selectionGestureRef.current.startY, e.clientY));
+        const width = Math.max(0, right - left);
+        const height = Math.max(0, bottom - top);
+
+        if (selectionGestureRef.current.raf !== null) return;
+        selectionGestureRef.current.raf = window.requestAnimationFrame(() => {
+          selectionGestureRef.current.raf = null;
+          setSelectionBox({
+            left: left - bounds.left,
+            top: top - bounds.top,
+            width,
+            height
+          });
+        });
+      };
+
+      const handlePointerUp = (e: PointerEvent) => {
+        if (!selectionGestureRef.current.active) return;
+        selectionGestureRef.current.active = false;
+
+        const container = containerRef.current;
+        if (container && selectionGestureRef.current.pointerId !== null) {
+          try {
+            container.releasePointerCapture(selectionGestureRef.current.pointerId);
+          } catch {
+          }
+        }
+
+        if (selectionGestureRef.current.raf !== null) {
+          window.cancelAnimationFrame(selectionGestureRef.current.raf);
+          selectionGestureRef.current.raf = null;
+        }
+
+        const ctrlKey = selectionGestureRef.current.ctrlKey;
+        const moved = selectionGestureRef.current.moved;
+        const startX = selectionGestureRef.current.startX;
+        const startY = selectionGestureRef.current.startY;
+        const endX = selectionGestureRef.current.lastClientX;
+        const endY = selectionGestureRef.current.lastClientY;
+
+        if (ctrlKey) {
+          const w = getWorld();
+          if (w?.camera?.hasCameraControls?.() && selectionGestureRef.current.controlsWasEnabled !== null) {
+            w.camera.controls.enabled = selectionGestureRef.current.controlsWasEnabled;
+          }
+        }
+
+        selectionGestureRef.current.ctrlKey = false;
+        selectionGestureRef.current.pointerId = null;
+        selectionGestureRef.current.controlsWasEnabled = null;
+
+        if (ctrlKey && moved) {
+          setSelectionBox(null);
+          void crossingSelect({
+            left: Math.min(startX, endX),
+            right: Math.max(startX, endX),
+            top: Math.min(startY, endY),
+            bottom: Math.max(startY, endY)
+          });
+          return;
+        }
+
+        setSelectionBox(null);
+        void highlighter.highlight('select', !e.ctrlKey, false, null);
+      };
+
+      containerRef.current?.addEventListener('pointerdown', handlePointerDown, { capture: true });
+      containerRef.current?.addEventListener('pointermove', handlePointerMove, { capture: true });
+      containerRef.current?.addEventListener('pointerup', handlePointerUp, { capture: true });
+      containerRef.current?.addEventListener('pointercancel', handlePointerUp, { capture: true });
 
       // Keyboard shortcuts
       const handleKeyDown = (e: KeyboardEvent) => {
         switch(e.key.toLowerCase()) {
           case 'c':
             highlighter.clear();
-            onElementSelect(null);
+            onSelectionChangeRef.current([]);
             break;
           case 'f':
             fitToVisible();
@@ -283,7 +540,13 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       };
 
       window.addEventListener('keydown', handleKeyDown);
-      (components as any)._shortcutsCleanup = () => window.removeEventListener('keydown', handleKeyDown);
+      (components as any)._shortcutsCleanup = () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        containerRef.current?.removeEventListener('pointerdown', handlePointerDown, { capture: true } as any);
+        containerRef.current?.removeEventListener('pointermove', handlePointerMove, { capture: true } as any);
+        containerRef.current?.removeEventListener('pointerup', handlePointerUp, { capture: true } as any);
+        containerRef.current?.removeEventListener('pointercancel', handlePointerUp, { capture: true } as any);
+      };
       
       void getAllModels();
     };
@@ -529,6 +792,12 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
   return (
     <div className="relative w-full h-full bg-white">
       <div ref={containerRef} className="w-full h-full" />
+      {selectionBox && (
+        <div
+          className="absolute border border-blue-500 bg-blue-500/10 pointer-events-none"
+          style={{ left: selectionBox.left, top: selectionBox.top, width: selectionBox.width, height: selectionBox.height }}
+        />
+      )}
       
       {isLoading && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm z-50">
