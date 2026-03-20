@@ -1,5 +1,5 @@
 const SPREADSHEET_ID = '1IYDpeHQU3TL9YhbjGd49suFObfVcRJhhiB0TqtxfgO4';
-const VERSION = '2026-03-17.1';
+const VERSION = '2026-03-20.1';
 
 const HEADERS = [
   'CÓDIGO',
@@ -29,6 +29,26 @@ function doGet(e) {
     if (action === 'backfillCodes') {
       const result = backfillCodes_(sheet);
       const payload = { ok: true, version: VERSION, sheetName: sheet.getName(), action, result };
+      return callback
+        ? ContentService.createTextOutput(`${callback}(${JSON.stringify(payload)});`).setMimeType(
+            ContentService.MimeType.JAVASCRIPT,
+          )
+        : ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === 'backfillCodesAll') {
+      const sheets = spreadsheet.getSheets();
+      const results = [];
+      for (let i = 0; i < sheets.length; i++) {
+        const s = sheets[i];
+        try {
+          ensureSheetReady_(s);
+          results.push({ sheetName: s.getName(), result: backfillCodes_(s) });
+        } catch (err) {
+          results.push({ sheetName: s.getName(), error: String(err && err.stack ? err.stack : err) });
+        }
+      }
+      const payload = { ok: true, version: VERSION, action, results };
       return callback
         ? ContentService.createTextOutput(`${callback}(${JSON.stringify(payload)});`).setMimeType(
             ContentService.MimeType.JAVASCRIPT,
@@ -285,6 +305,30 @@ function parseCodigo_(raw, expectedPrefix, sheetPrefix) {
   return null;
 }
 
+function normalizeCodigoForSheet_(raw, sheetPrefix) {
+  const value = String(raw || '').trim();
+  if (!value) return null;
+  const normalized = normalizeHeader_(value);
+
+  const matchPrefixed = normalized.match(/^([A-Z]{3})(\d+)$/);
+  if (matchPrefixed) {
+    const prefix = matchPrefixed[1];
+    const n = Number.parseInt(matchPrefixed[2], 10);
+    if (Number.isNaN(n)) return null;
+    if (prefix !== sheetPrefix) return null;
+    return `${sheetPrefix}${String(n).padStart(3, '0')}`;
+  }
+
+  const matchPlain = normalized.match(/^(\d+)$/);
+  if (matchPlain) {
+    const n = Number.parseInt(matchPlain[1], 10);
+    if (Number.isNaN(n)) return null;
+    return `${sheetPrefix}${String(n).padStart(3, '0')}`;
+  }
+
+  return null;
+}
+
 function getMaxCodigoForPrefix_(spreadsheet, prefix) {
   const sheets = spreadsheet.getSheets();
   let maxCodigo = null;
@@ -352,11 +396,17 @@ function backfillCodes_(sheet) {
 
     const key = [fecha, tipo, responsable, proposito, especialidad, observaciones].join('||');
 
-    if (existing) {
-      const parsed = parseCodigo_(existing, prefix, prefix);
+    const normalizedExisting = normalizeCodigoForSheet_(existing, prefix);
+    if (normalizedExisting) {
+      const parsed = parseCodigo_(normalizedExisting, prefix, prefix);
       if (parsed !== null && (maxCodigo === null || parsed > maxCodigo)) {
         maxCodigo = parsed;
         nextCodigo = parsed + 1;
+      }
+      if (!keyToCodigo[key]) keyToCodigo[key] = normalizedExisting;
+      if (existing !== normalizedExisting) {
+        row[col - 1] = normalizedExisting;
+        updatedRows += 1;
       }
       continue;
     }
@@ -371,8 +421,10 @@ function backfillCodes_(sheet) {
   }
 
   if (updatedRows > 0) {
-    const codes = values.map(r => [r[0]]);
-    sheet.getRange(2, col, codes.length, 1).setValues(codes);
+    const codes = values.map(r => [r[col - 1]]);
+    const range = sheet.getRange(2, col, codes.length, 1);
+    range.setNumberFormat('@');
+    range.setValues(codes);
     SpreadsheetApp.flush();
   }
 
