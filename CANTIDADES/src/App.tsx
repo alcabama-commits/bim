@@ -4,9 +4,8 @@ import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
 import BIMViewer from './components/BIMViewer';
 import { BIMElement, CategorySummary } from './types';
-import { Folder, File, ChevronDown, ChevronRight, RefreshCw, Eye, Loader2, Maximize2, Minimize2, Palette, Grid3X3 } from 'lucide-react';
+import { Folder, File, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Eye, Loader2, Maximize2, Minimize2, Palette, Grid3X3 } from 'lucide-react';
 import Sidebar from './components/Sidebar';
-import LevelGrid from './components/LevelGrid';
 import DataTable from './components/DataTable';
 
 const PRIORITY_PROPS = [
@@ -98,11 +97,14 @@ export default function App() {
     const stored = Number(localStorage.getItem('cantidades:rightPanelWidth'));
     return Number.isFinite(stored) && stored > 0 ? stored : 320;
   });
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(() => localStorage.getItem('cantidades:leftPanelCollapsed') === 'true');
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(() => localStorage.getItem('cantidades:rightPanelCollapsed') === 'true');
   const [tablePanelHeight, setTablePanelHeight] = useState(() => {
     const stored = Number(localStorage.getItem('cantidades:tablePanelHeight'));
     return Number.isFinite(stored) && stored > 0 ? stored : 320;
   });
   const [isTableMaximized, setIsTableMaximized] = useState(false);
+  const [isViewerMaximized, setIsViewerMaximized] = useState(false);
 
   // Filter states
   const [selectedClassifications, setSelectedClassifications] = useState<string[]>([]);
@@ -173,6 +175,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('cantidades:rightPanelWidth', String(rightPanelWidth));
   }, [rightPanelWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('cantidades:leftPanelCollapsed', String(leftPanelCollapsed));
+  }, [leftPanelCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem('cantidades:rightPanelCollapsed', String(rightPanelCollapsed));
+  }, [rightPanelCollapsed]);
 
   useEffect(() => {
     localStorage.setItem('cantidades:tablePanelHeight', String(tablePanelHeight));
@@ -1035,20 +1045,35 @@ export default function App() {
         <>
           <div
             className="bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden"
-            style={{ width: leftPanelWidth }}
+            style={{ width: leftPanelCollapsed ? 44 : leftPanelWidth }}
           >
-              <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <div className={`border-b border-slate-100 bg-slate-50/50 flex items-center justify-between ${leftPanelCollapsed ? 'p-2' : 'p-4'}`}>
+              {!leftPanelCollapsed && (
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Modelos IFC</h3>
+              )}
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={fetchAvailableModels}
+                  onClick={() => setLeftPanelCollapsed((v) => !v)}
                   className="p-1 hover:bg-slate-200 rounded transition-colors"
-                  title="Actualizar lista"
+                  title={leftPanelCollapsed ? 'Mostrar panel' : 'Ocultar panel'}
                 >
-                  {isModelsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  {leftPanelCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
                 </button>
+                {!leftPanelCollapsed && (
+                  <button
+                    type="button"
+                    onClick={fetchAvailableModels}
+                    className="p-1 hover:bg-slate-200 rounded transition-colors"
+                    title="Actualizar lista"
+                  >
+                    {isModelsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  </button>
+                )}
               </div>
+            </div>
 
+            {!leftPanelCollapsed && (
               <div className="flex-1 overflow-y-auto p-2">
                 {modelsError && (
                   <div className="p-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
@@ -1113,21 +1138,40 @@ export default function App() {
                   );
                 })}
               </div>
+            )}
           </div>
 
-          <div
-            className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
-            onPointerDown={(e) => {
-              const start = leftPanelWidth;
-              startHorizontalDrag(e, (dx) => {
-                const next = Math.min(520, Math.max(220, start + dx));
-                setLeftPanelWidth(next);
-              });
-            }}
-          />
+          {!leftPanelCollapsed && (
+            <div
+              className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
+              onPointerDown={(e) => {
+                const start = leftPanelWidth;
+                startHorizontalDrag(e, (dx) => {
+                  const next = Math.min(520, Math.max(220, start + dx));
+                  setLeftPanelWidth(next);
+                });
+              }}
+            />
+          )}
 
           <div className="flex-1 flex flex-col overflow-hidden relative">
-            <div className="flex-1 relative bg-slate-50">
+            <div className={isViewerMaximized ? "fixed inset-0 z-50 bg-white flex flex-col" : "flex-1 relative bg-slate-50"}>
+              {isViewerMaximized && (
+                <div className="h-12 px-6 border-b border-slate-200 bg-white flex items-center justify-between">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Modelo 3D</div>
+                  <button
+                    type="button"
+                    onClick={() => setIsViewerMaximized(false)}
+                    className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                    title="Volver"
+                  >
+                    <Minimize2 className="w-4 h-4 text-slate-600" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Volver</span>
+                  </button>
+                </div>
+              )}
+
+              <div className={isViewerMaximized ? "flex-1 relative bg-slate-50" : "absolute inset-0"}>
                 {showWelcome && !isLoading && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
                     <div className="bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-slate-200 max-w-md text-center pointer-events-auto">
@@ -1158,6 +1202,14 @@ export default function App() {
 
                 <div className="absolute top-4 right-4 flex flex-col gap-2">
                   <button
+                    onClick={() => setIsViewerMaximized((v) => !v)}
+                    className="p-2 rounded-lg shadow border transition-all flex items-center gap-2 bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white"
+                    title={isViewerMaximized ? 'Volver' : 'Maximizar modelo'}
+                  >
+                    {isViewerMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                    <span className="text-[10px] font-bold uppercase tracking-widest">{isViewerMaximized ? 'Volver' : 'Maximizar'}</span>
+                  </button>
+                  <button
                     onClick={() => setIsIsolateMode(!isIsolateMode)}
                     className={`p-2 rounded-lg shadow border transition-all flex items-center gap-2 ${isIsolateMode ? 'bg-blue-600 text-white border-blue-500' : 'bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white'}`}
                     title={isIsolateMode ? "Desactivar Aislamiento" : "Activar Aislamiento"}
@@ -1182,85 +1234,105 @@ export default function App() {
                     <span className="text-[10px] font-bold uppercase tracking-widest">Rejilla</span>
                   </button>
                 </div>
+              </div>
             </div>
 
-            <LevelGrid
-              levels={levels}
-              selectedLevels={selectedLevels}
-              onToggleLevel={toggleLevel}
-            />
+            {!isViewerMaximized && (
+              <>
+                <div
+                  className="h-3 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-row-resize select-none touch-none relative z-20"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    try {
+                      (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+                    } catch {
+                    }
+                    const start = tablePanelHeight;
+                    startVerticalDrag(e, (dy) => {
+                      const next = Math.min(900, Math.max(180, start - dy));
+                      setTablePanelHeight(next);
+                    });
+                  }}
+                />
 
+                <div className="flex flex-col border-t border-slate-200" style={{ height: tablePanelHeight }}>
+                  <div className="h-10 px-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
+                    <button
+                      type="button"
+                      onClick={() => setIsTableMaximized(true)}
+                      className="p-1 hover:bg-slate-200 rounded transition-colors"
+                      title="Maximizar"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {!isTableMaximized && (
+                    <DataTable
+                      elements={filteredElements}
+                      onSelectElement={setSelectedElementId}
+                      selectedElementId={selectedElementId || undefined}
+                      selectedElementIds={selectedElementIds}
+                      onSetSelectedElementIds={setSelectedElementIds}
+                      statuses={elementStatuses}
+                      onChangeStatus={handleChangeStatus}
+                      onChangeStatusMany={handleChangeStatusMany}
+                      onClearFilters={resetFilters}
+                    />
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {!rightPanelCollapsed && (
             <div
-              className="h-3 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-row-resize select-none touch-none relative z-20"
+              className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
               onPointerDown={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                try {
-                  (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
-                } catch {
-                }
-                const start = tablePanelHeight;
-                startVerticalDrag(e, (dy) => {
-                  const next = Math.min(900, Math.max(180, start - dy));
-                  setTablePanelHeight(next);
+                const start = rightPanelWidth;
+                startHorizontalDrag(e, (dx) => {
+                  const next = Math.min(520, Math.max(260, start - dx));
+                  setRightPanelWidth(next);
                 });
               }}
             />
+          )}
 
-            <div className="flex flex-col border-t border-slate-200" style={{ height: tablePanelHeight }}>
-                <div className="h-10 px-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                  <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
-                  <button
-                    type="button"
-                    onClick={() => setIsTableMaximized(true)}
-                    className="p-1 hover:bg-slate-200 rounded transition-colors"
-                    title="Maximizar"
-                  >
-                    <Maximize2 className="w-4 h-4" />
-                  </button>
-                </div>
-                {!isTableMaximized && (
-                  <DataTable
-                    elements={filteredElements}
-                    onSelectElement={setSelectedElementId}
-                    selectedElementId={selectedElementId || undefined}
-                    selectedElementIds={selectedElementIds}
-                    onSetSelectedElementIds={setSelectedElementIds}
-                    statuses={elementStatuses}
-                    onChangeStatus={handleChangeStatus}
-                    onChangeStatusMany={handleChangeStatusMany}
-                    onClearFilters={resetFilters}
-                  />
-                )}
+          {rightPanelCollapsed ? (
+            <div style={{ width: 44 }} className="bg-white border-l border-slate-200 flex flex-col h-full overflow-hidden">
+              <div className="p-2 border-b border-slate-100 bg-slate-50/50 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => setRightPanelCollapsed(false)}
+                  className="p-1 hover:bg-slate-200 rounded transition-colors"
+                  title="Mostrar panel"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          </div>
-
-          <div
-            className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
-            onPointerDown={(e) => {
-              const start = rightPanelWidth;
-              startHorizontalDrag(e, (dx) => {
-                const next = Math.min(520, Math.max(260, start - dx));
-                setRightPanelWidth(next);
-              });
-            }}
-          />
-
-          <div style={{ width: rightPanelWidth }} className="h-full overflow-hidden">
-            <Sidebar
-              categories={sidebarData}
-              selectedClassifications={selectedClassifications}
-              selectedCategories={selectedCategories}
-              selectedSubCategories={selectedSubCategories}
-              onToggleClassification={toggleClassification}
-              onToggleCategory={toggleCategory}
-              onToggleSubCategory={toggleSubCategory}
-              diameters={diameters}
-              selectedDiameter={selectedDiameter}
-              onDiameterChange={setSelectedDiameter}
-              onResetFilters={resetFilters}
-            />
-          </div>
+          ) : (
+            <div style={{ width: rightPanelWidth }} className="h-full overflow-hidden">
+              <Sidebar
+                categories={sidebarData}
+                selectedClassifications={selectedClassifications}
+                selectedCategories={selectedCategories}
+                selectedSubCategories={selectedSubCategories}
+                onToggleClassification={toggleClassification}
+                onToggleCategory={toggleCategory}
+                onToggleSubCategory={toggleSubCategory}
+                levels={levels}
+                selectedLevels={selectedLevels}
+                onToggleLevel={toggleLevel}
+                diameters={diameters}
+                selectedDiameter={selectedDiameter}
+                onDiameterChange={setSelectedDiameter}
+                onResetFilters={resetFilters}
+                onToggleCollapse={() => setRightPanelCollapsed(true)}
+              />
+            </div>
+          )}
         </>
 
         {isTableMaximized && (

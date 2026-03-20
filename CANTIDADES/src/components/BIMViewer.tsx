@@ -367,7 +367,8 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       const visibleCount = finalVisible.length;
       const hiddenCount = Math.max(0, totalCount - visibleCount);
 
-      const shouldShowAll = !filterActive && !isolateSelection;
+      const statusFilterActive = Object.values(statusVisibility).some((v) => v === false);
+      const shouldShowAll = !filterActive && !isolateSelection && !statusFilterActive;
       if (shouldShowAll) {
         if (seq !== updateSeqRef.current) return;
         if (allHiddenRef.current) {

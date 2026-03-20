@@ -19,10 +19,14 @@ interface SidebarProps {
   onToggleClassification: (name: string) => void;
   onToggleCategory: (name: string) => void;
   onToggleSubCategory: (name: string) => void;
+  levels: string[];
+  selectedLevels: string[];
+  onToggleLevel: (level: string) => void;
   diameters: string[];
   selectedDiameter: string;
   onDiameterChange: (diameter: string) => void;
   onResetFilters: () => void;
+  onToggleCollapse?: () => void;
 }
 
 export default function Sidebar({
@@ -33,10 +37,14 @@ export default function Sidebar({
   onToggleClassification,
   onToggleCategory,
   onToggleSubCategory,
+  levels,
+  selectedLevels,
+  onToggleLevel,
   diameters,
   selectedDiameter,
   onDiameterChange,
-  onResetFilters
+  onResetFilters,
+  onToggleCollapse
 }: SidebarProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -48,13 +56,25 @@ export default function Sidebar({
     <div className="bg-white border-l border-slate-200 flex flex-col h-full overflow-hidden">
       <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Clasificación / Categoría</h3>
-        <button 
-          onClick={onResetFilters}
-          className="p-1 hover:bg-slate-200 rounded transition-colors"
-          title="Limpiar filtros"
-        >
-          <ChevronRight className="w-4 h-4 rotate-180" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button 
+            onClick={onResetFilters}
+            className="p-1 hover:bg-slate-200 rounded transition-colors"
+            title="Limpiar filtros"
+          >
+            <ChevronRight className="w-4 h-4 rotate-180" />
+          </button>
+          {onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="p-1 hover:bg-slate-200 rounded transition-colors"
+              title="Ocultar panel"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
       
       <div className="flex-1 overflow-y-auto p-2">
@@ -138,6 +158,33 @@ export default function Sidebar({
             )}
           </div>
         ))}
+      </div>
+
+      <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Niveles</h3>
+        <div className="grid grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
+          {[...levels].sort((a, b) => {
+            const aNum = parseFloat(a.match(/-?\d+(\.\d+)?/)?.[0] || '0');
+            const bNum = parseFloat(b.match(/-?\d+(\.\d+)?/)?.[0] || '0');
+            return aNum - bNum;
+          }).map((level) => {
+            const isSelected = selectedLevels.includes(level);
+            return (
+              <button
+                key={level}
+                type="button"
+                onClick={() => onToggleLevel(level)}
+                className={`px-2 py-2 text-[10px] font-medium rounded transition-all border text-center leading-tight ${
+                  isSelected
+                    ? 'bg-blue-600 border-blue-700 text-white shadow-sm'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {level || '(En blanco)'}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="p-4 border-t border-slate-100 bg-slate-50/50">
