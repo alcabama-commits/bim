@@ -127,6 +127,12 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
   }, [elements, statuses]);
 
   const format2 = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const format2FromRaw = (raw: unknown, fallback?: number) => {
+    const n = parseNumber(raw);
+    if (n !== null) return format2(n);
+    if (fallback !== undefined && Number.isFinite(fallback)) return format2(fallback);
+    return '-';
+  };
 
   const overscan = 20;
   const totalRows = elements.length;
@@ -381,6 +387,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                 <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Sel</th>
                 <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Estado</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Clasificación</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Tipo</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Categoría</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Elemento</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Detalle</th>
@@ -394,7 +401,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
             <tbody className="divide-y divide-slate-100">
               {paddingTop > 0 && (
                 <tr style={{ height: paddingTop }}>
-                  <td colSpan={11} />
+                  <td colSpan={12} />
                 </tr>
               )}
 
@@ -404,6 +411,8 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                 const tint = statusTint(st);
                 const isChecked = selectedSet.has(el.id);
                 const absoluteIndex = startIndex + idx;
+                const tipoRaw = getProp(el, "NOMBRE INTEGRADO");
+                const tipo = tipoRaw !== '-' && tipoRaw !== '' ? tipoRaw : el.name;
 
                 return (
                   <tr
@@ -450,15 +459,16 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                         return v !== '-' ? v : 'SIN CLASIFICAR';
                       })()}
                     </td>
+                    <td className="px-4 py-1.5 text-[10px] text-slate-600 uppercase font-medium">{tipo}</td>
                     <td className="px-4 py-1.5 text-[10px] text-slate-600 uppercase">{el.category}</td>
                     <td className="px-4 py-1.5 text-[10px] text-slate-600 uppercase font-medium">{getProp(el, "NOMBRE INTEGRADO") || el.name}</td>
                     <td className="px-4 py-1.5 text-[10px] text-slate-600 uppercase">{getProp(el, "DETALLE") || '-'}</td>
                     <td className="px-4 py-1.5 text-[10px] text-slate-600 uppercase">{getProp(el, "MATERIAL INTEGRADO")}</td>
                     <td className="px-4 py-1.5 text-[10px] text-slate-600 uppercase">{getProp(el, "NIVEL INTEGRADO")}</td>
-                    <td className="px-4 py-1.5 text-[10px] text-slate-600 text-right font-mono">{getProp(el, "AREA INTEGRADO")}</td>
-                    <td className="px-4 py-1.5 text-[10px] text-slate-600 text-right font-mono">{getProp(el, "LONGITUD INTEGRADO")}</td>
+                    <td className="px-4 py-1.5 text-[10px] text-slate-600 text-right font-mono">{format2FromRaw(getProp(el, "AREA INTEGRADO"))}</td>
+                    <td className="px-4 py-1.5 text-[10px] text-slate-600 text-right font-mono">{format2FromRaw(getProp(el, "LONGITUD INTEGRADO"))}</td>
                     <td className="px-4 py-1.5 text-[10px] text-slate-600 text-right font-mono font-bold">
-                      {getProp(el, "VOLUMEN INTEGRADO") !== '-' ? getProp(el, "VOLUMEN INTEGRADO") : el.volume.toFixed(2)}
+                      {format2FromRaw(getProp(el, "VOLUMEN INTEGRADO"), el.volume)}
                     </td>
                   </tr>
                 );
@@ -466,13 +476,13 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
 
               {paddingBottom > 0 && (
                 <tr style={{ height: paddingBottom }}>
-                  <td colSpan={11} />
+                  <td colSpan={12} />
                 </tr>
               )}
 
               {totalRows === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-4 py-8 text-center text-slate-400 text-xs italic">
+                  <td colSpan={12} className="px-4 py-8 text-center text-slate-400 text-xs italic">
                     No hay datos para mostrar con los filtros actuales.
                   </td>
                 </tr>
