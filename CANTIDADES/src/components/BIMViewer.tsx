@@ -4,7 +4,7 @@ import * as OBC from '@thatopen/components';
 import * as OBCF from '@thatopen/components-front';
 import * as FRAGS from '@thatopen/fragments';
 import { BIMElement } from '../types';
-import { Box, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const FRAGMENTS_WORKER_URL = 'https://thatopen.github.io/engine_fragment/resources/worker.mjs';
 
@@ -22,6 +22,7 @@ interface BIMViewerProps {
   visibleElements: BIMElement[];
   statuses: Record<string, 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'EN BODEGA' | 'INSTALADO' | undefined>;
   statusColorsEnabled?: boolean;
+  gridVisible?: boolean;
   selectedElementId?: string;
   selectedElementIds?: string[];
   onElementSelect: (id: string | null) => void;
@@ -29,7 +30,7 @@ interface BIMViewerProps {
   isIsolateMode?: boolean;
 }
 
-export default function BIMViewer({ onModelLoaded, allElements, visibleElements, statuses, statusColorsEnabled = true, selectedElementId, selectedElementIds, onElementSelect, isLoading, isIsolateMode }: BIMViewerProps) {
+export default function BIMViewer({ onModelLoaded, allElements, visibleElements, statuses, statusColorsEnabled = true, gridVisible = true, selectedElementId, selectedElementIds, onElementSelect, isLoading, isIsolateMode }: BIMViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const componentsRef = useRef<OBC.Components | null>(null);
   const workerUrlRef = useRef<string | null>(null);
@@ -37,6 +38,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
   const hiddenMapRef = useRef<OBC.ModelIdMap>({});
   const allHiddenRef = useRef(false);
   const updateSeqRef = useRef(0);
+  const gridRef = useRef<any>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [statusVisibility, setStatusVisibility] = useState<Record<string, boolean>>(() => {
     try {
@@ -75,6 +77,20 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
     ] as const;
   }, []);
 
+  const applyGridVisibility = (grid: any, visible: boolean) => {
+    if (!grid) return;
+    if (typeof grid === 'object' && grid !== null) {
+      if ('visible' in grid) (grid as any).visible = visible;
+      if ((grid as any).three && 'visible' in (grid as any).three) (grid as any).three.visible = visible;
+      if ((grid as any).mesh && 'visible' in (grid as any).mesh) (grid as any).mesh.visible = visible;
+      if ((grid as any).grid && 'visible' in (grid as any).grid) (grid as any).grid.visible = visible;
+    }
+  };
+
+  useEffect(() => {
+    applyGridVisibility(gridRef.current, gridVisible);
+  }, [gridVisible]);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -105,7 +121,8 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
     }
     
     const grids = components.get(OBC.Grids);
-    grids.create(world);
+    gridRef.current = grids.create(world);
+    applyGridVisibility(gridRef.current, gridVisible);
 
     // Light
     const light = new THREE.DirectionalLight(0xffffff, 1.5);
@@ -507,20 +524,6 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         </div>
       )}
 
-      {!isLoading && (
-        <div className="absolute top-6 left-6 flex flex-col gap-2">
-          <div className="bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-lg border border-white flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#024959] flex items-center justify-center text-white">
-              <Box className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Visor 3D</h2>
-              <p className="text-[10px] text-slate-500 font-medium">Inspirado en VSR IFC Viewer</p>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="absolute bottom-6 right-6 flex gap-2">
         <button 
           onClick={() => {
@@ -547,20 +550,6 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         >
           Enfocar Filtrados
         </button>
-        <button 
-          onClick={() => {
-            if (componentsRef.current) {
-              // En v3 no hay core.update
-              console.log("Actualización manual no disponible en v3.");
-            }
-          }}
-          className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-white text-[10px] font-bold text-[#024959] uppercase tracking-widest hover:bg-white transition-all"
-        >
-          Forzar Renderizado
-        </button>
-        <div className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-white text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-          Orbit: Left Click | Pan: Right Click | Zoom: Scroll
-        </div>
       </div>
 
       <div className="absolute bottom-6 left-6 flex gap-2">

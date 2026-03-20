@@ -4,7 +4,7 @@ import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
 import BIMViewer from './components/BIMViewer';
 import { BIMElement, CategorySummary } from './types';
-import { Upload, Box, Folder, File, ChevronDown, ChevronRight, RefreshCw, Eye, Loader2, Maximize2, Minimize2, Palette } from 'lucide-react';
+import { Folder, File, ChevronDown, ChevronRight, RefreshCw, Eye, Loader2, Maximize2, Minimize2, Palette, Grid3X3 } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import LevelGrid from './components/LevelGrid';
 import DataTable from './components/DataTable';
@@ -116,6 +116,11 @@ export default function App() {
     if (raw === null) return true;
     return raw === 'true';
   });
+  const [gridVisible, setGridVisible] = useState(() => {
+    const raw = localStorage.getItem('cantidades:gridVisible');
+    if (raw === null) return true;
+    return raw === 'true';
+  });
 
   const statusStorageKey = useMemo(() => {
     const base = selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'local';
@@ -176,6 +181,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('cantidades:statusColorsEnabled', String(statusColorsEnabled));
   }, [statusColorsEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem('cantidades:gridVisible', String(gridVisible));
+  }, [gridVisible]);
 
   const startHorizontalDrag = useCallback((startEvent: React.PointerEvent, onDeltaX: (dx: number) => void) => {
     startEvent.preventDefault();
@@ -954,125 +963,6 @@ export default function App() {
     }
   }, [applyJsonText, fetchArrayBufferCached, fetchTextCached, loadFragBytes]);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0 || !componentsRef.current) return;
-
-    const fileList = Array.from(files) as File[];
-    const fragFile = fileList.find(f => f.name.toLowerCase().endsWith('.frag'));
-    const jsonFile = fileList.find(f => f.name.toLowerCase().endsWith('.json'));
-
-    if (!fragFile && !jsonFile) {
-      alert("Por favor selecciona al menos un archivo .frag o .json");
-      return;
-    }
-
-    setIsLoading(true);
-    setShowWelcome(false);
-
-    try {
-      if (fragFile) {
-        await loadFragBytes(fragFile.name, new Uint8Array(await fragFile.arrayBuffer()));
-      }
-
-      if (jsonFile) {
-        await applyJsonText(await jsonFile.text());
-      }
-    } catch (error) {
-      console.error('Error en la carga combinada:', error);
-      alert('Error al procesar los archivos.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadSample = async () => {
-    if (!componentsRef.current) return;
-    setIsLoading(true);
-    setShowWelcome(false);
-    await clearScene();
-    
-    const worlds = componentsRef.current.get(OBC.Worlds);
-    const world = worlds.list.values().next().value;
-
-    if (world) {
-      const group = new THREE.Group();
-      group.name = "SampleGroup";
-      const mockCategories = ['Slabs', 'Walls', 'Columns', 'Beams'];
-      const colors = [0x10b981, 0x3b82f6, 0xf59e0b, 0xef4444];
-
-      for (let i = 0; i < 15; i++) {
-        const catIdx = i % mockCategories.length;
-        const geometry = new THREE.BoxGeometry(
-          Math.random() * 2 + 1, 
-          Math.random() * 3 + 1, 
-          Math.random() * 2 + 1
-        );
-        const material = new THREE.MeshStandardMaterial({ 
-          color: colors[catIdx],
-          transparent: true,
-          opacity: 0.9
-        });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.set((Math.random() - 0.5) * 10, Math.random() * 5, (Math.random() - 0.5) * 10);
-        group.add(mesh);
-      }
-
-      world.scene.three.add(group);
-      if (world.camera.hasCameraControls()) {
-        world.camera.controls.fitToSphere(group, true);
-      }
-    }
-
-    // Generar datos de ejemplo para el tablero
-    const mockElements: BIMElement[] = [];
-    const catMap: Record<string, { totalVolume: number; count: number }> = {};
-    const mockLevels = ['1. NE 0.00 - CIMENTACIÓN', '2. NE +2.70 - PISO 2', '3. NE +5.12 - PISO 3', '4. NE +7.54 - PISO 4'];
-    const mockMaterials = ['Concreto 3000 psi', 'Concreto 4000 psi', 'Acero A36'];
-    const mockClassifications = ['OBRA GRUESA', 'TERMINACIONES', 'INSTALACIONES'];
-    
-    ['CIMENTACIÓN', 'COLUMNAS', 'VIGAS', 'LOSAS'].forEach((cat, cIdx) => {
-      const classification = mockClassifications[cIdx % mockClassifications.length];
-      const count = Math.floor(Math.random() * 5 + 3);
-      let totalVol = 0;
-      for (let i = 0; i < count; i++) {
-        const vol = Math.random() * 5 + 2;
-        totalVol += vol;
-        const level = mockLevels[Math.floor(Math.random() * mockLevels.length)];
-        const material = mockMaterials[Math.floor(Math.random() * mockMaterials.length)];
-        const name = `${cat} Type ${i + 1}`;
-        
-        mockElements.push({ 
-          id: crypto.randomUUID(), 
-          name: name, 
-          category: cat, 
-          volume: vol, 
-          unit: 'm³',
-          properties: {
-            "NOMBRE INTEGRADO": name,
-            "NIVEL INTEGRADO": level,
-            "MATERIAL INTEGRADO": material,
-            "AREA INTEGRADO": (vol * 2.5).toFixed(2),
-            "LONGITUD INTEGRADO": (vol * 1.5).toFixed(2),
-            "VOLUMEN INTEGRADO": vol.toFixed(2),
-            "DETALLE": `Detalle ${cat}-${i}`,
-            "CLASIFICACIÓN": classification
-          }
-        });
-      }
-      catMap[cat] = { totalVolume: totalVol, count };
-    });
-
-    setElements(mockElements);
-    setSummaries(Object.entries(catMap).map(([category, data]) => ({
-      category,
-      totalVolume: data.totalVolume,
-      count: data.count
-    })));
-    
-    setIsLoading(false);
-  };
-
   const resetFilters = () => {
     setSelectedClassifications([]);
     setSelectedCategories([]);
@@ -1241,25 +1131,10 @@ export default function App() {
                 {showWelcome && !isLoading && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
                     <div className="bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-slate-200 max-w-md text-center pointer-events-auto">
-                      <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                        <Box className="w-8 h-8 text-blue-600" />
-                      </div>
                       <h2 className="text-2xl font-light text-slate-900 mb-2">Extractor de Cantidades</h2>
-                      <p className="text-slate-500 text-sm mb-8">
-                        Selecciona un modelo del menú izquierdo o carga archivos <b>.frag</b> + <b>.json</b>.
+                      <p className="text-slate-500 text-sm">
+                        Selecciona un modelo del menú izquierdo.
                       </p>
-                      <div className="flex flex-col gap-3">
-                        <button
-                          onClick={loadSample}
-                          className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
-                        >
-                          Cargar Modelo de Ejemplo
-                        </button>
-                        <label className="w-full py-3 bg-white text-slate-700 border border-slate-200 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-slate-50 transition-all cursor-pointer">
-                          Subir Archivos
-                          <input type="file" accept=".frag,.json" multiple className="hidden" onChange={handleFileUpload} />
-                        </label>
-                      </div>
                     </div>
                   </div>
                 )}
@@ -1270,6 +1145,7 @@ export default function App() {
                   visibleElements={filteredElements}
                   statuses={elementStatuses}
                   statusColorsEnabled={statusColorsEnabled}
+                  gridVisible={gridVisible}
                   isLoading={isLoading}
                   selectedElementId={selectedElementId || undefined}
                   selectedElementIds={selectedElementIds}
@@ -1298,16 +1174,13 @@ export default function App() {
                     <span className="text-[10px] font-bold uppercase tracking-widest">Colores</span>
                   </button>
                   <button
-                    onClick={loadSample}
-                    className="p-2 bg-white/90 backdrop-blur-md text-slate-700 rounded-lg shadow border border-slate-200 hover:bg-white transition-all"
-                    title="Cargar Ejemplo"
+                    onClick={() => setGridVisible((v) => !v)}
+                    className={`p-2 rounded-lg shadow border transition-all flex items-center gap-2 ${gridVisible ? 'bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white' : 'bg-white/70 backdrop-blur-md text-slate-400 border-slate-200 hover:bg-white'}`}
+                    title={gridVisible ? 'Apagar rejilla' : 'Encender rejilla'}
                   >
-                    <Box className="w-5 h-5 text-blue-600" />
+                    <Grid3X3 className="w-4 h-4" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Rejilla</span>
                   </button>
-                  <label className="p-2 bg-blue-600 text-white rounded-lg shadow shadow-blue-600/20 hover:bg-blue-700 transition-all cursor-pointer" title="Subir Archivos">
-                    <Upload className="w-5 h-5" />
-                    <input type="file" accept=".frag,.json" multiple className="hidden" onChange={handleFileUpload} />
-                  </label>
                 </div>
             </div>
 
