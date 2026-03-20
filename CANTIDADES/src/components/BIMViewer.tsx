@@ -39,6 +39,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
   const allHiddenRef = useRef(false);
   const updateSeqRef = useRef(0);
   const gridRef = useRef<any>(null);
+  const suppressSelectClearRef = useRef(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [statusVisibility, setStatusVisibility] = useState<Record<string, boolean>>(() => {
     try {
@@ -258,6 +259,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         });
 
         highlighter.events.select.onClear.add(() => {
+          if (suppressSelectClearRef.current) return;
           onElementSelect(null);
         });
       }
@@ -433,11 +435,6 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         }
       }
 
-      try {
-        await highlighter.clear('select');
-      } catch {
-      }
-
       const visibleForColors = finalVisible;
       const byStatus: Record<string, BIMElement[]> = {
         PEDIDO: [],
@@ -501,9 +498,25 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         if (hasAny) {
           if (seq !== updateSeqRef.current) return;
           try {
+            suppressSelectClearRef.current = true;
+            try {
+              await highlighter.clear('select');
+            } finally {
+              suppressSelectClearRef.current = false;
+            }
             await highlighter.highlightByID("select", map, true, false, null, false);
           } catch {
           }
+        }
+      } else {
+        try {
+          suppressSelectClearRef.current = true;
+          try {
+            await highlighter.clear('select');
+          } finally {
+            suppressSelectClearRef.current = false;
+          }
+        } catch {
         }
       }
     };

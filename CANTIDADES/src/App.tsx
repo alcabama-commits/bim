@@ -1191,8 +1191,14 @@ export default function App() {
             />
 
             <div
-              className="h-3 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-row-resize"
+              className="h-3 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-row-resize select-none touch-none relative z-20"
               onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                  (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+                } catch {
+                }
                 const start = tablePanelHeight;
                 startVerticalDrag(e, (dy) => {
                   const next = Math.min(900, Math.max(180, start - dy));
