@@ -95,6 +95,7 @@ export default function App() {
   const [selectedRemoteModelName, setSelectedRemoteModelName] = useState<string | null>(null);
   const [elementStatuses, setElementStatuses] = useState<Record<string, ConstructionStatus>>({});
   const [elementHistory, setElementHistory] = useState<Record<string, Array<{ status: ConstructionStatus; at: string }>>>({});
+  const [timelineDate, setTimelineDate] = useState<string | null>(null);
 
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
     const stored = Number(localStorage.getItem('cantidades:leftPanelWidth'));
@@ -200,6 +201,37 @@ export default function App() {
     } catch {
     }
   }, [elementHistory, historyStorageKey]);
+
+  const timelinePoints = useMemo(() => {
+    const set = new Set<string>();
+    const arrays = Object.values(elementHistory) as Array<Array<{ status: ConstructionStatus; at: string }>>;
+    for (const arr of arrays) {
+      for (const it of arr ?? []) {
+        const d = new Date(it.at);
+        if (isNaN(d.getTime())) continue;
+        const key = d.toISOString().slice(0, 10);
+        set.add(key);
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [elementHistory]);
+
+  const viewerStatuses = useMemo(() => {
+    if (!timelineDate) return elementStatuses;
+    const target = new Date(timelineDate + 'T23:59:59.999Z').getTime();
+    const next: Record<string, ConstructionStatus> = {};
+    for (const el of elements) {
+      const hist = elementHistory[el.id];
+      if (!hist || hist.length === 0) continue;
+      let chosen: ConstructionStatus | null = null;
+      for (const entry of hist) {
+        const t = new Date(entry.at).getTime();
+        if (!isNaN(t) && t <= target) chosen = entry.status;
+      }
+      if (chosen) next[el.id] = chosen;
+    }
+    return next;
+  }, [elementHistory, elementStatuses, elements, timelineDate]);
 
   useEffect(() => {
     localStorage.setItem('cantidades:leftPanelWidth', String(leftPanelWidth));
@@ -1292,7 +1324,7 @@ export default function App() {
                   onModelLoaded={handleModelLoaded}
                   allElements={baseElements}
                   visibleElements={filteredElements}
-                  statuses={elementStatuses}
+                  statuses={viewerStatuses}
                   statusColorsEnabled={statusColorsEnabled}
                   gridVisible={gridVisible}
                   isLoading={isLoading}
@@ -1304,6 +1336,35 @@ export default function App() {
                   }}
                   isIsolateMode={isIsolateMode}
                 />
+
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 w-full max-w-4xl px-4 z-20">
+                  <div className="bg-white/90 backdrop-blur-md border border-slate-200 rounded-xl shadow flex items-center gap-2 overflow-x-auto px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setTimelineDate(null)}
+                      className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border ${timelineDate === null ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+                      title="Ver estado actual"
+                    >
+                      Actual
+                    </button>
+                    {timelinePoints.map((key) => {
+                      const d = new Date(key + 'T00:00:00Z');
+                      const label = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                      const active = timelineDate === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setTimelineDate(active ? null : key)}
+                          className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap ${active ? 'bg-[#024959] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+                          title={label}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 <div className="absolute top-4 right-4 flex flex-col gap-2">
                   <button
