@@ -561,7 +561,7 @@ export default function App() {
           volume: volume,
           unit: 'm³',
           properties: { ...data },
-          modelId: model.uuid || model.id || model.modelId,
+        modelId: model.modelId || model.id || model.uuid,
           localId: localId
         });
 
