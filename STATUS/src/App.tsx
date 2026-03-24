@@ -334,32 +334,84 @@ export default function App() {
     fetchAvailableModels();
   }, [fetchAvailableModels]);
 
+  const deriveFilterClassification = useCallback((el: BIMElement) => {
+    const ifcRaw =
+      (el.category && String(el.category)) ||
+      getFirstProp(el, ["IFC TYPE", "IFC_TYPE", "ifcType", "IfcType", "type"]) ||
+      "";
+    const ifc = normalizeClassification(String(ifcRaw));
+
+    if (ifc.includes("IFCSTAIR")) return "ESCALERAS";
+    if (ifc.includes("IFCSTAIRFLIGHT")) return "ESCALERAS";
+    if (ifc.includes("IFCCOLUMN")) return "COLUMNAS";
+    if (ifc.includes("IFCBEAM")) return "VIGAS";
+    if (ifc.includes("IFCWALL")) return "MUROS";
+    if (ifc.includes("IFCSLAB")) return "PISOS/PLACAS";
+
+    const hint = normalizeClassification(
+      String(getFirstProp(el, ["DETALLE"]) || getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name || "")
+    );
+    if (hint.includes("ESCAL")) return "ESCALERAS";
+    if (hint.includes("STAIR")) return "ESCALERAS";
+    if (hint.includes("COLUM")) return "COLUMNAS";
+    if (hint.includes("VIGA") || hint.includes("BEAM")) return "VIGAS";
+    if (hint.includes("MURO") || hint.includes("WALL")) return "MUROS";
+    if (hint.includes("LOSA") || hint.includes("SLAB") || hint.includes("PISO")) return "PISOS/PLACAS";
+
+    const raw = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]);
+    return raw && String(raw).trim() ? String(raw).trim() : "SIN CLASIFICAR";
+  }, [getFirstProp]);
+
   const baseElements = useMemo(() => {
     return elements.filter((el) => {
-      const classifRaw = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]);
+      const classifRaw = deriveFilterClassification(el);
       return !isSinClasificar(classifRaw);
     });
-  }, [elements, getFirstProp]);
+  }, [deriveFilterClassification, elements]);
 
   useEffect(() => {
     setSelectedClassifications((prev) => prev.filter((c) => !isSinClasificar(c)));
   }, [baseElements]);
 
+  const deriveFilterCategory = useCallback((el: BIMElement) => {
+    const ifcRaw =
+      (el.category && String(el.category)) ||
+      getFirstProp(el, ["IFC TYPE", "IFC_TYPE", "ifcType", "IfcType", "type"]) ||
+      "";
+    const ifc = normalizeClassification(String(ifcRaw));
+
+    if (ifc.includes("IFCSTAIR")) return "ESCALERAS";
+    if (ifc.includes("IFCSTAIRFLIGHT")) return "ESCALERAS";
+    if (ifc.includes("IFCCOLUMN")) return "COLUMNAS";
+    if (ifc.includes("IFCBEAM")) return "VIGAS";
+    if (ifc.includes("IFCWALL")) return "MUROS";
+    if (ifc.includes("IFCSLAB")) return "PISOS/PLACAS";
+
+    const hint = normalizeClassification(
+      String(getFirstProp(el, ["DETALLE"]) || getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name || "")
+    );
+    if (hint.includes("ESCAL")) return "ESCALERAS";
+    if (hint.includes("STAIR")) return "ESCALERAS";
+
+    const nombreIntegrado = getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name;
+    return String(nombreIntegrado).trim();
+  }, [getFirstProp]);
+
   const filteredElements = useMemo(() => {
     return baseElements.filter(el => {
-      const classif = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
-      const nombreIntegrado = getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name;
+      const classif = deriveFilterClassification(el);
+      const categoryLabel = deriveFilterCategory(el);
       const level = getProp(el, "NIVEL INTEGRADO") || "";
       const diameter = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]) || "";
 
       const classificationMatch = selectedClassifications.length === 0 || selectedClassifications.includes(classif);
-      const categoryMatch = selectedCategories.length === 0 || selectedCategories.includes(nombreIntegrado);
+      const categoryMatch = selectedCategories.length === 0 || selectedCategories.includes(categoryLabel);
       const levelMatch = selectedLevels.length === 0 || selectedLevels.includes(level);
       const diameterMatch = selectedDiameter === 'Todos' || diameter === selectedDiameter;
 
       return classificationMatch && categoryMatch && levelMatch && diameterMatch;
     });
-  }, [baseElements, getFirstProp, getProp, selectedClassifications, selectedCategories, selectedDiameter, selectedLevels]);
+  }, [baseElements, deriveFilterCategory, deriveFilterClassification, getFirstProp, getProp, selectedClassifications, selectedCategories, selectedDiameter, selectedLevels]);
 
   const elementsWithVolume = useMemo(() => {
     const toNumber = (v: unknown) => {
@@ -383,11 +435,11 @@ export default function App() {
     const classificationMap: Record<string, Set<string>> = {};
     
     elementsWithVolume.forEach(el => {
-      const classification = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
-      const nombreIntegrado = getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name;
+      const classification = deriveFilterClassification(el);
+      const categoryLabel = deriveFilterCategory(el);
 
       if (!classificationMap[classification]) classificationMap[classification] = new Set();
-      classificationMap[classification].add(nombreIntegrado);
+      classificationMap[classification].add(categoryLabel);
     });
 
     return Object.entries(classificationMap).map(([classifName, categories]) => ({
@@ -399,7 +451,7 @@ export default function App() {
           children: []
         }))
     })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [elementsWithVolume, getFirstProp]);
+  }, [deriveFilterCategory, deriveFilterClassification, elementsWithVolume]);
 
   const levels = useMemo(() => {
     const levelSet = new Set<string>();

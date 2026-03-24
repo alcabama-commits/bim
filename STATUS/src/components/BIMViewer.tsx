@@ -20,7 +20,7 @@ interface BIMViewerProps {
   onModelLoaded: (components: OBC.Components) => void;
   allElements: BIMElement[];
   visibleElements: BIMElement[];
-  statuses: Record<string, 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'EN BODEGA' | 'INSTALADO' | undefined>;
+  statuses: Record<string, ConstructionStatus | undefined>;
   statusColorsEnabled?: boolean;
   gridVisible?: boolean;
   selectedElementId?: string;
@@ -29,6 +29,16 @@ interface BIMViewerProps {
   isLoading: boolean;
   isIsolateMode?: boolean;
 }
+
+type ConstructionStatus =
+  | 'NINGUNO'
+  | 'EN PROGRESO'
+  | 'PARA INSPECCION'
+  | 'APROBADO'
+  | 'CERRADO'
+  | 'RECHAZADO';
+
+const statusStyleKey = (st: ConstructionStatus) => `status_${st.replace(/\s+/g, '_')}`;
 
 export default function BIMViewer({ onModelLoaded, allElements, visibleElements, statuses, statusColorsEnabled = true, gridVisible = true, selectedElementId, selectedElementIds, onSelectionChange, isLoading, isIsolateMode }: BIMViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -81,19 +91,31 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
     try {
       const raw = localStorage.getItem('cantidades:statusVisibility');
       if (!raw) {
-        return { PENDIENTE: true, PEDIDO: true, COMPRADO: true, 'EN BODEGA': true, INSTALADO: true };
+        return { 'NINGUNO': true, 'EN PROGRESO': true, 'PARA INSPECCION': true, 'APROBADO': true, 'CERRADO': true, 'RECHAZADO': true };
       }
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const pick = (k: string) => (typeof parsed[k] === 'boolean' ? (parsed[k] as boolean) : true);
+      const hasNewKeys = ['NINGUNO', 'EN PROGRESO', 'PARA INSPECCION', 'APROBADO', 'CERRADO', 'RECHAZADO'].some((k) => k in parsed);
+      if (!hasNewKeys) {
+        return {
+          'NINGUNO': pick('PENDIENTE'),
+          'EN PROGRESO': pick('PEDIDO'),
+          'PARA INSPECCION': pick('COMPRADO'),
+          'APROBADO': true,
+          'CERRADO': pick('INSTALADO'),
+          'RECHAZADO': true,
+        };
+      }
       return {
-        PENDIENTE: pick('PENDIENTE'),
-        PEDIDO: pick('PEDIDO'),
-        COMPRADO: pick('COMPRADO'),
-        'EN BODEGA': pick('EN BODEGA'),
-        INSTALADO: pick('INSTALADO')
+        'NINGUNO': pick('NINGUNO'),
+        'EN PROGRESO': pick('EN PROGRESO'),
+        'PARA INSPECCION': pick('PARA INSPECCION'),
+        'APROBADO': pick('APROBADO'),
+        'CERRADO': pick('CERRADO'),
+        'RECHAZADO': pick('RECHAZADO'),
       };
     } catch {
-      return { PENDIENTE: true, PEDIDO: true, COMPRADO: true, 'EN BODEGA': true, INSTALADO: true };
+      return { 'NINGUNO': true, 'EN PROGRESO': true, 'PARA INSPECCION': true, 'APROBADO': true, 'CERRADO': true, 'RECHAZADO': true };
     }
   });
 
@@ -106,11 +128,12 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
 
   const statusButtons = useMemo(() => {
     return [
-      { key: 'PENDIENTE', label: 'Pendiente', color: '#9CA3AF' },
-      { key: 'PEDIDO', label: 'Pedido', color: '#3B82F6' },
-      { key: 'COMPRADO', label: 'Comprado', color: '#FFA400' },
-      { key: 'EN BODEGA', label: 'En bodega', color: '#A78BFA' },
-      { key: 'INSTALADO', label: 'Instalado', color: '#22C55E' }
+      { key: 'NINGUNO', label: 'Ninguno', color: '#9CA3AF' },
+      { key: 'EN PROGRESO', label: 'En progreso', color: '#F59E0B' },
+      { key: 'PARA INSPECCION', label: 'Para inspección', color: '#3B82F6' },
+      { key: 'APROBADO', label: 'Aprobado', color: '#86EFAC' },
+      { key: 'CERRADO', label: 'Cerrado', color: '#166534' },
+      { key: 'RECHAZADO', label: 'Rechazado', color: '#EF4444' }
     ] as const;
   }, []);
 
@@ -208,31 +231,37 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
           renderedFaces: FRAGS.RenderedFaces.TWO
         });
 
-        highlighter.styles.set("status_PEDIDO", { 
+        highlighter.styles.set(statusStyleKey("EN PROGRESO"), { 
+          color: new THREE.Color(0xf59e0b),
+          opacity: 1,
+          transparent: false,
+          renderedFaces: FRAGS.RenderedFaces.TWO
+        });
+        highlighter.styles.set(statusStyleKey("PARA INSPECCION"), { 
           color: new THREE.Color(0x3b82f6),
           opacity: 1,
           transparent: false,
           renderedFaces: FRAGS.RenderedFaces.TWO
         });
-        highlighter.styles.set("status_COMPRADO", { 
-          color: new THREE.Color(0xffa400),
+        highlighter.styles.set(statusStyleKey("APROBADO"), { 
+          color: new THREE.Color(0x86efac),
           opacity: 1,
           transparent: false,
           renderedFaces: FRAGS.RenderedFaces.TWO
         });
-        highlighter.styles.set("status_EN_BODEGA", { 
-          color: new THREE.Color(0xa78bfa),
+        highlighter.styles.set(statusStyleKey("CERRADO"), { 
+          color: new THREE.Color(0x166534),
           opacity: 1,
           transparent: false,
           renderedFaces: FRAGS.RenderedFaces.TWO
         });
-        highlighter.styles.set("status_INSTALADO", { 
-          color: new THREE.Color(0x22c55e),
+        highlighter.styles.set(statusStyleKey("RECHAZADO"), { 
+          color: new THREE.Color(0xef4444),
           opacity: 1,
           transparent: false,
           renderedFaces: FRAGS.RenderedFaces.TWO
         });
-        highlighter.styles.set("status_PENDIENTE", { 
+        highlighter.styles.set(statusStyleKey("NINGUNO"), { 
           color: new THREE.Color(0x9ca3af),
           opacity: 1,
           transparent: false,
@@ -576,7 +605,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       }
 
       finalVisible = finalVisible.filter((e) => {
-        const st = statuses[e.id] ?? 'PENDIENTE';
+        const st = statuses[e.id] ?? 'NINGUNO';
         return statusVisibility[st] !== false;
       });
 
@@ -654,38 +683,28 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       }
 
       const visibleForColors = finalVisible;
-      const byStatus: Record<string, BIMElement[]> = {
-        PEDIDO: [],
-        COMPRADO: [],
-        'EN BODEGA': [],
-        INSTALADO: [],
-        PENDIENTE: []
+      const byStatus: Record<ConstructionStatus, BIMElement[]> = {
+        'NINGUNO': [],
+        'EN PROGRESO': [],
+        'PARA INSPECCION': [],
+        'APROBADO': [],
+        'CERRADO': [],
+        'RECHAZADO': [],
       };
 
       for (const el of visibleForColors) {
-        const st = statuses[el.id] ?? 'PENDIENTE';
-        if (st === 'PENDIENTE') {
-          byStatus.PENDIENTE.push(el);
-        } else if (st === 'PEDIDO') {
-          byStatus.PEDIDO.push(el);
-        } else if (st === 'COMPRADO') {
-          byStatus.COMPRADO.push(el);
-        } else if (st === 'EN BODEGA') {
-          byStatus['EN BODEGA'].push(el);
-        } else if (st === 'INSTALADO') {
-          byStatus.INSTALADO.push(el);
-        } else {
-          byStatus.PENDIENTE.push(el);
-        }
+        const st = statuses[el.id] ?? 'NINGUNO';
+        byStatus[st].push(el);
       }
 
-      const pendingLimit = 50000;
-      const statusToStyle: Array<{ key: keyof typeof byStatus; style: string; enabled: boolean }> = [
-        { key: 'PEDIDO', style: 'status_PEDIDO', enabled: true },
-        { key: 'COMPRADO', style: 'status_COMPRADO', enabled: true },
-        { key: 'EN BODEGA', style: 'status_EN_BODEGA', enabled: true },
-        { key: 'INSTALADO', style: 'status_INSTALADO', enabled: true },
-        { key: 'PENDIENTE', style: 'status_PENDIENTE', enabled: byStatus.PENDIENTE.length <= pendingLimit }
+      const noneLimit = 50000;
+      const statusToStyle: Array<{ key: ConstructionStatus; style: string; enabled: boolean }> = [
+        { key: 'EN PROGRESO', style: statusStyleKey('EN PROGRESO'), enabled: true },
+        { key: 'PARA INSPECCION', style: statusStyleKey('PARA INSPECCION'), enabled: true },
+        { key: 'APROBADO', style: statusStyleKey('APROBADO'), enabled: true },
+        { key: 'CERRADO', style: statusStyleKey('CERRADO'), enabled: true },
+        { key: 'RECHAZADO', style: statusStyleKey('RECHAZADO'), enabled: true },
+        { key: 'NINGUNO', style: statusStyleKey('NINGUNO'), enabled: byStatus['NINGUNO'].length <= noneLimit }
       ];
 
       for (const { style } of statusToStyle) {
