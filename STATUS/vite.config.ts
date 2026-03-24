@@ -5,9 +5,9 @@ import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
-  const outDir = process.env.VITE_OUTDIR ?? path.resolve(__dirname, '../docs/CANTIDADES');
+  const outDir = process.env.VITE_OUTDIR ?? '../docs/STATUS';
   return {
-    base: env.VITE_BASE || './',
+    base: './',
     build: {
       outDir,
       emptyOutDir: true,
