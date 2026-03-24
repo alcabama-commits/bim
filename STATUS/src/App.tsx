@@ -95,7 +95,8 @@ export default function App() {
   const [selectedRemoteModelName, setSelectedRemoteModelName] = useState<string | null>(null);
   const [elementStatuses, setElementStatuses] = useState<Record<string, ConstructionStatus>>({});
   const [elementHistory, setElementHistory] = useState<Record<string, Array<{ status: ConstructionStatus; at: string }>>>({});
-  const [timelineDate, setTimelineDate] = useState<string | null>(null);
+  const [timelineIndexDraft, setTimelineIndexDraft] = useState<number | null>(null);
+  const [timelineIndex, setTimelineIndex] = useState<number | null>(null);
 
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
     const stored = Number(localStorage.getItem('cantidades:leftPanelWidth'));
@@ -215,6 +216,90 @@ export default function App() {
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [elementHistory]);
+
+  const timelineDays = useMemo(() => {
+    if (timelinePoints.length === 0) return [];
+    const minKey = timelinePoints[0]!;
+    const maxKey = timelinePoints[timelinePoints.length - 1]!;
+    const minT = Date.parse(minKey + 'T00:00:00Z');
+    const maxTHistory = Date.parse(maxKey + 'T00:00:00Z');
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const maxTToday = Date.parse(todayKey + 'T00:00:00Z');
+    const maxT = Math.max(maxTHistory, maxTToday);
+    if (!Number.isFinite(minT) || !Number.isFinite(maxT) || maxT < minT) return [];
+    const days: string[] = [];
+    for (let t = minT; t <= maxT; t += 86400000) {
+      const key = new Date(t).toISOString().slice(0, 10);
+      days.push(key);
+    }
+    return days;
+  }, [timelinePoints]);
+
+  useEffect(() => {
+    if (timelineDays.length === 0) {
+      setTimelineIndexDraft(null);
+      setTimelineIndex(null);
+      return;
+    }
+    if (timelineIndexDraft !== null) {
+      const clamped = Math.max(0, Math.min(timelineDays.length - 1, timelineIndexDraft));
+      if (clamped !== timelineIndexDraft) setTimelineIndexDraft(clamped);
+    }
+    if (timelineIndex !== null) {
+      const clamped = Math.max(0, Math.min(timelineDays.length - 1, timelineIndex));
+      if (clamped !== timelineIndex) setTimelineIndex(clamped);
+    }
+  }, [timelineDays, timelineIndex, timelineIndexDraft]);
+
+  useEffect(() => {
+    if (timelineIndexDraft === null) {
+      if (timelineIndex !== null) setTimelineIndex(null);
+      return;
+    }
+    const raf = window.requestAnimationFrame(() => {
+      setTimelineIndex(timelineIndexDraft);
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [timelineIndexDraft, timelineIndex]);
+
+  const timelineDate = useMemo(() => {
+    if (timelineIndex === null) return null;
+    return timelineDays[timelineIndex] ?? null;
+  }, [timelineDays, timelineIndex]);
+
+  const timelineMarkers = useMemo(() => {
+    const getISOWeek = (date: Date) => {
+      const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    };
+
+    const months: Array<{ index: number; label: string }> = [];
+    const weeks: Array<{ index: number; label: string }> = [];
+    const days: Array<{ index: number; label: string }> = [];
+
+    for (let i = 0; i < timelineDays.length; i += 1) {
+      const key = timelineDays[i]!;
+      const d = new Date(key + 'T00:00:00Z');
+      if (isNaN(d.getTime())) continue;
+      const day = d.getUTCDate();
+      const dow = d.getUTCDay();
+      if (i === 0 || day === 1) {
+        const m = d.toLocaleDateString('es-ES', { month: 'short', year: 'numeric', timeZone: 'UTC' }).toUpperCase();
+        months.push({ index: i, label: m });
+      }
+      if (i === 0 || dow === 1) {
+        weeks.push({ index: i, label: `W${String(getISOWeek(d)).padStart(2, '0')}` });
+      }
+      if (i === 0 || day === 1 || day % 5 === 0) {
+        days.push({ index: i, label: String(day) });
+      }
+    }
+
+    return { months, weeks, days };
+  }, [timelineDays]);
 
   const viewerStatuses = useMemo(() => {
     if (!timelineDate) return elementStatuses;
@@ -1337,32 +1422,76 @@ export default function App() {
                   isIsolateMode={isIsolateMode}
                 />
 
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 w-full max-w-4xl px-4 z-20">
-                  <div className="bg-white/90 backdrop-blur-md border border-slate-200 rounded-xl shadow flex items-center gap-2 overflow-x-auto px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => setTimelineDate(null)}
-                      className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border ${timelineDate === null ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
-                      title="Ver estado actual"
-                    >
-                      Actual
-                    </button>
-                    {timelinePoints.map((key) => {
-                      const d = new Date(key + 'T00:00:00Z');
-                      const label = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                      const active = timelineDate === key;
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => setTimelineDate(active ? null : key)}
-                          className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap ${active ? 'bg-[#024959] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
-                          title={label}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 w-full max-w-5xl px-4 z-20">
+                  <div className="bg-white/90 backdrop-blur-md border border-slate-200 rounded-xl shadow px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
+                        {timelineDate
+                          ? new Date(timelineDate + 'T00:00:00Z').toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
+                          : 'Hoy'}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTimelineIndexDraft(null);
+                          setTimelineIndex(null);
+                        }}
+                        className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border ${timelineDate === null ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+                        title="Ver estado actual"
+                      >
+                        Hoy
+                      </button>
+                    </div>
+
+                    <div className="relative mt-2">
+                      <div className="absolute -top-5 left-0 right-0 h-4 pointer-events-none">
+                        {timelineMarkers.months.map((m) => {
+                          const pct = timelineDays.length <= 1 ? 0 : (m.index / (timelineDays.length - 1)) * 100;
+                          return (
+                            <div key={`m-${m.index}`} className="absolute top-0 text-[10px] font-bold text-slate-400 whitespace-nowrap" style={{ left: `${pct}%`, transform: 'translateX(-10%)' }}>
+                              {m.label}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="absolute -bottom-5 left-0 right-0 h-4 pointer-events-none">
+                        {timelineMarkers.weeks.map((w) => {
+                          const pct = timelineDays.length <= 1 ? 0 : (w.index / (timelineDays.length - 1)) * 100;
+                          return (
+                            <div key={`w-${w.index}`} className="absolute top-0 text-[10px] font-bold text-slate-400 whitespace-nowrap" style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}>
+                              {w.label}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <input
+                        type="range"
+                        min={0}
+                        max={Math.max(0, timelineDays.length - 1)}
+                        value={timelineIndexDraft === null ? Math.max(0, timelineDays.length - 1) : timelineIndexDraft}
+                        onChange={(e) => setTimelineIndexDraft(Number(e.target.value))}
+                        disabled={timelineDays.length <= 1}
+                        className="w-full accent-[#024959]"
+                      />
+
+                      <div className="mt-1 flex justify-between text-[10px] font-bold text-slate-400 select-none">
+                        <div className="truncate">{timelineDays[0] ? new Date(timelineDays[0] + 'T00:00:00Z').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' }) : ''}</div>
+                        <div className="truncate">{timelineDays[timelineDays.length - 1] ? new Date(timelineDays[timelineDays.length - 1] + 'T00:00:00Z').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' }) : ''}</div>
+                      </div>
+
+                      <div className="relative h-3 mt-1">
+                        {timelineMarkers.days.map((d) => {
+                          const pct = timelineDays.length <= 1 ? 0 : (d.index / (timelineDays.length - 1)) * 100;
+                          return (
+                            <div key={`d-${d.index}`} className="absolute top-0 text-[9px] font-bold text-slate-400" style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}>
+                              {d.label}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
