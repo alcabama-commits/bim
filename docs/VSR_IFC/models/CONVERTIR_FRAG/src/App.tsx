@@ -27,6 +27,16 @@ interface ConversionState {
   errorDetails?: string;
 }
 
+interface BatchConversionState {
+  status: 'idle' | 'scanning' | 'converting' | 'success' | 'error';
+  message: string;
+  progress?: number;
+  currentFile?: string;
+  done?: number;
+  total?: number;
+  errorDetails?: string;
+}
+
 type JsonMode = 'products' | 'all' | 'hidrosanitario';
 
 const WEB_IFC_WASM_PATH = 'https://unpkg.com/web-ifc@0.0.77/';
@@ -347,12 +357,24 @@ export default function App() {
     message: 'Listo para convertir tu archivo IFC.'
   });
 
+  const [batchState, setBatchState] = useState<BatchConversionState>({
+    status: 'idle',
+    message: 'Listo para convertir en lote.'
+  });
+
   const [jsonMode, setJsonMode] = useState<JsonMode>('products');
   const [prettyJson, setPrettyJson] = useState<boolean>(true);
   const [includePsets, setIncludePsets] = useState<boolean>(true);
   const [includeSpatial, setIncludeSpatial] = useState<boolean>(true);
   const [optimizeAll, setOptimizeAll] = useState<boolean>(true);
   const [minimalEntity, setMinimalEntity] = useState<boolean>(false);
+
+  const [sourceFolderPath, setSourceFolderPath] = useState('');
+  const [destFolderPath, setDestFolderPath] = useState('');
+  const [sourceDirHandle, setSourceDirHandle] = useState<any>(null);
+  const [destDirHandle, setDestDirHandle] = useState<any>(null);
+  const [batchFiles, setBatchFiles] = useState<File[]>([]);
+  const batchFilePickerRef = useRef<HTMLInputElement | null>(null);
 
   const componentsRef = useRef<OBC.Components | null>(null);
   const fragmentsRef = useRef<OBC.FragmentsManager | null>(null);
@@ -524,16 +546,216 @@ export default function App() {
     }
   };
 
-  const downloadFile = (blob: Blob, ext: string) => {
-    if (!state.fileName) return;
+  const downloadNamedFile = (blob: Blob, fullName: string) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${state.fileName}${ext}`;
+    a.download = fullName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const downloadFile = (blob: Blob, ext: string) => {
+    if (!state.fileName) return;
+    downloadNamedFile(blob, `${state.fileName}${ext}`);
+  };
+
+  const ensureInit = async () => {
+    if (!initPromiseRef.current) throw new Error('El convertidor aún no está inicializado');
+    await initPromiseRef.current;
+    const loader = loaderRef.current;
+    const fragments = fragmentsRef.current;
+    if (!loader || !fragments) throw new Error('El motor del convertidor no está listo');
+    return { loader, fragments };
+  };
+
+  const convertIfcBytes = async (
+    bytes: Uint8Array,
+    baseName: string,
+    onProgress: (p: number, message: string) => void
+  ) => {
+    const { loader } = await ensureInit();
+    onProgress(10, 'Convirtiendo IFC a FRAG...');
+    const model = await loader.load(bytes, true, baseName, {
+      processData: {
+        progressCallback: (progress, data) => {
+          const p = clampProgress(progress);
+          let overall = 10 + (p / 100) * 70;
+          if (data.process === 'attributes') overall = 80 + (p / 100) * 7;
+          if (data.process === 'relations') overall = 87 + (p / 100) * 6;
+          if (data.process === 'conversion') overall = 10 + (p / 100) * 10;
+          onProgress(
+            clampProgress(overall),
+            data.process === 'attributes'
+              ? 'Convirtiendo (atributos)...'
+              : data.process === 'relations'
+                ? 'Convirtiendo (relaciones)...'
+                : 'Convirtiendo (geometría)...'
+          );
+        }
+      }
+    } as any);
+
+    onProgress(94, 'Exportando .FRAG...');
+    const fragBuffer = await model.getBuffer(false);
+    const fragBlob = new Blob([new Uint8Array(fragBuffer)], { type: 'application/octet-stream' });
+
+    onProgress(96, 'Generando .JSON...');
+    const isHidrosanitario = jsonMode === 'hidrosanitario';
+    const effectiveMode: JsonMode = isHidrosanitario ? 'products' : jsonMode;
+
+    const jsonBlob = await extractPropertiesJsonBlob(bytes, effectiveMode, {
+      prettyJson,
+      includePsets: isHidrosanitario ? true : includePsets,
+      optimizeAll,
+      includeSpatialInProducts: includeSpatial,
+      minimalEntity,
+      hidrosanitario: isHidrosanitario,
+      onProgress: (p) => onProgress(clampProgress(96 + (p / 100) * 4), 'Generando .JSON...')
+    });
+
+    await model.dispose();
+    return { fragBlob, jsonBlob };
+  };
+
+  const pickDirectory = async (mode: 'read' | 'readwrite') => {
+    const picker = (window as any).showDirectoryPicker;
+    if (typeof picker !== 'function') return null;
+    const handle = await picker({ mode });
+    if (!handle) return null;
+    try {
+      await handle.requestPermission?.({ mode });
+    } catch {
+    }
+    return handle;
+  };
+
+  const listIfcFilesRecursive = async (dir: any, prefix = ''): Promise<Array<{ file: File; relPath: string }>> => {
+    const out: Array<{ file: File; relPath: string }> = [];
+    const iter = (dir as any).entries?.() ?? (dir as any).values?.();
+    if (!iter) return out;
+    for await (const entry of iter as any) {
+      const name: string = Array.isArray(entry) ? entry[0] : entry?.name;
+      const handle: any = Array.isArray(entry) ? entry[1] : entry;
+      if (!handle || !name) continue;
+      const relPath = prefix ? `${prefix}/${name}` : name;
+      if (handle.kind === 'file') {
+        if (!name.toLowerCase().endsWith('.ifc')) continue;
+        const file = await handle.getFile();
+        out.push({ file, relPath });
+      } else if (handle.kind === 'directory') {
+        const nested = await listIfcFilesRecursive(handle, relPath);
+        out.push(...nested);
+      }
+    }
+    return out;
+  };
+
+  const writeToDir = async (dir: any, name: string, blob: Blob) => {
+    const handle = await dir.getFileHandle(name, { create: true });
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+  };
+
+  const runBatchConversion = async () => {
+    setBatchState({
+      status: 'scanning',
+      message: 'Preparando lote...',
+      progress: 0,
+      errorDetails: undefined
+    });
+
+    try {
+      await ensureInit();
+
+      let entries: Array<{ file: File; relPath: string }> = [];
+      if (sourceDirHandle) {
+        setBatchState((prev) => ({ ...prev, message: 'Escaneando carpeta de origen...', progress: 1 }));
+        entries = await listIfcFilesRecursive(sourceDirHandle);
+      } else if (batchFiles.length > 0) {
+        entries = batchFiles
+          .filter((f) => f.name.toLowerCase().endsWith('.ifc'))
+          .map((file) => ({ file, relPath: file.name }));
+      }
+
+      if (entries.length === 0) {
+        setBatchState({
+          status: 'error',
+          message: 'No se encontraron archivos .ifc para convertir.',
+          errorDetails: 'Selecciona una carpeta de origen o agrega archivos IFC.'
+        });
+        return;
+      }
+
+      const total = entries.length;
+      setBatchState({
+        status: 'converting',
+        message: 'Iniciando conversión en lote...',
+        progress: 0,
+        done: 0,
+        total
+      });
+
+      for (let i = 0; i < entries.length; i += 1) {
+        const { file } = entries[i]!;
+        const baseName = file.name.replace(/\.ifc$/i, '');
+
+        const fileProgressBase = (i / total) * 100;
+        const fileProgressSpan = 100 / total;
+
+        setBatchState((prev) => ({
+          ...prev,
+          currentFile: file.name,
+          done: i,
+          total,
+          message: `Convirtiendo ${file.name}...`,
+          progress: clampProgress(fileProgressBase)
+        }));
+
+        const buffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+
+        const { fragBlob, jsonBlob } = await convertIfcBytes(bytes, baseName, (p, message) => {
+          const overall = fileProgressBase + (p / 100) * fileProgressSpan;
+          setBatchState((prev) => ({
+            ...prev,
+            message,
+            progress: clampProgress(overall)
+          }));
+        });
+
+        if (destDirHandle) {
+          await writeToDir(destDirHandle, `${baseName}.frag`, fragBlob);
+          await writeToDir(destDirHandle, `${baseName}.json`, jsonBlob);
+        } else {
+          downloadNamedFile(fragBlob, `${baseName}.frag`);
+          downloadNamedFile(jsonBlob, `${baseName}.json`);
+        }
+
+        setBatchState((prev) => ({
+          ...prev,
+          done: i + 1,
+          total
+        }));
+      }
+
+      setBatchState((prev) => ({
+        ...prev,
+        status: 'success',
+        message: '¡Conversión en lote completada!',
+        progress: 100,
+        errorDetails: undefined
+      }));
+    } catch (error) {
+      setBatchState({
+        status: 'error',
+        message: 'La conversión en lote falló.',
+        errorDetails: toErrorString(error)
+      });
+    }
   };
 
   return (
@@ -554,6 +776,153 @@ export default function App() {
         <main className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Upload Section */}
           <section className="space-y-6">
+            <div className="border border-[#141414] p-6 bg-white/50">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">Conversión en lote</span>
+                <Database className="w-4 h-4 opacity-30" />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={sourceFolderPath}
+                    onChange={(e) => setSourceFolderPath(e.target.value)}
+                    placeholder="Ruta carpeta origen (IFC)"
+                    className="flex-1 h-9 border border-[#141414] px-3 text-[10px] font-mono bg-white"
+                    disabled={batchState.status === 'scanning' || batchState.status === 'converting'}
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const dir = await pickDirectory('read');
+                        if (!dir) return;
+                        setSourceDirHandle(dir);
+                        setSourceFolderPath(String(dir.name ?? ''));
+                        setBatchFiles([]);
+                      } catch (e) {
+                        setBatchState({
+                          status: 'error',
+                          message: 'No se pudo seleccionar la carpeta de origen.',
+                          errorDetails: toErrorString(e)
+                        });
+                      }
+                    }}
+                    className="h-9 border border-[#141414] px-3 text-[10px] font-mono bg-white"
+                    disabled={batchState.status === 'scanning' || batchState.status === 'converting'}
+                  >
+                    Elegir
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    value={destFolderPath}
+                    onChange={(e) => setDestFolderPath(e.target.value)}
+                    placeholder="Ruta carpeta destino (FRAG + JSON)"
+                    className="flex-1 h-9 border border-[#141414] px-3 text-[10px] font-mono bg-white"
+                    disabled={batchState.status === 'scanning' || batchState.status === 'converting'}
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const dir = await pickDirectory('readwrite');
+                        if (!dir) return;
+                        setDestDirHandle(dir);
+                        setDestFolderPath(String(dir.name ?? ''));
+                      } catch (e) {
+                        setBatchState({
+                          status: 'error',
+                          message: 'No se pudo seleccionar la carpeta de destino.',
+                          errorDetails: toErrorString(e)
+                        });
+                      }
+                    }}
+                    className="h-9 border border-[#141414] px-3 text-[10px] font-mono bg-white"
+                    disabled={batchState.status === 'scanning' || batchState.status === 'converting'}
+                  >
+                    Elegir
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => batchFilePickerRef.current?.click()}
+                    className="flex-1 h-9 border border-[#141414] px-3 text-[10px] font-mono bg-white"
+                    disabled={batchState.status === 'scanning' || batchState.status === 'converting'}
+                  >
+                    Agregar IFCs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={runBatchConversion}
+                    className="h-9 border border-[#141414] px-3 text-[10px] font-mono bg-[#141414] text-[#E4E3E0] disabled:opacity-50"
+                    disabled={batchState.status === 'scanning' || batchState.status === 'converting'}
+                  >
+                    Convertir lote
+                  </button>
+                  <input
+                    ref={batchFilePickerRef}
+                    type="file"
+                    accept=".ifc"
+                    multiple
+                    className="hidden"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const picked = e.currentTarget.files;
+                      const files = (picked ? Array.from(picked) : []) as File[];
+                      const ifcs = files.filter((f) => f.name.toLowerCase().endsWith('.ifc'));
+                      setBatchFiles(ifcs);
+                      setSourceDirHandle(null);
+                    }}
+                    disabled={batchState.status === 'scanning' || batchState.status === 'converting'}
+                  />
+                </div>
+
+                <div className="border border-[#141414] p-3 bg-white">
+                  <div className="flex items-start gap-3">
+                    {batchState.status === 'scanning' || batchState.status === 'converting' ? (
+                      <Loader2 className="w-4 h-4 animate-spin mt-0.5" />
+                    ) : batchState.status === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 mt-0.5" />
+                    ) : batchState.status === 'error' ? (
+                      <AlertCircle className="w-4 h-4 text-rose-600 mt-0.5" />
+                    ) : (
+                      <div className="w-4 h-4 border border-[#141414] mt-0.5" />
+                    )}
+                    <div className="space-y-1 flex-1">
+                      <p className="text-xs font-medium">{batchState.message}</p>
+                      {(batchState.status === 'scanning' || batchState.status === 'converting') && typeof batchState.progress === 'number' && (
+                        <div className="mt-2">
+                          <div className="flex items-center justify-between text-[10px] font-mono opacity-60 mb-1">
+                            <span>PROGRESO</span>
+                            <span>{Math.round(batchState.progress)}%</span>
+                          </div>
+                          <div className="w-full h-2 border border-[#141414]">
+                            <div className="h-full bg-[#141414]" style={{ width: `${Math.max(0, Math.min(100, batchState.progress))}%` }} />
+                          </div>
+                        </div>
+                      )}
+                      {typeof batchState.done === 'number' && typeof batchState.total === 'number' && (
+                        <p className="text-[10px] font-mono opacity-50">
+                          {batchState.done}/{batchState.total}{batchState.currentFile ? ` · ${batchState.currentFile}` : ''}
+                        </p>
+                      )}
+                      {batchFiles.length > 0 && (
+                        <p className="text-[10px] font-mono opacity-50">ARCHIVOS: {batchFiles.length}</p>
+                      )}
+                      {batchState.status === 'error' && batchState.errorDetails && (
+                        <pre className="mt-2 text-[10px] font-mono opacity-70 whitespace-pre-wrap break-words max-h-40 overflow-auto border border-[#141414] p-2">
+                          {batchState.errorDetails}
+                        </pre>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="border border-[#141414] p-8 bg-white/50 relative overflow-hidden group">
               <div className="relative z-10 flex flex-col items-center justify-center text-center space-y-4">
                 <div className="w-16 h-16 border border-dashed border-[#141414] flex items-center justify-center group-hover:bg-[#141414] group-hover:text-[#E4E3E0] transition-colors duration-300">
