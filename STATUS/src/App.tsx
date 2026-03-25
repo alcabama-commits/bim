@@ -84,8 +84,8 @@ const jsonpRequest = <T,>(url: URL, signal?: AbortSignal): Promise<T> => {
       if (settled) return;
       settled = true;
       cleanup();
-      reject(new Error('Tiempo de espera agotado (JSONP)'));
-    }, 30000);
+      reject(new Error('Tiempo de espera agotado (JSONP). Revisa que el Web App responda como JavaScript con callback=...'));
+    }, 8000);
 
     document.head.appendChild(script);
   });
@@ -471,14 +471,19 @@ export default function App() {
     setIsModelsLoading(true);
     setModelsError(null);
     try {
-      const driveModels = await (async (): Promise<RemoteModel[] | null> => {
-        if (!DRIVE_SCRIPT_WEBAPP_URL) return null;
+      if (DRIVE_SCRIPT_WEBAPP_URL) {
         const url = new URL(DRIVE_SCRIPT_WEBAPP_URL);
         url.searchParams.set('action', 'list');
         url.searchParams.set('folderId', DRIVE_MODELS_FOLDER_ID);
         const data = await jsonpRequest<{
           models?: Array<{ name: string; fragId: string; jsonId?: string | null }>;
+          error?: string;
         }>(url);
+
+        if (data && typeof data === 'object' && typeof (data as any).error === 'string' && (data as any).error.trim()) {
+          throw new Error(String((data as any).error));
+        }
+
         const models = Array.isArray(data.models) ? data.models : [];
         const next = models
           .filter((m) => m && typeof m === 'object' && typeof m.name === 'string' && typeof m.fragId === 'string')
@@ -495,11 +500,11 @@ export default function App() {
             };
           })
           .sort((a, b) => a.name.localeCompare(b.name, 'es'));
-        return next;
-      })().catch(() => null);
 
-      if (driveModels && driveModels.length > 0) {
-        setAvailableModels(driveModels);
+        setAvailableModels(next);
+        if (next.length === 0) {
+          setModelsError('Drive no devolvió modelos. Verifica que existan .frag en la carpeta y que el Web App esté desplegado con acceso "Anyone".');
+        }
         return;
       }
 
@@ -537,6 +542,11 @@ export default function App() {
 
       setAvailableModels(nextModels);
     } catch (e) {
+      if (DRIVE_SCRIPT_WEBAPP_URL) {
+        setModelsError(`No se pudo cargar modelos desde Drive: ${e instanceof Error ? e.message : 'Error desconocido'}`);
+        setAvailableModels([]);
+        return;
+      }
       setModelsError(e instanceof Error ? e.message : 'Error cargando modelos');
       setAvailableModels([]);
     } finally {
