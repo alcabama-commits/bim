@@ -50,6 +50,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
   const updateSeqRef = useRef(0);
   const gridRef = useRef<any>(null);
   const suppressSelectClearRef = useRef(false);
+  const prevStatusAppliedRef = useRef<Record<string, boolean>>({});
   const [isInitialized, setIsInitialized] = useState(false);
   const [selectionBox, setSelectionBox] = useState<null | { left: number; top: number; width: number; height: number; dashed: boolean }>(null);
   const selectionGestureRef = useRef<{
@@ -721,13 +722,6 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         { key: 'NINGUNO', style: statusStyleKey('NINGUNO'), enabled: byStatus['NINGUNO'].length <= noneLimit }
       ];
 
-      for (const { style } of statusToStyle) {
-        try {
-          await highlighter.clear(style);
-        } catch {
-        }
-      }
-
       if (statusColorsEnabled) {
         for (const { key, style, enabled } of statusToStyle) {
           if (!enabled) continue;
@@ -738,8 +732,29 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
           if (seq !== updateSeqRef.current) return;
           try {
             await highlighter.highlightByID(style, map, true, false, null, false);
+            prevStatusAppliedRef.current[style] = true;
           } catch {
           }
+        }
+        for (const { key, style, enabled } of statusToStyle) {
+          const had = prevStatusAppliedRef.current[style] === true;
+          const shouldApply = enabled && (byStatus[key]?.length ?? 0) > 0;
+          if (!shouldApply && had) {
+            try {
+              await highlighter.clear(style);
+            } catch {
+            }
+            prevStatusAppliedRef.current[style] = false;
+          }
+        }
+      } else {
+        for (const { style } of statusToStyle) {
+          if (prevStatusAppliedRef.current[style] !== true) continue;
+          try {
+            await highlighter.clear(style);
+          } catch {
+          }
+          prevStatusAppliedRef.current[style] = false;
         }
       }
 
