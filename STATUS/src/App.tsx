@@ -117,7 +117,7 @@ const GITHUB_REPO = {
 };
 
 const DRIVE_MODELS_FOLDER_ID = '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8';
-const DRIVE_SCRIPT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxiSGOqRVgeZ_KVfneUxfj4kSBMsabO0CjEJxkg_ST0DMEu4UFSOTwodyyslArJKoBvDQ/exec';
+const DRIVE_SCRIPT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwyjAqfwV4XDgocmJfZASnlRr5hss_o2xELkE4ZGd8oYlLgshr2oP0d2JWWtFRY6_2zsg/exec';
 
 const rawUrlFor = (path: string) =>
   `https://raw.githubusercontent.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/${GITHUB_REPO.branch}/${path.split('/').map(encodeURIComponent).join('/')}`;
