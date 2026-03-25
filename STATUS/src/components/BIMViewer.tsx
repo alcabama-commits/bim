@@ -226,60 +226,60 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         highlighter.autoToggle.add('select');
         highlighter.styles.set("select", { 
           color: new THREE.Color(0xffa400),
-          opacity: 0.95,
+          opacity: 0.9,
           transparent: true,
-          depthTest: false,
+          depthTest: true,
           depthWrite: false,
           renderedFaces: FRAGS.RenderedFaces.TWO
         });
 
         highlighter.styles.set(statusStyleKey("EN PROGRESO"), { 
           color: new THREE.Color(0xf59e0b),
-          opacity: 0.95,
-          transparent: true,
-          depthTest: false,
-          depthWrite: false,
-          renderedFaces: FRAGS.RenderedFaces.TWO
+          opacity: 1,
+          transparent: false,
+          depthTest: true,
+          depthWrite: true,
+          renderedFaces: FRAGS.RenderedFaces.ONE
         });
         highlighter.styles.set(statusStyleKey("PARA INSPECCION"), { 
           color: new THREE.Color(0x3b82f6),
-          opacity: 0.95,
-          transparent: true,
-          depthTest: false,
-          depthWrite: false,
-          renderedFaces: FRAGS.RenderedFaces.TWO
+          opacity: 1,
+          transparent: false,
+          depthTest: true,
+          depthWrite: true,
+          renderedFaces: FRAGS.RenderedFaces.ONE
         });
         highlighter.styles.set(statusStyleKey("APROBADO"), { 
           color: new THREE.Color(0x86efac),
-          opacity: 0.95,
-          transparent: true,
-          depthTest: false,
-          depthWrite: false,
-          renderedFaces: FRAGS.RenderedFaces.TWO
+          opacity: 1,
+          transparent: false,
+          depthTest: true,
+          depthWrite: true,
+          renderedFaces: FRAGS.RenderedFaces.ONE
         });
         highlighter.styles.set(statusStyleKey("CERRADO"), { 
           color: new THREE.Color(0x166534),
-          opacity: 0.95,
-          transparent: true,
-          depthTest: false,
-          depthWrite: false,
-          renderedFaces: FRAGS.RenderedFaces.TWO
+          opacity: 1,
+          transparent: false,
+          depthTest: true,
+          depthWrite: true,
+          renderedFaces: FRAGS.RenderedFaces.ONE
         });
         highlighter.styles.set(statusStyleKey("RECHAZADO"), { 
           color: new THREE.Color(0xef4444),
-          opacity: 0.95,
-          transparent: true,
-          depthTest: false,
-          depthWrite: false,
-          renderedFaces: FRAGS.RenderedFaces.TWO
+          opacity: 1,
+          transparent: false,
+          depthTest: true,
+          depthWrite: true,
+          renderedFaces: FRAGS.RenderedFaces.ONE
         });
         highlighter.styles.set(statusStyleKey("NINGUNO"), { 
           color: new THREE.Color(0x9ca3af),
-          opacity: 0.95,
-          transparent: true,
-          depthTest: false,
-          depthWrite: false,
-          renderedFaces: FRAGS.RenderedFaces.TWO
+          opacity: 1,
+          transparent: false,
+          depthTest: true,
+          depthWrite: true,
+          renderedFaces: FRAGS.RenderedFaces.ONE
         });
         
         // Configurar eventos
