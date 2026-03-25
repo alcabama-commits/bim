@@ -32,11 +32,73 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: 
   }
 };
 
+const jsonpRequest = <T,>(url: URL, signal?: AbortSignal): Promise<T> => {
+  if (signal?.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  return new Promise<T>((resolve, reject) => {
+    const cbName = `__jsonp_${Math.random().toString(36).slice(2)}`;
+    url.searchParams.set('callback', cbName);
+
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = url.toString();
+
+    let settled = false;
+    let abortHandler: (() => void) | null = null;
+    let timeoutId: number | null = null;
+
+    const cleanup = () => {
+      try {
+        delete (window as any)[cbName];
+      } catch {
+        (window as any)[cbName] = undefined;
+      }
+      if (script.parentNode) script.parentNode.removeChild(script);
+      script.onerror = null;
+      if (signal && abortHandler) signal.removeEventListener('abort', abortHandler);
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+    };
+
+    (window as any)[cbName] = (data: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(data as T);
+    };
+
+    script.onerror = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('Error cargando JSONP'));
+    };
+
+    abortHandler = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    if (signal) signal.addEventListener('abort', abortHandler);
+
+    timeoutId = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('Tiempo de espera agotado (JSONP)'));
+    }, 30000);
+
+    document.head.appendChild(script);
+  });
+};
+
 type RemoteModel = {
   name: string;
   fragUrl: string;
   jsonUrl?: string;
   group: string;
+  source?: 'github' | 'drive';
+  fragId?: string;
+  jsonId?: string;
 };
 
 type ConstructionStatus =
@@ -53,6 +115,9 @@ const GITHUB_REPO = {
   branch: 'main',
   modelsPath: 'docs/VSR_IFC/models'
 };
+
+const DRIVE_MODELS_FOLDER_ID = '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8';
+const DRIVE_SCRIPT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxiSGOqRVgeZ_KVfneUxfj4kSBMsabO0CjEJxkg_ST0DMEu4UFSOTwodyyslArJKoBvDQ/exec';
 
 const rawUrlFor = (path: string) =>
   `https://raw.githubusercontent.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/${GITHUB_REPO.branch}/${path.split('/').map(encodeURIComponent).join('/')}`;
@@ -406,6 +471,38 @@ export default function App() {
     setIsModelsLoading(true);
     setModelsError(null);
     try {
+      const driveModels = await (async (): Promise<RemoteModel[] | null> => {
+        if (!DRIVE_SCRIPT_WEBAPP_URL) return null;
+        const url = new URL(DRIVE_SCRIPT_WEBAPP_URL);
+        url.searchParams.set('action', 'list');
+        url.searchParams.set('folderId', DRIVE_MODELS_FOLDER_ID);
+        const data = await jsonpRequest<{
+          models?: Array<{ name: string; fragId: string; jsonId?: string | null }>;
+        }>(url);
+        const models = Array.isArray(data.models) ? data.models : [];
+        const next = models
+          .filter((m) => m && typeof m === 'object' && typeof m.name === 'string' && typeof m.fragId === 'string')
+          .map((m) => {
+            const group = /estructura/i.test(m.name) ? 'ESTRUCTURA' : 'DRIVE';
+            return {
+              name: m.name,
+              fragUrl: '',
+              jsonUrl: undefined,
+              group,
+              source: 'drive' as const,
+              fragId: m.fragId,
+              jsonId: m.jsonId ? String(m.jsonId) : undefined
+            };
+          })
+          .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        return next;
+      })().catch(() => null);
+
+      if (driveModels && driveModels.length > 0) {
+        setAvailableModels(driveModels);
+        return;
+      }
+
       const url = `https://api.github.com/repos/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/contents/${GITHUB_REPO.modelsPath}?ref=${GITHUB_REPO.branch}`;
       const res = await fetch(url, {
         headers: { Accept: 'application/vnd.github+json' }
@@ -1061,6 +1158,91 @@ export default function App() {
     }
   };
 
+  const base64ToBytes = (b64: string) => {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  };
+
+  const fetchDriveFragBytesCached = useCallback(async (fileId: string, signal?: AbortSignal) => {
+    if (!DRIVE_SCRIPT_WEBAPP_URL) {
+      throw new Error('Falta configurar DRIVE_SCRIPT_WEBAPP_URL');
+    }
+
+    const key = `drive-frag:${DRIVE_SCRIPT_WEBAPP_URL}|${fileId}`;
+    const mem = remoteCacheRef.current.fragBytesByUrl.get(key);
+    if (mem) return mem;
+
+    const disk = await idbGet<{ url: string; ts: number; data: ArrayBuffer }>('frag', key);
+    if (disk?.data) {
+      const bytes = new Uint8Array(disk.data);
+      putLru(remoteCacheRef.current.fragBytesByUrl, key, bytes, 2);
+      void idbPut('frag', { url: key, ts: Date.now(), data: disk.data }, 6);
+      return bytes;
+    }
+
+    const parts: Uint8Array[] = [];
+    const limit = 2 * 1024 * 1024;
+    let offset = 0;
+    let total: number | null = null;
+
+    for (;;) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      const url = new URL(DRIVE_SCRIPT_WEBAPP_URL);
+      url.searchParams.set('action', 'chunk');
+      url.searchParams.set('id', fileId);
+      url.searchParams.set('offset', String(offset));
+      url.searchParams.set('limit', String(limit));
+      const data = await jsonpRequest<{ data?: string; total?: number; nextOffset?: number; done?: boolean }>(url, signal);
+      const chunk = data.data ? base64ToBytes(String(data.data)) : new Uint8Array(0);
+      parts.push(chunk);
+      if (typeof data.total === 'number' && Number.isFinite(data.total)) total = data.total;
+      offset = typeof data.nextOffset === 'number' && Number.isFinite(data.nextOffset) ? data.nextOffset : offset + chunk.byteLength;
+      if (data.done) break;
+      if (chunk.byteLength === 0) break;
+      if (total !== null && offset >= total) break;
+    }
+
+    const totalLen = parts.reduce((sum, p) => sum + p.byteLength, 0);
+    const bytes = new Uint8Array(totalLen);
+    let p = 0;
+    for (const part of parts) {
+      bytes.set(part, p);
+      p += part.byteLength;
+    }
+    putLru(remoteCacheRef.current.fragBytesByUrl, key, bytes, 2);
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    void idbPut('frag', { url: key, ts: Date.now(), data: buffer }, 6);
+    return bytes;
+  }, []);
+
+  const fetchDriveTextCached = useCallback(async (fileId: string, signal?: AbortSignal) => {
+    if (!DRIVE_SCRIPT_WEBAPP_URL) {
+      throw new Error('Falta configurar DRIVE_SCRIPT_WEBAPP_URL');
+    }
+
+    const key = `drive-json:${DRIVE_SCRIPT_WEBAPP_URL}|${fileId}`;
+    const mem = remoteCacheRef.current.jsonTextByUrl.get(key);
+    if (mem) return mem;
+
+    const disk = await idbGet<{ url: string; ts: number; data: string }>('json', key);
+    if (disk?.data) {
+      putLru(remoteCacheRef.current.jsonTextByUrl, key, disk.data, 2);
+      void idbPut('json', { url: key, ts: Date.now(), data: disk.data }, 6);
+      return disk.data;
+    }
+
+    const url = new URL(DRIVE_SCRIPT_WEBAPP_URL);
+    url.searchParams.set('action', 'text');
+    url.searchParams.set('id', fileId);
+    const data = await jsonpRequest<{ text?: string }>(url, signal);
+    const text = data?.text ? String(data.text) : '';
+    putLru(remoteCacheRef.current.jsonTextByUrl, key, text, 2);
+    void idbPut('json', { url: key, ts: Date.now(), data: text }, 6);
+    return text;
+  }, []);
+
   const fetchArrayBufferCached = useCallback(async (url: string, signal?: AbortSignal) => {
     const mem = remoteCacheRef.current.fragBytesByUrl.get(url);
     if (mem) return mem;
@@ -1155,8 +1337,13 @@ export default function App() {
     setShowWelcome(false);
     setSelectedRemoteModelName(remote.name);
     try {
-      const fragPromise = fetchArrayBufferCached(remote.fragUrl, controller.signal);
-      const jsonPromise = remote.jsonUrl ? fetchTextCached(remote.jsonUrl, controller.signal) : Promise.resolve<string | null>(null);
+      const isDrive = remote.source === 'drive' && typeof remote.fragId === 'string' && remote.fragId.trim() !== '';
+      const fragPromise = isDrive
+        ? fetchDriveFragBytesCached(remote.fragId!, controller.signal)
+        : fetchArrayBufferCached(remote.fragUrl, controller.signal);
+      const jsonPromise = isDrive
+        ? (remote.jsonId ? fetchDriveTextCached(remote.jsonId, controller.signal) : Promise.resolve<string | null>(null))
+        : (remote.jsonUrl ? fetchTextCached(remote.jsonUrl, controller.signal) : Promise.resolve<string | null>(null));
       const [fragBytes, jsonText] = await Promise.all([fragPromise, jsonPromise]);
 
       if (controller.signal.aborted) return;
@@ -1173,7 +1360,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [applyJsonText, fetchArrayBufferCached, fetchTextCached, loadFragBytes]);
+  }, [applyJsonText, fetchArrayBufferCached, fetchDriveFragBytesCached, fetchDriveTextCached, fetchTextCached, loadFragBytes]);
 
   const resetFilters = () => {
     setSelectedClassifications([]);
@@ -1225,7 +1412,8 @@ export default function App() {
 
   const [expandedModelGroups, setExpandedModelGroups] = useState<Record<string, boolean>>({
     ESTRUCTURA: true,
-    GENERAL: true
+    GENERAL: true,
+    DRIVE: true
   });
 
   return (
