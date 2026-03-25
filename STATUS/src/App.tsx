@@ -69,7 +69,7 @@ const jsonpRequest = <T,>(url: URL, signal?: AbortSignal): Promise<T> => {
       if (settled) return;
       settled = true;
       cleanup();
-      reject(new Error('Error cargando JSONP'));
+      reject(new Error(`Error cargando JSONP: ${script.src}`));
     };
 
     abortHandler = () => {
@@ -84,7 +84,7 @@ const jsonpRequest = <T,>(url: URL, signal?: AbortSignal): Promise<T> => {
       if (settled) return;
       settled = true;
       cleanup();
-      reject(new Error('Tiempo de espera agotado (JSONP). Revisa que el Web App responda como JavaScript con callback=...'));
+      reject(new Error(`Tiempo de espera agotado (JSONP). Revisa que el Web App responda como JavaScript con callback=... URL: ${script.src}`));
     }, 8000);
 
     document.head.appendChild(script);
