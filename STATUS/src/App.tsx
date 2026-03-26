@@ -179,6 +179,51 @@ export default function App() {
   });
   const [isTableMaximized, setIsTableMaximized] = useState(false);
   const [isViewerMaximized, setIsViewerMaximized] = useState(false);
+  const [isUpdatingApp, setIsUpdatingApp] = useState(false);
+
+  const updateApp = useCallback(async () => {
+    if (isUpdatingApp) return;
+    setIsUpdatingApp(true);
+    try {
+      if (!('serviceWorker' in navigator)) {
+        window.location.reload();
+        return;
+      }
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) {
+        window.location.reload();
+        return;
+      }
+
+      const reload = () => window.location.reload();
+      let reloaded = false;
+      const onControllerChange = () => {
+        if (reloaded) return;
+        reloaded = true;
+        navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+        reload();
+      };
+      navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+
+      if (reg.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      } else {
+        try {
+          await reg.update();
+        } catch {
+        }
+        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+
+      setTimeout(() => {
+        if (reloaded) return;
+        navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+        reload();
+      }, 1500);
+    } finally {
+      setIsUpdatingApp(false);
+    }
+  }, [isUpdatingApp]);
 
   // Filter states
   const [selectedClassifications, setSelectedClassifications] = useState<string[]>([]);
@@ -1694,6 +1739,15 @@ export default function App() {
                 </div>
 
                 <div className="absolute top-4 right-4 flex flex-col gap-2">
+                  <button
+                    onClick={updateApp}
+                    className="p-2 rounded-lg shadow border transition-all flex items-center gap-2 bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white disabled:opacity-60"
+                    title="Actualizar app y datos"
+                    disabled={isUpdatingApp}
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isUpdatingApp ? 'animate-spin' : ''}`} />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Actualizar</span>
+                  </button>
                   <button
                     onClick={() => setIsViewerMaximized((v) => !v)}
                     className="p-2 rounded-lg shadow border transition-all flex items-center gap-2 bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white"

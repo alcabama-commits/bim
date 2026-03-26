@@ -366,8 +366,10 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         if (!cam || !dom) return;
 
         const domBounds = dom.getBoundingClientRect();
-        const topLeft = new THREE.Vector2(rect.left - domBounds.left, rect.top - domBounds.top);
-        const bottomRight = new THREE.Vector2(rect.right - domBounds.left, rect.bottom - domBounds.top);
+        const scaleX = domBounds.width ? dom.width / domBounds.width : 1;
+        const scaleY = domBounds.height ? dom.height / domBounds.height : 1;
+        const topLeft = new THREE.Vector2((rect.left - domBounds.left) * scaleX, (rect.top - domBounds.top) * scaleY);
+        const bottomRight = new THREE.Vector2((rect.right - domBounds.left) * scaleX, (rect.bottom - domBounds.top) * scaleY);
 
         try {
           const worlds = components.get(OBC.Worlds);
