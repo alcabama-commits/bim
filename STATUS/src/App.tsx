@@ -32,7 +32,17 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: 
   }
 };
 
-const jsonpRequest = <T,>(url: URL, signal?: AbortSignal): Promise<T> => {
+type JsonpOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
+const jsonpRequest = <T,>(url: URL, signalOrOptions?: AbortSignal | JsonpOptions): Promise<T> => {
+  const options: JsonpOptions = signalOrOptions && typeof signalOrOptions === 'object' && 'signal' in signalOrOptions
+    ? (signalOrOptions as JsonpOptions)
+    : { signal: signalOrOptions as AbortSignal | undefined };
+  const signal = options.signal;
+  const timeoutMs = typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : 30000;
   if (signal?.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
   return new Promise<T>((resolve, reject) => {
     const cbName = `__jsonp_${Math.random().toString(36).slice(2)}`;
@@ -85,7 +95,7 @@ const jsonpRequest = <T,>(url: URL, signal?: AbortSignal): Promise<T> => {
       settled = true;
       cleanup();
       reject(new Error(`Tiempo de espera agotado (JSONP). Revisa que el Web App responda como JavaScript con callback=... URL: ${script.src}`));
-    }, 8000);
+    }, timeoutMs);
 
     document.head.appendChild(script);
   });
@@ -1238,7 +1248,7 @@ export default function App() {
     }
 
     const parts: Uint8Array[] = [];
-    const limit = 2 * 1024 * 1024;
+    let limit = 2 * 1024 * 1024;
     let offset = 0;
     let total: number | null = null;
 
@@ -1249,7 +1259,26 @@ export default function App() {
       url.searchParams.set('id', fileId);
       url.searchParams.set('offset', String(offset));
       url.searchParams.set('limit', String(limit));
-      const data = await jsonpRequest<{ data?: string; total?: number; nextOffset?: number; done?: boolean }>(url, signal);
+      let data: { data?: string; total?: number; nextOffset?: number; done?: boolean } | null = null;
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        try {
+          data = await jsonpRequest<{ data?: string; total?: number; nextOffset?: number; done?: boolean }>(url, { signal, timeoutMs: 45000 });
+          lastErr = null;
+          break;
+        } catch (e) {
+          lastErr = e;
+          const msg = String((e as any)?.message ?? '');
+          const isTimeout = msg.includes('Tiempo de espera agotado (JSONP)');
+          if (isTimeout && limit > 256 * 1024) {
+            limit = Math.max(256 * 1024, Math.floor(limit / 2));
+            url.searchParams.set('limit', String(limit));
+          }
+          await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+        }
+      }
+      if (!data) throw (lastErr instanceof Error ? lastErr : new Error('No se pudo descargar chunk (JSONP).'));
       const chunk = data.data ? base64ToBytes(String(data.data)) : new Uint8Array(0);
       parts.push(chunk);
       if (typeof data.total === 'number' && Number.isFinite(data.total)) total = data.total;
@@ -1291,7 +1320,7 @@ export default function App() {
     const url = new URL(DRIVE_SCRIPT_WEBAPP_URL);
     url.searchParams.set('action', 'text');
     url.searchParams.set('id', fileId);
-    const data = await jsonpRequest<{ text?: string }>(url, signal);
+    const data = await jsonpRequest<{ text?: string }>(url, { signal, timeoutMs: 30000 });
     const text = data?.text ? String(data.text) : '';
     putLru(remoteCacheRef.current.jsonTextByUrl, key, text, 2);
     void idbPut('json', { url: key, ts: Date.now(), data: text }, 6);
