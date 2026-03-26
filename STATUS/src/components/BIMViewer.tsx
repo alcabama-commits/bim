@@ -369,6 +369,14 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         const topLeft = new THREE.Vector2(rect.left - domBounds.left, rect.top - domBounds.top);
         const bottomRight = new THREE.Vector2(rect.right - domBounds.left, rect.bottom - domBounds.top);
 
+        try {
+          const worlds = components.get(OBC.Worlds);
+          const wsync = Array.from(worlds.list.values())[0] as any;
+          wsync?.camera?.three?.updateMatrixWorld?.(true);
+          await fragments.core.update(true);
+        } catch {
+        }
+
         const selection: OBC.ModelIdMap = {};
         for (const model of getAllModels()) {
           try {
