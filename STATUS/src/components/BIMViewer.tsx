@@ -380,7 +380,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
               fullyIncluded
             } as FRAGS.RectangleRaycastData);
             if (!res || !res.localIds || res.localIds.length === 0 || !res.fragments) continue;
-            const modelId = String(res.fragments.modelId);
+            const modelId = String((model as any)?.modelId ?? (model as any)?.id ?? (model as any)?.uuid ?? res.fragments.modelId);
             if (!modelId) continue;
             const picked = new Set<number>(res.localIds.map((v: number) => Number(v)).filter((v: number) => Number.isFinite(v)));
             if (picked.size > 0) selection[modelId] = picked;
