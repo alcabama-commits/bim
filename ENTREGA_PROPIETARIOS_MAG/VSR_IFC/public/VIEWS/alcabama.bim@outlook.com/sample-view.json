@@ -1,0 +1,20 @@
+{
+  "id": "sample-view-001",
+  "userId": "alcabama.bim@outlook.com",
+  "title": "Vista de Ejemplo del Repositorio",
+  "description": "Esta es una vista persistente almacenada en el repositorio.",
+  "category": "Ejemplos",
+  "date": 1740924000000,
+  "tags": ["demo", "repositorio"],
+  "camera": {
+    "position": [50, 50, 50],
+    "target": [0, 0, 0],
+    "projection": "perspective"
+  },
+  "selection": {},
+  "isolation": [],
+  "hidden": {},
+  "annotations": [],
+  "clippingPlanes": [],
+  "loadedModels": []
+}

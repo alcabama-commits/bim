@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-alcabama-pink: #D3045C;
+  --color-alcabama-white: #FFFFFF;
+  --color-alcabama-light-grey: #C5C0C8;
+  --color-alcabama-black: #000000;
+  --color-alcabama-medium-grey: #A49FA6;
+  --color-alcabama-grey: #827E84;
+  --color-alcabama-dark-grey: #605E62;
+}
+
+@layer base {
+  html {
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    width: 100%;
+    min-height: 100%;
+    overflow-x: hidden;
+  }
+
+  #root {
+    width: 100%;
+    min-height: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    @apply bg-alcabama-white text-alcabama-black font-sans;
+  }
+}

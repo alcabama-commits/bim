@@ -1,0 +1,17 @@
+[33mcommit 99d0927053178fb9ab807f76f5ac870e4f0d2148[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: Camilo Martinez <imagina3ddesign@gmail.com>
+Date:   Wed Feb 4 14:20:56 2026 -0500
+
+    no sincro 2 - cargar cambios en los FRAG vertices
+
+[33mcommit 6807e092086d7725d5ddd2dc6d8ea852b107d2b4[m
+Author: Camilo Martinez <imagina3ddesign@gmail.com>
+Date:   Wed Feb 4 14:18:51 2026 -0500
+
+    Update_build_artifacts_v3
+
+[33mcommit 7cc7937bac52dabeb0632b8606b652a4f4e5b850[m
+Author: Camilo Martinez <imagina3ddesign@gmail.com>
+Date:   Wed Feb 4 14:18:19 2026 -0500
+
+    Add_verification_logs

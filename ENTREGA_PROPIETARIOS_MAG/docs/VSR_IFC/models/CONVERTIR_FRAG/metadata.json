@@ -1,0 +1,5 @@
+{
+  "name": "IFC to FRAG Converter",
+  "description": "Convert IFC files to high-performance .FRAG files with associated property JSON for BIM visualization.",
+  "requestFramePermissions": []
+}
