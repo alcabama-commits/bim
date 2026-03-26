@@ -226,12 +226,12 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         highlighter.multiple = 'ctrlKey';
         highlighter.autoToggle.add('select');
         highlighter.styles.set("select", { 
-          color: new THREE.Color(0xffa400),
-          opacity: 0.9,
-          transparent: true,
+          color: new THREE.Color(0xd3045c),
+          opacity: 1,
+          transparent: false,
           depthTest: true,
-          depthWrite: false,
-          renderedFaces: FRAGS.RenderedFaces.TWO
+          depthWrite: true,
+          renderedFaces: FRAGS.RenderedFaces.ONE
         });
 
         highlighter.styles.set(statusStyleKey("EN PROGRESO"), { 
@@ -375,7 +375,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
 
         if (!OBC.ModelIdMapUtils.isEmpty(selection)) {
           try {
-            await highlighter.highlightByID('select', selection, false, false, null, true);
+            await highlighter.highlightByID('select', selection, false, false, null, false);
           } catch {
           }
           const ids = getSelectionIds(highlighter.selection?.select ?? {});
