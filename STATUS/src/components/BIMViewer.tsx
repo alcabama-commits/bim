@@ -51,6 +51,8 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
   const gridRef = useRef<any>(null);
   const suppressSelectClearRef = useRef(false);
   const prevStatusAppliedRef = useRef<Record<string, boolean>>({});
+  const lastEmittedSelectionKeyRef = useRef<string>('');
+  const lastAppliedSelectionKeyRef = useRef<string>('');
   const [isInitialized, setIsInitialized] = useState(false);
   const [selectionBox, setSelectionBox] = useState<null | { left: number; top: number; width: number; height: number; dashed: boolean }>(null);
   const selectionGestureRef = useRef<{
@@ -69,6 +71,19 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
   const allElementsRef = useRef(allElements);
   const elementIdIndexRef = useRef<Map<string, string>>(new Map());
   const selectableIdsRef = useRef<Set<string>>(new Set());
+
+  const selectionKeyOf = (ids?: string[]) => {
+    if (!ids || ids.length === 0) return '';
+    const sorted = ids.filter(Boolean).slice().sort();
+    return sorted.join('|');
+  };
+
+  const emitSelection = (ids: string[]) => {
+    const nextKey = selectionKeyOf(ids);
+    if (nextKey === lastEmittedSelectionKeyRef.current) return;
+    lastEmittedSelectionKeyRef.current = nextKey;
+    onSelectionChangeRef.current(ids);
+  };
 
   useEffect(() => {
     onSelectionChangeRef.current = onSelectionChange;
@@ -379,13 +394,13 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
           } catch {
           }
           const ids = getSelectionIds(highlighter.selection?.select ?? {});
-          onSelectionChangeRef.current(ids);
+          emitSelection(ids);
         } else if (!fullyIncluded) {
           try {
             await highlighter.clear('select');
           } catch {
           }
-          onSelectionChangeRef.current([]);
+          emitSelection([]);
         }
       };
 
@@ -394,12 +409,12 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         highlighter.events.select.onHighlight.add(async () => {
           const current = highlighter.selection?.select ?? {};
           const ids = getSelectionIds(current);
-          onSelectionChangeRef.current(ids);
+          emitSelection(ids);
         });
 
         highlighter.events.select.onClear.add(() => {
           if (suppressSelectClearRef.current) return;
-          onSelectionChangeRef.current([]);
+          emitSelection([]);
         });
       }
 
@@ -609,6 +624,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       const filterActive = visibleElements.length !== allElements.length;
       const selectionIds = selectedElementIds && selectedElementIds.length > 0 ? selectedElementIds : (selectedElementId ? [selectedElementId] : []);
       const hasSelection = selectionIds.length > 0;
+      const selectionKey = selectionKeyOf(selectionIds);
       const isolateSelection = Boolean(isIsolateMode && hasSelection);
 
       const visibleIdSet = new Set(visibleElements.map((e) => e.id));
@@ -764,23 +780,29 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         if (hasAny) {
           if (seq !== updateSeqRef.current) return;
           try {
+            if (selectionKey !== lastAppliedSelectionKeyRef.current) {
+              suppressSelectClearRef.current = true;
+              try {
+                await highlighter.clear('select');
+              } finally {
+                suppressSelectClearRef.current = false;
+              }
+              await highlighter.highlightByID("select", map, true, false, null, false);
+              lastAppliedSelectionKeyRef.current = selectionKey;
+            }
+          } catch {
+          }
+        }
+      } else {
+        try {
+          if (lastAppliedSelectionKeyRef.current !== '') {
             suppressSelectClearRef.current = true;
             try {
               await highlighter.clear('select');
             } finally {
               suppressSelectClearRef.current = false;
             }
-            await highlighter.highlightByID("select", map, true, false, null, false);
-          } catch {
-          }
-        }
-      } else {
-        try {
-          suppressSelectClearRef.current = true;
-          try {
-            await highlighter.clear('select');
-          } finally {
-            suppressSelectClearRef.current = false;
+            lastAppliedSelectionKeyRef.current = '';
           }
         } catch {
         }
