@@ -48,6 +48,64 @@ const normalizeToISODate = (v: unknown): string | null => {
   return null;
 };
 
+const getTime24Now = () => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+const time24ToAmPm = (time24: string): string | null => {
+  const m = String(time24 ?? '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  const hh12 = ((hh + 11) % 12) + 1;
+  return `${String(hh12).padStart(2, '0')}:${String(mm).padStart(2, '0')} ${ampm}`;
+};
+
+const extractTime24 = (v: unknown): string | null => {
+  if (!v) return null;
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    return `${String(v.getHours()).padStart(2, '0')}:${String(v.getMinutes()).padStart(2, '0')}`;
+  }
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  if (!s) return null;
+
+  const iso = s.match(/(?:T| )(\d{2}):(\d{2})/);
+  if (iso) return `${iso[1]}:${iso[2]}`;
+
+  const ampm = s.match(/(\d{1,2}):(\d{2})\s*([AP]M)\b/i);
+  if (ampm) {
+    const hhRaw = Number(ampm[1]);
+    const mm = Number(ampm[2]);
+    const mer = String(ampm[3]).toUpperCase();
+    if (hhRaw < 1 || hhRaw > 12 || mm < 0 || mm > 59) return null;
+    let hh = hhRaw % 12;
+    if (mer === 'PM') hh += 12;
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  }
+
+  return null;
+};
+
+const formatWeeklyGoalDateTime = (v: unknown): string | null => {
+  const date = normalizeToISODate(v);
+  if (!date) return null;
+  const time24 = extractTime24(v);
+  const ampm = time24 ? time24ToAmPm(time24) : null;
+  return ampm ? `${date} ${ampm}` : date;
+};
+
+const buildWeeklyGoalDateTimeValue = (dateIso: string, time24: string): string => {
+  const date = normalizeToISODate(dateIso) ?? dateIso;
+  const ampm = time24ToAmPm(time24);
+  return ampm ? `${date} ${ampm}` : date;
+};
+
 const getStatusLabel = (status: Status) => {
   switch (status) {
     case 'owner_delivered': return 'Entregado a propietario';
@@ -215,9 +273,12 @@ const mergeSheetDataIntoTowers = (baseTowers: Tower[], data: SheetData[]): Tower
     const status = normalizeStatus(item.status);
     const towerId = Number(item.towerId);
     const aptNumber = String(item.aptNumber).trim();
+    const rawWeekly = (item as SheetData).weeklyGoalDate;
+    const weeklyStr = rawWeekly == null ? '' : String(rawWeekly);
+    const weeklyValue = normalizeToISODate(weeklyStr) ? weeklyStr : null;
     statusMap.set(`${towerId}-${aptNumber}`, {
       status,
-      weeklyGoalDate: normalizeToISODate((item as SheetData).weeklyGoalDate) ?? null
+      weeklyGoalDate: weeklyValue
     });
   }
 
@@ -274,7 +335,7 @@ const ApartmentCell = ({
         transition-all duration-200 hover:scale-110 hover:z-10 cursor-pointer shadow-sm
         ${getStatusStyles(apartment.status)}
       `}
-      title={`Apartamento ${apartment.number} - ${getStatusLabel(apartment.status)}${apartment.status === 'weekly_goal' && apartment.weeklyGoalDate ? ` (${apartment.weeklyGoalDate})` : ''}`}
+      title={`Apartamento ${apartment.number} - ${getStatusLabel(apartment.status)}${apartment.status === 'weekly_goal' && apartment.weeklyGoalDate ? ` (${formatWeeklyGoalDateTime(apartment.weeklyGoalDate) ?? apartment.weeklyGoalDate})` : ''}`}
     >
       {apartment.number}
     </div>
@@ -323,7 +384,7 @@ const TowerCard = ({
   const filteredCount = statusFilter
     ? tower.apartments.filter(a =>
         a.status === statusFilter &&
-        (statusFilter !== 'weekly_goal' || !weeklyGoalDateFilter || a.weeklyGoalDate === weeklyGoalDateFilter)
+        (statusFilter !== 'weekly_goal' || !weeklyGoalDateFilter || normalizeToISODate(a.weeklyGoalDate) === weeklyGoalDateFilter)
       ).length
     : towerStats.total;
 
@@ -365,7 +426,7 @@ const TowerCard = ({
                 {apts.map((apt) => (
                   statusFilter && (
                     apt.status !== statusFilter ||
-                    (statusFilter === 'weekly_goal' && weeklyGoalDateFilter && apt.weeklyGoalDate !== weeklyGoalDateFilter)
+                    (statusFilter === 'weekly_goal' && weeklyGoalDateFilter && normalizeToISODate(apt.weeklyGoalDate) !== weeklyGoalDateFilter)
                   )
                     ? <div key={apt.id} className="h-8 w-full" />
                     : (
@@ -417,6 +478,7 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<Status | null>(null);
   const [weeklyGoalDateFilter, setWeeklyGoalDateFilter] = useState<string | null>(null);
   const [weeklyGoalDateInput, setWeeklyGoalDateInput] = useState(() => new Date().toISOString().slice(0, 10));
+  const [weeklyGoalTimeInput, setWeeklyGoalTimeInput] = useState(() => getTime24Now());
   const [timelineDateFilter, setTimelineDateFilter] = useState(() => new Date().toISOString().slice(0, 10));
   // activeTab removed
   const [allTowers, setAllTowers] = useState<Tower[]>(() => generateStructure());
@@ -441,6 +503,7 @@ export default function App() {
     const d = editingApartment.apartment.weeklyGoalDate;
     const fallback = new Date().toISOString().slice(0, 10);
     setWeeklyGoalDateInput(normalizeToISODate(d) ?? fallback);
+    setWeeklyGoalTimeInput(extractTime24(d) ?? getTime24Now());
   }, [editingApartment]);
 
   React.useEffect(() => {
@@ -527,6 +590,7 @@ export default function App() {
     
     // If in edit mode, apply change immediately
     if (isEditMode) {
+      const weeklyGoalValue = buildWeeklyGoalDateTimeValue(weeklyGoalDateInput, weeklyGoalTimeInput);
       // Optimistic update
       setAllTowers(prev => prev.map(tower => {
         if (tower.id !== editingApartment.towerId) return tower;
@@ -534,7 +598,7 @@ export default function App() {
           ...tower,
           apartments: tower.apartments.map(apt => 
             apt.id === editingApartment.apartment.id
-              ? { ...apt, status: newStatus, weeklyGoalDate: newStatus === 'weekly_goal' ? weeklyGoalDateInput : null }
+              ? { ...apt, status: newStatus, weeklyGoalDate: newStatus === 'weekly_goal' ? weeklyGoalValue : null }
               : apt
           )
         };
@@ -548,7 +612,7 @@ export default function App() {
           towerId: editingApartment.towerId,
           aptNumber: editingApartment.apartment.number,
           status: newStatus,
-          weeklyGoalDate: newStatus === 'weekly_goal' ? weeklyGoalDateInput : null
+          weeklyGoalDate: newStatus === 'weekly_goal' ? weeklyGoalValue : null
         });
         return newMap;
       });
@@ -1549,7 +1613,7 @@ export default function App() {
                       {editingApartment.apartment.status === 'weekly_goal' && (
                         <div className="mt-2 text-xs text-alcabama-grey">
                           {editingApartment.apartment.weeklyGoalDate
-                            ? `Fecha meta semanal: ${normalizeToISODate(editingApartment.apartment.weeklyGoalDate)}`
+                            ? `Fecha meta semanal: ${formatWeeklyGoalDateTime(editingApartment.apartment.weeklyGoalDate) ?? editingApartment.apartment.weeklyGoalDate}`
                             : 'Fecha meta semanal: sin fecha definida'}
                         </div>
                       )}
@@ -1593,12 +1657,20 @@ export default function App() {
 
                 <div className="w-full flex items-center justify-between gap-4 px-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Fecha meta semanal</span>
-                  <input
-                    type="date"
-                    value={weeklyGoalDateInput}
-                    onChange={(e) => setWeeklyGoalDateInput(e.target.value)}
-                    className="h-9 rounded-lg border border-alcabama-light-grey px-3 text-xs text-alcabama-dark-grey"
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={weeklyGoalDateInput}
+                      onChange={(e) => setWeeklyGoalDateInput(e.target.value)}
+                      className="h-9 rounded-lg border border-alcabama-light-grey px-3 text-xs text-alcabama-dark-grey"
+                    />
+                    <input
+                      type="time"
+                      value={weeklyGoalTimeInput}
+                      onChange={(e) => setWeeklyGoalTimeInput(e.target.value)}
+                      className="h-9 rounded-lg border border-alcabama-light-grey px-3 text-xs text-alcabama-dark-grey"
+                    />
+                  </div>
                 </div>
 
                 <button 
