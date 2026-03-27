@@ -7,90 +7,44 @@ export interface SheetData {
   weeklyGoalDate?: string | null;
 }
 
-const jsonpRequest = async <T>(url: string, timeoutMs: number = 20000): Promise<T> => {
-  const callbackName = `__gas_jsonp_cb_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  const src = url.includes('?') ? `${url}&callback=${callbackName}` : `${url}?callback=${callbackName}`;
-
-  return new Promise<T>((resolve, reject) => {
-    const w = window as unknown as Record<string, unknown>;
-    const script = document.createElement('script');
-
-    const cleanup = () => {
-      try {
-        delete w[callbackName];
-      } catch {}
-      script.remove();
-    };
-
-    const timer = window.setTimeout(() => {
-      cleanup();
-      reject(new Error('JSONP timeout'));
-    }, timeoutMs);
-
-    w[callbackName] = (data: unknown) => {
-      window.clearTimeout(timer);
-      cleanup();
-      resolve(data as T);
-    };
-
-    script.async = true;
-    script.src = src;
-    script.onerror = () => {
-      window.clearTimeout(timer);
-      cleanup();
-      reject(new Error('JSONP load error'));
-    };
-
-    document.head.appendChild(script);
-  });
-};
-
 export const fetchSheetData = async (): Promise<SheetData[] | null> => {
   if (!API_CONFIG.scriptUrl) {
     console.warn('Google Apps Script URL not configured. Using local data.');
     return null;
   }
 
-  const cacheBustedUrl = API_CONFIG.scriptUrl.includes('?')
-    ? `${API_CONFIG.scriptUrl}&_ts=${Date.now()}`
-    : `${API_CONFIG.scriptUrl}?_ts=${Date.now()}`;
-
   try {
-    const response = await fetch(cacheBustedUrl, { cache: "no-store" });
+    const cacheBustedUrl =
+      API_CONFIG.scriptUrl.includes('?')
+        ? `${API_CONFIG.scriptUrl}&_ts=${Date.now()}`
+        : `${API_CONFIG.scriptUrl}?_ts=${Date.now()}`;
+
+    const response = await fetch(cacheBustedUrl, { cache: 'no-store' });
     if (!response.ok) throw new Error('Network response was not ok');
+    
     const data = await response.json();
-    return data.towers || [];
+    // The GAS script returns { towers: [...] } based on our implementation
+    return data.towers || []; 
   } catch (error) {
-    try {
-      const data = await jsonpRequest<{ towers?: SheetData[] }>(cacheBustedUrl);
-      return data.towers || [];
-    } catch (jsonpError) {
-      console.error('Error fetching data from Google Sheets:', error);
-      console.error('Error fetching data from Google Sheets (JSONP fallback):', jsonpError);
-      return null;
-    }
+    console.error('Error fetching data from Google Sheets:', error);
+    return null;
   }
 };
 
 export const triggerSync = async (): Promise<boolean> => {
   if (!API_CONFIG.scriptUrl) return false;
 
-  const url = API_CONFIG.scriptUrl.includes('?')
-    ? `${API_CONFIG.scriptUrl}&action=sync&_ts=${Date.now()}`
-    : `${API_CONFIG.scriptUrl}?action=sync&_ts=${Date.now()}`;
-
   try {
+    const url = API_CONFIG.scriptUrl.includes('?')
+      ? `${API_CONFIG.scriptUrl}&action=sync&_ts=${Date.now()}`
+      : `${API_CONFIG.scriptUrl}?action=sync&_ts=${Date.now()}`;
+
     const response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) return false;
     await response.json().catch(() => null);
     return true;
   } catch {
-    try {
-      await jsonpRequest<unknown>(url);
-      return true;
-    } catch {
-      return false;
-    }
+    return false;
   }
 };
 
