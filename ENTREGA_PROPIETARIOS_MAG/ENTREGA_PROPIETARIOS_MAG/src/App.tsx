@@ -17,11 +17,18 @@ import { API_CONFIG } from './config';
 type Status = 'owner_delivered' | 'post_construction_delivered' | 'notarized' | 'weekly_goal' | 'in_process' | 'special' | 'under_construction';
 type Tab = 'towers' | 'charts';
 
+const getLocalISODate = (d: Date = new Date()): string => {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 const normalizeToISODate = (v: unknown): string | null => {
   if (!v) return null;
 
   if (v instanceof Date && !Number.isNaN(v.getTime())) {
-    return v.toISOString().slice(0, 10);
+    return getLocalISODate(v);
   }
 
   if (typeof v !== 'string') return null;
@@ -42,7 +49,7 @@ const normalizeToISODate = (v: unknown): string | null => {
 
   const parsed = new Date(s);
   if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
+    return getLocalISODate(parsed);
   }
 
   return null;
@@ -488,9 +495,9 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<Status | null>(null);
   const [weeklyGoalDateFilter, setWeeklyGoalDateFilter] = useState<string | null>(null);
-  const [weeklyGoalDateInput, setWeeklyGoalDateInput] = useState(() => new Date().toISOString().slice(0, 10));
+  const [weeklyGoalDateInput, setWeeklyGoalDateInput] = useState(() => getLocalISODate());
   const [weeklyGoalTimeInput, setWeeklyGoalTimeInput] = useState(() => getTime24Now());
-  const [timelineDateFilter, setTimelineDateFilter] = useState(() => new Date().toISOString().slice(0, 10));
+  const [timelineDateFilter, setTimelineDateFilter] = useState(() => getLocalISODate());
   // activeTab removed
   const [allTowers, setAllTowers] = useState<Tower[]>(() => generateStructure());
   const [editingApartment, setEditingApartment] = useState<{ towerId: number, apartment: Apartment } | null>(null);
@@ -506,13 +513,13 @@ export default function App() {
     setStatusFilter(null);
     setWeeklyGoalDateFilter(null);
     setSearchTerm('');
-    setTimelineDateFilter(new Date().toISOString().slice(0, 10));
+    setTimelineDateFilter(getLocalISODate());
   };
 
   React.useEffect(() => {
     if (!editingApartment) return;
     const d = editingApartment.apartment.weeklyGoalDate;
-    const fallback = new Date().toISOString().slice(0, 10);
+    const fallback = getLocalISODate();
     setWeeklyGoalDateInput(normalizeToISODate(d) ?? fallback);
     setWeeklyGoalTimeInput(extractTime24(d) ?? getTime24Now());
   }, [editingApartment]);
@@ -602,6 +609,8 @@ export default function App() {
     // If in edit mode, apply change immediately
     if (isEditMode) {
       const weeklyGoalValue = buildWeeklyGoalDateTimeValue(weeklyGoalDateInput, weeklyGoalTimeInput);
+      const nowDate = getLocalISODate();
+      const nowTs = Date.now();
       // Optimistic update
       setAllTowers(prev => prev.map(tower => {
         if (tower.id !== editingApartment.towerId) return tower;
@@ -633,8 +642,8 @@ export default function App() {
           towerId: editingApartment.towerId,
           aptNumber: editingApartment.apartment.number,
           status: newStatus,
-          date: new Date().toISOString().slice(0, 10),
-          ts: Date.now()
+          date: nowDate,
+          ts: nowTs
         };
 
         setTimelineEvents(prev => {
@@ -651,6 +660,47 @@ export default function App() {
       // If not in edit mode, this shouldn't happen via UI but as a safeguard
       // we can prompt for edit mode or just ignore. 
     }
+  };
+
+  const handleRestoreApartment = () => {
+    if (!editingApartment) return;
+    if (!isEditMode) return;
+    if (editingApartment.apartment.status === 'special') return;
+
+    const key = `${editingApartment.towerId}-${editingApartment.apartment.number}`;
+
+    setTimelineEvents(prev => {
+      const next = prev.filter((e) => !(e.towerId === editingApartment.towerId && e.aptNumber === editingApartment.apartment.number));
+      writeTimelineEvents(next);
+      return next;
+    });
+
+    setPendingChanges(prev => {
+      const next = new Map(prev);
+      next.set(key, {
+        towerId: editingApartment.towerId,
+        aptNumber: editingApartment.apartment.number,
+        status: 'under_construction',
+        weeklyGoalDate: null
+      });
+      return next;
+    });
+
+    setAllTowers(prev => prev.map(tower => {
+      if (tower.id !== editingApartment.towerId) return tower;
+      return {
+        ...tower,
+        apartments: tower.apartments.map(apt =>
+          apt.id === editingApartment.apartment.id
+            ? { ...apt, status: 'under_construction', weeklyGoalDate: null }
+            : apt
+        )
+      };
+    }));
+
+    setIsUsingCachedData(false);
+    setLastUpdatedAt(Date.now());
+    setEditingApartment(null);
   };
 
   const handleSaveChanges = async () => {
@@ -752,12 +802,12 @@ export default function App() {
   }, [allTowers]);
 
   const weeklyGoalTimeline = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalISODate();
 
     const addDaysISO = (iso: string, days: number) => {
       const d = new Date(`${iso}T00:00:00`);
       d.setDate(d.getDate() + days);
-      return d.toISOString().slice(0, 10);
+      return getLocalISODate(d);
     };
 
     const getDayOfWeekLabel = (iso: string) => {
@@ -1727,6 +1777,15 @@ export default function App() {
                 >
                   <div className="w-4 h-4 bg-white border border-alcabama-light-grey rounded-full" />
                   <span className="text-sm font-medium text-alcabama-dark-grey group-hover:text-alcabama-black">Sin proceso</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRestoreApartment}
+                  className="w-full flex items-center gap-4 p-4 rounded-xl border border-alcabama-light-grey hover:border-alcabama-black hover:bg-alcabama-light-grey/10 transition-all group"
+                >
+                  <div className="w-4 h-4 bg-alcabama-black rounded-full" />
+                  <span className="text-sm font-medium text-alcabama-dark-grey group-hover:text-alcabama-black">Restaurar (En obra)</span>
                 </button>
 
                 <div className="pt-4">
