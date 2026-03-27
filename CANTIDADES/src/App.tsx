@@ -256,13 +256,100 @@ export default function App() {
     setIsModelsLoading(true);
     setModelsError(null);
     try {
+      const env = ((import.meta as any).env || {}) as Record<string, string | undefined>;
+      const driveFolderId = env.VITE_DRIVE_FOLDER_ID?.trim();
+      const driveApiKey = env.VITE_DRIVE_API_KEY?.trim();
+
+      const normalizeBase = (name: string) =>
+        name
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .trim()
+          .toLowerCase();
+
+      if (driveFolderId && driveApiKey) {
+        type DriveFile = { id: string; name: string; mimeType?: string };
+
+        const listDriveFiles = async (): Promise<DriveFile[]> => {
+          const folderMime = 'application/vnd.google-apps.folder';
+          const results: DriveFile[] = [];
+          const visited = new Set<string>();
+          const queue: string[] = [driveFolderId];
+
+          while (queue.length > 0) {
+            const folderId = queue.shift()!;
+            if (visited.has(folderId)) continue;
+            visited.add(folderId);
+
+            let pageToken: string | undefined;
+            do {
+              const params = new URLSearchParams();
+              params.set('q', `'${folderId}' in parents and trashed=false`);
+              params.set('fields', 'nextPageToken,files(id,name,mimeType)');
+              params.set('pageSize', '1000');
+              params.set('key', driveApiKey);
+              params.set('supportsAllDrives', 'true');
+              params.set('includeItemsFromAllDrives', 'true');
+              if (pageToken) params.set('pageToken', pageToken);
+
+              const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
+                cache: 'no-store'
+              });
+              if (!res.ok) throw new Error(`No se pudo listar modelos en Drive (${res.status})`);
+              const data = (await res.json()) as { nextPageToken?: string; files?: DriveFile[] };
+              const files = Array.isArray(data.files) ? data.files.filter((f) => f && f.id && f.name) : [];
+              for (const f of files) {
+                if (f.mimeType === folderMime) {
+                  queue.push(f.id);
+                } else {
+                  results.push(f);
+                }
+              }
+              pageToken = data.nextPageToken;
+            } while (pageToken);
+          }
+
+          return results;
+        };
+
+        const files = await listDriveFiles();
+        const fragFiles = files.filter((f) => f.name.toLowerCase().endsWith('.frag'));
+        const jsonByBase = new Map<string, string>();
+        files
+          .filter((f) => f.name.toLowerCase().endsWith('.json'))
+          .forEach((f) => {
+            const base = normalizeBase(f.name.slice(0, -'.json'.length));
+            jsonByBase.set(base, f.id);
+          });
+
+        const driveDownloadUrl = (id: string) =>
+          `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&acknowledgeAbuse=true&key=${encodeURIComponent(driveApiKey)}`;
+
+        const nextModels: RemoteModel[] = fragFiles
+          .map((f) => {
+            const base = normalizeBase(f.name.slice(0, -'.frag'.length));
+            const jsonId = jsonByBase.get(base);
+            const group = /estructura/i.test(f.name) ? 'ESTRUCTURA' : 'GENERAL';
+            return {
+              name: f.name,
+              fragUrl: driveDownloadUrl(f.id),
+              jsonUrl: jsonId ? driveDownloadUrl(jsonId) : undefined,
+              group
+            };
+          })
+          .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+
+        setAvailableModels(nextModels);
+        return;
+      }
+
       const url = `https://api.github.com/repos/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/contents/${GITHUB_REPO.modelsPath}?ref=${GITHUB_REPO.branch}`;
       const res = await fetch(url, {
-        headers: { Accept: 'application/vnd.github+json' }
+        headers: { Accept: 'application/vnd.github+json' },
+        cache: 'no-store'
       });
-      if (!res.ok) {
-        throw new Error(`No se pudo listar modelos (${res.status})`);
-      }
+      if (!res.ok) throw new Error(`No se pudo listar modelos (${res.status})`);
+
       const data = (await res.json()) as Array<{ type: string; name: string; path: string }>;
       const files = data.filter((item) => item.type === 'file');
       const fragFiles = files.filter((f) => f.name.toLowerCase().endsWith('.frag'));
@@ -270,14 +357,14 @@ export default function App() {
       files
         .filter((f) => f.name.toLowerCase().endsWith('.json'))
         .forEach((f) => {
-          const base = f.name.slice(0, -'.json'.length);
-          jsonByBase.set(base.toLowerCase(), f.path);
+          const base = normalizeBase(f.name.slice(0, -'.json'.length));
+          jsonByBase.set(base, f.path);
         });
 
       const nextModels: RemoteModel[] = fragFiles
         .map((f) => {
-          const base = f.name.slice(0, -'.frag'.length);
-          const jsonPath = jsonByBase.get(base.toLowerCase());
+          const base = normalizeBase(f.name.slice(0, -'.frag'.length));
+          const jsonPath = jsonByBase.get(base);
           const group = /estructura/i.test(f.name) ? 'ESTRUCTURA' : 'GENERAL';
           return {
             name: f.name,
