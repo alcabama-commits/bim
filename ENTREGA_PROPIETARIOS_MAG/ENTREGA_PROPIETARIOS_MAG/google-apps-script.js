@@ -160,6 +160,11 @@ function parseTipoTorreApartamento_(s) {
   return { towerId, aptNumber };
 }
 
+function isEligibleForEscriturasUpdate_(baseStatus) {
+  const s = String(baseStatus ?? '').trim().toLowerCase();
+  return s === 'in_process' || s === 'sin proceso' || s === 'under_construction' || s === 'en obra';
+}
+
 function applyNotarizedFlag_(sheet, unitKeysSet) {
   const lastRow = sheet.getLastRow();
   if (lastRow <= 1) return 0;
@@ -176,6 +181,7 @@ function applyNotarizedFlag_(sheet, unitKeysSet) {
     const baseStatus = String(values[i][2] ?? '').trim().toLowerCase();
 
     if (baseStatus === 'special') continue;
+    if (!isEligibleForEscriturasUpdate_(baseStatus)) continue;
 
     const key = `${towerId}-${aptNumber}`;
     const nextFlag = unitKeysSet.has(key);
@@ -207,7 +213,7 @@ function getAllData(sheet) {
     let status = baseStatusRaw || 'in_process';
     if (status === 'special') {
       status = 'special';
-    } else if (isListNotarized) {
+    } else if (isListNotarized && isEligibleForEscriturasUpdate_(status)) {
       status = 'notarized';
     } else if (status === 'notarized') {
       status = 'in_process';
