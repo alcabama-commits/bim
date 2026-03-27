@@ -181,7 +181,16 @@ function applyNotarizedFlag_(sheet, unitKeysSet) {
     const baseStatus = String(values[i][2] ?? '').trim().toLowerCase();
 
     if (baseStatus === 'special') continue;
-    if (!isEligibleForEscriturasUpdate_(baseStatus)) continue;
+    const eligible = isEligibleForEscriturasUpdate_(baseStatus);
+    if (!eligible) {
+      const prevFlag = Boolean(values[i][5]);
+      if (prevFlag) {
+        values[i][5] = false;
+        values[i][3] = now;
+        updated++;
+      }
+      continue;
+    }
 
     const key = `${towerId}-${aptNumber}`;
     const nextFlag = unitKeysSet.has(key);
@@ -210,13 +219,19 @@ function getAllData(sheet) {
     const baseStatusRaw = String(row[2] ?? '').trim().toLowerCase();
     const isListNotarized = Boolean(row[5]);
 
-    let status = baseStatusRaw || 'in_process';
-    if (status === 'special') {
+    let base = baseStatusRaw || 'in_process';
+    if (base === 'sin proceso') base = 'in_process';
+    if (base === 'en obra') base = 'under_construction';
+
+    let status = base;
+    if (base === 'special') {
       status = 'special';
-    } else if (isListNotarized && isEligibleForEscriturasUpdate_(status)) {
-      status = 'notarized';
-    } else if (status === 'notarized') {
-      status = 'in_process';
+    } else if (base === 'notarized') {
+      status = isListNotarized ? 'notarized' : 'in_process';
+    } else if (base === 'in_process' || base === 'under_construction') {
+      status = isListNotarized ? 'notarized' : base;
+    } else {
+      status = base;
     }
 
     return {
