@@ -31,6 +31,23 @@ export const fetchSheetData = async (): Promise<SheetData[] | null> => {
   }
 };
 
+export const triggerSync = async (): Promise<boolean> => {
+  if (!API_CONFIG.scriptUrl) return false;
+
+  try {
+    const url = API_CONFIG.scriptUrl.includes('?')
+      ? `${API_CONFIG.scriptUrl}&action=sync&_ts=${Date.now()}`
+      : `${API_CONFIG.scriptUrl}?action=sync&_ts=${Date.now()}`;
+
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) return false;
+    await response.json().catch(() => null);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const updateSheetStatus = async (towerId: number, aptNumber: string, status: string, weeklyGoalDate?: string | null): Promise<boolean> => {
   if (!API_CONFIG.scriptUrl) {
     console.warn('Google Apps Script URL not configured. Change not saved to sheet.');

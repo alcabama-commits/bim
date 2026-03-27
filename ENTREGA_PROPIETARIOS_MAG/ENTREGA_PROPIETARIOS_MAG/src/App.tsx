@@ -9,7 +9,7 @@ import { Building2, CheckCircle2, Clock, Info, Search, Lock, Save, Loader2, Eye,
 import { 
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell 
 } from 'recharts';
-import { fetchSheetData, updateSheetStatus, SheetData } from './services/sheetService';
+import { fetchSheetData, triggerSync, updateSheetStatus, SheetData } from './services/sheetService';
 import { API_CONFIG } from './config';
 
 // --- Types ---
@@ -503,6 +503,8 @@ export default function App() {
   const [editingApartment, setEditingApartment] = useState<{ towerId: number, apartment: Apartment } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [isUsingCachedData, setIsUsingCachedData] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
@@ -558,6 +560,22 @@ export default function App() {
       setIsRefreshing(false);
     }
   }, []);
+
+  const syncEscrituras = React.useCallback(async () => {
+    if (!isOnline) return;
+    setIsSyncing(true);
+    setSyncError(null);
+    try {
+      const ok = await triggerSync();
+      if (!ok) {
+        setSyncError('No se pudo sincronizar. Revisa el Apps Script (permisos / Drive API / despliegue).');
+        return;
+      }
+      await refreshData();
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isOnline, refreshData]);
 
   React.useEffect(() => {
     if (isLoading) return;
@@ -1087,11 +1105,23 @@ export default function App() {
                   {isRefreshing ? <Loader2 size={16} className="animate-spin text-alcabama-grey" /> : <RefreshCw size={16} className="text-alcabama-grey" />}
                   Actualizar
                 </button>
+
+                <button
+                  type="button"
+                  onClick={syncEscrituras}
+                  disabled={isSyncing || !isOnline}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold bg-white border border-alcabama-light-grey hover:bg-alcabama-light-grey/10 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="Sincronizar Escriturados desde Magnolias - Escrituras.xlsx"
+                >
+                  {isSyncing ? <Loader2 size={16} className="animate-spin text-alcabama-grey" /> : <RefreshCw size={16} className="text-alcabama-grey" />}
+                  Sincronizar
+                </button>
               </div>
 
               <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">
                 {isUsingCachedData ? 'Mostrando última información guardada' : (isOnline ? 'En línea' : 'Sin señal')}
                 {lastUpdatedAt ? ` • Última: ${new Date(lastUpdatedAt).toLocaleString('es-CO', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
+                {syncError ? ` • ${syncError}` : ''}
               </div>
             </div>
           </div>
