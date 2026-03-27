@@ -605,6 +605,7 @@ export default function App() {
 
   const handleStatusChange = (newStatus: Status) => {
     if (!editingApartment) return;
+    if (newStatus === 'notarized') return;
     
     // If in edit mode, apply change immediately
     if (isEditMode) {
@@ -1727,14 +1728,6 @@ export default function App() {
                 >
                   <div className="w-4 h-4 bg-green-500 rounded-full" />
                   <span className="text-sm font-medium text-alcabama-dark-grey group-hover:text-green-700">Entregado a Post construcción</span>
-                </button>
-
-                <button 
-                  onClick={() => handleStatusChange('notarized')}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl border border-alcabama-light-grey hover:border-orange-500 hover:bg-orange-50 transition-all group"
-                >
-                  <div className="w-4 h-4 bg-orange-500 rounded-full" />
-                  <span className="text-sm font-medium text-alcabama-dark-grey group-hover:text-orange-700">Escriturado</span>
                 </button>
 
                 <div className="w-full flex items-center justify-between gap-4 px-1">

@@ -37,6 +37,10 @@ export const updateSheetStatus = async (towerId: number, aptNumber: string, stat
     return true; // Simulate success so UI updates even without backend
   }
 
+  if (String(status).trim().toLowerCase() === 'notarized') {
+    return false;
+  }
+
   try {
     // We use no-cors mode as a fallback if CORS is strict, but ideally we want 'cors'
     // GAS web apps deployed as "Anyone" support CORS.
