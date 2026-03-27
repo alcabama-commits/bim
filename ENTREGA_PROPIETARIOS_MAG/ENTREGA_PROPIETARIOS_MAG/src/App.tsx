@@ -66,6 +66,17 @@ const time24ToAmPm = (time24: string): string | null => {
   return `${String(hh12).padStart(2, '0')}:${String(mm).padStart(2, '0')} ${ampm}`;
 };
 
+const tsToAmPm = (ts: number): string | null => {
+  if (!Number.isFinite(ts)) return null;
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return null;
+  const hh = d.getHours();
+  const mm = d.getMinutes();
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  const hh12 = ((hh + 11) % 12) + 1;
+  return `${String(hh12).padStart(2, '0')}:${String(mm).padStart(2, '0')} ${ampm}`;
+};
+
 const extractTime24 = (v: unknown): string | null => {
   if (!v) return null;
   if (v instanceof Date && !Number.isNaN(v.getTime())) {
@@ -775,6 +786,16 @@ export default function App() {
       return acc + tower.apartments.filter(a => a.status === 'weekly_goal' && !normalizeToISODate(a.weeklyGoalDate)).length;
     }, 0);
 
+    type TimelineItem = {
+      towerId: number;
+      towerName: string;
+      aptNumber: string;
+      status: Status;
+      date: string;
+      timeLabel?: string | null;
+      ts?: number | null;
+    };
+
     const scheduled = allTowers.flatMap(tower =>
       tower.apartments
         .filter(a => a.status !== 'special')
@@ -787,27 +808,35 @@ export default function App() {
               towerName: tower.name,
               aptNumber: a.number,
               status: ev.status,
-              date: ev.date
-            }];
+              date: ev.date,
+              timeLabel: tsToAmPm(ev.ts),
+              ts: ev.ts
+            } satisfies TimelineItem];
           }
 
           if (a.status === 'weekly_goal') {
             const date = normalizeToISODate(a.weeklyGoalDate);
             if (!date) return [];
+            const timeLabel = (() => {
+              const t24 = extractTime24(a.weeklyGoalDate);
+              return t24 ? time24ToAmPm(t24) : null;
+            })();
             return [{
               towerId: tower.id,
               towerName: tower.name,
               aptNumber: a.number,
               status: 'weekly_goal' as const,
-              date
-            }];
+              date,
+              timeLabel,
+              ts: null
+            } satisfies TimelineItem];
           }
 
           return [];
         })
     );
 
-    const byDate = new Map<string, typeof scheduled>();
+    const byDate = new Map<string, TimelineItem[]>();
     for (const item of scheduled) {
       const current = byDate.get(item.date);
       if (current) current.push(item);
@@ -816,6 +845,7 @@ export default function App() {
 
     for (const items of byDate.values()) {
       items.sort((a, b) => {
+        if ((a.ts ?? 0) !== (b.ts ?? 0)) return (a.ts ?? 0) - (b.ts ?? 0);
         if (a.towerId !== b.towerId) return a.towerId - b.towerId;
         return a.aptNumber.localeCompare(b.aptNumber);
       });
@@ -862,7 +892,7 @@ export default function App() {
       .sort(([a], [b]) => a.localeCompare(b))
       .flatMap(([, items]) => items);
 
-    const upcomingWeeksMap = new Map<string, typeof scheduled>();
+    const upcomingWeeksMap = new Map<string, TimelineItem[]>();
     for (const [d, items] of byDate.entries()) {
       if (d <= weekEnd) continue;
       const wk = getWeekStartISO(d);
@@ -874,6 +904,7 @@ export default function App() {
     for (const items of upcomingWeeksMap.values()) {
       items.sort((a, b) => {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
+        if ((a.ts ?? 0) !== (b.ts ?? 0)) return (a.ts ?? 0) - (b.ts ?? 0);
         if (a.towerId !== b.towerId) return a.towerId - b.towerId;
         return a.aptNumber.localeCompare(b.aptNumber);
       });
@@ -1271,9 +1302,10 @@ export default function App() {
                                   type="button"
                                   onClick={() => showTimelineItemInTower(item.towerId, day.date)}
                                   className={`w-full px-1.5 py-1 rounded-md border text-[9px] font-black shadow-sm transition-colors ${getStatusChipClass(item.status)} ${isSelected ? 'ring-1 ring-alcabama-pink/40' : ''}`}
-                                  title={`${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                                  title={`${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}${item.timeLabel ? ` • ${item.timeLabel}` : ''}`}
                                 >
-                                  T{item.towerId}-{item.aptNumber}
+                                  <div className="leading-none">T{item.towerId}-{item.aptNumber}</div>
+                                  {item.timeLabel && <div className="mt-0.5 text-[8px] font-black leading-none opacity-90">{item.timeLabel}</div>}
                                 </button>
                               ))}
                               {day.items.length > 5 && (
@@ -1315,9 +1347,9 @@ export default function App() {
                             type="button"
                             onClick={() => showTimelineItemInTower(item.towerId, weeklyGoalTimeline.today)}
                             className={`px-2 py-1 rounded-md border text-[10px] font-black transition-colors ${getStatusChipClass(item.status)}`}
-                            title={`${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                            title={`${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}${item.timeLabel ? ` • ${item.timeLabel}` : ''}`}
                           >
-                            T{item.towerId}-{item.aptNumber}
+                            T{item.towerId}-{item.aptNumber}{item.timeLabel ? ` ${item.timeLabel}` : ''}
                           </button>
                         ))}
                         {(weeklyGoalTimeline.byDate.get(weeklyGoalTimeline.today) ?? []).length === 0 && (
@@ -1351,9 +1383,9 @@ export default function App() {
                                     type="button"
                                     onClick={() => showTimelineItemInTower(item.towerId, d.date)}
                                     className={`px-2 py-1 rounded-md border text-[10px] font-black transition-colors ${getStatusChipClass(item.status)}`}
-                                    title={`${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                                    title={`${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}${item.timeLabel ? ` • ${item.timeLabel}` : ''}`}
                                   >
-                                    T{item.towerId}-{item.aptNumber}
+                                    T{item.towerId}-{item.aptNumber}{item.timeLabel ? ` ${item.timeLabel}` : ''}
                                   </button>
                                 ))}
                               </div>
@@ -1386,9 +1418,9 @@ export default function App() {
                                     type="button"
                                     onClick={() => showTimelineItemInTower(item.towerId, item.date)}
                                     className={`px-2 py-1 rounded-md border text-[10px] font-black transition-colors ${getStatusChipClass(item.status)}`}
-                                    title={`${item.date} • ${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                                    title={`${item.date}${item.timeLabel ? ` • ${item.timeLabel}` : ''} • ${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}`}
                                   >
-                                    {item.date.slice(8, 10)}/{item.date.slice(5, 7)} T{item.towerId}-{item.aptNumber}
+                                    {item.date.slice(8, 10)}/{item.date.slice(5, 7)} T{item.towerId}-{item.aptNumber}{item.timeLabel ? ` ${item.timeLabel}` : ''}
                                   </button>
                                 ))}
                                 {w.items.length > 24 && (
@@ -1454,10 +1486,10 @@ export default function App() {
                         return <div className="mt-3 text-sm text-alcabama-grey">No hay registros para este día.</div>;
                       }
 
-                      const byTower = new Map<number, { aptNumber: string; status: Status }[]>();
+                      const byTower = new Map<number, { aptNumber: string; status: Status; timeLabel?: string | null; ts?: number | null }[]>();
                       for (const item of selectedItems) {
                         const current = byTower.get(item.towerId);
-                        const payload = { aptNumber: item.aptNumber, status: item.status };
+                        const payload = { aptNumber: item.aptNumber, status: item.status, timeLabel: item.timeLabel ?? null, ts: item.ts ?? null };
                         if (current) current.push(payload);
                         else byTower.set(item.towerId, [payload]);
                       }
@@ -1473,11 +1505,11 @@ export default function App() {
                               </span>
                               {apts.slice(0, 30).map((apt) => (
                                 <span
-                                  key={`${towerId}-${apt.aptNumber}-${apt.status}`}
+                                  key={`${towerId}-${apt.aptNumber}-${apt.status}-${apt.timeLabel ?? ''}-${apt.ts ?? ''}`}
                                   className={`px-2 py-1 rounded-md border text-[10px] font-bold ${getStatusChipClass(apt.status)}`}
-                                  title={getStatusLabel(apt.status)}
+                                  title={`${getStatusLabel(apt.status)}${apt.timeLabel ? ` • ${apt.timeLabel}` : ''}`}
                                 >
-                                  {apt.aptNumber}
+                                  {apt.aptNumber}{apt.timeLabel ? ` ${apt.timeLabel}` : ''}
                                 </span>
                               ))}
                               {apts.length > 30 && (
