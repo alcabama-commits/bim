@@ -11,9 +11,10 @@ const PROP_ESCRITURAS_FINGERPRINT = 'ESCRITURAS_FINGERPRINT_V1';
 
 function doGet(e) {
   const action = e && e.parameter ? String(e.parameter.action || '').trim() : '';
+  const callback = e && e.parameter ? e.parameter.callback : null;
   if (action === 'sync') {
     const result = syncAll_();
-    return responseJSON({ ok: true, action, result });
+    return responseJSON({ ok: true, action, result }, callback);
   }
   return handleRequest(e);
 }
@@ -27,6 +28,7 @@ function handleRequest(e) {
   lock.tryLock(30000);
 
   try {
+    const callback = e && e.parameter ? e.parameter.callback : null;
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const sheet = getDataSheet(ss);
     ensureSheetSchema(sheet);
@@ -36,23 +38,23 @@ function handleRequest(e) {
 
       if (params.action === 'initialize') {
         setupSheet(true);
-        return responseJSON({ success: true, message: 'Database initialized' });
+        return responseJSON({ success: true, message: 'Database initialized' }, callback);
       }
 
       const { towerId, aptNumber, status, weeklyGoalDate } = params;
       if (towerId && aptNumber && status) {
         if (String(status).trim().toLowerCase() === 'notarized') {
-          return responseJSON({ success: false, error: 'status_notarized_is_list_controlled' });
+          return responseJSON({ success: false, error: 'status_notarized_is_list_controlled' }, callback);
         }
         updateApartmentStatus(sheet, towerId, aptNumber, status, weeklyGoalDate);
-        return responseJSON({ success: true });
+        return responseJSON({ success: true }, callback);
       }
     }
 
     const data = getAllData(sheet);
-    return responseJSON({ towers: data });
+    return responseJSON({ towers: data }, callback);
   } catch (error) {
-    return responseJSON({ error: String(error && error.stack ? error.stack : error) });
+    return responseJSON({ error: String(error && error.stack ? error.stack : error) }, null);
   } finally {
     lock.releaseLock();
   }
@@ -241,8 +243,13 @@ function updateApartmentStatus(sheet, towerId, aptNumber, status, weeklyGoalDate
   }
 }
 
-function responseJSON(data) {
-  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+function responseJSON(data, callback) {
+  const json = JSON.stringify(data);
+  if (callback) {
+    const safe = String(callback).replace(/[^\w.$]/g, '');
+    return ContentService.createTextOutput(`${safe}(${json});`).setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
 function getDataSheet(ss) {
