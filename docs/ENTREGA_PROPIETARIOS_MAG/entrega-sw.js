@@ -13,7 +13,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-const CACHE_NAME = 'entregas-assets-v2';
+const CACHE_NAME = 'entregas-assets-v3';
 
 const shouldHandle = (request) => {
   if (request.method !== 'GET') return false;

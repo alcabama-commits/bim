@@ -215,7 +215,7 @@ const generateStructure = (): Tower[] => {
   return towers;
 };
 
-const DATA_CACHE_KEY = 'entrega_propi_mag_cache_v1';
+const DATA_CACHE_KEY = 'entrega_propi_mag_cache_v2';
 const TIMELINE_EVENTS_KEY = 'entrega_propi_mag_timeline_events_v1';
 
 type TimelineEvent = {
