@@ -34,8 +34,14 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: 
 
 type RemoteModel = {
   name: string;
-  fragUrl: string;
+  fragUrl?: string;
   jsonUrl?: string;
+  drive?: {
+    scriptUrl: string;
+    folderId?: string;
+    fragId: string;
+    jsonId?: string;
+  };
   group: string;
 };
 
@@ -257,6 +263,7 @@ export default function App() {
     setModelsError(null);
     try {
       const env = ((import.meta as any).env || {}) as Record<string, string | undefined>;
+      const driveScriptUrl = env.VITE_DRIVE_SCRIPT_URL?.trim();
       const driveFolderId = env.VITE_DRIVE_FOLDER_ID?.trim();
       const driveApiKey = env.VITE_DRIVE_API_KEY?.trim();
 
@@ -266,6 +273,40 @@ export default function App() {
           .replace(/[\u0300-\u036f]/g, '')
           .trim()
           .toLowerCase();
+
+      if (driveScriptUrl) {
+        const params = new URLSearchParams();
+        params.set('action', 'list');
+        if (driveFolderId) params.set('folderId', driveFolderId);
+        params.set('t', String(Date.now()));
+
+        const res = await fetch(`${driveScriptUrl}?${params.toString()}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`No se pudo listar modelos en Drive (${res.status})`);
+        const data = (await res.json()) as {
+          models?: Array<{ name: string; fragId: string; jsonId?: string | null }>;
+        };
+        const models = Array.isArray(data.models) ? data.models : [];
+
+        const nextModels: RemoteModel[] = models
+          .filter((m) => m && m.name && m.fragId)
+          .map((m) => {
+            const group = /estructura/i.test(m.name) ? 'ESTRUCTURA' : 'GENERAL';
+            return {
+              name: m.name,
+              group,
+              drive: {
+                scriptUrl: driveScriptUrl,
+                folderId: driveFolderId,
+                fragId: m.fragId,
+                jsonId: m.jsonId ? String(m.jsonId) : undefined
+              }
+            };
+          })
+          .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+
+        setAvailableModels(nextModels);
+        return;
+      }
 
       if (driveFolderId && driveApiKey) {
         type DriveFile = { id: string; name: string; mimeType?: string };
@@ -1029,6 +1070,99 @@ export default function App() {
     return text;
   }, []);
 
+  const fetchDriveScriptFragBytes = useCallback(async (scriptUrl: string, id: string, signal?: AbortSignal) => {
+    const cacheKey = `drive-script:frag:${id}`;
+    const mem = remoteCacheRef.current.fragBytesByUrl.get(cacheKey);
+    if (mem) return mem;
+
+    const disk = await idbGet<{ url: string; ts: number; data: ArrayBuffer }>('frag', cacheKey);
+    if (disk?.data) {
+      const bytes = new Uint8Array(disk.data);
+      putLru(remoteCacheRef.current.fragBytesByUrl, cacheKey, bytes, 2);
+      void idbPut('frag', { url: cacheKey, ts: Date.now(), data: disk.data }, 6);
+      return bytes;
+    }
+
+    const base64ToBytes = (b64: string) => {
+      const binary = atob(b64);
+      const out = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+      return out;
+    };
+
+    const chunkLimit = 2 * 1024 * 1024;
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    let offset = 0;
+    let safety = 0;
+
+    while (true) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      safety++;
+      if (safety > 20000) throw new Error('Demasiados fragmentos descargados. Revisa el archivo.');
+
+      const params = new URLSearchParams();
+      params.set('action', 'chunk');
+      params.set('id', id);
+      params.set('offset', String(offset));
+      params.set('limit', String(chunkLimit));
+      params.set('t', String(Date.now()));
+
+      const res = await fetch(`${scriptUrl}?${params.toString()}`, { cache: 'no-store', signal });
+      if (!res.ok) throw new Error(`No se pudo descargar chunk (${res.status})`);
+      const data = (await res.json()) as { total: number; nextOffset: number; done: boolean; data: string };
+
+      if (!Number.isFinite(data.total) || !Number.isFinite(data.nextOffset) || typeof data.done !== 'boolean') {
+        throw new Error('Respuesta inválida del servidor de Drive (chunk).');
+      }
+
+      total = data.total;
+      const bytes = base64ToBytes(String(data.data || ''));
+      chunks.push(bytes);
+      offset = data.nextOffset;
+      if (data.done) break;
+    }
+
+    const merged = new Uint8Array(total);
+    let pos = 0;
+    for (const c of chunks) {
+      merged.set(c, pos);
+      pos += c.length;
+    }
+
+    putLru(remoteCacheRef.current.fragBytesByUrl, cacheKey, merged, 2);
+    const buffer = merged.buffer.slice(merged.byteOffset, merged.byteOffset + merged.byteLength);
+    void idbPut('frag', { url: cacheKey, ts: Date.now(), data: buffer }, 6);
+    return merged;
+  }, []);
+
+  const fetchDriveScriptJsonText = useCallback(async (scriptUrl: string, id: string, signal?: AbortSignal) => {
+    const cacheKey = `drive-script:json:${id}`;
+    const mem = remoteCacheRef.current.jsonTextByUrl.get(cacheKey);
+    if (mem) return mem;
+
+    const disk = await idbGet<{ url: string; ts: number; data: string }>('json', cacheKey);
+    if (disk?.data) {
+      putLru(remoteCacheRef.current.jsonTextByUrl, cacheKey, disk.data, 2);
+      void idbPut('json', { url: cacheKey, ts: Date.now(), data: disk.data }, 6);
+      return disk.data;
+    }
+
+    const params = new URLSearchParams();
+    params.set('action', 'text');
+    params.set('id', id);
+    params.set('t', String(Date.now()));
+
+    const res = await fetch(`${scriptUrl}?${params.toString()}`, { cache: 'no-store', signal });
+    if (!res.ok) throw new Error(`No se pudo descargar JSON (${res.status})`);
+    const data = (await res.json()) as { text?: string };
+    const text = typeof data.text === 'string' ? data.text : '';
+
+    putLru(remoteCacheRef.current.jsonTextByUrl, cacheKey, text, 2);
+    void idbPut('json', { url: cacheKey, ts: Date.now(), data: text }, 6);
+    return text;
+  }, []);
+
   const loadRemoteModel = useCallback(async (remote: RemoteModel) => {
     if (!componentsRef.current) return;
     if (loadAbortRef.current) {
@@ -1040,6 +1174,22 @@ export default function App() {
     setShowWelcome(false);
     setSelectedRemoteModelName(remote.name);
     try {
+      if (remote.drive) {
+        const fragPromise = fetchDriveScriptFragBytes(remote.drive.scriptUrl, remote.drive.fragId, controller.signal);
+        const jsonPromise = remote.drive.jsonId
+          ? fetchDriveScriptJsonText(remote.drive.scriptUrl, remote.drive.jsonId, controller.signal)
+          : Promise.resolve<string | null>(null);
+        const [fragBytes, jsonText] = await Promise.all([fragPromise, jsonPromise]);
+
+        if (controller.signal.aborted) return;
+        await loadFragBytes(remote.name, fragBytes);
+
+        if (controller.signal.aborted) return;
+        if (jsonText) await applyJsonText(jsonText);
+        return;
+      }
+
+      if (!remote.fragUrl) throw new Error('Modelo remoto sin URL de descarga.');
       const fragPromise = fetchArrayBufferCached(remote.fragUrl, controller.signal);
       const jsonPromise = remote.jsonUrl ? fetchTextCached(remote.jsonUrl, controller.signal) : Promise.resolve<string | null>(null);
       const [fragBytes, jsonText] = await Promise.all([fragPromise, jsonPromise]);
@@ -1058,7 +1208,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [applyJsonText, fetchArrayBufferCached, fetchTextCached, loadFragBytes]);
+  }, [applyJsonText, fetchArrayBufferCached, fetchDriveScriptFragBytes, fetchDriveScriptJsonText, fetchTextCached, loadFragBytes]);
 
   const resetFilters = () => {
     setSelectedClassifications([]);
