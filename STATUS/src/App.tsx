@@ -191,6 +191,7 @@ export default function App() {
   const [isTableMaximized, setIsTableMaximized] = useState(false);
   const [isViewerMaximized, setIsViewerMaximized] = useState(false);
   const [isUpdatingApp, setIsUpdatingApp] = useState(false);
+  const [isRefreshingProgress, setIsRefreshingProgress] = useState(false);
 
   const updateApp = useCallback(async () => {
     if (isUpdatingApp) return;
@@ -432,6 +433,21 @@ export default function App() {
     }, 800);
   }, [flushRemoteStatuses]);
 
+  const refreshProgressFromSheet = useCallback(async () => {
+    const modelName = selectedRemoteModelName;
+    if (!modelName) return;
+    if (isRefreshingProgress) return;
+    setIsRefreshingProgress(true);
+    try {
+      await withTimeout(flushRemoteStatuses(), 15000, 'No se pudo sincronizar cambios pendientes');
+      await withTimeout(fetchRemoteStatuses(modelName), 30000, 'No se pudo cargar avance desde Google Sheets');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo cargar avance desde Google Sheets');
+    } finally {
+      setIsRefreshingProgress(false);
+    }
+  }, [fetchRemoteStatuses, flushRemoteStatuses, isRefreshingProgress, selectedRemoteModelName]);
+
   const timelinePoints = useMemo(() => {
     const set = new Set<string>();
     const arrays = Object.values(elementHistory) as Array<Array<{ status: ConstructionStatus; at: string }>>;
@@ -529,6 +545,168 @@ export default function App() {
 
     return { months, weeks, days };
   }, [timelineDays]);
+
+  const effectiveTimelineDate = useMemo(() => {
+    if (timelineDate) return new Date(timelineDate + 'T00:00:00Z');
+    return new Date();
+  }, [timelineDate]);
+
+  const monthOptions = useMemo(() => {
+    if (timelineDays.length === 0) return [] as Array<{ key: string; label: string; startIndex: number; endIndex: number }>;
+    const options: Array<{ key: string; label: string; startIndex: number; endIndex: number }> = [];
+    const pad2 = (n: number) => String(n).padStart(2, '0');
+    const fmtLabel = (d: Date) => d.toLocaleDateString('es-ES', { month: 'short', year: 'numeric', timeZone: 'UTC' }).toUpperCase();
+    for (let i = 0; i < timelineDays.length; i += 1) {
+      const key = timelineDays[i]!;
+      const d = new Date(key + 'T00:00:00Z');
+      if (isNaN(d.getTime())) continue;
+      const monthKey = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
+      const last = options.length > 0 ? options[options.length - 1] : null;
+      if (last && last.key === monthKey) {
+        last.endIndex = i;
+      } else {
+        options.push({ key: monthKey, label: fmtLabel(d), startIndex: i, endIndex: i });
+      }
+    }
+    return options;
+  }, [timelineDays]);
+
+  const selectedMonthKey = useMemo(() => {
+    const y = effectiveTimelineDate.getUTCFullYear();
+    const m = String(effectiveTimelineDate.getUTCMonth() + 1).padStart(2, '0');
+    return `${y}-${m}`;
+  }, [effectiveTimelineDate]);
+
+  const weekKeyOf = useCallback((d: Date) => {
+    const y = d.getUTCFullYear();
+    const w = getISOWeek(d);
+    return `${y}-W${String(w).padStart(2, '0')}`;
+  }, [getISOWeek]);
+
+  const weekOptions = useMemo(() => {
+    const month = monthOptions.find((m) => m.key === selectedMonthKey) ?? monthOptions[monthOptions.length - 1];
+    if (!month) return [] as Array<{ key: string; label: string; startIndex: number; endIndex: number }>;
+    const options: Array<{ key: string; label: string; startIndex: number; endIndex: number }> = [];
+    for (let i = month.startIndex; i <= month.endIndex; i += 1) {
+      const key = timelineDays[i]!;
+      const d = new Date(key + 'T00:00:00Z');
+      if (isNaN(d.getTime())) continue;
+      const wk = weekKeyOf(d);
+      const last = options.length > 0 ? options[options.length - 1] : null;
+      if (last && last.key === wk) {
+        last.endIndex = i;
+      } else {
+        options.push({ key: wk, label: `W${String(getISOWeek(d)).padStart(2, '0')}`, startIndex: i, endIndex: i });
+      }
+    }
+    return options;
+  }, [getISOWeek, monthOptions, selectedMonthKey, timelineDays, weekKeyOf]);
+
+  const selectedWeekKey = useMemo(() => weekKeyOf(effectiveTimelineDate), [effectiveTimelineDate, weekKeyOf]);
+
+  const weekDayIndices = useMemo(() => {
+    if (timelineDays.length === 0) return [] as number[];
+    const selectedWeek = weekOptions.find((w) => w.key === selectedWeekKey) ?? weekOptions[weekOptions.length - 1];
+    if (!selectedWeek) return [] as number[];
+    const indices: number[] = [];
+    for (let i = selectedWeek.startIndex; i < timelineDays.length && indices.length < 7; i += 1) {
+      const d = new Date(timelineDays[i]! + 'T00:00:00Z');
+      if (isNaN(d.getTime())) continue;
+      if (weekKeyOf(d) !== selectedWeek.key) break;
+      indices.push(i);
+    }
+    return indices;
+  }, [selectedWeekKey, timelineDays, weekKeyOf, weekOptions]);
+
+  const weekDayKeys = useMemo(() => weekDayIndices.map((i) => timelineDays[i]!).filter(Boolean), [timelineDays, weekDayIndices]);
+
+  const elementLevelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const el of baseElements) {
+      const level = getProp(el, 'NIVEL INTEGRADO');
+      if (level) map.set(el.id, String(level));
+    }
+    return map;
+  }, [baseElements, getProp]);
+
+  const sortedLevels = useMemo(() => {
+    return [...levels].sort((a, b) => String(a).localeCompare(String(b), 'es'));
+  }, [levels]);
+
+  const weekLevelCells = useMemo(() => {
+    const days = weekDayKeys;
+    if (days.length === 0 || sortedLevels.length === 0) {
+      return { days, levels: sortedLevels, cellStatus: new Map<string, ConstructionStatus>(), cellTitle: new Map<string, string>() };
+    }
+
+    const dayTargets = days.map((k) => Date.parse(k + 'T23:59:59.999Z'));
+    const levelIndex = new Map<string, number>();
+    sortedLevels.forEach((l, idx) => levelIndex.set(String(l), idx));
+
+    const counts: Array<Array<Record<ConstructionStatus, number>>> = sortedLevels.map(() =>
+      days.map(() => ({
+        'NINGUNO': 0,
+        'EN PROGRESO': 0,
+        'PARA INSPECCION': 0,
+        'APROBADO': 0,
+        'CERRADO': 0,
+        'RECHAZADO': 0
+      })),
+    );
+
+    const statusAt = (id: string, target: number): ConstructionStatus => {
+      const hist = elementHistory[id];
+      if (!hist || hist.length === 0) return elementStatuses[id] ?? 'NINGUNO';
+      let chosen: ConstructionStatus | null = null;
+      for (const entry of hist) {
+        const t = new Date(entry.at).getTime();
+        if (!isNaN(t) && t <= target) chosen = entry.status;
+      }
+      return chosen ?? 'NINGUNO';
+    };
+
+    for (const el of baseElements) {
+      const lvl = elementLevelById.get(el.id);
+      if (!lvl) continue;
+      const li = levelIndex.get(lvl);
+      if (li === undefined) continue;
+      for (let di = 0; di < dayTargets.length; di += 1) {
+        const st = statusAt(el.id, dayTargets[di]!);
+        counts[li]![di]![st] += 1;
+      }
+    }
+
+    const pickCell = (c: Record<ConstructionStatus, number>): ConstructionStatus => {
+      if ((c['RECHAZADO'] ?? 0) > 0) return 'RECHAZADO';
+      let best: ConstructionStatus = 'NINGUNO';
+      let bestN = -1;
+      for (const k of ['CERRADO', 'APROBADO', 'PARA INSPECCION', 'EN PROGRESO', 'NINGUNO'] as ConstructionStatus[]) {
+        const n = c[k] ?? 0;
+        if (n > bestN) {
+          best = k;
+          bestN = n;
+        }
+      }
+      return best;
+    };
+
+    const cellStatus = new Map<string, ConstructionStatus>();
+    const cellTitle = new Map<string, string>();
+    for (let li = 0; li < sortedLevels.length; li += 1) {
+      for (let di = 0; di < days.length; di += 1) {
+        const c = counts[li]![di]!;
+        const st = pickCell(c);
+        const levelLabel = String(sortedLevels[li]!);
+        const dayLabel = days[di]!;
+        const title = `${levelLabel} • ${dayLabel}\nNINGUNO: ${c['NINGUNO']}\nEN PROGRESO: ${c['EN PROGRESO']}\nPARA INSPECCION: ${c['PARA INSPECCION']}\nAPROBADO: ${c['APROBADO']}\nCERRADO: ${c['CERRADO']}\nRECHAZADO: ${c['RECHAZADO']}`;
+        const key = `${levelLabel}@@${dayLabel}`;
+        cellStatus.set(key, st);
+        cellTitle.set(key, title);
+      }
+    }
+
+    return { days, levels: sortedLevels, cellStatus, cellTitle };
+  }, [baseElements, elementHistory, elementLevelById, elementStatuses, sortedLevels, weekDayKeys]);
 
   const viewerStatuses = useMemo(() => {
     if (!timelineDate) return elementStatuses;
@@ -1699,82 +1877,120 @@ export default function App() {
           </div>
 
           {timelineBarOpen && (
-            <div className="mt-3">
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Mes</div>
-                  <div className="text-[11px] font-black text-slate-800 truncate">
-                    {(timelineDate ? new Date(timelineDate + 'T00:00:00Z') : new Date())
-                      .toLocaleDateString('es-ES', { month: 'short', year: 'numeric', timeZone: 'UTC' })
-                      .toUpperCase()}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Semana</div>
-                  <div className="text-[11px] font-black text-slate-800 truncate">
-                    {(() => {
-                      const d = timelineDate ? new Date(timelineDate + 'T00:00:00Z') : new Date();
-                      return `W${String(getISOWeek(d)).padStart(2, '0')}`;
-                    })()}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Día</div>
-                  <div className="text-[11px] font-black text-slate-800 truncate">
-                    {(timelineDate ? new Date(timelineDate + 'T00:00:00Z') : new Date())
-                      .toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' })
-                      .toUpperCase()}
-                  </div>
+            <div className="mt-3 space-y-3">
+              <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Mes</div>
+                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                  {monthOptions.map((m) => {
+                    const active = m.key === selectedMonthKey;
+                    return (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => setTimelineIndexDraft(m.startIndex)}
+                        className={`shrink-0 px-3 py-1.5 rounded-md border text-[10px] font-bold uppercase tracking-widest ${
+                          active ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                        title={m.label}
+                      >
+                        {m.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              <div className="relative mt-3">
-                <div className="absolute -top-5 left-0 right-0 h-4 pointer-events-none">
-                  {timelineMarkers.months.map((m) => {
-                    const pct = timelineDays.length <= 1 ? 0 : (m.index / (timelineDays.length - 1)) * 100;
+              <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Semana</div>
+                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                  {weekOptions.map((w) => {
+                    const active = w.key === selectedWeekKey;
                     return (
-                      <div key={`m-${m.index}`} className="absolute top-0 text-[10px] font-bold text-slate-400 whitespace-nowrap" style={{ left: `${pct}%`, transform: 'translateX(-10%)' }}>
-                        {m.label}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="absolute -bottom-5 left-0 right-0 h-4 pointer-events-none">
-                  {timelineMarkers.weeks.map((w) => {
-                    const pct = timelineDays.length <= 1 ? 0 : (w.index / (timelineDays.length - 1)) * 100;
-                    return (
-                      <div key={`w-${w.index}`} className="absolute top-0 text-[10px] font-bold text-slate-400 whitespace-nowrap" style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}>
+                      <button
+                        key={w.key}
+                        type="button"
+                        onClick={() => setTimelineIndexDraft(w.startIndex)}
+                        className={`shrink-0 px-3 py-1.5 rounded-md border text-[10px] font-bold uppercase tracking-widest ${
+                          active ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                        }`}
+                        title={w.key}
+                      >
                         {w.label}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
+              </div>
 
-                <input
-                  type="range"
-                  min={0}
-                  max={Math.max(0, timelineDays.length - 1)}
-                  value={timelineIndexDraft === null ? Math.max(0, timelineDays.length - 1) : timelineIndexDraft}
-                  onChange={(e) => setTimelineIndexDraft(Number(e.target.value))}
-                  disabled={timelineDays.length <= 1}
-                  className="w-full accent-[#024959]"
-                />
+              <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Día a día por niveles</div>
+                <div className="mt-2 overflow-auto max-h-56 rounded-lg border border-slate-100">
+                  {(() => {
+                    const statusSwatchClass = (st: ConstructionStatus) => {
+                      switch (st) {
+                        case 'NINGUNO': return 'bg-slate-200';
+                        case 'EN PROGRESO': return 'bg-amber-300';
+                        case 'PARA INSPECCION': return 'bg-blue-300';
+                        case 'APROBADO': return 'bg-emerald-300';
+                        case 'CERRADO': return 'bg-green-400';
+                        case 'RECHAZADO': return 'bg-red-400';
+                      }
+                    };
 
-                <div className="mt-1 flex justify-between text-[10px] font-bold text-slate-400 select-none">
-                  <div className="truncate">{timelineDays[0] ? new Date(timelineDays[0] + 'T00:00:00Z').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' }) : ''}</div>
-                  <div className="truncate">{timelineDays[timelineDays.length - 1] ? new Date(timelineDays[timelineDays.length - 1] + 'T00:00:00Z').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' }) : ''}</div>
-                </div>
+                    const activeDayKey = timelineDate ?? weekLevelCells.days[weekLevelCells.days.length - 1] ?? null;
 
-                <div className="relative h-3 mt-1">
-                  {timelineMarkers.days.map((d) => {
-                    const pct = timelineDays.length <= 1 ? 0 : (d.index / (timelineDays.length - 1)) * 100;
                     return (
-                      <div key={`d-${d.index}`} className="absolute top-0 text-[9px] font-bold text-slate-400" style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}>
-                        {d.label}
-                      </div>
+                      <table className="min-w-full border-collapse text-left">
+                        <thead className="sticky top-0 bg-white z-10">
+                          <tr className="border-b border-slate-100">
+                            <th className="sticky left-0 bg-white z-20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 border-r border-slate-100">
+                              Nivel
+                            </th>
+                            {weekDayIndices.map((idx) => {
+                              const key = timelineDays[idx]!;
+                              const d = new Date(key + 'T00:00:00Z');
+                              const label = isNaN(d.getTime()) ? key : d.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', timeZone: 'UTC' }).toUpperCase();
+                              const active = activeDayKey === key;
+                              return (
+                                <th key={key} className="px-3 py-2 text-[10px] font-bold text-slate-600 whitespace-nowrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => setTimelineIndexDraft(idx)}
+                                    className={`px-2 py-1 rounded-md border ${active ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+                                    title={key}
+                                  >
+                                    {label}
+                                  </button>
+                                </th>
+                              );
+                            })}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {weekLevelCells.levels.map((lvl) => (
+                            <tr key={String(lvl)}>
+                              <td className="sticky left-0 bg-white z-10 px-3 py-2 text-[10px] font-bold text-slate-700 whitespace-nowrap border-r border-slate-100">
+                                {String(lvl)}
+                              </td>
+                              {weekLevelCells.days.map((dayKey) => {
+                                const k = `${String(lvl)}@@${dayKey}`;
+                                const st = weekLevelCells.cellStatus.get(k) ?? 'NINGUNO';
+                                const title = weekLevelCells.cellTitle.get(k) ?? `${String(lvl)} • ${dayKey}`;
+                                return (
+                                  <td key={k} className="px-3 py-2">
+                                    <div
+                                      className={`w-4 h-4 rounded ${statusSwatchClass(st)} border border-slate-200`}
+                                      title={title}
+                                    />
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     );
-                  })}
+                  })()}
                 </div>
               </div>
             </div>
@@ -1945,12 +2161,12 @@ export default function App() {
 
                 <div className="absolute top-4 right-4 flex flex-col gap-2">
                   <button
-                    onClick={updateApp}
+                    onClick={refreshProgressFromSheet}
                     className="p-2 rounded-lg shadow border transition-all flex items-center gap-2 bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white disabled:opacity-60"
-                    title="Actualizar app y datos"
-                    disabled={isUpdatingApp}
+                    title="Actualizar avance desde Google Sheets"
+                    disabled={isRefreshingProgress}
                   >
-                    <RefreshCw className={`w-4 h-4 ${isUpdatingApp ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={`w-4 h-4 ${isRefreshingProgress ? 'animate-spin' : ''}`} />
                     <span className="text-[10px] font-bold uppercase tracking-widest">Actualizar</span>
                   </button>
                   <button
