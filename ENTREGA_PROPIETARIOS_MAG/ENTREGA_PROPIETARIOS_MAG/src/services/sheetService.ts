@@ -56,19 +56,14 @@ export const fetchSheetData = async (): Promise<SheetData[] | null> => {
     : `${API_CONFIG.scriptUrl}?_ts=${Date.now()}`;
 
   try {
-    const response = await fetch(cacheBustedUrl, { cache: "no-store" });
-    if (!response.ok) throw new Error('Network response was not ok');
-    const data = await response.json();
+    const data = await jsonpRequest<{ towers?: SheetData[]; error?: string }>(cacheBustedUrl);
+    if (data && typeof data === 'object' && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
+      throw new Error(String((data as any).error));
+    }
     return data.towers || [];
   } catch (error) {
-    try {
-      const data = await jsonpRequest<{ towers?: SheetData[] }>(cacheBustedUrl);
-      return data.towers || [];
-    } catch (jsonpError) {
-      console.error('Error fetching data from Google Sheets:', error);
-      console.error('Error fetching data from Google Sheets (JSONP fallback):', jsonpError);
-      return null;
-    }
+    console.error('Error fetching data from Google Sheets (JSONP):', error);
+    return null;
   }
 };
 
@@ -80,17 +75,15 @@ export const triggerSync = async (): Promise<boolean> => {
     : `${API_CONFIG.scriptUrl}?action=sync&_ts=${Date.now()}`;
 
   try {
-    const response = await fetch(url, { cache: 'no-store' });
-    if (!response.ok) return false;
-    await response.json().catch(() => null);
-    return true;
-  } catch {
-    try {
-      await jsonpRequest<unknown>(url);
-      return true;
-    } catch {
+    const data = await jsonpRequest<{ ok?: boolean; error?: string }>(url);
+    if (data && typeof data === 'object' && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
       return false;
     }
+    if (data && typeof data === 'object' && typeof (data as any).ok === 'boolean') return Boolean((data as any).ok);
+    return true;
+  } catch (error) {
+    console.error('Error triggering sync (JSONP):', error);
+    return false;
   }
 };
 
@@ -105,10 +98,9 @@ export const updateSheetStatus = async (towerId: number, aptNumber: string, stat
   }
 
   try {
-    // We use no-cors mode as a fallback if CORS is strict, but ideally we want 'cors'
-    // GAS web apps deployed as "Anyone" support CORS.
     const response = await fetch(API_CONFIG.scriptUrl, {
       method: 'POST',
+      mode: 'no-cors',
       headers: {
         'Content-Type': 'text/plain;charset=utf-8', // GAS prefers text/plain to avoid preflight
       },
@@ -121,12 +113,7 @@ export const updateSheetStatus = async (towerId: number, aptNumber: string, stat
       })
     });
 
-    if (!response.ok) {
-       // If opaque response in no-cors, we won't see this.
-       // But assuming standard setup.
-       console.warn('Update request might have failed', response.status);
-    }
-    
+    void response;
     return true;
   } catch (error) {
     console.error('Error updating status in Google Sheets:', error);
