@@ -546,168 +546,6 @@ export default function App() {
     return { months, weeks, days };
   }, [timelineDays]);
 
-  const effectiveTimelineDate = useMemo(() => {
-    if (timelineDate) return new Date(timelineDate + 'T00:00:00Z');
-    return new Date();
-  }, [timelineDate]);
-
-  const monthOptions = useMemo(() => {
-    if (timelineDays.length === 0) return [] as Array<{ key: string; label: string; startIndex: number; endIndex: number }>;
-    const options: Array<{ key: string; label: string; startIndex: number; endIndex: number }> = [];
-    const pad2 = (n: number) => String(n).padStart(2, '0');
-    const fmtLabel = (d: Date) => d.toLocaleDateString('es-ES', { month: 'short', year: 'numeric', timeZone: 'UTC' }).toUpperCase();
-    for (let i = 0; i < timelineDays.length; i += 1) {
-      const key = timelineDays[i]!;
-      const d = new Date(key + 'T00:00:00Z');
-      if (isNaN(d.getTime())) continue;
-      const monthKey = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
-      const last = options.length > 0 ? options[options.length - 1] : null;
-      if (last && last.key === monthKey) {
-        last.endIndex = i;
-      } else {
-        options.push({ key: monthKey, label: fmtLabel(d), startIndex: i, endIndex: i });
-      }
-    }
-    return options;
-  }, [timelineDays]);
-
-  const selectedMonthKey = useMemo(() => {
-    const y = effectiveTimelineDate.getUTCFullYear();
-    const m = String(effectiveTimelineDate.getUTCMonth() + 1).padStart(2, '0');
-    return `${y}-${m}`;
-  }, [effectiveTimelineDate]);
-
-  const weekKeyOf = useCallback((d: Date) => {
-    const y = d.getUTCFullYear();
-    const w = getISOWeek(d);
-    return `${y}-W${String(w).padStart(2, '0')}`;
-  }, [getISOWeek]);
-
-  const weekOptions = useMemo(() => {
-    const month = monthOptions.find((m) => m.key === selectedMonthKey) ?? monthOptions[monthOptions.length - 1];
-    if (!month) return [] as Array<{ key: string; label: string; startIndex: number; endIndex: number }>;
-    const options: Array<{ key: string; label: string; startIndex: number; endIndex: number }> = [];
-    for (let i = month.startIndex; i <= month.endIndex; i += 1) {
-      const key = timelineDays[i]!;
-      const d = new Date(key + 'T00:00:00Z');
-      if (isNaN(d.getTime())) continue;
-      const wk = weekKeyOf(d);
-      const last = options.length > 0 ? options[options.length - 1] : null;
-      if (last && last.key === wk) {
-        last.endIndex = i;
-      } else {
-        options.push({ key: wk, label: `W${String(getISOWeek(d)).padStart(2, '0')}`, startIndex: i, endIndex: i });
-      }
-    }
-    return options;
-  }, [getISOWeek, monthOptions, selectedMonthKey, timelineDays, weekKeyOf]);
-
-  const selectedWeekKey = useMemo(() => weekKeyOf(effectiveTimelineDate), [effectiveTimelineDate, weekKeyOf]);
-
-  const weekDayIndices = useMemo(() => {
-    if (timelineDays.length === 0) return [] as number[];
-    const selectedWeek = weekOptions.find((w) => w.key === selectedWeekKey) ?? weekOptions[weekOptions.length - 1];
-    if (!selectedWeek) return [] as number[];
-    const indices: number[] = [];
-    for (let i = selectedWeek.startIndex; i < timelineDays.length && indices.length < 7; i += 1) {
-      const d = new Date(timelineDays[i]! + 'T00:00:00Z');
-      if (isNaN(d.getTime())) continue;
-      if (weekKeyOf(d) !== selectedWeek.key) break;
-      indices.push(i);
-    }
-    return indices;
-  }, [selectedWeekKey, timelineDays, weekKeyOf, weekOptions]);
-
-  const weekDayKeys = useMemo(() => weekDayIndices.map((i) => timelineDays[i]!).filter(Boolean), [timelineDays, weekDayIndices]);
-
-  const elementLevelById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const el of baseElements) {
-      const level = getProp(el, 'NIVEL INTEGRADO');
-      if (level) map.set(el.id, String(level));
-    }
-    return map;
-  }, [baseElements, getProp]);
-
-  const sortedLevels = useMemo(() => {
-    return [...levels].sort((a, b) => String(a).localeCompare(String(b), 'es'));
-  }, [levels]);
-
-  const weekLevelCells = useMemo(() => {
-    const days = weekDayKeys;
-    if (days.length === 0 || sortedLevels.length === 0) {
-      return { days, levels: sortedLevels, cellStatus: new Map<string, ConstructionStatus>(), cellTitle: new Map<string, string>() };
-    }
-
-    const dayTargets = days.map((k) => Date.parse(k + 'T23:59:59.999Z'));
-    const levelIndex = new Map<string, number>();
-    sortedLevels.forEach((l, idx) => levelIndex.set(String(l), idx));
-
-    const counts: Array<Array<Record<ConstructionStatus, number>>> = sortedLevels.map(() =>
-      days.map(() => ({
-        'NINGUNO': 0,
-        'EN PROGRESO': 0,
-        'PARA INSPECCION': 0,
-        'APROBADO': 0,
-        'CERRADO': 0,
-        'RECHAZADO': 0
-      })),
-    );
-
-    const statusAt = (id: string, target: number): ConstructionStatus => {
-      const hist = elementHistory[id];
-      if (!hist || hist.length === 0) return elementStatuses[id] ?? 'NINGUNO';
-      let chosen: ConstructionStatus | null = null;
-      for (const entry of hist) {
-        const t = new Date(entry.at).getTime();
-        if (!isNaN(t) && t <= target) chosen = entry.status;
-      }
-      return chosen ?? 'NINGUNO';
-    };
-
-    for (const el of baseElements) {
-      const lvl = elementLevelById.get(el.id);
-      if (!lvl) continue;
-      const li = levelIndex.get(lvl);
-      if (li === undefined) continue;
-      for (let di = 0; di < dayTargets.length; di += 1) {
-        const st = statusAt(el.id, dayTargets[di]!);
-        counts[li]![di]![st] += 1;
-      }
-    }
-
-    const pickCell = (c: Record<ConstructionStatus, number>): ConstructionStatus => {
-      if ((c['RECHAZADO'] ?? 0) > 0) return 'RECHAZADO';
-      let best: ConstructionStatus = 'NINGUNO';
-      let bestN = -1;
-      for (const k of ['CERRADO', 'APROBADO', 'PARA INSPECCION', 'EN PROGRESO', 'NINGUNO'] as ConstructionStatus[]) {
-        const n = c[k] ?? 0;
-        if (n > bestN) {
-          best = k;
-          bestN = n;
-        }
-      }
-      return best;
-    };
-
-    const cellStatus = new Map<string, ConstructionStatus>();
-    const cellTitle = new Map<string, string>();
-    for (let li = 0; li < sortedLevels.length; li += 1) {
-      for (let di = 0; di < days.length; di += 1) {
-        const c = counts[li]![di]!;
-        const st = pickCell(c);
-        const levelLabel = String(sortedLevels[li]!);
-        const dayLabel = days[di]!;
-        const title = `${levelLabel} • ${dayLabel}\nNINGUNO: ${c['NINGUNO']}\nEN PROGRESO: ${c['EN PROGRESO']}\nPARA INSPECCION: ${c['PARA INSPECCION']}\nAPROBADO: ${c['APROBADO']}\nCERRADO: ${c['CERRADO']}\nRECHAZADO: ${c['RECHAZADO']}`;
-        const key = `${levelLabel}@@${dayLabel}`;
-        cellStatus.set(key, st);
-        cellTitle.set(key, title);
-      }
-    }
-
-    return { days, levels: sortedLevels, cellStatus, cellTitle };
-  }, [baseElements, elementHistory, elementLevelById, elementStatuses, sortedLevels, weekDayKeys]);
-
   const viewerStatuses = useMemo(() => {
     if (!timelineDate) return elementStatuses;
     const target = new Date(timelineDate + 'T23:59:59.999Z').getTime();
@@ -1059,6 +897,168 @@ export default function App() {
       return a.localeCompare(b, 'es');
     });
   }, [baseElements, getFirstProp]);
+
+  const effectiveTimelineDate = useMemo(() => {
+    if (timelineDate) return new Date(timelineDate + 'T00:00:00Z');
+    return new Date();
+  }, [timelineDate]);
+
+  const monthOptions = useMemo(() => {
+    if (timelineDays.length === 0) return [] as Array<{ key: string; label: string; startIndex: number; endIndex: number }>;
+    const options: Array<{ key: string; label: string; startIndex: number; endIndex: number }> = [];
+    const pad2 = (n: number) => String(n).padStart(2, '0');
+    const fmtLabel = (d: Date) => d.toLocaleDateString('es-ES', { month: 'short', year: 'numeric', timeZone: 'UTC' }).toUpperCase();
+    for (let i = 0; i < timelineDays.length; i += 1) {
+      const key = timelineDays[i]!;
+      const d = new Date(key + 'T00:00:00Z');
+      if (isNaN(d.getTime())) continue;
+      const monthKey = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
+      const last = options.length > 0 ? options[options.length - 1] : null;
+      if (last && last.key === monthKey) {
+        last.endIndex = i;
+      } else {
+        options.push({ key: monthKey, label: fmtLabel(d), startIndex: i, endIndex: i });
+      }
+    }
+    return options;
+  }, [timelineDays]);
+
+  const selectedMonthKey = useMemo(() => {
+    const y = effectiveTimelineDate.getUTCFullYear();
+    const m = String(effectiveTimelineDate.getUTCMonth() + 1).padStart(2, '0');
+    return `${y}-${m}`;
+  }, [effectiveTimelineDate]);
+
+  const weekKeyOf = useCallback((d: Date) => {
+    const y = d.getUTCFullYear();
+    const w = getISOWeek(d);
+    return `${y}-W${String(w).padStart(2, '0')}`;
+  }, [getISOWeek]);
+
+  const weekOptions = useMemo(() => {
+    const month = monthOptions.find((m) => m.key === selectedMonthKey) ?? monthOptions[monthOptions.length - 1];
+    if (!month) return [] as Array<{ key: string; label: string; startIndex: number; endIndex: number }>;
+    const options: Array<{ key: string; label: string; startIndex: number; endIndex: number }> = [];
+    for (let i = month.startIndex; i <= month.endIndex; i += 1) {
+      const key = timelineDays[i]!;
+      const d = new Date(key + 'T00:00:00Z');
+      if (isNaN(d.getTime())) continue;
+      const wk = weekKeyOf(d);
+      const last = options.length > 0 ? options[options.length - 1] : null;
+      if (last && last.key === wk) {
+        last.endIndex = i;
+      } else {
+        options.push({ key: wk, label: `W${String(getISOWeek(d)).padStart(2, '0')}`, startIndex: i, endIndex: i });
+      }
+    }
+    return options;
+  }, [getISOWeek, monthOptions, selectedMonthKey, timelineDays, weekKeyOf]);
+
+  const selectedWeekKey = useMemo(() => weekKeyOf(effectiveTimelineDate), [effectiveTimelineDate, weekKeyOf]);
+
+  const weekDayIndices = useMemo(() => {
+    if (timelineDays.length === 0) return [] as number[];
+    const selectedWeek = weekOptions.find((w) => w.key === selectedWeekKey) ?? weekOptions[weekOptions.length - 1];
+    if (!selectedWeek) return [] as number[];
+    const indices: number[] = [];
+    for (let i = selectedWeek.startIndex; i < timelineDays.length && indices.length < 7; i += 1) {
+      const d = new Date(timelineDays[i]! + 'T00:00:00Z');
+      if (isNaN(d.getTime())) continue;
+      if (weekKeyOf(d) !== selectedWeek.key) break;
+      indices.push(i);
+    }
+    return indices;
+  }, [selectedWeekKey, timelineDays, weekKeyOf, weekOptions]);
+
+  const weekDayKeys = useMemo(() => weekDayIndices.map((i) => timelineDays[i]!).filter(Boolean), [timelineDays, weekDayIndices]);
+
+  const elementLevelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const el of baseElements) {
+      const level = getProp(el, 'NIVEL INTEGRADO');
+      if (level) map.set(el.id, String(level));
+    }
+    return map;
+  }, [baseElements, getProp]);
+
+  const sortedLevels = useMemo(() => {
+    return [...levels].sort((a, b) => String(a).localeCompare(String(b), 'es'));
+  }, [levels]);
+
+  const weekLevelCells = useMemo(() => {
+    const days = weekDayKeys;
+    if (days.length === 0 || sortedLevels.length === 0) {
+      return { days, levels: sortedLevels, cellStatus: new Map<string, ConstructionStatus>(), cellTitle: new Map<string, string>() };
+    }
+
+    const dayTargets = days.map((k) => Date.parse(k + 'T23:59:59.999Z'));
+    const levelIndex = new Map<string, number>();
+    sortedLevels.forEach((l, idx) => levelIndex.set(String(l), idx));
+
+    const counts: Array<Array<Record<ConstructionStatus, number>>> = sortedLevels.map(() =>
+      days.map(() => ({
+        'NINGUNO': 0,
+        'EN PROGRESO': 0,
+        'PARA INSPECCION': 0,
+        'APROBADO': 0,
+        'CERRADO': 0,
+        'RECHAZADO': 0
+      })),
+    );
+
+    const statusAt = (id: string, target: number): ConstructionStatus => {
+      const hist = elementHistory[id];
+      if (!hist || hist.length === 0) return elementStatuses[id] ?? 'NINGUNO';
+      let chosen: ConstructionStatus | null = null;
+      for (const entry of hist) {
+        const t = new Date(entry.at).getTime();
+        if (!isNaN(t) && t <= target) chosen = entry.status;
+      }
+      return chosen ?? 'NINGUNO';
+    };
+
+    for (const el of baseElements) {
+      const lvl = elementLevelById.get(el.id);
+      if (!lvl) continue;
+      const li = levelIndex.get(lvl);
+      if (li === undefined) continue;
+      for (let di = 0; di < dayTargets.length; di += 1) {
+        const st = statusAt(el.id, dayTargets[di]!);
+        counts[li]![di]![st] += 1;
+      }
+    }
+
+    const pickCell = (c: Record<ConstructionStatus, number>): ConstructionStatus => {
+      if ((c['RECHAZADO'] ?? 0) > 0) return 'RECHAZADO';
+      let best: ConstructionStatus = 'NINGUNO';
+      let bestN = -1;
+      for (const k of ['CERRADO', 'APROBADO', 'PARA INSPECCION', 'EN PROGRESO', 'NINGUNO'] as ConstructionStatus[]) {
+        const n = c[k] ?? 0;
+        if (n > bestN) {
+          best = k;
+          bestN = n;
+        }
+      }
+      return best;
+    };
+
+    const cellStatus = new Map<string, ConstructionStatus>();
+    const cellTitle = new Map<string, string>();
+    for (let li = 0; li < sortedLevels.length; li += 1) {
+      for (let di = 0; di < days.length; di += 1) {
+        const c = counts[li]![di]!;
+        const st = pickCell(c);
+        const levelLabel = String(sortedLevels[li]!);
+        const dayLabel = days[di]!;
+        const title = `${levelLabel} • ${dayLabel}\nNINGUNO: ${c['NINGUNO']}\nEN PROGRESO: ${c['EN PROGRESO']}\nPARA INSPECCION: ${c['PARA INSPECCION']}\nAPROBADO: ${c['APROBADO']}\nCERRADO: ${c['CERRADO']}\nRECHAZADO: ${c['RECHAZADO']}`;
+        const key = `${levelLabel}@@${dayLabel}`;
+        cellStatus.set(key, st);
+        cellTitle.set(key, title);
+      }
+    }
+
+    return { days, levels: sortedLevels, cellStatus, cellTitle };
+  }, [baseElements, elementHistory, elementLevelById, elementStatuses, sortedLevels, weekDayKeys]);
 
   const toggleClassification = (name: string) => {
     setSelectedClassifications(prev => 
