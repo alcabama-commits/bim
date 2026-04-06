@@ -128,6 +128,7 @@ const GITHUB_REPO = {
 
 const DRIVE_MODELS_FOLDER_ID = '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8';
 const DRIVE_SCRIPT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwuZ-H6Stii7Lun0qFPd-aYttnVzh7L7OtIXplIi13kx-2wKSGQP9IVGHud59c72IL4UA/exec';
+const STATUS_SHEET_ID = '1GSaNTuafarE8l7VFlJNLJcu0GIXaNUS-VDwJ9UB9038';
 
 const rawUrlFor = (path: string) =>
   `https://raw.githubusercontent.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/${GITHUB_REPO.branch}/${path.split('/').map(encodeURIComponent).join('/')}`;
@@ -322,6 +323,108 @@ export default function App() {
     } catch {
     }
   }, [elementHistory, historyStorageKey]);
+
+  const getModelKey = useCallback((modelName: string | null) => {
+    const base = (modelName ?? '').replace(/\.frag$/i, '').trim();
+    return base || 'local';
+  }, []);
+
+  const normalizeConstructionStatus = useCallback((v: unknown): ConstructionStatus | null => {
+    const allowed: ConstructionStatus[] = ['NINGUNO', 'EN PROGRESO', 'PARA INSPECCION', 'APROBADO', 'CERRADO', 'RECHAZADO'];
+    const s = String(v ?? '').trim().toUpperCase();
+    if (s === 'PARA INSPECCIÓN') return 'PARA INSPECCION';
+    if (allowed.includes(s as ConstructionStatus)) return s as ConstructionStatus;
+    return null;
+  }, []);
+
+  const fetchRemoteStatuses = useCallback(async (modelName: string, signal?: AbortSignal) => {
+    if (!DRIVE_SCRIPT_WEBAPP_URL) return;
+    const url = new URL(DRIVE_SCRIPT_WEBAPP_URL);
+    url.searchParams.set('action', 'status_get');
+    url.searchParams.set('sheetId', STATUS_SHEET_ID);
+    url.searchParams.set('model', getModelKey(modelName));
+    const data = await jsonpRequest<{
+      ok?: boolean;
+      error?: string;
+      statuses?: Record<string, unknown>;
+      history?: Record<string, Array<{ status: unknown; at: unknown }>>;
+    }>(url, { signal, timeoutMs: 30000 });
+
+    if (!data || typeof data !== 'object') return;
+    if (typeof (data as any).error === 'string' && String((data as any).error).trim()) {
+      throw new Error(String((data as any).error));
+    }
+
+    const rawStatuses = (data as any).statuses;
+    if (rawStatuses && typeof rawStatuses === 'object') {
+      const nextStatuses: Record<string, ConstructionStatus> = {};
+      for (const [id, stRaw] of Object.entries(rawStatuses as Record<string, unknown>)) {
+        const st = normalizeConstructionStatus(stRaw);
+        if (st) nextStatuses[id] = st;
+      }
+      setElementStatuses(nextStatuses);
+    }
+
+    const rawHistory = (data as any).history;
+    if (rawHistory && typeof rawHistory === 'object') {
+      const nextHistory: Record<string, Array<{ status: ConstructionStatus; at: string }>> = {};
+      for (const [id, entries] of Object.entries(rawHistory as Record<string, unknown>)) {
+        if (!Array.isArray(entries)) continue;
+        const arr: Array<{ status: ConstructionStatus; at: string }> = [];
+        for (const e of entries as Array<any>) {
+          const st = normalizeConstructionStatus(e?.status);
+          const at = String(e?.at ?? '').trim();
+          if (!st || !at) continue;
+          arr.push({ status: st, at });
+        }
+        if (arr.length > 0) nextHistory[id] = arr;
+      }
+      setElementHistory(nextHistory);
+    }
+  }, [getModelKey, normalizeConstructionStatus]);
+
+  const pendingRemoteStatusRef = useRef<Record<string, ConstructionStatus>>({});
+  const remoteFlushTimerRef = useRef<number | null>(null);
+
+  const flushRemoteStatuses = useCallback(async () => {
+    if (!DRIVE_SCRIPT_WEBAPP_URL) return;
+    const modelName = selectedRemoteModelName;
+    if (!modelName) return;
+    const modelKey = getModelKey(modelName);
+
+    const pending = pendingRemoteStatusRef.current;
+    const entries = Object.entries(pending);
+    if (entries.length === 0) return;
+    pendingRemoteStatusRef.current = {};
+
+    try {
+      const payload = {
+        action: 'status_set',
+        sheetId: STATUS_SHEET_ID,
+        model: modelKey,
+        updates: entries.map(([id, status]) => ({ id, status, at: new Date().toISOString() }))
+      };
+
+      await fetch(DRIVE_SCRIPT_WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+    } catch {
+      for (const [id, status] of entries) {
+        pendingRemoteStatusRef.current[id] = status;
+      }
+    }
+  }, [getModelKey, selectedRemoteModelName]);
+
+  const scheduleRemoteSave = useCallback((id: string, status: ConstructionStatus) => {
+    pendingRemoteStatusRef.current[id] = status;
+    if (remoteFlushTimerRef.current !== null) return;
+    remoteFlushTimerRef.current = window.setTimeout(() => {
+      remoteFlushTimerRef.current = null;
+      void flushRemoteStatuses();
+    }, 800);
+  }, [flushRemoteStatuses]);
 
   const timelinePoints = useMemo(() => {
     const set = new Set<string>();
@@ -1437,6 +1540,12 @@ export default function App() {
       if (jsonText) {
         await applyJsonText(jsonText);
       }
+
+      if (controller.signal.aborted) return;
+      try {
+        await fetchRemoteStatuses(remote.name, controller.signal);
+      } catch {
+      }
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return;
       console.error('Error cargando modelo remoto:', e);
@@ -1467,7 +1576,8 @@ export default function App() {
       }
       return { ...prev, [id]: entries };
     });
-  }, []);
+    scheduleRemoteSave(id, status);
+  }, [scheduleRemoteSave]);
 
   const handleChangeStatusMany = useCallback((ids: string[], status: ConstructionStatus) => {
     setElementStatuses((prev) => {
@@ -1492,7 +1602,10 @@ export default function App() {
       }
       return next;
     });
-  }, []);
+    for (const id of ids) {
+      scheduleRemoteSave(id, status);
+    }
+  }, [scheduleRemoteSave]);
 
   const [expandedModelGroups, setExpandedModelGroups] = useState<Record<string, boolean>>({
     ESTRUCTURA: true,
