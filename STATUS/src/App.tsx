@@ -253,6 +253,11 @@ export default function App() {
     if (raw === null) return true;
     return raw === 'true';
   });
+  const [timelineBarOpen, setTimelineBarOpen] = useState(() => {
+    const raw = localStorage.getItem('cantidades:timelineBarOpen');
+    if (raw === null) return true;
+    return raw === 'true';
+  });
 
   const statusStorageKey = useMemo(() => {
     const base = selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'local';
@@ -570,6 +575,10 @@ export default function App() {
     localStorage.setItem('cantidades:gridVisible', String(gridVisible));
   }, [gridVisible]);
 
+  useEffect(() => {
+    localStorage.setItem('cantidades:timelineBarOpen', String(timelineBarOpen));
+  }, [timelineBarOpen]);
+
   const startHorizontalDrag = useCallback((startEvent: React.PointerEvent, onDeltaX: (dx: number) => void) => {
     startEvent.preventDefault();
     const startX = startEvent.clientX;
@@ -582,6 +591,14 @@ export default function App() {
     window.addEventListener('pointermove', move, true);
     window.addEventListener('pointerup', up, true);
     window.addEventListener('pointercancel', up, true);
+  }, []);
+
+  const getISOWeek = useCallback((date: Date) => {
+    const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
   }, []);
 
   const startVerticalDrag = useCallback((startEvent: React.PointerEvent, onDeltaY: (dy: number) => void) => {
@@ -1649,76 +1666,119 @@ export default function App() {
         </div>
       </header>
 
-      <div className="px-6 py-3 border-b border-slate-200 bg-white">
-        <div className="max-w-7xl mx-auto">
+      <div className="border-b border-slate-200 bg-white w-full">
+        <div className="w-full px-3 sm:px-6 py-3">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
+            <button
+              type="button"
+              onClick={() => setTimelineBarOpen((v) => !v)}
+              className="flex items-center gap-2 px-2 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
+              title={timelineBarOpen ? 'Ocultar barra de tiempo' : 'Mostrar barra de tiempo'}
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform ${timelineBarOpen ? 'rotate-180' : ''}`} />
+              <span className="text-[10px] font-bold uppercase tracking-widest">Tiempo</span>
+            </button>
+
+            <div className="text-[10px] font-black text-slate-600 uppercase tracking-widest truncate">
               {timelineDate
                 ? new Date(timelineDate + 'T00:00:00Z').toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
                 : 'Hoy'}
             </div>
+
             <button
               type="button"
               onClick={() => {
                 setTimelineIndexDraft(null);
                 setTimelineIndex(null);
               }}
-              className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border ${timelineDate === null ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+              className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest border ${timelineDate === null ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
               title="Ver estado actual"
             >
               Hoy
             </button>
           </div>
 
-          <div className="relative mt-2">
-            <div className="absolute -top-5 left-0 right-0 h-4 pointer-events-none">
-              {timelineMarkers.months.map((m) => {
-                const pct = timelineDays.length <= 1 ? 0 : (m.index / (timelineDays.length - 1)) * 100;
-                return (
-                  <div key={`m-${m.index}`} className="absolute top-0 text-[10px] font-bold text-slate-400 whitespace-nowrap" style={{ left: `${pct}%`, transform: 'translateX(-10%)' }}>
-                    {m.label}
+          {timelineBarOpen && (
+            <div className="mt-3">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Mes</div>
+                  <div className="text-[11px] font-black text-slate-800 truncate">
+                    {(timelineDate ? new Date(timelineDate + 'T00:00:00Z') : new Date())
+                      .toLocaleDateString('es-ES', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+                      .toUpperCase()}
                   </div>
-                );
-              })}
-            </div>
-
-            <div className="absolute -bottom-5 left-0 right-0 h-4 pointer-events-none">
-              {timelineMarkers.weeks.map((w) => {
-                const pct = timelineDays.length <= 1 ? 0 : (w.index / (timelineDays.length - 1)) * 100;
-                return (
-                  <div key={`w-${w.index}`} className="absolute top-0 text-[10px] font-bold text-slate-400 whitespace-nowrap" style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}>
-                    {w.label}
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Semana</div>
+                  <div className="text-[11px] font-black text-slate-800 truncate">
+                    {(() => {
+                      const d = timelineDate ? new Date(timelineDate + 'T00:00:00Z') : new Date();
+                      return `W${String(getISOWeek(d)).padStart(2, '0')}`;
+                    })()}
                   </div>
-                );
-              })}
-            </div>
-
-            <input
-              type="range"
-              min={0}
-              max={Math.max(0, timelineDays.length - 1)}
-              value={timelineIndexDraft === null ? Math.max(0, timelineDays.length - 1) : timelineIndexDraft}
-              onChange={(e) => setTimelineIndexDraft(Number(e.target.value))}
-              disabled={timelineDays.length <= 1}
-              className="w-full accent-[#024959]"
-            />
-
-            <div className="mt-1 flex justify-between text-[10px] font-bold text-slate-400 select-none">
-              <div className="truncate">{timelineDays[0] ? new Date(timelineDays[0] + 'T00:00:00Z').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' }) : ''}</div>
-              <div className="truncate">{timelineDays[timelineDays.length - 1] ? new Date(timelineDays[timelineDays.length - 1] + 'T00:00:00Z').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' }) : ''}</div>
-            </div>
-
-            <div className="relative h-3 mt-1">
-              {timelineMarkers.days.map((d) => {
-                const pct = timelineDays.length <= 1 ? 0 : (d.index / (timelineDays.length - 1)) * 100;
-                return (
-                  <div key={`d-${d.index}`} className="absolute top-0 text-[9px] font-bold text-slate-400" style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}>
-                    {d.label}
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Día</div>
+                  <div className="text-[11px] font-black text-slate-800 truncate">
+                    {(timelineDate ? new Date(timelineDate + 'T00:00:00Z') : new Date())
+                      .toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' })
+                      .toUpperCase()}
                   </div>
-                );
-              })}
+                </div>
+              </div>
+
+              <div className="relative mt-3">
+                <div className="absolute -top-5 left-0 right-0 h-4 pointer-events-none">
+                  {timelineMarkers.months.map((m) => {
+                    const pct = timelineDays.length <= 1 ? 0 : (m.index / (timelineDays.length - 1)) * 100;
+                    return (
+                      <div key={`m-${m.index}`} className="absolute top-0 text-[10px] font-bold text-slate-400 whitespace-nowrap" style={{ left: `${pct}%`, transform: 'translateX(-10%)' }}>
+                        {m.label}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="absolute -bottom-5 left-0 right-0 h-4 pointer-events-none">
+                  {timelineMarkers.weeks.map((w) => {
+                    const pct = timelineDays.length <= 1 ? 0 : (w.index / (timelineDays.length - 1)) * 100;
+                    return (
+                      <div key={`w-${w.index}`} className="absolute top-0 text-[10px] font-bold text-slate-400 whitespace-nowrap" style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}>
+                        {w.label}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <input
+                  type="range"
+                  min={0}
+                  max={Math.max(0, timelineDays.length - 1)}
+                  value={timelineIndexDraft === null ? Math.max(0, timelineDays.length - 1) : timelineIndexDraft}
+                  onChange={(e) => setTimelineIndexDraft(Number(e.target.value))}
+                  disabled={timelineDays.length <= 1}
+                  className="w-full accent-[#024959]"
+                />
+
+                <div className="mt-1 flex justify-between text-[10px] font-bold text-slate-400 select-none">
+                  <div className="truncate">{timelineDays[0] ? new Date(timelineDays[0] + 'T00:00:00Z').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' }) : ''}</div>
+                  <div className="truncate">{timelineDays[timelineDays.length - 1] ? new Date(timelineDays[timelineDays.length - 1] + 'T00:00:00Z').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', timeZone: 'UTC' }) : ''}</div>
+                </div>
+
+                <div className="relative h-3 mt-1">
+                  {timelineMarkers.days.map((d) => {
+                    const pct = timelineDays.length <= 1 ? 0 : (d.index / (timelineDays.length - 1)) * 100;
+                    return (
+                      <div key={`d-${d.index}`} className="absolute top-0 text-[9px] font-bold text-slate-400" style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}>
+                        {d.label}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
