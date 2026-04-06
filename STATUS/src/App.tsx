@@ -1060,6 +1060,31 @@ export default function App() {
     return { days, levels: sortedLevels, cellStatus, cellTitle };
   }, [baseElements, elementHistory, elementLevelById, elementStatuses, sortedLevels, weekDayKeys]);
 
+  const weekSegments = useMemo(() => {
+    if (timelineDays.length === 0) return [] as Array<{ key: string; label: string; startIndex: number; endIndex: number }>;
+    const segments: Array<{ key: string; label: string; startIndex: number; endIndex: number }> = [];
+    for (let i = 0; i < timelineDays.length; i += 1) {
+      const key = timelineDays[i]!;
+      const d = new Date(key + 'T00:00:00Z');
+      if (isNaN(d.getTime())) continue;
+      const wk = weekKeyOf(d);
+      const label = `W${String(getISOWeek(d)).padStart(2, '0')}`;
+      const last = segments.length > 0 ? segments[segments.length - 1] : null;
+      if (last && last.key === wk) {
+        last.endIndex = i;
+      } else {
+        segments.push({ key: wk, label, startIndex: i, endIndex: i });
+      }
+    }
+    return segments;
+  }, [getISOWeek, timelineDays, weekKeyOf]);
+
+  const selectedTimelineIndex = useMemo(() => {
+    if (timelineDays.length === 0) return 0;
+    if (timelineIndexDraft !== null) return Math.max(0, Math.min(timelineDays.length - 1, timelineIndexDraft));
+    return Math.max(0, timelineDays.length - 1);
+  }, [timelineDays.length, timelineIndexDraft]);
+
   const toggleClassification = (name: string) => {
     setSelectedClassifications(prev => 
       prev.includes(name) ? prev.filter(c => c !== name) : [...prev, name]
@@ -1879,46 +1904,75 @@ export default function App() {
           {timelineBarOpen && (
             <div className="mt-3 space-y-3">
               <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Mes</div>
-                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                  {monthOptions.map((m) => {
-                    const active = m.key === selectedMonthKey;
-                    return (
-                      <button
-                        key={m.key}
-                        type="button"
-                        onClick={() => setTimelineIndexDraft(m.startIndex)}
-                        className={`shrink-0 px-3 py-1.5 rounded-md border text-[10px] font-bold uppercase tracking-widest ${
-                          active ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                        }`}
-                        title={m.label}
-                      >
-                        {m.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Tiempo</div>
+                <div className="mt-2 overflow-x-auto">
+                  {(() => {
+                    const dayW = 44;
+                    const totalW = Math.max(1, timelineDays.length) * dayW;
+                    const days = timelineDays;
+                    const dowLabels = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'] as const;
 
-              <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Semana</div>
-                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                  {weekOptions.map((w) => {
-                    const active = w.key === selectedWeekKey;
+                    const isSelected = (idx: number) => idx === selectedTimelineIndex;
+
                     return (
-                      <button
-                        key={w.key}
-                        type="button"
-                        onClick={() => setTimelineIndexDraft(w.startIndex)}
-                        className={`shrink-0 px-3 py-1.5 rounded-md border text-[10px] font-bold uppercase tracking-widest ${
-                          active ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                        }`}
-                        title={w.key}
-                      >
-                        {w.label}
-                      </button>
+                      <div className="min-w-full">
+                        <div className="relative" style={{ width: totalW }}>
+                          <div className="h-6 relative">
+                            {monthOptions.map((m) => (
+                              <div
+                                key={m.key}
+                                className="absolute top-0 h-6 flex items-center justify-center text-[10px] font-black text-slate-600 uppercase tracking-widest"
+                                style={{
+                                  left: m.startIndex * dayW,
+                                  width: (m.endIndex - m.startIndex + 1) * dayW
+                                }}
+                              >
+                                {m.label}
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="h-5 relative border-t border-slate-100">
+                            {weekSegments.map((w) => (
+                              <div
+                                key={w.key}
+                                className="absolute top-0 h-5 flex items-center justify-center text-[9px] font-bold text-slate-400 uppercase tracking-widest"
+                                style={{
+                                  left: w.startIndex * dayW,
+                                  width: (w.endIndex - w.startIndex + 1) * dayW
+                                }}
+                              >
+                                {w.label}
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="grid" style={{ gridTemplateColumns: `repeat(${Math.max(1, days.length)}, ${dayW}px)` }}>
+                            {days.map((k, idx) => {
+                              const d = new Date(k + 'T00:00:00Z');
+                              const dow = isNaN(d.getTime()) ? '' : dowLabels[d.getUTCDay()] ?? '';
+                              const dayNum = isNaN(d.getTime()) ? '' : String(d.getUTCDate());
+                              const selected = isSelected(idx);
+                              return (
+                                <button
+                                  key={k}
+                                  type="button"
+                                  onClick={() => setTimelineIndexDraft(idx)}
+                                  className={`h-12 border-t border-slate-100 border-r border-slate-100 flex flex-col items-center justify-center gap-0.5 ${
+                                    selected ? 'bg-[#003E52] text-white' : 'bg-white text-slate-700 hover:bg-slate-50'
+                                  }`}
+                                  title={k}
+                                >
+                                  <div className={`text-[9px] font-bold uppercase tracking-widest ${selected ? 'text-white/80' : 'text-slate-400'}`}>{dow}</div>
+                                  <div className="text-[11px] font-black">{dayNum}</div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
                     );
-                  })}
+                  })()}
                 </div>
               </div>
 
