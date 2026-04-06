@@ -1581,7 +1581,7 @@ export default function App() {
                   </div>
                 )}
 
-                {(['ESTRUCTURA', 'GENERAL'] as const).map((group) => {
+                {(['ESTRUCTURA', 'GENERAL', 'DRIVE'] as const).map((group) => {
                   const items = availableModels.filter((m) => m.group === group);
                   if (items.length === 0) return null;
                   const expanded = expandedModelGroups[group];
