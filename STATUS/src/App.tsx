@@ -243,6 +243,13 @@ export default function App() {
   const [selectedSubCategories, setSelectedSubCategories] = useState<string[]>([]);
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
   const [selectedDiameter, setSelectedDiameter] = useState<string>('Todos');
+  const [selectedMaterial, setSelectedMaterial] = useState<string>('Todos');
+  const [selectedPileNumber, setSelectedPileNumber] = useState<string>('Todos');
+  const [showPileNumberLabels, setShowPileNumberLabels] = useState(() => {
+    const raw = localStorage.getItem('cantidades:showPileNumberLabels');
+    if (raw === null) return false;
+    return raw === 'true';
+  });
   const [isIsolateMode, setIsIsolateMode] = useState(false);
   const [statusColorsEnabled, setStatusColorsEnabled] = useState(() => {
     const raw = localStorage.getItem('cantidades:statusColorsEnabled');
@@ -259,6 +266,11 @@ export default function App() {
     if (raw === null) return true;
     return raw === 'true';
   });
+
+  const isStructureModel = useMemo(() => {
+    const name = selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : '';
+    return /estructura/i.test(name);
+  }, [selectedRemoteModelName]);
 
   const statusStorageKey = useMemo(() => {
     const base = selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'local';
@@ -595,6 +607,10 @@ export default function App() {
     localStorage.setItem('cantidades:timelineBarOpen', String(timelineBarOpen));
   }, [timelineBarOpen]);
 
+  useEffect(() => {
+    localStorage.setItem('cantidades:showPileNumberLabels', String(showPileNumberLabels));
+  }, [showPileNumberLabels]);
+
   const startHorizontalDrag = useCallback((startEvent: React.PointerEvent, onDeltaX: (dx: number) => void) => {
     startEvent.preventDefault();
     const startX = startEvent.clientX;
@@ -819,15 +835,49 @@ export default function App() {
       const categoryLabel = deriveFilterCategory(el);
       const level = getProp(el, "NIVEL INTEGRADO") || "";
       const diameter = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]) || "";
+      const material = getFirstProp(el, ["MATERIAL INTEGRADO", "MATERIAL"]) || "";
+      const pileNumber = getFirstProp(el, ["NÚMERO DE PILOTE", "NUMERO DE PILOTE", "NUMERO PILOTE", "PILOTE NUMBER", "PILOTE"]) || "";
 
       const classificationMatch = selectedClassifications.length === 0 || selectedClassifications.includes(classif);
       const categoryMatch = selectedCategories.length === 0 || selectedCategories.includes(categoryLabel);
       const levelMatch = selectedLevels.length === 0 || selectedLevels.includes(level);
       const diameterMatch = selectedDiameter === 'Todos' || diameter === selectedDiameter;
+      const materialMatch = selectedMaterial === 'Todos' || material === selectedMaterial;
+      const pileMatch = selectedPileNumber === 'Todos' || pileNumber === selectedPileNumber;
 
+      if (isStructureModel) {
+        return classificationMatch && categoryMatch && levelMatch && materialMatch && pileMatch;
+      }
       return classificationMatch && categoryMatch && levelMatch && diameterMatch;
     });
-  }, [baseElements, deriveFilterCategory, deriveFilterClassification, getFirstProp, getProp, selectedClassifications, selectedCategories, selectedDiameter, selectedLevels]);
+  }, [baseElements, deriveFilterCategory, deriveFilterClassification, getFirstProp, getProp, isStructureModel, selectedCategories, selectedClassifications, selectedDiameter, selectedLevels, selectedMaterial, selectedPileNumber]);
+
+  const pileNumberLabels = useMemo(() => {
+    if (!isStructureModel) return [] as Array<{ id: string; label: string; position: { x: number; y: number; z: number } }>;
+    const read = (props: Record<string, any> | undefined | null, keys: string[]) => {
+      if (!props) return '';
+      for (const k of keys) {
+        const v = (props as any)[k];
+        if (v === undefined || v === null) continue;
+        const s = String(v).trim();
+        if (s) return s;
+      }
+      return '';
+    };
+
+    const byPile = new Map<string, { id: string; label: string; position: { x: number; y: number; z: number } }>();
+    for (const el of filteredElements) {
+      const props = el.properties as any;
+      const pile = read(props, ["NÚMERO DE PILOTE", "NUMERO DE PILOTE", "NUMERO PILOTE", "PILOTE NUMBER", "PILOTE"]);
+      const center = props?.__pileCenter as { x: number; y: number; z: number } | undefined;
+      if (!pile || !center) continue;
+      if (!Number.isFinite(center.x) || !Number.isFinite(center.y) || !Number.isFinite(center.z)) continue;
+      if (!byPile.has(pile)) {
+        byPile.set(pile, { id: `pile:${pile}`, label: pile, position: { x: center.x, y: center.y, z: center.z } });
+      }
+    }
+    return Array.from(byPile.values());
+  }, [filteredElements, isStructureModel]);
 
   const elementsWithVolume = useMemo(() => {
     const toNumber = (v: unknown) => {
@@ -891,6 +941,35 @@ export default function App() {
     return Array.from(diameterSet).sort((a, b) => {
       const na = asNumber(a);
       const nb = asNumber(b);
+      if (na !== null && nb !== null) return na - nb;
+      if (na !== null) return -1;
+      if (nb !== null) return 1;
+      return a.localeCompare(b, 'es');
+    });
+  }, [baseElements, getFirstProp]);
+
+  const materials = useMemo(() => {
+    const set = new Set<string>();
+    baseElements.forEach((el) => {
+      const v = getFirstProp(el, ["MATERIAL INTEGRADO", "MATERIAL"]);
+      if (v) set.add(String(v));
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+  }, [baseElements, getFirstProp]);
+
+  const pileNumbers = useMemo(() => {
+    const set = new Set<string>();
+    baseElements.forEach((el) => {
+      const v = getFirstProp(el, ["NÚMERO DE PILOTE", "NUMERO DE PILOTE", "NUMERO PILOTE", "PILOTE NUMBER", "PILOTE"]);
+      if (v) set.add(String(v));
+    });
+    const asNum = (s: string) => {
+      const n = Number(String(s).replace(/[^\d.\-]/g, ''));
+      return Number.isFinite(n) ? n : null;
+    };
+    return Array.from(set).sort((a, b) => {
+      const na = asNum(a);
+      const nb = asNum(b);
       if (na !== null && nb !== null) return na - nb;
       if (na !== null) return -1;
       if (nb !== null) return 1;
@@ -1139,6 +1218,61 @@ export default function App() {
         return attr;
       };
 
+      const pileEntries: Array<{ props: Record<string, any>; localId: number }> = [];
+      const getPileNumberFromData = (data: any) => {
+        const raw =
+          getValue(data?.["NÚMERO DE PILOTE"]) ??
+          getValue(data?.["NUMERO DE PILOTE"]) ??
+          getValue(data?.["NUMERO PILOTE"]) ??
+          getValue(data?.["PILOTE NUMBER"]) ??
+          getValue(data?.["PILOTE"]);
+        const s = raw !== undefined && raw !== null ? String(raw).trim() : '';
+        return s || null;
+      };
+
+      const tryGetCenterFromBox = (box: any): { x: number; y: number; z: number } | null => {
+        try {
+          const b = new THREE.Box3();
+          if (box instanceof THREE.Box3) {
+            b.copy(box);
+          } else if (Array.isArray(box) && box.length >= 6) {
+            b.min.set(Number(box[0]), Number(box[1]), Number(box[2]));
+            b.max.set(Number(box[3]), Number(box[4]), Number(box[5]));
+          } else if (box && typeof box === 'object' && box.min && box.max) {
+            b.min.set(Number(box.min.x), Number(box.min.y), Number(box.min.z));
+            b.max.set(Number(box.max.x), Number(box.max.y), Number(box.max.z));
+          } else {
+            return null;
+          }
+          if (!Number.isFinite(b.min.x) || !Number.isFinite(b.max.x)) return null;
+          const c = new THREE.Vector3();
+          b.getCenter(c);
+          if (!Number.isFinite(c.x) || !Number.isFinite(c.y) || !Number.isFinite(c.z)) return null;
+          return { x: c.x, y: c.y, z: c.z };
+        } catch {
+          return null;
+        }
+      };
+
+      const tryGetItemCenter = async (localId: number): Promise<{ x: number; y: number; z: number } | null> => {
+        const candidates = [
+          (model as any)?.getItemBoundingBox,
+          (model as any)?.getItemBox,
+          (model as any)?.getBoundingBox,
+          (model as any)?.getAABB
+        ].filter((fn) => typeof fn === 'function') as Array<(id: number) => any>;
+
+        for (const fn of candidates) {
+          try {
+            const res = await Promise.resolve(fn.call(model, localId));
+            const center = tryGetCenterFromBox(res);
+            if (center) return center;
+          } catch {
+          }
+        }
+        return null;
+      };
+
       for (let i = 0; i < ids.length; i++) {
         const localId = ids[i];
         const data = itemsData[i] || {};
@@ -1156,6 +1290,15 @@ export default function App() {
         const name = (rawName !== undefined && rawName !== null ? rawName : `${category} - ${expressId}`).toString();
         const volume = 0;
 
+        const props = { ...data };
+        if (isStructureModel) {
+          const pile = getPileNumberFromData(data);
+          if (pile) {
+            props["NÚMERO DE PILOTE"] = pile;
+            pileEntries.push({ props, localId });
+          }
+        }
+
         extractedElements.push({
           id: expressId, 
           globalId: globalId,
@@ -1163,7 +1306,7 @@ export default function App() {
           category,
           volume: volume,
           unit: 'm³',
-          properties: { ...data },
+          properties: props,
         modelId: model.modelId || model.id || model.uuid,
           localId: localId
         });
@@ -1183,10 +1326,21 @@ export default function App() {
       })));
       
       console.log(`Preparados ${extractedElements.length} elementos para vinculación.`);
+
+      if (isStructureModel && pileEntries.length > 0) {
+        const max = Math.min(500, pileEntries.length);
+        for (let i = 0; i < max; i++) {
+          const it = pileEntries[i]!;
+          const center = await tryGetItemCenter(it.localId);
+          if (center) {
+            it.props.__pileCenter = center;
+          }
+        }
+      }
     } catch (err) {
       console.error("Error en processModel:", err);
     }
-  }, []);
+  }, [isStructureModel]);
 
   const handleModelLoaded = useCallback((components: OBC.Components) => {
     componentsRef.current = components;
@@ -1782,6 +1936,8 @@ export default function App() {
     setSelectedSubCategories([]);
     setSelectedLevels([]);
     setSelectedDiameter('Todos');
+    setSelectedMaterial('Todos');
+    setSelectedPileNumber('Todos');
   };
 
   const handleChangeStatus = useCallback((id: string, status: ConstructionStatus) => {
@@ -2202,6 +2358,8 @@ export default function App() {
                   statusColorsEnabled={statusColorsEnabled}
                   gridVisible={gridVisible}
                   isLoading={isLoading}
+                  showPileNumberLabels={isStructureModel && showPileNumberLabels}
+                  pileNumberLabels={pileNumberLabels}
                   selectedElementId={selectedElementId || undefined}
                   selectedElementIds={selectedElementIds}
                   onSelectionChange={(ids) => {
@@ -2354,6 +2512,15 @@ export default function App() {
                 diameters={diameters}
                 selectedDiameter={selectedDiameter}
                 onDiameterChange={setSelectedDiameter}
+                isStructureModel={isStructureModel}
+                materials={materials}
+                selectedMaterial={selectedMaterial}
+                onMaterialChange={setSelectedMaterial}
+                pileNumbers={pileNumbers}
+                selectedPileNumber={selectedPileNumber}
+                onPileNumberChange={setSelectedPileNumber}
+                showPileLabels={showPileNumberLabels}
+                onToggleShowPileLabels={() => setShowPileNumberLabels((v) => !v)}
                 onResetFilters={resetFilters}
                 onToggleCollapse={() => setRightPanelCollapsed(true)}
               />

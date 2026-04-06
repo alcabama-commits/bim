@@ -25,6 +25,15 @@ interface SidebarProps {
   diameters: string[];
   selectedDiameter: string;
   onDiameterChange: (diameter: string) => void;
+  isStructureModel?: boolean;
+  materials?: string[];
+  selectedMaterial?: string;
+  onMaterialChange?: (material: string) => void;
+  pileNumbers?: string[];
+  selectedPileNumber?: string;
+  onPileNumberChange?: (pile: string) => void;
+  showPileLabels?: boolean;
+  onToggleShowPileLabels?: () => void;
   onResetFilters: () => void;
   onToggleCollapse?: () => void;
 }
@@ -43,6 +52,15 @@ export default function Sidebar({
   diameters,
   selectedDiameter,
   onDiameterChange,
+  isStructureModel = false,
+  materials = [],
+  selectedMaterial = 'Todos',
+  onMaterialChange,
+  pileNumbers = [],
+  selectedPileNumber = 'Todos',
+  onPileNumberChange,
+  showPileLabels = false,
+  onToggleShowPileLabels,
   onResetFilters,
   onToggleCollapse
 }: SidebarProps) {
@@ -188,17 +206,61 @@ export default function Sidebar({
       </div>
 
       <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Diámetros</h3>
-        <select 
-          value={selectedDiameter}
-          onChange={(e) => onDiameterChange(e.target.value)}
-          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-        >
-          <option value="Todos">Todos</option>
-          {diameters.map((d) => (
-            <option key={d} value={d}>{d}</option>
-          ))}
-        </select>
+        {isStructureModel ? (
+          <>
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Número de pilote</h3>
+            <select
+              value={selectedPileNumber}
+              onChange={(e) => onPileNumberChange?.(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+              disabled={!onPileNumberChange}
+            >
+              <option value="Todos">Todos</option>
+              {pileNumbers.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={onToggleShowPileLabels}
+              className={`mt-2 w-full px-3 py-2 rounded-lg border text-[10px] font-bold uppercase tracking-widest transition-all ${
+                showPileLabels ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+              }`}
+              disabled={!onToggleShowPileLabels}
+              title="Mostrar u ocultar números de pilote en el modelo"
+            >
+              {showPileLabels ? 'Ocultar números' : 'Mostrar números'}
+            </button>
+
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 mt-4">Material</h3>
+            <select
+              value={selectedMaterial}
+              onChange={(e) => onMaterialChange?.(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+              disabled={!onMaterialChange}
+            >
+              <option value="Todos">Todos</option>
+              {materials.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </>
+        ) : (
+          <>
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Diámetros</h3>
+            <select
+              value={selectedDiameter}
+              onChange={(e) => onDiameterChange(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+            >
+              <option value="Todos">Todos</option>
+              {diameters.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </>
+        )}
       </div>
     </div>
   );

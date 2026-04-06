@@ -28,6 +28,8 @@ interface BIMViewerProps {
   onSelectionChange: (ids: string[]) => void;
   isLoading: boolean;
   isIsolateMode?: boolean;
+  showPileNumberLabels?: boolean;
+  pileNumberLabels?: Array<{ id: string; label: string; position: { x: number; y: number; z: number } }>;
 }
 
 type ConstructionStatus =
@@ -40,7 +42,7 @@ type ConstructionStatus =
 
 const statusStyleKey = (st: ConstructionStatus) => `status_${st.replace(/\s+/g, '_')}`;
 
-export default function BIMViewer({ onModelLoaded, allElements, visibleElements, statuses, statusColorsEnabled = true, gridVisible = true, selectedElementId, selectedElementIds, onSelectionChange, isLoading, isIsolateMode }: BIMViewerProps) {
+export default function BIMViewer({ onModelLoaded, allElements, visibleElements, statuses, statusColorsEnabled = true, gridVisible = true, selectedElementId, selectedElementIds, onSelectionChange, isLoading, isIsolateMode, showPileNumberLabels = false, pileNumberLabels = [] }: BIMViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const componentsRef = useRef<OBC.Components | null>(null);
   const workerUrlRef = useRef<string | null>(null);
@@ -55,6 +57,8 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
   const lastAppliedSelectionKeyRef = useRef<string>('');
   const [isInitialized, setIsInitialized] = useState(false);
   const [selectionBox, setSelectionBox] = useState<null | { left: number; top: number; width: number; height: number; dashed: boolean }>(null);
+  const labelContainerRef = useRef<HTMLDivElement | null>(null);
+  const labelElByIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const selectionGestureRef = useRef<{
     active: boolean;
     ctrlKey: boolean;
@@ -823,9 +827,90 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
     void update(seq);
   }, [allElements, isInitialized, isIsolateMode, selectedElementId, selectedElementIds, statusColorsEnabled, statusVisibility, statuses, visibleElements]);
 
+  useEffect(() => {
+    const container = labelContainerRef.current;
+    if (!container) return;
+    if (!showPileNumberLabels || pileNumberLabels.length === 0) {
+      for (const el of labelElByIdRef.current.values()) {
+        el.style.display = 'none';
+      }
+      return;
+    }
+
+    const components = componentsRef.current;
+    if (!components) return;
+    const worlds = components.get(OBC.Worlds);
+    const world = Array.from(worlds.list.values())[0] as any;
+    const camera = world?.camera?.three as THREE.PerspectiveCamera | THREE.OrthographicCamera | undefined;
+    const dom = world?.renderer?.three?.domElement as HTMLCanvasElement | undefined;
+    if (!camera || !dom) return;
+
+    let raf = 0;
+    const v = new THREE.Vector3();
+
+    const updateLabels = () => {
+      const rect = dom.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      if (w <= 0 || h <= 0) {
+        raf = window.requestAnimationFrame(updateLabels);
+        return;
+      }
+
+      for (const l of pileNumberLabels) {
+        const el = labelElByIdRef.current.get(l.id);
+        if (!el) continue;
+        v.set(l.position.x, l.position.y, l.position.z);
+        v.project(camera);
+
+        const inFront = v.z >= -1 && v.z <= 1;
+        if (!inFront) {
+          el.style.display = 'none';
+          continue;
+        }
+
+        const x = (v.x * 0.5 + 0.5) * w;
+        const y = (-v.y * 0.5 + 0.5) * h;
+
+        const inView = x >= -40 && x <= w + 40 && y >= -40 && y <= h + 40;
+        if (!inView) {
+          el.style.display = 'none';
+          continue;
+        }
+
+        el.style.display = 'block';
+        el.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+      }
+
+      raf = window.requestAnimationFrame(updateLabels);
+    };
+
+    raf = window.requestAnimationFrame(updateLabels);
+    return () => window.cancelAnimationFrame(raf);
+  }, [pileNumberLabels, showPileNumberLabels]);
+
   return (
     <div className="relative w-full h-full bg-white">
       <div ref={containerRef} className="w-full h-full" />
+      <div ref={labelContainerRef} className="absolute inset-0 pointer-events-none">
+        {showPileNumberLabels && pileNumberLabels.map((l) => (
+          <div
+            key={l.id}
+            ref={(node) => {
+              const map = labelElByIdRef.current;
+              if (!node) {
+                map.delete(l.id);
+                return;
+              }
+              map.set(l.id, node);
+            }}
+            className="absolute px-2 py-1 rounded-md bg-white/90 border border-slate-200 text-[10px] font-black text-slate-800 shadow"
+            style={{ display: 'none', willChange: 'transform' }}
+          >
+            {l.label}
+          </div>
+        ))}
+      </div>
       {selectionBox && (
         <div
           className="absolute border border-blue-500 bg-blue-500/10 pointer-events-none"
