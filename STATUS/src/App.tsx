@@ -127,7 +127,7 @@ const GITHUB_REPO = {
 };
 
 const DRIVE_MODELS_FOLDER_ID = '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8';
-const DRIVE_SCRIPT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwuZ-H6Stii7Lun0qFPd-aYttnVzh7L7OtIXplIi13kx-2wKSGQP9IVGHud59c72IL4UA/exec';
+const DRIVE_SCRIPT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwz1XYlqzxUCLLsTeXsxW7uNzRiqRhT82OC_Y1dSt4iOvaWNFpAPWAZc74UE28iiwI/exec';
 const STATUS_SHEET_ID = '1GSaNTuafarE8l7VFlJNLJcu0GIXaNUS-VDwJ9UB9038';
 
 const rawUrlFor = (path: string) =>
