@@ -40,6 +40,8 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
   const updateSeqRef = useRef(0);
   const gridRef = useRef<any>(null);
   const suppressSelectClearRef = useRef(false);
+  const prevStatusAppliedRef = useRef<Record<string, boolean>>({});
+  const lastAppliedSelectionKeyRef = useRef<string>('');
   const [isInitialized, setIsInitialized] = useState(false);
   const [selectionBox, setSelectionBox] = useState<null | { left: number; top: number; width: number; height: number; dashed: boolean }>(null);
   const selectionGestureRef = useRef<{
@@ -202,41 +204,53 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         highlighter.multiple = 'ctrlKey';
         highlighter.autoToggle.add('select');
         highlighter.styles.set("select", { 
-          color: new THREE.Color(0xffa400),
+          color: new THREE.Color(0xd3045c),
           opacity: 1,
           transparent: false,
-          renderedFaces: FRAGS.RenderedFaces.TWO
+          depthTest: true,
+          depthWrite: true,
+          renderedFaces: FRAGS.RenderedFaces.ONE
         });
 
         highlighter.styles.set("status_PEDIDO", { 
           color: new THREE.Color(0x3b82f6),
           opacity: 1,
           transparent: false,
-          renderedFaces: FRAGS.RenderedFaces.TWO
+          depthTest: true,
+          depthWrite: true,
+          renderedFaces: FRAGS.RenderedFaces.ONE
         });
         highlighter.styles.set("status_COMPRADO", { 
           color: new THREE.Color(0xffa400),
           opacity: 1,
           transparent: false,
-          renderedFaces: FRAGS.RenderedFaces.TWO
+          depthTest: true,
+          depthWrite: true,
+          renderedFaces: FRAGS.RenderedFaces.ONE
         });
         highlighter.styles.set("status_EN_BODEGA", { 
           color: new THREE.Color(0xa78bfa),
           opacity: 1,
           transparent: false,
-          renderedFaces: FRAGS.RenderedFaces.TWO
+          depthTest: true,
+          depthWrite: true,
+          renderedFaces: FRAGS.RenderedFaces.ONE
         });
         highlighter.styles.set("status_INSTALADO", { 
           color: new THREE.Color(0x22c55e),
           opacity: 1,
           transparent: false,
-          renderedFaces: FRAGS.RenderedFaces.TWO
+          depthTest: true,
+          depthWrite: true,
+          renderedFaces: FRAGS.RenderedFaces.ONE
         });
         highlighter.styles.set("status_PENDIENTE", { 
           color: new THREE.Color(0x9ca3af),
           opacity: 1,
           transparent: false,
-          renderedFaces: FRAGS.RenderedFaces.TWO
+          depthTest: true,
+          depthWrite: true,
+          renderedFaces: FRAGS.RenderedFaces.ONE
         });
         
         // Configurar eventos
@@ -331,7 +345,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
 
         if (!OBC.ModelIdMapUtils.isEmpty(selection)) {
           try {
-            await highlighter.highlightByID('select', selection, false, false, null, true);
+            await highlighter.highlightByID('select', selection, false, false, null, false);
           } catch {
           }
           const ids = getSelectionIds(highlighter.selection?.select ?? {});
@@ -688,13 +702,6 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         { key: 'PENDIENTE', style: 'status_PENDIENTE', enabled: byStatus.PENDIENTE.length <= pendingLimit }
       ];
 
-      for (const { style } of statusToStyle) {
-        try {
-          await highlighter.clear(style);
-        } catch {
-        }
-      }
-
       if (statusColorsEnabled) {
         for (const { key, style, enabled } of statusToStyle) {
           if (!enabled) continue;
@@ -705,34 +712,62 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
           if (seq !== updateSeqRef.current) return;
           try {
             await highlighter.highlightByID(style, map, true, false, null, false);
+            prevStatusAppliedRef.current[style] = true;
           } catch {
           }
         }
+        for (const { key, style, enabled } of statusToStyle) {
+          const had = prevStatusAppliedRef.current[style] === true;
+          const shouldApply = enabled && (byStatus[key]?.length ?? 0) > 0;
+          if (!shouldApply && had) {
+            try {
+              await highlighter.clear(style);
+            } catch {
+            }
+            prevStatusAppliedRef.current[style] = false;
+          }
+        }
+      } else {
+        for (const { style } of statusToStyle) {
+          if (prevStatusAppliedRef.current[style] !== true) continue;
+          try {
+            await highlighter.clear(style);
+          } catch {
+          }
+          prevStatusAppliedRef.current[style] = false;
+        }
       }
 
+      const selectionKey = selectionIds.slice().sort().join('|');
       if (hasSelection) {
         const selectedElements = allElements.filter((e) => selectedIdSet.has(e.id));
         const { map, hasAny } = buildModelIdMapFromElements(selectedElements);
         if (hasAny) {
           if (seq !== updateSeqRef.current) return;
           try {
+            if (selectionKey !== lastAppliedSelectionKeyRef.current) {
+              suppressSelectClearRef.current = true;
+              try {
+                await highlighter.clear('select');
+              } finally {
+                suppressSelectClearRef.current = false;
+              }
+              await highlighter.highlightByID("select", map, true, false, null, false);
+              lastAppliedSelectionKeyRef.current = selectionKey;
+            }
+          } catch {
+          }
+        }
+      } else {
+        try {
+          if (lastAppliedSelectionKeyRef.current !== '') {
             suppressSelectClearRef.current = true;
             try {
               await highlighter.clear('select');
             } finally {
               suppressSelectClearRef.current = false;
             }
-            await highlighter.highlightByID("select", map, true, false, null, false);
-          } catch {
-          }
-        }
-      } else {
-        try {
-          suppressSelectClearRef.current = true;
-          try {
-            await highlighter.clear('select');
-          } finally {
-            suppressSelectClearRef.current = false;
+            lastAppliedSelectionKeyRef.current = '';
           }
         } catch {
         }
