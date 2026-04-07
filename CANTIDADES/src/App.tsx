@@ -126,8 +126,10 @@ const GITHUB_REPO = {
 const rawUrlFor = (path: string) =>
   `https://raw.githubusercontent.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/${GITHUB_REPO.branch}/${path.split('/').map(encodeURIComponent).join('/')}`;
 
-const CANTIDADES_SHEET_ID = ((import.meta as any).env?.VITE_CANTIDADES_SHEET_ID ?? '19kpmTk5Ap2DaJEZH-BFejBt_ia8qALIKqaPyMdDVuEU').trim();
-const CANTIDADES_SHEET_SCRIPT_URL = String(((import.meta as any).env?.VITE_CANTIDADES_SHEET_SCRIPT_URL ?? '')).trim();
+const CANTIDADES_SHEET_ID = String(((import.meta as any).env?.VITE_CANTIDADES_SHEET_ID ?? '19kpmTk5Ap2DaJEZH-BFejBt_ia8qALIKqaPyMdDVuEU')).trim();
+const CANTIDADES_SHEET_SCRIPT_URL = String(
+  ((import.meta as any).env?.VITE_CANTIDADES_SHEET_SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycbzqdowukNUpdAkhlsoyJQhv7jCOut9wHJS8xc8AWZ1ys99WtyS6e_1sLwgQEq2Vb-Ol/exec'),
+).trim();
 
 const normalizeClassification = (v: string) =>
   v
