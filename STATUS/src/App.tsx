@@ -649,22 +649,67 @@ export default function App() {
 
   const getProp = useCallback((el: BIMElement, key: string) => {
     if (!el.properties) return undefined;
-    const val = el.properties[key];
-    if (val === undefined || val === null) return undefined;
-    
-    // Si es un objeto con 'value', extraerlo
-    if (typeof val === 'object' && val !== null) {
-      if ('value' in val) return String(val.value);
-      if ('NominalValue' in val) {
-        const nv = val.NominalValue;
-        return (typeof nv === 'object' && nv !== null && 'value' in nv) ? String(nv.value) : String(nv);
+
+    const unwrap = (val: any) => {
+      if (val === undefined || val === null) return undefined;
+      if (typeof val === 'object') {
+        if ('value' in val) return val.value;
+        if ('NominalValue' in val) {
+          const nv = val.NominalValue;
+          return (typeof nv === 'object' && nv !== null && 'value' in nv) ? nv.value : nv;
+        }
+        if ('QuantityValue' in val) {
+          const qv = val.QuantityValue;
+          return (typeof qv === 'object' && qv !== null && 'value' in qv) ? qv.value : qv;
+        }
       }
-      if ('QuantityValue' in val) {
-        const qv = val.QuantityValue;
-        return (typeof qv === 'object' && qv !== null && 'value' in qv) ? String(qv.value) : String(qv);
+      return val;
+    };
+
+    const normalizeKey = (s: string) =>
+      s
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[_\-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toUpperCase();
+
+    const target = normalizeKey(key);
+
+    const direct = (el.properties as any)[key];
+    if (direct !== undefined && direct !== null) {
+      const v = unwrap(direct);
+      return v === undefined || v === null ? undefined : String(v);
+    }
+
+    const stack: any[] = [el.properties];
+    const seen = new WeakSet<object>();
+    let nodes = 0;
+    const maxNodes = 12000;
+    while (stack.length > 0 && nodes < maxNodes) {
+      const cur = stack.pop();
+      if (!cur || typeof cur !== 'object') continue;
+      if (seen.has(cur as object)) continue;
+      seen.add(cur as object);
+      nodes++;
+
+      if (Array.isArray(cur)) {
+        for (let i = 0; i < cur.length; i++) stack.push(cur[i]);
+        continue;
+      }
+
+      for (const k in cur) {
+        const rawVal = (cur as any)[k];
+        if (normalizeKey(String(k)) === target) {
+          const v = unwrap(rawVal);
+          return v === undefined || v === null ? undefined : String(v);
+        }
+        if (rawVal && typeof rawVal === 'object') stack.push(rawVal);
       }
     }
-    return String(val);
+
+    return undefined;
   }, []);
 
   const getFirstProp = useCallback((el: BIMElement, keys: string[]) => {
@@ -1053,21 +1098,32 @@ export default function App() {
 
   const elementLevelById = useMemo(() => {
     const map = new Map<string, string>();
-    for (const el of baseElements) {
+    for (const el of filteredElements) {
       const level = getProp(el, 'NIVEL INTEGRADO');
       if (level) map.set(el.id, String(level));
     }
     return map;
-  }, [baseElements, getProp]);
+  }, [filteredElements, getProp]);
 
   const sortedLevels = useMemo(() => {
-    return [...levels].sort((a, b) => String(a).localeCompare(String(b), 'es'));
-  }, [levels]);
+    const set = new Set<string>();
+    for (const el of filteredElements) {
+      const level = getProp(el, 'NIVEL INTEGRADO');
+      if (level) set.add(String(level));
+    }
+    return Array.from(set).sort((a, b) => String(a).localeCompare(String(b), 'es'));
+  }, [filteredElements, getProp]);
 
   const weekLevelCells = useMemo(() => {
     const days = weekDayKeys;
     if (days.length === 0 || sortedLevels.length === 0) {
-      return { days, levels: sortedLevels, cellStatus: new Map<string, ConstructionStatus>(), cellTitle: new Map<string, string>() };
+      return {
+        days,
+        levels: sortedLevels,
+        cellStatus: new Map<string, ConstructionStatus>(),
+        cellTitle: new Map<string, string>(),
+        dayTotals: new Map<string, Record<ConstructionStatus, number>>()
+      };
     }
 
     const dayTargets = days.map((k) => Date.parse(k + 'T23:59:59.999Z'));
@@ -1096,7 +1152,7 @@ export default function App() {
       return chosen ?? 'NINGUNO';
     };
 
-    for (const el of baseElements) {
+    for (const el of filteredElements) {
       const lvl = elementLevelById.get(el.id);
       if (!lvl) continue;
       const li = levelIndex.get(lvl);
@@ -1123,6 +1179,7 @@ export default function App() {
 
     const cellStatus = new Map<string, ConstructionStatus>();
     const cellTitle = new Map<string, string>();
+    const dayTotals = new Map<string, Record<ConstructionStatus, number>>();
     for (let li = 0; li < sortedLevels.length; li += 1) {
       for (let di = 0; di < days.length; di += 1) {
         const c = counts[li]![di]!;
@@ -1133,11 +1190,27 @@ export default function App() {
         const key = `${levelLabel}@@${dayLabel}`;
         cellStatus.set(key, st);
         cellTitle.set(key, title);
+
+        const total = dayTotals.get(dayLabel) ?? {
+          'NINGUNO': 0,
+          'EN PROGRESO': 0,
+          'PARA INSPECCION': 0,
+          'APROBADO': 0,
+          'CERRADO': 0,
+          'RECHAZADO': 0
+        };
+        total['NINGUNO'] += c['NINGUNO'] ?? 0;
+        total['EN PROGRESO'] += c['EN PROGRESO'] ?? 0;
+        total['PARA INSPECCION'] += c['PARA INSPECCION'] ?? 0;
+        total['APROBADO'] += c['APROBADO'] ?? 0;
+        total['CERRADO'] += c['CERRADO'] ?? 0;
+        total['RECHAZADO'] += c['RECHAZADO'] ?? 0;
+        dayTotals.set(dayLabel, total);
       }
     }
 
-    return { days, levels: sortedLevels, cellStatus, cellTitle };
-  }, [baseElements, elementHistory, elementLevelById, elementStatuses, sortedLevels, weekDayKeys]);
+    return { days, levels: sortedLevels, cellStatus, cellTitle, dayTotals };
+  }, [elementHistory, elementLevelById, elementStatuses, filteredElements, sortedLevels, weekDayKeys]);
 
   const weekSegments = useMemo(() => {
     if (timelineDays.length === 0) return [] as Array<{ key: string; label: string; startIndex: number; endIndex: number }>;
@@ -1218,16 +1291,47 @@ export default function App() {
         return attr;
       };
 
-      const pileEntries: Array<{ props: Record<string, any>; localId: number }> = [];
+      const pileEntries: Array<{ props: Record<string, any>; localId: number; expressId: string }> = [];
       const getPileNumberFromData = (data: any) => {
-        const raw =
-          getValue(data?.["NÚMERO DE PILOTE"]) ??
-          getValue(data?.["NUMERO DE PILOTE"]) ??
-          getValue(data?.["NUMERO PILOTE"]) ??
-          getValue(data?.["PILOTE NUMBER"]) ??
-          getValue(data?.["PILOTE"]);
-        const s = raw !== undefined && raw !== null ? String(raw).trim() : '';
-        return s || null;
+        const normalizeKey = (s: string) =>
+          s
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[_\-]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toUpperCase();
+
+        const targets = new Set(
+          ["NÚMERO DE PILOTE", "NUMERO DE PILOTE", "NUMERO PILOTE", "PILOTE NUMBER", "PILOTE"].map((k) => normalizeKey(k)),
+        );
+
+        const stack: any[] = [data];
+        const seen = new WeakSet<object>();
+        let nodes = 0;
+        const maxNodes = 12000;
+        while (stack.length > 0 && nodes < maxNodes) {
+          const cur = stack.pop();
+          if (!cur || typeof cur !== 'object') continue;
+          if (seen.has(cur as object)) continue;
+          seen.add(cur as object);
+          nodes++;
+          if (Array.isArray(cur)) {
+            for (let i = 0; i < cur.length; i++) stack.push(cur[i]);
+            continue;
+          }
+          for (const k in cur) {
+            const rawVal = (cur as any)[k];
+            if (targets.has(normalizeKey(String(k)))) {
+              const raw = getValue(rawVal);
+              const s = raw !== undefined && raw !== null ? String(raw).trim() : '';
+              if (s) return s;
+            }
+            if (rawVal && typeof rawVal === 'object') stack.push(rawVal);
+          }
+        }
+
+        return null;
       };
 
       const tryGetCenterFromBox = (box: any): { x: number; y: number; z: number } | null => {
@@ -1254,7 +1358,7 @@ export default function App() {
         }
       };
 
-      const tryGetItemCenter = async (localId: number): Promise<{ x: number; y: number; z: number } | null> => {
+      const tryGetItemCenter = async (ids: Array<number | string>): Promise<{ x: number; y: number; z: number } | null> => {
         const candidates = [
           (model as any)?.getItemBoundingBox,
           (model as any)?.getItemBox,
@@ -1262,12 +1366,16 @@ export default function App() {
           (model as any)?.getAABB
         ].filter((fn) => typeof fn === 'function') as Array<(id: number) => any>;
 
-        for (const fn of candidates) {
-          try {
-            const res = await Promise.resolve(fn.call(model, localId));
-            const center = tryGetCenterFromBox(res);
-            if (center) return center;
-          } catch {
+        for (const id of ids) {
+          const n = typeof id === 'number' ? id : Number(String(id));
+          if (!Number.isFinite(n)) continue;
+          for (const fn of candidates) {
+            try {
+              const res = await Promise.resolve(fn.call(model, n));
+              const center = tryGetCenterFromBox(res);
+              if (center) return center;
+            } catch {
+            }
           }
         }
         return null;
@@ -1295,7 +1403,7 @@ export default function App() {
           const pile = getPileNumberFromData(data);
           if (pile) {
             props["NÚMERO DE PILOTE"] = pile;
-            pileEntries.push({ props, localId });
+            pileEntries.push({ props, localId, expressId: String(expressId) });
           }
         }
 
@@ -1331,7 +1439,7 @@ export default function App() {
         const max = Math.min(500, pileEntries.length);
         for (let i = 0; i < max; i++) {
           const it = pileEntries[i]!;
-          const center = await tryGetItemCenter(it.localId);
+          const center = await tryGetItemCenter([it.localId, it.expressId]);
           if (center) {
             it.props.__pileCenter = center;
           }
@@ -2148,9 +2256,51 @@ export default function App() {
                     };
 
                     const activeDayKey = timelineDate ?? weekLevelCells.days[weekLevelCells.days.length - 1] ?? null;
+                    const activeTotals = activeDayKey ? weekLevelCells.dayTotals.get(activeDayKey) : null;
+                    const sumTotals = (t: Record<ConstructionStatus, number>) =>
+                      (t['NINGUNO'] ?? 0) +
+                      (t['EN PROGRESO'] ?? 0) +
+                      (t['PARA INSPECCION'] ?? 0) +
+                      (t['APROBADO'] ?? 0) +
+                      (t['CERRADO'] ?? 0) +
+                      (t['RECHAZADO'] ?? 0);
+
+                    const pickFromTotals = (t: Record<ConstructionStatus, number>): ConstructionStatus => {
+                      if ((t['RECHAZADO'] ?? 0) > 0) return 'RECHAZADO';
+                      let best: ConstructionStatus = 'NINGUNO';
+                      let bestN = -1;
+                      for (const k of ['CERRADO', 'APROBADO', 'PARA INSPECCION', 'EN PROGRESO', 'NINGUNO'] as ConstructionStatus[]) {
+                        const n = t[k] ?? 0;
+                        if (n > bestN) {
+                          best = k;
+                          bestN = n;
+                        }
+                      }
+                      return best;
+                    };
 
                     return (
-                      <table className="min-w-full border-collapse text-left">
+                      <div className="min-w-full">
+                        {activeDayKey && activeTotals && (
+                          <div className="px-3 py-2 border-b border-slate-100 bg-white sticky top-0 z-20">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                Resumen {activeDayKey} • {sumTotals(activeTotals)} elementos
+                              </div>
+                              {(['EN PROGRESO', 'PARA INSPECCION', 'APROBADO', 'CERRADO', 'RECHAZADO', 'NINGUNO'] as ConstructionStatus[])
+                                .filter((s) => (activeTotals[s] ?? 0) > 0)
+                                .map((s) => (
+                                  <div key={s} className="flex items-center gap-1 px-2 py-1 rounded-md border border-slate-200 bg-slate-50">
+                                    <div className={`w-2.5 h-2.5 rounded ${statusSwatchClass(s)} border border-slate-200`} />
+                                    <div className="text-[10px] font-bold text-slate-700">{s}</div>
+                                    <div className="text-[10px] font-black text-slate-900">{activeTotals[s]}</div>
+                                  </div>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <table className="min-w-full border-collapse text-left">
                         <thead className="sticky top-0 bg-white z-10">
                           <tr className="border-b border-slate-100">
                             <th className="sticky left-0 bg-white z-20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 border-r border-slate-100">
@@ -2177,6 +2327,31 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
+                          <tr>
+                            <td className="sticky left-0 bg-white z-10 px-3 py-2 text-[10px] font-black text-slate-700 whitespace-nowrap border-r border-slate-100">
+                              Total
+                            </td>
+                            {weekLevelCells.days.map((dayKey) => {
+                              const t = weekLevelCells.dayTotals.get(dayKey);
+                              if (!t) {
+                                return (
+                                  <td key={`tot@@${dayKey}`} className="px-3 py-2">
+                                    <div className="w-4 h-4 rounded bg-slate-100 border border-slate-200" title={`Total • ${dayKey}`} />
+                                  </td>
+                                );
+                              }
+                              const st = pickFromTotals(t);
+                              const title = `Total • ${dayKey}\nNINGUNO: ${t['NINGUNO']}\nEN PROGRESO: ${t['EN PROGRESO']}\nPARA INSPECCION: ${t['PARA INSPECCION']}\nAPROBADO: ${t['APROBADO']}\nCERRADO: ${t['CERRADO']}\nRECHAZADO: ${t['RECHAZADO']}`;
+                              return (
+                                <td key={`tot@@${dayKey}`} className="px-3 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-4 h-4 rounded ${statusSwatchClass(st)} border border-slate-200`} title={title} />
+                                    <div className="text-[10px] font-black text-slate-700">{sumTotals(t)}</div>
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
                           {weekLevelCells.levels.map((lvl) => (
                             <tr key={String(lvl)}>
                               <td className="sticky left-0 bg-white z-10 px-3 py-2 text-[10px] font-bold text-slate-700 whitespace-nowrap border-r border-slate-100">
@@ -2199,6 +2374,7 @@ export default function App() {
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     );
                   })()}
                 </div>
