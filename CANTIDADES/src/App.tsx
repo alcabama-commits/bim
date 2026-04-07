@@ -38,12 +38,13 @@ type JsonpOptions = {
 };
 
 const jsonpRequest = <T,>(url: URL, signalOrOptions?: AbortSignal | JsonpOptions): Promise<T> => {
-  const options: JsonpOptions = signalOrOptions && typeof signalOrOptions === 'object' && 'signal' in signalOrOptions
+  const options: JsonpOptions = signalOrOptions && typeof signalOrOptions === 'object' && (('signal' in signalOrOptions) || ('timeoutMs' in signalOrOptions))
     ? (signalOrOptions as JsonpOptions)
     : { signal: signalOrOptions as AbortSignal | undefined };
   const signal = options.signal;
+  const hasAbort = Boolean(signal && typeof (signal as any).addEventListener === 'function' && typeof (signal as any).removeEventListener === 'function');
   const timeoutMs = typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : 30000;
-  if (signal?.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  if (hasAbort && (signal as any).aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
   return new Promise<T>((resolve, reject) => {
     const cbName = `__jsonp_${Math.random().toString(36).slice(2)}`;
     url.searchParams.set('callback', cbName);
@@ -63,7 +64,7 @@ const jsonpRequest = <T,>(url: URL, signalOrOptions?: AbortSignal | JsonpOptions
         (window as any)[cbName] = undefined;
       }
       if (timeoutId !== null) window.clearTimeout(timeoutId);
-      if (abortHandler && signal) signal.removeEventListener('abort', abortHandler);
+      if (abortHandler && hasAbort) (signal as any).removeEventListener('abort', abortHandler);
       if (script.parentNode) script.parentNode.removeChild(script);
     };
 
@@ -87,7 +88,7 @@ const jsonpRequest = <T,>(url: URL, signalOrOptions?: AbortSignal | JsonpOptions
       cleanup();
       reject(new DOMException('Aborted', 'AbortError'));
     };
-    if (signal) signal.addEventListener('abort', abortHandler);
+    if (hasAbort) (signal as any).addEventListener('abort', abortHandler);
 
     timeoutId = window.setTimeout(() => {
       if (settled) return;
