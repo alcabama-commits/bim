@@ -32,6 +32,74 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: 
   }
 };
 
+type JsonpOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
+const jsonpRequest = <T,>(url: URL, signalOrOptions?: AbortSignal | JsonpOptions): Promise<T> => {
+  const options: JsonpOptions = signalOrOptions && typeof signalOrOptions === 'object' && 'signal' in signalOrOptions
+    ? (signalOrOptions as JsonpOptions)
+    : { signal: signalOrOptions as AbortSignal | undefined };
+  const signal = options.signal;
+  const timeoutMs = typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : 30000;
+  if (signal?.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  return new Promise<T>((resolve, reject) => {
+    const cbName = `__jsonp_${Math.random().toString(36).slice(2)}`;
+    url.searchParams.set('callback', cbName);
+
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = url.toString();
+
+    let settled = false;
+    let abortHandler: (() => void) | null = null;
+    let timeoutId: number | null = null;
+
+    const cleanup = () => {
+      try {
+        delete (window as any)[cbName];
+      } catch {
+        (window as any)[cbName] = undefined;
+      }
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      if (abortHandler && signal) signal.removeEventListener('abort', abortHandler);
+      if (script.parentNode) script.parentNode.removeChild(script);
+    };
+
+    (window as any)[cbName] = (data: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(data as T);
+    };
+
+    script.onerror = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(`Error cargando JSONP: ${script.src}`));
+    };
+
+    abortHandler = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    if (signal) signal.addEventListener('abort', abortHandler);
+
+    timeoutId = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(`Tiempo de espera agotado (JSONP). URL: ${script.src}`));
+    }, timeoutMs);
+
+    document.head.appendChild(script);
+  });
+};
+
 type RemoteModel = {
   name: string;
   fragUrl?: string;
@@ -57,6 +125,9 @@ const GITHUB_REPO = {
 
 const rawUrlFor = (path: string) =>
   `https://raw.githubusercontent.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/${GITHUB_REPO.branch}/${path.split('/').map(encodeURIComponent).join('/')}`;
+
+const CANTIDADES_SHEET_ID = ((import.meta as any).env?.VITE_CANTIDADES_SHEET_ID ?? '19kpmTk5Ap2DaJEZH-BFejBt_ia8qALIKqaPyMdDVuEU').trim();
+const CANTIDADES_SHEET_SCRIPT_URL = String(((import.meta as any).env?.VITE_CANTIDADES_SHEET_SCRIPT_URL ?? '')).trim();
 
 const normalizeClassification = (v: string) =>
   v
@@ -96,6 +167,115 @@ export default function App() {
   const [selectedRemoteModelName, setSelectedRemoteModelName] = useState<string | null>(null);
   const [elementStatuses, setElementStatuses] = useState<Record<string, PurchaseStatus>>({});
   const [elementHistory, setElementHistory] = useState<Record<string, HistoryEntry[]>>({});
+  const getModelKey = useCallback((modelName: string | null) => {
+    const base = (modelName ?? '').replace(/\.frag$/i, '').trim();
+    return base || 'local';
+  }, []);
+
+  const currentModelKey = useMemo(() => getModelKey(selectedRemoteModelName), [getModelKey, selectedRemoteModelName]);
+
+  const normalizePurchaseStatus = useCallback((v: unknown): PurchaseStatus | null => {
+    const allowed: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'EN BODEGA', 'INSTALADO'];
+    const s = String(v ?? '').trim().toUpperCase();
+    if (s === 'EN SITIO') return 'INSTALADO';
+    if (s === 'EN_BODEGA') return 'EN BODEGA';
+    if (allowed.includes(s as PurchaseStatus)) return s as PurchaseStatus;
+    return null;
+  }, []);
+
+  const fetchRemoteStatuses = useCallback(async (modelName: string, signal?: AbortSignal) => {
+    if (!CANTIDADES_SHEET_SCRIPT_URL) return;
+    const url = new URL(CANTIDADES_SHEET_SCRIPT_URL);
+    url.searchParams.set('action', 'status_get');
+    url.searchParams.set('sheetId', CANTIDADES_SHEET_ID);
+    url.searchParams.set('model', getModelKey(modelName));
+    const data = await jsonpRequest<{
+      ok?: boolean;
+      error?: string;
+      statuses?: Record<string, unknown>;
+      history?: Record<string, Array<{ status: unknown; at: unknown }>>;
+    }>(url, { signal, timeoutMs: 30000 });
+
+    if (!data || typeof data !== 'object') return;
+    if (typeof (data as any).error === 'string' && String((data as any).error).trim()) {
+      throw new Error(String((data as any).error));
+    }
+    if ((data as any).ok === false) return;
+
+    const rawStatuses = (data as any).statuses;
+    if (rawStatuses && typeof rawStatuses === 'object') {
+      const nextStatuses: Record<string, PurchaseStatus> = {};
+      for (const [id, stRaw] of Object.entries(rawStatuses as Record<string, unknown>)) {
+        const st = normalizePurchaseStatus(stRaw);
+        if (st) nextStatuses[String(id)] = st;
+      }
+      setElementStatuses(nextStatuses);
+    }
+
+    const rawHistory = (data as any).history;
+    if (rawHistory && typeof rawHistory === 'object') {
+      const nextHistory: Record<string, HistoryEntry[]> = {};
+      for (const [id, entries] of Object.entries(rawHistory as Record<string, unknown>)) {
+        if (!Array.isArray(entries)) continue;
+        const arr: HistoryEntry[] = [];
+        for (const e of entries as Array<any>) {
+          const st = normalizePurchaseStatus(e?.status);
+          const at = String(e?.at ?? '').trim();
+          if (!st || !at) continue;
+          arr.push({ status: st, at });
+        }
+        if (arr.length > 0) nextHistory[String(id)] = arr;
+      }
+      setElementHistory(nextHistory);
+    }
+  }, [getModelKey, normalizePurchaseStatus]);
+
+  const remoteQueueRef = useRef<Array<{ modelKey: string; id: string; status: PurchaseStatus; at: string }>>([]);
+  const remoteFlushTimerRef = useRef<number | null>(null);
+  const remoteAbortRef = useRef<AbortController | null>(null);
+
+  const flushRemoteQueue = useCallback(async () => {
+    if (!CANTIDADES_SHEET_SCRIPT_URL) return;
+    if (remoteQueueRef.current.length === 0) return;
+    const batch = remoteQueueRef.current.splice(0, 25);
+    const controller = new AbortController();
+    remoteAbortRef.current = controller;
+    try {
+      for (const it of batch) {
+        const url = new URL(CANTIDADES_SHEET_SCRIPT_URL);
+        url.searchParams.set('action', 'status_set');
+        url.searchParams.set('sheetId', CANTIDADES_SHEET_ID);
+        url.searchParams.set('model', it.modelKey);
+        url.searchParams.set('elementId', it.id);
+        url.searchParams.set('status', it.status);
+        url.searchParams.set('at', it.at);
+        await jsonpRequest(url, { signal: controller.signal, timeoutMs: 30000 });
+      }
+    } catch {
+      remoteQueueRef.current.unshift(...batch);
+    } finally {
+      if (remoteQueueRef.current.length > 0) {
+        remoteFlushTimerRef.current = window.setTimeout(() => void flushRemoteQueue(), 900);
+      } else {
+        remoteFlushTimerRef.current = null;
+      }
+    }
+  }, [currentModelKey]);
+
+  const enqueueRemoteChange = useCallback((id: string, status: PurchaseStatus, at: string) => {
+    if (!CANTIDADES_SHEET_SCRIPT_URL) return;
+    remoteQueueRef.current.push({ modelKey: currentModelKey, id, status, at });
+    if (remoteFlushTimerRef.current !== null) return;
+    remoteFlushTimerRef.current = window.setTimeout(() => void flushRemoteQueue(), 900);
+  }, [currentModelKey, flushRemoteQueue]);
+
+  useEffect(() => {
+    if (!CANTIDADES_SHEET_SCRIPT_URL) return;
+    if (!selectedRemoteModelName) return;
+    const controller = new AbortController();
+    void fetchRemoteStatuses(selectedRemoteModelName, controller.signal);
+    return () => controller.abort();
+  }, [fetchRemoteStatuses, selectedRemoteModelName]);
 
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
     const stored = Number(localStorage.getItem('cantidades:leftPanelWidth'));
@@ -1270,6 +1450,7 @@ export default function App() {
   };
 
   const handleChangeStatus = useCallback((id: string, status: PurchaseStatus) => {
+    const at = new Date().toISOString();
     setElementStatuses((prev) => {
       if (prev[id] === status) return prev;
       return { ...prev, [id]: status };
@@ -1278,12 +1459,13 @@ export default function App() {
       const current = prev[id] ?? [];
       const last = current.length > 0 ? current[current.length - 1] : null;
       if (last && last.status === status) return prev;
-      const at = new Date().toISOString();
       return { ...prev, [id]: [...current, { status, at }] };
     });
-  }, []);
+    enqueueRemoteChange(id, status, at);
+  }, [enqueueRemoteChange]);
 
   const handleChangeStatusMany = useCallback((ids: string[], status: PurchaseStatus) => {
+    const at = new Date().toISOString();
     setElementStatuses((prev) => {
       let next: Record<string, PurchaseStatus> | null = null;
       for (const id of ids) {
@@ -1295,7 +1477,6 @@ export default function App() {
       return next ?? prev;
     });
     setElementHistory((prev) => {
-      const at = new Date().toISOString();
       let next: Record<string, HistoryEntry[]> | null = null;
       for (const id of ids) {
         const current = prev[id] ?? [];
@@ -1306,7 +1487,8 @@ export default function App() {
       }
       return next ?? prev;
     });
-  }, []);
+    for (const id of ids) enqueueRemoteChange(id, status, at);
+  }, [enqueueRemoteChange]);
 
   const [expandedModelGroups, setExpandedModelGroups] = useState<Record<string, boolean>>({
     ESTRUCTURA: true,
