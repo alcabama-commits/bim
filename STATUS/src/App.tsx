@@ -202,6 +202,14 @@ export default function App() {
     const v = Number(localStorage.getItem('cantidades:timelineDayWidth'));
     return Number.isFinite(v) && v >= 24 && v <= 64 ? v : 44;
   });
+  const [timelineLevelsLevelColWidth, setTimelineLevelsLevelColWidth] = useState(() => {
+    const v = Number(localStorage.getItem('cantidades:timelineLevelsLevelColWidth'));
+    return Number.isFinite(v) && v >= 180 && v <= 600 ? v : 360;
+  });
+  const [timelineLevelsDayColWidth, setTimelineLevelsDayColWidth] = useState(() => {
+    const v = Number(localStorage.getItem('cantidades:timelineLevelsDayColWidth'));
+    return Number.isFinite(v) && v >= 90 && v <= 260 ? v : 160;
+  });
 
   const updateApp = useCallback(async () => {
     if (isUpdatingApp) return;
@@ -649,6 +657,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('cantidades:timelineDayWidth', String(timelineDayWidth));
   }, [timelineDayWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('cantidades:timelineLevelsLevelColWidth', String(timelineLevelsLevelColWidth));
+  }, [timelineLevelsLevelColWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('cantidades:timelineLevelsDayColWidth', String(timelineLevelsDayColWidth));
+  }, [timelineLevelsDayColWidth]);
   useEffect(() => {
     localStorage.setItem('cantidades:statusColorsEnabled', String(statusColorsEnabled));
   }, [statusColorsEnabled]);
@@ -2494,7 +2510,45 @@ export default function App() {
                         )}
 
                         {showTimelineLevelsDetail && (
-                          <table className="min-w-full border-collapse text-left">
+                          <>
+                          <div className="px-3 py-2 border-b border-slate-100 bg-white sticky top-0 z-10">
+                            <div className="flex flex-wrap items-center gap-4">
+                              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Columnas</div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-[10px] font-bold text-slate-600 whitespace-nowrap">Nivel</div>
+                                <input
+                                  type="range"
+                                  min={180}
+                                  max={600}
+                                  value={timelineLevelsLevelColWidth}
+                                  onChange={(e) => setTimelineLevelsLevelColWidth(Number(e.target.value))}
+                                />
+                                <div className="text-[10px] font-bold text-slate-400 w-10 text-right tabular-nums">{timelineLevelsLevelColWidth}</div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-[10px] font-bold text-slate-600 whitespace-nowrap">Día</div>
+                                <input
+                                  type="range"
+                                  min={90}
+                                  max={260}
+                                  value={timelineLevelsDayColWidth}
+                                  onChange={(e) => setTimelineLevelsDayColWidth(Number(e.target.value))}
+                                />
+                                <div className="text-[10px] font-bold text-slate-400 w-10 text-right tabular-nums">{timelineLevelsDayColWidth}</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <table
+                            className="border-collapse text-left table-fixed"
+                            style={{ width: timelineLevelsLevelColWidth + (weekLevelCells.days.length * timelineLevelsDayColWidth) }}
+                          >
+                            <colgroup>
+                              <col style={{ width: timelineLevelsLevelColWidth }} />
+                              {weekLevelCells.days.map((d) => (
+                                <col key={`col-${d}`} style={{ width: timelineLevelsDayColWidth }} />
+                              ))}
+                            </colgroup>
                         <thead className="sticky top-0 bg-white z-10">
                           <tr className="border-b border-slate-100">
                             <th className="sticky left-0 bg-white z-20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 border-r border-slate-100">
@@ -2527,6 +2581,7 @@ export default function App() {
                             </td>
                             {weekLevelCells.days.map((dayKey) => {
                               const t = weekLevelCells.dayTotals.get(dayKey);
+                              const ch = weekLevelCells.dayChanges.get(dayKey);
                               if (!t) {
                                 return (
                                   <td key={`tot@@${dayKey}`} className="px-3 py-2">
@@ -2537,12 +2592,24 @@ export default function App() {
                               const title = `Total • ${dayKey}\nNINGUNO: ${t['NINGUNO']}\nEN PROGRESO: ${t['EN PROGRESO']}\nPARA INSPECCION: ${t['PARA INSPECCION']}\nAPROBADO: ${t['APROBADO']}\nCERRADO: ${t['CERRADO']}\nRECHAZADO: ${t['RECHAZADO']}`;
                               return (
                                 <td key={`tot@@${dayKey}`} className="px-3 py-2">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <div className="w-4 h-4 rounded bg-slate-300 border border-slate-400" title={title} />
                                     <div className="text-[10px] font-black text-slate-700">{sumTotals(t)}</div>
                                     {(t['RECHAZADO'] ?? 0) > 0 && (
                                       <div className="px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-[10px] font-black text-red-700">
                                         {t['RECHAZADO']}
+                                      </div>
+                                    )}
+                                    {ch && sumTotals(ch) > 0 && (
+                                      <div className="flex items-center gap-1 ml-2">
+                                        {(['EN PROGRESO', 'PARA INSPECCION', 'APROBADO', 'CERRADO', 'RECHAZADO'] as ConstructionStatus[])
+                                          .filter((s) => (ch[s] ?? 0) > 0)
+                                          .map((s) => (
+                                            <div key={`totchg-${dayKey}-${s}`} className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-slate-200 bg-white">
+                                              <div className={`w-2 h-2 rounded ${statusSwatchClass(s)} border border-slate-200`} />
+                                              <div className="text-[10px] font-black text-slate-700">{ch[s]}</div>
+                                            </div>
+                                          ))}
                                       </div>
                                     )}
                                   </div>
@@ -2561,13 +2628,28 @@ export default function App() {
                                 const title = weekLevelCells.cellTitle.get(k) ?? `${String(lvl)} • ${dayKey}`;
                                 const c = weekLevelCells.cellCounts.get(k);
                                 const rejected = c ? (c['RECHAZADO'] ?? 0) : 0;
+                                const changes = weekLevelCells.cellChanges.get(k);
                                 return (
                                   <td key={k} className="px-3 py-2">
-                                    <div className="relative inline-flex" title={title}>
-                                      <div className={`w-4 h-4 rounded ${statusSwatchClass(st)} border border-slate-200`} />
-                                      {rejected > 0 && (
-                                        <div className="absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-red-600 text-white text-[9px] font-black flex items-center justify-center">
-                                          {rejected}
+                                    <div className="flex items-center gap-2" title={title}>
+                                      <div className="relative inline-flex">
+                                        <div className={`w-4 h-4 rounded ${statusSwatchClass(st)} border border-slate-200`} />
+                                        {rejected > 0 && (
+                                          <div className="absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-red-600 text-white text-[9px] font-black flex items-center justify-center">
+                                            {rejected}
+                                          </div>
+                                        )}
+                                      </div>
+                                      {changes && sumTotals(changes) > 0 && (
+                                        <div className="flex items-center gap-1 flex-wrap">
+                                          {(['EN PROGRESO', 'PARA INSPECCION', 'APROBADO', 'CERRADO', 'RECHAZADO'] as ConstructionStatus[])
+                                            .filter((s) => (changes[s] ?? 0) > 0)
+                                            .map((s) => (
+                                              <div key={`chg-${k}-${s}`} className="flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-slate-200 bg-white">
+                                                <div className={`w-2 h-2 rounded ${statusSwatchClass(s)} border border-slate-200`} />
+                                                <div className="text-[10px] font-black text-slate-700">{changes[s]}</div>
+                                              </div>
+                                            ))}
                                         </div>
                                       )}
                                     </div>
@@ -2578,6 +2660,7 @@ export default function App() {
                           ))}
                         </tbody>
                       </table>
+                          </>
                         )}
                       </div>
                     );
@@ -2818,7 +2901,7 @@ export default function App() {
                   }}
                 />
 
-                <div className="flex flex-col border-t border-slate-200" style={{ height: isTableDocked ? 28 : tablePanelHeight }}>
+                <div className="flex flex-col border-t border-slate-200" style={{ height: isTableDocked ? 44 : tablePanelHeight }}>
                   <div className="h-10 px-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                     <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
                     <div className="flex items-center gap-2">
