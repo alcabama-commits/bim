@@ -22,16 +22,18 @@ interface BIMViewerProps {
   selectedElementId?: string;
   selectedElementIds?: string[];
   onElementSelect: (id: string | null) => void;
+  onSelectionChange?: (ids: string[]) => void;
   isLoading: boolean;
   isIsolateMode?: boolean;
 }
 
-export default function BIMViewer({ onModelLoaded, elements, selectedElementId, selectedElementIds, onElementSelect, isLoading, isIsolateMode }: BIMViewerProps) {
+export default function BIMViewer({ onModelLoaded, elements, selectedElementId, selectedElementIds, onElementSelect, onSelectionChange, isLoading, isIsolateMode }: BIMViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const componentsRef = useRef<OBC.Components | null>(null);
   const workerUrlRef = useRef<string | null>(null);
   const syncCleanupRef = useRef<null | (() => void)>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const elementIdIndexRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -103,11 +105,15 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
         // Configurar Highlighter
         highlighter.setup({ world });
         highlighter.enabled = true;
-        highlighter.styles.set("select", { 
-          color: new THREE.Color(0x3b82f6),
-          opacity: 0.5,
-          transparent: true,
-          renderedFaces: FRAGS.RenderedFaces.TWO
+        highlighter.multiple = 'ctrlKey';
+        highlighter.autoToggle.add('select');
+        highlighter.styles.set('select', {
+          color: new THREE.Color(0xd3045c),
+          opacity: 1,
+          transparent: false,
+          depthTest: true,
+          depthWrite: true,
+          renderedFaces: FRAGS.RenderedFaces.ONE
         });
         
         // Configurar eventos
@@ -155,19 +161,44 @@ export default function BIMViewer({ onModelLoaded, elements, selectedElementId, 
         }
       };
 
-      // Suscribirse a eventos de selección
+      // Índice para mapear (modelId:localId) -> elementId
+      const buildElementIndex = () => {
+        const index = new Map<string, string>();
+        for (const el of elements) {
+          const modelId = el.modelId ? String(el.modelId) : '';
+          const localId = el.localId !== undefined ? Number(el.localId) : Number(el.id);
+          if (modelId && Number.isFinite(localId)) {
+            index.set(`${modelId}:${localId}`, el.id);
+          }
+        }
+        elementIdIndexRef.current = index;
+      };
+      buildElementIndex();
+
+      const getSelectionIds = (modelIdMap: OBC.ModelIdMap) => {
+        const resolved: string[] = [];
+        const index = elementIdIndexRef.current;
+        for (const [modelId, itemIds] of Object.entries(modelIdMap)) {
+          for (const itemId of Array.from(itemIds)) {
+            const key = `${String(modelId)}:${Number(itemId)}`;
+            const elId = index.get(key);
+            if (elId) resolved.push(elId);
+          }
+        }
+        return resolved;
+      };
+
+      // Suscribirse a eventos de selección (múltiple con Ctrl)
       if (highlighter.events.select) {
-        highlighter.events.select.onHighlight.add(async (modelIdMap) => {
-          const modelId = Object.keys(modelIdMap)[0];
-          const itemIds = modelIdMap[modelId];
-          const itemId = Array.from(itemIds)[0];
-          
-          getModelById(modelId);
-          onElementSelect(itemId.toString());
+        highlighter.events.select.onHighlight.add((modelIdMap) => {
+          const ids = getSelectionIds(modelIdMap);
+          if (onSelectionChange) onSelectionChange(ids);
+          onElementSelect(ids[0] ?? null);
         });
 
         highlighter.events.select.onClear.add(() => {
           onElementSelect(null);
+          if (onSelectionChange) onSelectionChange([]);
         });
       }
 

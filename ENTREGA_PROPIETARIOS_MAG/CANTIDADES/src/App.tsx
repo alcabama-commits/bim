@@ -804,6 +804,10 @@ export default function App() {
               selectedElementId={selectedElementId || undefined}
               selectedElementIds={selectedElementIds}
               onElementSelect={setSelectedElementId}
+              onSelectionChange={(ids) => {
+                setSelectedElementIds(ids);
+                setSelectedElementId(ids[0] ?? null);
+              }}
               isIsolateMode={isIsolateMode}
             />
 
