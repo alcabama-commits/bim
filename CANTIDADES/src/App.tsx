@@ -128,7 +128,7 @@ const rawUrlFor = (path: string) =>
 
 const CANTIDADES_SHEET_ID = String(((import.meta as any).env?.VITE_CANTIDADES_SHEET_ID ?? '19kpmTk5Ap2DaJEZH-BFejBt_ia8qALIKqaPyMdDVuEU')).trim();
 const CANTIDADES_SHEET_SCRIPT_URL = String(
-  ((import.meta as any).env?.VITE_CANTIDADES_SHEET_SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycbzqdowukNUpdAkhlsoyJQhv7jCOut9wHJS8xc8AWZ1ys99WtyS6e_1sLwgQEq2Vb-Ol/exec'),
+  ((import.meta as any).env?.VITE_CANTIDADES_SHEET_SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycby3d3vIF4lrZjgCt1Uh5yGnvuGOJvoyrVrt6CyQ3eg0rjdZ8oq43ZSdtYtxrNdkP7U/exec'),
 ).trim();
 
 const normalizeClassification = (v: string) =>
