@@ -134,7 +134,7 @@ const rawUrlFor = (path: string) =>
 
 const CANTIDADES_SHEET_ID = String(((import.meta as any).env?.VITE_CANTIDADES_SHEET_ID ?? '19kpmTk5Ap2DaJEZH-BFejBt_ia8qALIKqaPyMdDVuEU')).trim();
 const CANTIDADES_SHEET_SCRIPT_URL = String(
-  ((import.meta as any).env?.VITE_CANTIDADES_SHEET_SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycby3d3vIF4lrZjgCt1Uh5yGnvuGOJvoyrVrt6CyQ3eg0rjdZ8oq43ZSdtYtxrNdkP7U/exec'),
+  ((import.meta as any).env?.VITE_CANTIDADES_SHEET_SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycbzMhiaepsPfrTdYOHLK7mDTnODjlecNqz8G6TODOGy_lqusQ9lRSEUcXUpsfCWinw/exec'),
 ).trim();
 
 const normalizeClassification = (v: string) =>
