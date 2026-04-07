@@ -244,9 +244,14 @@ export default function App() {
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
   const [selectedDiameter, setSelectedDiameter] = useState<string>('Todos');
   const [selectedMaterial, setSelectedMaterial] = useState<string>('Todos');
-  const [selectedPileNumber, setSelectedPileNumber] = useState<string>('Todos');
+  const [selectedPileNumbers, setSelectedPileNumbers] = useState<string[]>([]);
   const [showPileNumberLabels, setShowPileNumberLabels] = useState(() => {
     const raw = localStorage.getItem('cantidades:showPileNumberLabels');
+    if (raw === null) return false;
+    return raw === 'true';
+  });
+  const [showTimelineLevelsDetail, setShowTimelineLevelsDetail] = useState(() => {
+    const raw = localStorage.getItem('cantidades:showTimelineLevelsDetail');
     if (raw === null) return false;
     return raw === 'true';
   });
@@ -366,11 +371,30 @@ export default function App() {
       error?: string;
       statuses?: Record<string, unknown>;
       history?: Record<string, Array<{ status: unknown; at: unknown }>>;
+      rows?: Array<{ id?: unknown; elementId?: unknown; status?: unknown; updatedAt?: unknown; at?: unknown }>;
     }>(url, { signal, timeoutMs: 30000 });
 
     if (!data || typeof data !== 'object') return;
     if (typeof (data as any).error === 'string' && String((data as any).error).trim()) {
       throw new Error(String((data as any).error));
+    }
+
+    const rawRows = (data as any).rows;
+    if (Array.isArray(rawRows) && rawRows.length > 0) {
+      const nextStatuses: Record<string, ConstructionStatus> = {};
+      const nextHistory: Record<string, Array<{ status: ConstructionStatus; at: string }>> = {};
+      for (const r of rawRows) {
+        const id = String(r?.elementId ?? r?.id ?? '').trim();
+        if (!id) continue;
+        const st = normalizeConstructionStatus(r?.status);
+        if (!st) continue;
+        nextStatuses[id] = st;
+        const at = String(r?.updatedAt ?? r?.at ?? '').trim();
+        if (at) nextHistory[id] = [{ status: st, at }];
+      }
+      setElementStatuses(nextStatuses);
+      setElementHistory(nextHistory);
+      return;
     }
 
     const rawStatuses = (data as any).statuses;
@@ -398,6 +422,8 @@ export default function App() {
         if (arr.length > 0) nextHistory[id] = arr;
       }
       setElementHistory(nextHistory);
+    } else {
+      setElementHistory({});
     }
   }, [getModelKey, normalizeConstructionStatus]);
 
@@ -610,6 +636,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('cantidades:showPileNumberLabels', String(showPileNumberLabels));
   }, [showPileNumberLabels]);
+
+  useEffect(() => {
+    localStorage.setItem('cantidades:showTimelineLevelsDetail', String(showTimelineLevelsDetail));
+  }, [showTimelineLevelsDetail]);
 
   const startHorizontalDrag = useCallback((startEvent: React.PointerEvent, onDeltaX: (dx: number) => void) => {
     startEvent.preventDefault();
@@ -888,41 +918,50 @@ export default function App() {
       const levelMatch = selectedLevels.length === 0 || selectedLevels.includes(level);
       const diameterMatch = selectedDiameter === 'Todos' || diameter === selectedDiameter;
       const materialMatch = selectedMaterial === 'Todos' || material === selectedMaterial;
-      const pileMatch = selectedPileNumber === 'Todos' || pileNumber === selectedPileNumber;
 
       if (isStructureModel) {
-        return classificationMatch && categoryMatch && levelMatch && materialMatch && pileMatch;
+        return classificationMatch && categoryMatch && levelMatch && materialMatch;
       }
       return classificationMatch && categoryMatch && levelMatch && diameterMatch;
     });
-  }, [baseElements, deriveFilterCategory, deriveFilterClassification, getFirstProp, getProp, isStructureModel, selectedCategories, selectedClassifications, selectedDiameter, selectedLevels, selectedMaterial, selectedPileNumber]);
+  }, [baseElements, deriveFilterCategory, deriveFilterClassification, getFirstProp, getProp, isStructureModel, selectedCategories, selectedClassifications, selectedDiameter, selectedLevels, selectedMaterial]);
+
+  useEffect(() => {
+    if (!isStructureModel) return;
+    if (selectedPileNumbers.length === 0) return;
+
+    const selected = new Set<string>();
+    for (const el of filteredElements) {
+      const pile = getFirstProp(el, ["NÚMERO DE PILOTE", "NUMERO DE PILOTE", "NUMERO PILOTE", "PILOTE NUMBER", "PILOTE"]);
+      if (!pile) continue;
+      if (!selectedPileNumbers.includes(pile)) continue;
+      selected.add(el.id);
+    }
+
+    const ids = Array.from(selected);
+    setSelectedElementIds(ids);
+    setSelectedElementId(ids[0] ?? null);
+    setIsIsolateMode(false);
+  }, [filteredElements, getFirstProp, isStructureModel, selectedPileNumbers]);
 
   const pileNumberLabels = useMemo(() => {
-    if (!isStructureModel) return [] as Array<{ id: string; label: string; position: { x: number; y: number; z: number } }>;
-    const read = (props: Record<string, any> | undefined | null, keys: string[]) => {
-      if (!props) return '';
-      for (const k of keys) {
-        const v = (props as any)[k];
-        if (v === undefined || v === null) continue;
-        const s = String(v).trim();
-        if (s) return s;
-      }
-      return '';
-    };
-
-    const byPile = new Map<string, { id: string; label: string; position: { x: number; y: number; z: number } }>();
+    if (!isStructureModel) return [] as Array<{ id: string; label: string; modelId: string; localId: number }>;
+    if (!showPileNumberLabels) return [];
+    const only = selectedPileNumbers.length > 0 ? new Set(selectedPileNumbers) : null;
+    const byPile = new Map<string, { id: string; label: string; modelId: string; localId: number }>();
     for (const el of filteredElements) {
-      const props = el.properties as any;
-      const pile = read(props, ["NÚMERO DE PILOTE", "NUMERO DE PILOTE", "NUMERO PILOTE", "PILOTE NUMBER", "PILOTE"]);
-      const center = props?.__pileCenter as { x: number; y: number; z: number } | undefined;
-      if (!pile || !center) continue;
-      if (!Number.isFinite(center.x) || !Number.isFinite(center.y) || !Number.isFinite(center.z)) continue;
-      if (!byPile.has(pile)) {
-        byPile.set(pile, { id: `pile:${pile}`, label: pile, position: { x: center.x, y: center.y, z: center.z } });
-      }
+      const pile = getFirstProp(el, ["NÚMERO DE PILOTE", "NUMERO DE PILOTE", "NUMERO PILOTE", "PILOTE NUMBER", "PILOTE"]);
+      if (!pile) continue;
+      if (only && !only.has(pile)) continue;
+      if (byPile.has(pile)) continue;
+      const modelId = el.modelId ? String(el.modelId) : '';
+      const localId = el.localId !== undefined ? Number(el.localId) : Number(el.id);
+      if (!modelId || !Number.isFinite(localId)) continue;
+      byPile.set(pile, { id: `pile:${pile}`, label: pile, modelId, localId });
+      if (!only && byPile.size >= 300) break;
     }
     return Array.from(byPile.values());
-  }, [filteredElements, isStructureModel]);
+  }, [filteredElements, getFirstProp, isStructureModel, selectedPileNumbers, showPileNumberLabels]);
 
   const elementsWithVolume = useMemo(() => {
     const toNumber = (v: unknown) => {
@@ -2045,8 +2084,17 @@ export default function App() {
     setSelectedLevels([]);
     setSelectedDiameter('Todos');
     setSelectedMaterial('Todos');
-    setSelectedPileNumber('Todos');
   };
+
+  const togglePileNumberSelection = useCallback((pile: string) => {
+    setSelectedPileNumbers((prev) => (prev.includes(pile) ? prev.filter((p) => p !== pile) : [...prev, pile]));
+  }, []);
+
+  const clearPileSelection = useCallback(() => {
+    setSelectedPileNumbers([]);
+    setSelectedElementIds([]);
+    setSelectedElementId(null);
+  }, []);
 
   const handleChangeStatus = useCallback((id: string, status: ConstructionStatus) => {
     setElementStatuses((prev) => {
@@ -2241,7 +2289,19 @@ export default function App() {
               </div>
 
               <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Día a día por niveles</div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Resumen por niveles</div>
+                  <button
+                    type="button"
+                    onClick={() => setShowTimelineLevelsDetail((v) => !v)}
+                    className={`px-2 py-1 rounded-md border text-[10px] font-bold uppercase tracking-widest ${
+                      showTimelineLevelsDetail ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                    title={showTimelineLevelsDetail ? 'Ocultar detalle por niveles' : 'Ver detalle por niveles'}
+                  >
+                    {showTimelineLevelsDetail ? 'Ocultar detalle' : 'Ver detalle'}
+                  </button>
+                </div>
                 <div className="mt-2 overflow-auto max-h-56 rounded-lg border border-slate-100">
                   {(() => {
                     const statusSwatchClass = (st: ConstructionStatus) => {
@@ -2300,7 +2360,8 @@ export default function App() {
                           </div>
                         )}
 
-                        <table className="min-w-full border-collapse text-left">
+                        {showTimelineLevelsDetail && (
+                          <table className="min-w-full border-collapse text-left">
                         <thead className="sticky top-0 bg-white z-10">
                           <tr className="border-b border-slate-100">
                             <th className="sticky left-0 bg-white z-20 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 border-r border-slate-100">
@@ -2374,6 +2435,7 @@ export default function App() {
                           ))}
                         </tbody>
                       </table>
+                        )}
                       </div>
                     );
                   })()}
@@ -2693,8 +2755,9 @@ export default function App() {
                 selectedMaterial={selectedMaterial}
                 onMaterialChange={setSelectedMaterial}
                 pileNumbers={pileNumbers}
-                selectedPileNumber={selectedPileNumber}
-                onPileNumberChange={setSelectedPileNumber}
+                selectedPileNumbers={selectedPileNumbers}
+                onTogglePileNumber={togglePileNumberSelection}
+                onClearPileSelection={clearPileSelection}
                 showPileLabels={showPileNumberLabels}
                 onToggleShowPileLabels={() => setShowPileNumberLabels((v) => !v)}
                 onResetFilters={resetFilters}

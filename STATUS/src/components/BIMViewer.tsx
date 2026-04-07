@@ -29,7 +29,7 @@ interface BIMViewerProps {
   isLoading: boolean;
   isIsolateMode?: boolean;
   showPileNumberLabels?: boolean;
-  pileNumberLabels?: Array<{ id: string; label: string; position: { x: number; y: number; z: number } }>;
+  pileNumberLabels?: Array<{ id: string; label: string; modelId: string; localId: number }>;
 }
 
 type ConstructionStatus =
@@ -59,6 +59,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
   const [selectionBox, setSelectionBox] = useState<null | { left: number; top: number; width: number; height: number; dashed: boolean }>(null);
   const labelContainerRef = useRef<HTMLDivElement | null>(null);
   const labelElByIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const labelPosByIdRef = useRef<Map<string, { x: number; y: number; z: number }>>(new Map());
   const selectionGestureRef = useRef<{
     active: boolean;
     ctrlKey: boolean;
@@ -839,11 +840,82 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
 
     const components = componentsRef.current;
     if (!components) return;
+    const fragments = components.get(OBC.FragmentsManager);
     const worlds = components.get(OBC.Worlds);
     const world = Array.from(worlds.list.values())[0] as any;
     const camera = world?.camera?.three as THREE.PerspectiveCamera | THREE.OrthographicCamera | undefined;
     const dom = world?.renderer?.three?.domElement as HTMLCanvasElement | undefined;
     if (!camera || !dom) return;
+
+    const list: Map<string, any> | undefined = (fragments as any).list;
+    const getAllModels = () => Array.from(list?.values?.() ?? []);
+    const getModelById = (id: string) => {
+      if (!id) return undefined;
+      const direct = list?.get?.(id);
+      if (direct) return direct;
+      for (const m of getAllModels()) {
+        const keys = [m?.uuid, m?.id, m?.modelId].filter(Boolean).map(String);
+        if (keys.includes(String(id))) return m;
+      }
+      return undefined;
+    };
+
+    const tryGetCenterFromBox = (box: any): { x: number; y: number; z: number } | null => {
+      try {
+        const b = new THREE.Box3();
+        if (box instanceof THREE.Box3) {
+          b.copy(box);
+        } else if (Array.isArray(box) && box.length >= 6) {
+          b.min.set(Number(box[0]), Number(box[1]), Number(box[2]));
+          b.max.set(Number(box[3]), Number(box[4]), Number(box[5]));
+        } else if (box && typeof box === 'object' && box.min && box.max) {
+          b.min.set(Number(box.min.x), Number(box.min.y), Number(box.min.z));
+          b.max.set(Number(box.max.x), Number(box.max.y), Number(box.max.z));
+        } else {
+          return null;
+        }
+        if (!Number.isFinite(b.min.x) || !Number.isFinite(b.max.x)) return null;
+        const c = new THREE.Vector3();
+        b.getCenter(c);
+        if (!Number.isFinite(c.x) || !Number.isFinite(c.y) || !Number.isFinite(c.z)) return null;
+        return { x: c.x, y: c.y, z: c.z };
+      } catch {
+        return null;
+      }
+    };
+
+    const tryComputeItemCenter = async (model: any, localId: number): Promise<{ x: number; y: number; z: number } | null> => {
+      const candidates = [
+        model?.getItemBoundingBox,
+        model?.getItemBox,
+        model?.getItemAABB,
+        model?.getBoundingBox,
+        model?.getAABB
+      ].filter((fn: any) => typeof fn === 'function') as Array<(id: number) => any>;
+
+      for (const fn of candidates) {
+        try {
+          const res = await Promise.resolve(fn.call(model, localId));
+          const center = tryGetCenterFromBox(res);
+          if (center) return center;
+        } catch {
+        }
+      }
+      return null;
+    };
+
+    let cancelled = false;
+    const computePositions = async () => {
+      const next = new Map<string, { x: number; y: number; z: number }>();
+      for (const l of pileNumberLabels) {
+        const model = getModelById(l.modelId);
+        if (!model) continue;
+        const center = await tryComputeItemCenter(model, l.localId);
+        if (center) next.set(l.id, center);
+      }
+      if (!cancelled) labelPosByIdRef.current = next;
+    };
+    void computePositions();
 
     let raf = 0;
     const v = new THREE.Vector3();
@@ -860,7 +932,12 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       for (const l of pileNumberLabels) {
         const el = labelElByIdRef.current.get(l.id);
         if (!el) continue;
-        v.set(l.position.x, l.position.y, l.position.z);
+        const pos = labelPosByIdRef.current.get(l.id);
+        if (!pos) {
+          el.style.display = 'none';
+          continue;
+        }
+        v.set(pos.x, pos.y, pos.z);
         v.project(camera);
 
         const inFront = v.z >= -1 && v.z <= 1;
@@ -886,7 +963,10 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
     };
 
     raf = window.requestAnimationFrame(updateLabels);
-    return () => window.cancelAnimationFrame(raf);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(raf);
+    };
   }, [pileNumberLabels, showPileNumberLabels]);
 
   return (
