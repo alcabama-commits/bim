@@ -508,16 +508,18 @@ export default function App() {
           .toLowerCase();
 
       if (driveScriptUrl) {
-        const params = new URLSearchParams();
-        params.set('action', 'list');
-        if (driveFolderId) params.set('folderId', driveFolderId);
-        params.set('t', String(Date.now()));
+        const url = new URL(driveScriptUrl);
+        url.searchParams.set('action', 'list');
+        if (driveFolderId) url.searchParams.set('folderId', driveFolderId);
+        url.searchParams.set('t', String(Date.now()));
 
-        const res = await fetch(`${driveScriptUrl}?${params.toString()}`, { cache: 'no-store' });
-        if (!res.ok) throw new Error(`No se pudo listar modelos en Drive (${res.status})`);
-        const data = (await res.json()) as {
+        const data = await jsonpRequest<{
           models?: Array<{ name: string; fragId: string; jsonId?: string | null }>;
-        };
+          error?: string;
+        }>(url, { timeoutMs: 30000 });
+        if (data && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
+          throw new Error(String((data as any).error));
+        }
         const models = Array.isArray(data.models) ? data.models : [];
 
         const nextModels: RemoteModel[] = models
@@ -1323,7 +1325,7 @@ export default function App() {
       return out;
     };
 
-    const chunkLimit = 2 * 1024 * 1024;
+    const chunkLimit = 512 * 1024;
     const chunks: Uint8Array[] = [];
     let total = 0;
     let offset = 0;
@@ -1334,16 +1336,17 @@ export default function App() {
       safety++;
       if (safety > 20000) throw new Error('Demasiados fragmentos descargados. Revisa el archivo.');
 
-      const params = new URLSearchParams();
-      params.set('action', 'chunk');
-      params.set('id', id);
-      params.set('offset', String(offset));
-      params.set('limit', String(chunkLimit));
-      params.set('t', String(Date.now()));
+      const url = new URL(scriptUrl);
+      url.searchParams.set('action', 'chunk');
+      url.searchParams.set('id', id);
+      url.searchParams.set('offset', String(offset));
+      url.searchParams.set('limit', String(chunkLimit));
+      url.searchParams.set('t', String(Date.now()));
 
-      const res = await fetch(`${scriptUrl}?${params.toString()}`, { cache: 'no-store', signal });
-      if (!res.ok) throw new Error(`No se pudo descargar chunk (${res.status})`);
-      const data = (await res.json()) as { total: number; nextOffset: number; done: boolean; data: string };
+      const data = await jsonpRequest<{ total: number; nextOffset: number; done: boolean; data: string; error?: string }>(url, { signal, timeoutMs: 30000 });
+      if (data && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
+        throw new Error(String((data as any).error));
+      }
 
       if (!Number.isFinite(data.total) || !Number.isFinite(data.nextOffset) || typeof data.done !== 'boolean') {
         throw new Error('Respuesta inválida del servidor de Drive (chunk).');
@@ -1381,14 +1384,15 @@ export default function App() {
       return disk.data;
     }
 
-    const params = new URLSearchParams();
-    params.set('action', 'text');
-    params.set('id', id);
-    params.set('t', String(Date.now()));
+    const url = new URL(scriptUrl);
+    url.searchParams.set('action', 'text');
+    url.searchParams.set('id', id);
+    url.searchParams.set('t', String(Date.now()));
 
-    const res = await fetch(`${scriptUrl}?${params.toString()}`, { cache: 'no-store', signal });
-    if (!res.ok) throw new Error(`No se pudo descargar JSON (${res.status})`);
-    const data = (await res.json()) as { text?: string };
+    const data = await jsonpRequest<{ text?: string; error?: string }>(url, { signal, timeoutMs: 30000 });
+    if (data && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
+      throw new Error(String((data as any).error));
+    }
     const text = typeof data.text === 'string' ? data.text : '';
 
     putLru(remoteCacheRef.current.jsonTextByUrl, cacheKey, text, 2);
