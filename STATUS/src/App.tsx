@@ -4,7 +4,7 @@ import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
 import BIMViewer from './components/BIMViewer';
 import { BIMElement, CategorySummary } from './types';
-import { Folder, File, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Eye, Loader2, Maximize2, Minimize2, Palette, Grid3X3 } from 'lucide-react';
+import { Folder, File, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Eye, EyeOff, Loader2, Maximize2, Minimize2, Palette, Grid3X3 } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import DataTable from './components/DataTable';
 
@@ -188,6 +188,11 @@ export default function App() {
     const stored = Number(localStorage.getItem('cantidades:tablePanelHeight'));
     return Number.isFinite(stored) && stored > 0 ? stored : 320;
   });
+  const [isTableVisible, setIsTableVisible] = useState(() => {
+    const raw = localStorage.getItem('cantidades:isTableVisible');
+    if (raw === null) return true;
+    return raw === 'true';
+  });
   const [isTableMaximized, setIsTableMaximized] = useState(false);
   const [isViewerMaximized, setIsViewerMaximized] = useState(false);
   const [isUpdatingApp, setIsUpdatingApp] = useState(false);
@@ -255,6 +260,7 @@ export default function App() {
     if (raw === null) return false;
     return raw === 'true';
   });
+  const [isTimelineSummaryMaximized, setIsTimelineSummaryMaximized] = useState(false);
   const [isIsolateMode, setIsIsolateMode] = useState(false);
   const [statusColorsEnabled, setStatusColorsEnabled] = useState(() => {
     const raw = localStorage.getItem('cantidades:statusColorsEnabled');
@@ -430,8 +436,6 @@ export default function App() {
         if (arr.length > 0) nextHistory[id] = arr;
       }
       setElementHistory(nextHistory);
-    } else {
-      setElementHistory({});
     }
   }, [getModelKey, normalizeConstructionStatus]);
 
@@ -628,6 +632,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('cantidades:tablePanelHeight', String(tablePanelHeight));
   }, [tablePanelHeight]);
+
+  useEffect(() => {
+    localStorage.setItem('cantidades:isTableVisible', String(isTableVisible));
+  }, [isTableVisible]);
 
   useEffect(() => {
     localStorage.setItem('cantidades:statusColorsEnabled', String(statusColorsEnabled));
@@ -1211,21 +1219,23 @@ export default function App() {
     }
 
     const pickCell = (c: Record<ConstructionStatus, number>): ConstructionStatus => {
-      if ((c['RECHAZADO'] ?? 0) > 0) return 'RECHAZADO';
+      const candidates: ConstructionStatus[] = ['CERRADO', 'APROBADO', 'PARA INSPECCION', 'EN PROGRESO', 'RECHAZADO'];
       let best: ConstructionStatus = 'NINGUNO';
-      let bestN = -1;
-      for (const k of ['CERRADO', 'APROBADO', 'PARA INSPECCION', 'EN PROGRESO', 'NINGUNO'] as ConstructionStatus[]) {
+      let bestN = 0;
+      for (const k of candidates) {
         const n = c[k] ?? 0;
         if (n > bestN) {
           best = k;
           bestN = n;
         }
       }
-      return best;
+      if (bestN > 0) return best;
+      return 'NINGUNO';
     };
 
     const cellStatus = new Map<string, ConstructionStatus>();
     const cellTitle = new Map<string, string>();
+    const cellCounts = new Map<string, Record<ConstructionStatus, number>>();
     const dayTotals = new Map<string, Record<ConstructionStatus, number>>();
     for (let li = 0; li < sortedLevels.length; li += 1) {
       for (let di = 0; di < days.length; di += 1) {
@@ -1237,6 +1247,7 @@ export default function App() {
         const key = `${levelLabel}@@${dayLabel}`;
         cellStatus.set(key, st);
         cellTitle.set(key, title);
+        cellCounts.set(key, { ...c });
 
         const total = dayTotals.get(dayLabel) ?? {
           'NINGUNO': 0,
@@ -1256,7 +1267,7 @@ export default function App() {
       }
     }
 
-    return { days, levels: sortedLevels, cellStatus, cellTitle, dayTotals };
+    return { days, levels: sortedLevels, cellStatus, cellTitle, cellCounts, dayTotals };
   }, [elementHistory, elementLevelById, elementStatuses, filteredElements, sortedLevels, weekDayKeys]);
 
   const weekSegments = useMemo(() => {
@@ -2296,21 +2307,50 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <div className={isTimelineSummaryMaximized ? "fixed inset-0 z-50 bg-white border border-slate-200 px-4 py-4 flex flex-col" : "rounded-lg border border-slate-200 bg-white px-3 py-2"}>
+                {isTimelineSummaryMaximized && (
+                  <div className="h-12 border-b border-slate-200 bg-white flex items-center justify-between px-2">
+                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Resumen por niveles</div>
+                    <button
+                      type="button"
+                      onClick={() => setIsTimelineSummaryMaximized(false)}
+                      className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                      title="Volver"
+                    >
+                      <Minimize2 className="w-4 h-4 text-slate-600" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Volver</span>
+                    </button>
+                  </div>
+                )}
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Resumen por niveles</div>
-                  <button
-                    type="button"
-                    onClick={() => setShowTimelineLevelsDetail((v) => !v)}
-                    className={`px-2 py-1 rounded-md border text-[10px] font-bold uppercase tracking-widest ${
-                      showTimelineLevelsDetail ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                    }`}
-                    title={showTimelineLevelsDetail ? 'Ocultar detalle por niveles' : 'Ver detalle por niveles'}
-                  >
-                    {showTimelineLevelsDetail ? 'Ocultar detalle' : 'Ver detalle'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowTimelineLevelsDetail((v) => !v)}
+                      className={`px-2 py-1 rounded-md border text-[10px] font-bold uppercase tracking-widest ${
+                        showTimelineLevelsDetail ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                      title={showTimelineLevelsDetail ? 'Ocultar detalle por niveles' : 'Ver detalle por niveles'}
+                    >
+                      {showTimelineLevelsDetail ? 'Ocultar detalle' : 'Ver detalle'}
+                    </button>
+                    {!isTimelineSummaryMaximized && (
+                      <button
+                        type="button"
+                        onClick={() => setIsTimelineSummaryMaximized(true)}
+                        className="px-2 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-50"
+                        title="Maximizar"
+                      >
+                        <Maximize2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="mt-2 overflow-auto max-h-56 rounded-lg border border-slate-100">
+                <div
+                  className={`mt-2 overflow-auto rounded-lg border border-slate-100 ${isTimelineSummaryMaximized ? 'flex-1' : 'max-h-56'}`}
+                  style={isTimelineSummaryMaximized ? { maxHeight: 'calc(100vh - 160px)' } : undefined}
+                >
                   {(() => {
                     const statusSwatchClass = (st: ConstructionStatus) => {
                       switch (st) {
@@ -2334,17 +2374,18 @@ export default function App() {
                       (t['RECHAZADO'] ?? 0);
 
                     const pickFromTotals = (t: Record<ConstructionStatus, number>): ConstructionStatus => {
-                      if ((t['RECHAZADO'] ?? 0) > 0) return 'RECHAZADO';
+                      const candidates: ConstructionStatus[] = ['CERRADO', 'APROBADO', 'PARA INSPECCION', 'EN PROGRESO', 'RECHAZADO'];
                       let best: ConstructionStatus = 'NINGUNO';
-                      let bestN = -1;
-                      for (const k of ['CERRADO', 'APROBADO', 'PARA INSPECCION', 'EN PROGRESO', 'NINGUNO'] as ConstructionStatus[]) {
+                      let bestN = 0;
+                      for (const k of candidates) {
                         const n = t[k] ?? 0;
                         if (n > bestN) {
                           best = k;
                           bestN = n;
                         }
                       }
-                      return best;
+                      if (bestN > 0) return best;
+                      return 'NINGUNO';
                     };
 
                     return (
@@ -2416,6 +2457,11 @@ export default function App() {
                                   <div className="flex items-center gap-2">
                                     <div className={`w-4 h-4 rounded ${statusSwatchClass(st)} border border-slate-200`} title={title} />
                                     <div className="text-[10px] font-black text-slate-700">{sumTotals(t)}</div>
+                                    {(t['RECHAZADO'] ?? 0) > 0 && (
+                                      <div className="px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-[10px] font-black text-red-700">
+                                        {t['RECHAZADO']}
+                                      </div>
+                                    )}
                                   </div>
                                 </td>
                               );
@@ -2430,12 +2476,18 @@ export default function App() {
                                 const k = `${String(lvl)}@@${dayKey}`;
                                 const st = weekLevelCells.cellStatus.get(k) ?? 'NINGUNO';
                                 const title = weekLevelCells.cellTitle.get(k) ?? `${String(lvl)} • ${dayKey}`;
+                                const c = weekLevelCells.cellCounts.get(k);
+                                const rejected = c ? (c['RECHAZADO'] ?? 0) : 0;
                                 return (
                                   <td key={k} className="px-3 py-2">
-                                    <div
-                                      className={`w-4 h-4 rounded ${statusSwatchClass(st)} border border-slate-200`}
-                                      title={title}
-                                    />
+                                    <div className="relative inline-flex" title={title}>
+                                      <div className={`w-4 h-4 rounded ${statusSwatchClass(st)} border border-slate-200`} />
+                                      {rejected > 0 && (
+                                        <div className="absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-red-600 text-white text-[9px] font-black flex items-center justify-center">
+                                          {rejected}
+                                        </div>
+                                      )}
+                                    </div>
                                   </td>
                                 );
                               })}
@@ -2685,16 +2737,27 @@ export default function App() {
                 <div className="flex flex-col border-t border-slate-200" style={{ height: tablePanelHeight }}>
                   <div className="h-10 px-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                     <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
-                    <button
-                      type="button"
-                      onClick={() => setIsTableMaximized(true)}
-                      className="p-1 hover:bg-slate-200 rounded transition-colors"
-                      title="Maximizar"
-                    >
-                      <Maximize2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsTableVisible((v) => !v)}
+                        className="p-1 hover:bg-slate-200 rounded transition-colors"
+                        title={isTableVisible ? 'Ocultar tabla' : 'Mostrar tabla'}
+                      >
+                        {isTableVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsTableMaximized(true)}
+                        className="p-1 hover:bg-slate-200 rounded transition-colors disabled:opacity-50"
+                        title="Maximizar"
+                        disabled={!isTableVisible}
+                      >
+                        <Maximize2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                  {!isTableMaximized && (
+                  {!isTableMaximized && isTableVisible && (
                     <DataTable
                       elements={filteredElements}
                       onSelectElement={(id) => {
@@ -2710,6 +2773,11 @@ export default function App() {
                       onChangeStatusMany={handleChangeStatusMany}
                       onClearFilters={resetFilters}
                     />
+                  )}
+                  {!isTableMaximized && !isTableVisible && (
+                    <div className="flex-1 flex items-center justify-center text-sm text-slate-400">
+                      Tabla oculta
+                    </div>
                   )}
                 </div>
               </>
