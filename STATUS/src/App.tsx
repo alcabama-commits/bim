@@ -4,7 +4,7 @@ import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
 import BIMViewer from './components/BIMViewer';
 import { BIMElement, CategorySummary } from './types';
-import { Folder, File, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Eye, EyeOff, Loader2, Maximize2, Minimize2, Palette, Grid3X3 } from 'lucide-react';
+import { Folder, File, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, RefreshCw, Eye, EyeOff, Loader2, Maximize2, Minimize2, Palette, Grid3X3 } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import DataTable from './components/DataTable';
 
@@ -197,6 +197,11 @@ export default function App() {
   const [isViewerMaximized, setIsViewerMaximized] = useState(false);
   const [isUpdatingApp, setIsUpdatingApp] = useState(false);
   const [isRefreshingProgress, setIsRefreshingProgress] = useState(false);
+  const [isTableDocked, setIsTableDocked] = useState(() => localStorage.getItem('cantidades:isTableDocked') === 'true');
+  const [timelineDayWidth, setTimelineDayWidth] = useState(() => {
+    const v = Number(localStorage.getItem('cantidades:timelineDayWidth'));
+    return Number.isFinite(v) && v >= 24 && v <= 64 ? v : 44;
+  });
 
   const updateApp = useCallback(async () => {
     if (isUpdatingApp) return;
@@ -637,6 +642,13 @@ export default function App() {
     localStorage.setItem('cantidades:isTableVisible', String(isTableVisible));
   }, [isTableVisible]);
 
+  useEffect(() => {
+    localStorage.setItem('cantidades:isTableDocked', String(isTableDocked));
+  }, [isTableDocked]);
+
+  useEffect(() => {
+    localStorage.setItem('cantidades:timelineDayWidth', String(timelineDayWidth));
+  }, [timelineDayWidth]);
   useEffect(() => {
     localStorage.setItem('cantidades:statusColorsEnabled', String(statusColorsEnabled));
   }, [statusColorsEnabled]);
@@ -1177,7 +1189,10 @@ export default function App() {
         levels: sortedLevels,
         cellStatus: new Map<string, ConstructionStatus>(),
         cellTitle: new Map<string, string>(),
-        dayTotals: new Map<string, Record<ConstructionStatus, number>>()
+        cellCounts: new Map<string, Record<ConstructionStatus, number>>(),
+        dayTotals: new Map<string, Record<ConstructionStatus, number>>(),
+        cellChanges: new Map<string, Record<ConstructionStatus, number>>(),
+        dayChanges: new Map<string, Record<ConstructionStatus, number>>()
       };
     }
 
@@ -1237,6 +1252,8 @@ export default function App() {
     const cellTitle = new Map<string, string>();
     const cellCounts = new Map<string, Record<ConstructionStatus, number>>();
     const dayTotals = new Map<string, Record<ConstructionStatus, number>>();
+    const cellChanges = new Map<string, Record<ConstructionStatus, number>>();
+    const dayChanges = new Map<string, Record<ConstructionStatus, number>>();
     for (let li = 0; li < sortedLevels.length; li += 1) {
       for (let di = 0; di < days.length; di += 1) {
         const c = counts[li]![di]!;
@@ -1267,7 +1284,42 @@ export default function App() {
       }
     }
 
-    return { days, levels: sortedLevels, cellStatus, cellTitle, cellCounts, dayTotals };
+    const daySet = new Set(days);
+    for (const el of filteredElements) {
+      const lvl = elementLevelById.get(el.id);
+      if (!lvl) continue;
+      const hist = elementHistory[el.id];
+      if (!Array.isArray(hist)) continue;
+      for (const h of hist) {
+        const dkey = String(h?.at ?? '').slice(0, 10);
+        const st = h?.status as ConstructionStatus | undefined;
+        if (!st || !daySet.has(dkey)) continue;
+        const k = `${String(lvl)}@@${dkey}`;
+        const cell = cellChanges.get(k) ?? {
+          'NINGUNO': 0,
+          'EN PROGRESO': 0,
+          'PARA INSPECCION': 0,
+          'APROBADO': 0,
+          'CERRADO': 0,
+          'RECHAZADO': 0
+        };
+        cell[st] += 1;
+        cellChanges.set(k, cell);
+
+        const tot = dayChanges.get(dkey) ?? {
+          'NINGUNO': 0,
+          'EN PROGRESO': 0,
+          'PARA INSPECCION': 0,
+          'APROBADO': 0,
+          'CERRADO': 0,
+          'RECHAZADO': 0
+        };
+        tot[st] += 1;
+        dayChanges.set(dkey, tot);
+      }
+    }
+
+    return { days, levels: sortedLevels, cellStatus, cellTitle, cellCounts, dayTotals, cellChanges, dayChanges };
   }, [elementHistory, elementLevelById, elementStatuses, filteredElements, sortedLevels, weekDayKeys]);
 
   const weekSegments = useMemo(() => {
@@ -2238,7 +2290,7 @@ export default function App() {
                 <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Tiempo</div>
                 <div className="mt-2 overflow-x-auto">
                   {(() => {
-                    const dayW = 44;
+                    const dayW = Math.max(24, Math.min(64, timelineDayWidth));
                     const totalW = Math.max(1, timelineDays.length) * dayW;
                     const days = timelineDays;
                     const dowLabels = ['DOM', 'LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB'] as const;
@@ -2304,6 +2356,16 @@ export default function App() {
                       </div>
                     );
                   })()}
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tamaño</div>
+                  <input
+                    type="range"
+                    min={24}
+                    max={64}
+                    value={timelineDayWidth}
+                    onChange={(e) => setTimelineDayWidth(Number(e.target.value))}
+                  />
                 </div>
               </div>
 
@@ -2405,6 +2467,28 @@ export default function App() {
                                     <div className="text-[10px] font-black text-slate-900">{activeTotals[s]}</div>
                                   </div>
                                 ))}
+                              {(() => {
+                                const changes = activeDayKey ? weekLevelCells.dayChanges.get(activeDayKey) : null;
+                                if (!changes) return null;
+                                const totalChanges = sumTotals(changes);
+                                return (
+                                  <div className="flex items-center gap-1 ml-4">
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Cambios</div>
+                                    {totalChanges === 0 ? (
+                                      <div className="text-[10px] font-bold text-slate-400">0</div>
+                                    ) : (
+                                      (['EN PROGRESO', 'PARA INSPECCION', 'APROBADO', 'CERRADO', 'RECHAZADO'] as ConstructionStatus[])
+                                        .filter((s) => (changes[s] ?? 0) > 0)
+                                        .map((s) => (
+                                          <div key={`chg-${s}`} className="flex items-center gap-1 px-2 py-1 rounded-md border border-slate-200 bg-white">
+                                            <div className={`w-2.5 h-2.5 rounded ${statusSwatchClass(s)} border border-slate-200`} />
+                                            <div className="text-[10px] font-bold text-slate-700">{changes[s]}</div>
+                                          </div>
+                                        ))
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
                         )}
@@ -2446,16 +2530,15 @@ export default function App() {
                               if (!t) {
                                 return (
                                   <td key={`tot@@${dayKey}`} className="px-3 py-2">
-                                    <div className="w-4 h-4 rounded bg-slate-100 border border-slate-200" title={`Total • ${dayKey}`} />
+                                    <div className="w-4 h-4 rounded bg-slate-200 border border-slate-300" title={`Total • ${dayKey}`} />
                                   </td>
                                 );
                               }
-                              const st = pickFromTotals(t);
                               const title = `Total • ${dayKey}\nNINGUNO: ${t['NINGUNO']}\nEN PROGRESO: ${t['EN PROGRESO']}\nPARA INSPECCION: ${t['PARA INSPECCION']}\nAPROBADO: ${t['APROBADO']}\nCERRADO: ${t['CERRADO']}\nRECHAZADO: ${t['RECHAZADO']}`;
                               return (
                                 <td key={`tot@@${dayKey}`} className="px-3 py-2">
                                   <div className="flex items-center gap-2">
-                                    <div className={`w-4 h-4 rounded ${statusSwatchClass(st)} border border-slate-200`} title={title} />
+                                    <div className="w-4 h-4 rounded bg-slate-300 border border-slate-400" title={title} />
                                     <div className="text-[10px] font-black text-slate-700">{sumTotals(t)}</div>
                                     {(t['RECHAZADO'] ?? 0) > 0 && (
                                       <div className="px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-[10px] font-black text-red-700">
@@ -2718,8 +2801,9 @@ export default function App() {
             {!isViewerMaximized && (
               <>
                 <div
-                  className="h-3 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-row-resize select-none touch-none relative z-20"
+                  className={`h-3 ${isTableDocked ? 'bg-slate-50' : 'bg-slate-100 hover:bg-blue-200 active:bg-blue-300'} cursor-row-resize select-none touch-none relative z-20`}
                   onPointerDown={(e) => {
+                    if (isTableDocked) return;
                     e.preventDefault();
                     e.stopPropagation();
                     try {
@@ -2734,10 +2818,18 @@ export default function App() {
                   }}
                 />
 
-                <div className="flex flex-col border-t border-slate-200" style={{ height: tablePanelHeight }}>
+                <div className="flex flex-col border-t border-slate-200" style={{ height: isTableDocked ? 28 : tablePanelHeight }}>
                   <div className="h-10 px-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                     <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsTableDocked((v) => !v)}
+                        className="p-1 hover:bg-slate-200 rounded transition-colors"
+                        title={isTableDocked ? 'Mostrar panel' : 'Guardar abajo'}
+                      >
+                        {isTableDocked ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
                       <button
                         type="button"
                         onClick={() => setIsTableVisible((v) => !v)}
@@ -2751,13 +2843,13 @@ export default function App() {
                         onClick={() => setIsTableMaximized(true)}
                         className="p-1 hover:bg-slate-200 rounded transition-colors disabled:opacity-50"
                         title="Maximizar"
-                        disabled={!isTableVisible}
+                        disabled={!isTableVisible || isTableDocked}
                       >
                         <Maximize2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-                  {!isTableMaximized && isTableVisible && (
+                  {!isTableMaximized && isTableVisible && !isTableDocked && (
                     <DataTable
                       elements={filteredElements}
                       onSelectElement={(id) => {
@@ -2774,9 +2866,9 @@ export default function App() {
                       onClearFilters={resetFilters}
                     />
                   )}
-                  {!isTableMaximized && !isTableVisible && (
+                  {!isTableMaximized && (!isTableVisible || isTableDocked) && (
                     <div className="flex-1 flex items-center justify-center text-sm text-slate-400">
-                      Tabla oculta
+                      {isTableDocked ? 'Guardada abajo' : 'Tabla oculta'}
                     </div>
                   )}
                 </div>
