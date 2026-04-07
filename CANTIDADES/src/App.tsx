@@ -496,8 +496,8 @@ export default function App() {
     setModelsError(null);
     try {
       const env = ((import.meta as any).env || {}) as Record<string, string | undefined>;
-      const driveScriptUrl = env.VITE_DRIVE_SCRIPT_URL?.trim();
-      const driveFolderId = env.VITE_DRIVE_FOLDER_ID?.trim();
+      const driveScriptUrl = (env.VITE_DRIVE_SCRIPT_URL?.trim() || CANTIDADES_SHEET_SCRIPT_URL).trim();
+      const driveFolderId = (env.VITE_DRIVE_FOLDER_ID?.trim() || '18gr5TvX3pYY5S3ZRfjmWagkTLhhG3B0W').trim();
       const driveApiKey = env.VITE_DRIVE_API_KEY?.trim();
 
       const normalizeBase = (name: string) =>
