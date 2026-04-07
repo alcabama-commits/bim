@@ -46,6 +46,7 @@ type RemoteModel = {
 };
 
 type PurchaseStatus = 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'EN BODEGA' | 'INSTALADO';
+type HistoryEntry = { status: PurchaseStatus; at: string };
 
 const GITHUB_REPO = {
   owner: 'alcabama-commits',
@@ -94,6 +95,7 @@ export default function App() {
   const [isModelsLoading, setIsModelsLoading] = useState(false);
   const [selectedRemoteModelName, setSelectedRemoteModelName] = useState<string | null>(null);
   const [elementStatuses, setElementStatuses] = useState<Record<string, PurchaseStatus>>({});
+  const [elementHistory, setElementHistory] = useState<Record<string, HistoryEntry[]>>({});
 
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
     const stored = Number(localStorage.getItem('cantidades:leftPanelWidth'));
@@ -136,6 +138,12 @@ export default function App() {
     return `cantidades:statuses:${safe}`;
   }, [selectedRemoteModelName]);
 
+  const historyStorageKey = useMemo(() => {
+    const base = selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'local';
+    const safe = base.trim().toLowerCase();
+    return `cantidades:history:${safe}`;
+  }, [selectedRemoteModelName]);
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem(statusStorageKey);
@@ -169,10 +177,53 @@ export default function App() {
 
   useEffect(() => {
     try {
+      const raw = localStorage.getItem(historyStorageKey);
+      if (!raw) {
+        setElementHistory({});
+        return;
+      }
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const allowed: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'EN BODEGA', 'INSTALADO'];
+      const normalize = (v: unknown): PurchaseStatus | null => {
+        const s = String(v ?? '').trim().toUpperCase();
+        if (s === 'EN SITIO') return 'INSTALADO';
+        if (s === 'EN_BODEGA') return 'EN BODEGA';
+        if (allowed.includes(s as PurchaseStatus)) return s as PurchaseStatus;
+        return null;
+      };
+      const next: Record<string, HistoryEntry[]> = {};
+      if (parsed && typeof parsed === 'object') {
+        for (const [id, entries] of Object.entries(parsed)) {
+          if (!Array.isArray(entries)) continue;
+          const arr: HistoryEntry[] = [];
+          for (const e of entries as any[]) {
+            const st = normalize(e?.status);
+            const at = String(e?.at ?? '').trim();
+            if (!st || !at) continue;
+            arr.push({ status: st, at });
+          }
+          if (arr.length > 0) next[id] = arr;
+        }
+      }
+      setElementHistory(next);
+    } catch {
+      setElementHistory({});
+    }
+  }, [historyStorageKey]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem(statusStorageKey, JSON.stringify(elementStatuses));
     } catch {
     }
   }, [elementStatuses, statusStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(historyStorageKey, JSON.stringify(elementHistory));
+    } catch {
+    }
+  }, [elementHistory, historyStorageKey]);
 
   useEffect(() => {
     localStorage.setItem('cantidades:leftPanelWidth', String(leftPanelWidth));
@@ -1223,6 +1274,13 @@ export default function App() {
       if (prev[id] === status) return prev;
       return { ...prev, [id]: status };
     });
+    setElementHistory((prev) => {
+      const current = prev[id] ?? [];
+      const last = current.length > 0 ? current[current.length - 1] : null;
+      if (last && last.status === status) return prev;
+      const at = new Date().toISOString();
+      return { ...prev, [id]: [...current, { status, at }] };
+    });
   }, []);
 
   const handleChangeStatusMany = useCallback((ids: string[], status: PurchaseStatus) => {
@@ -1233,6 +1291,18 @@ export default function App() {
           if (!next) next = { ...prev };
           next[id] = status;
         }
+      }
+      return next ?? prev;
+    });
+    setElementHistory((prev) => {
+      const at = new Date().toISOString();
+      let next: Record<string, HistoryEntry[]> | null = null;
+      for (const id of ids) {
+        const current = prev[id] ?? [];
+        const last = current.length > 0 ? current[current.length - 1] : null;
+        if (last && last.status === status) continue;
+        if (!next) next = { ...prev };
+        next[id] = [...current, { status, at }];
       }
       return next ?? prev;
     });
@@ -1516,6 +1586,7 @@ export default function App() {
                       selectedElementIds={selectedElementIds}
                       onSetSelectedElementIds={setSelectedElementIds}
                       statuses={elementStatuses}
+                      history={elementHistory}
                       onChangeStatus={handleChangeStatus}
                       onChangeStatusMany={handleChangeStatusMany}
                       onClearFilters={resetFilters}
@@ -1599,6 +1670,7 @@ export default function App() {
               selectedElementIds={selectedElementIds}
               onSetSelectedElementIds={setSelectedElementIds}
               statuses={elementStatuses}
+              history={elementHistory}
               onChangeStatus={handleChangeStatus}
               onChangeStatusMany={handleChangeStatusMany}
               onClearFilters={resetFilters}

@@ -3,6 +3,11 @@ import { BIMElement } from '../types';
 
 type PurchaseStatus = 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'EN BODEGA' | 'INSTALADO';
 
+interface HistoryEntry {
+  status: PurchaseStatus;
+  at: string;
+}
+
 interface DataTableProps {
   elements: BIMElement[];
   onSelectElement: (id: string | null) => void;
@@ -10,16 +15,17 @@ interface DataTableProps {
   selectedElementIds?: string[];
   onSetSelectedElementIds?: (ids: string[]) => void;
   statuses: Record<string, PurchaseStatus | undefined>;
+  history?: Record<string, HistoryEntry[] | undefined>;
   onChangeStatus: (id: string, status: PurchaseStatus) => void;
   onChangeStatusMany?: (ids: string[], status: PurchaseStatus) => void;
   onClearFilters?: () => void;
 }
 
-export default function DataTable({ elements, onSelectElement, selectedElementId, selectedElementIds, onSetSelectedElementIds, statuses, onChangeStatus, onChangeStatusMany, onClearFilters }: DataTableProps) {
+export default function DataTable({ elements, onSelectElement, selectedElementId, selectedElementIds, onSetSelectedElementIds, statuses, history, onChangeStatus, onChangeStatusMany, onClearFilters }: DataTableProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(400);
-  const [activeTab, setActiveTab] = useState<'DETALLE' | 'ESTADOS'>('DETALLE');
+  const [activeTab, setActiveTab] = useState<'DETALLE' | 'ESTADOS' | 'HISTORIAL'>('DETALLE');
   const [bulkStatus, setBulkStatus] = useState<PurchaseStatus>('COMPRADO');
   const [rowHeight, setRowHeight] = useState(() => {
     const stored = Number(localStorage.getItem('cantidades:tableRowHeight'));
@@ -251,6 +257,17 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
           >
             Estados
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('HISTORIAL')}
+            className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-colors ${
+              activeTab === 'HISTORIAL'
+                ? 'bg-[#003d4d] text-white border-[#003d4d]'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            Historial
+          </button>
         </div>
 
         <div className="text-[10px] text-slate-600 font-bold uppercase tracking-widest flex items-center gap-4">
@@ -379,7 +396,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
             </tbody>
           </table>
         </div>
-      ) : (
+      ) : activeTab === 'DETALLE' ? (
         <div ref={containerRef} className="flex-1 overflow-auto bg-white">
           <table className="w-full text-left border-collapse min-w-[1100px]">
             <thead className="sticky top-0 bg-[#003d4d] text-white z-10">
@@ -487,6 +504,42 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                   </td>
                 </tr>
               )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-auto">
+          <table className="w-full text-left border-collapse min-w-[1100px]">
+            <thead className="sticky top-0 bg-[#003d4d] text-white z-10">
+              <tr>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">ID</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Tipo</th>
+                {STATUS_ORDER.map((st) => (
+                  <th key={st} className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">{st}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {elements.map((el) => {
+                const tipoRaw = getProp(el, "NOMBRE INTEGRADO");
+                const tipo = tipoRaw !== '-' && tipoRaw !== '' ? tipoRaw : el.name;
+                const entries = (history?.[el.id] ?? []).slice().sort((a, b) => a.at.localeCompare(b.at));
+                const latestByStatus = new Map<PurchaseStatus, string>();
+                for (const entry of entries) {
+                  latestByStatus.set(entry.status, entry.at);
+                }
+                return (
+                  <tr key={el.id}>
+                    <td className="px-4 py-2 text-xs font-mono text-slate-700">{el.id}</td>
+                    <td className="px-4 py-2 text-xs text-slate-700">{tipo}</td>
+                    {STATUS_ORDER.map((st) => (
+                      <td key={st} className="px-4 py-2 text-[10px] text-slate-600">
+                        {latestByStatus.get(st) ? new Date(latestByStatus.get(st)!).toLocaleString('es-CO') : '-'}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
