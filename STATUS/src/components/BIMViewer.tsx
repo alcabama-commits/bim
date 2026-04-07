@@ -901,6 +901,47 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         } catch {
         }
       }
+
+      try {
+        const w = world;
+        if (w?.scene?.three) {
+          const box = new THREE.Box3();
+          let any = false;
+          const match = (mesh: any) => {
+            if (!mesh || !mesh.userData) return false;
+            const ud = mesh.userData;
+            const tryKeys = ['id', 'itemID', 'itemId', 'expressId'];
+            for (const k of tryKeys) {
+              const v = ud[k];
+              if (Number(v) === Number(localId)) return true;
+            }
+            const arrKeys = ['ids', 'items', 'localIds'];
+            for (const k of arrKeys) {
+              const v = ud[k];
+              if (Array.isArray(v) && v.some((n: any) => Number(n) === Number(localId))) return true;
+            }
+            if (ud.fragment && typeof ud.fragment === 'object') {
+              const f = ud.fragment;
+              if (Number(f.id) === Number(localId)) return true;
+              if (Array.isArray(f.ids) && f.ids.some((n: any) => Number(n) === Number(localId))) return true;
+            }
+            return false;
+          };
+          w.scene.three.traverse((obj: any) => {
+            if (!obj?.isMesh) return;
+            if (!obj.visible) return;
+            if (!match(obj)) return;
+            box.expandByObject(obj);
+            any = true;
+          });
+          if (any && !box.isEmpty()) {
+            const c = new THREE.Vector3();
+            box.getCenter(c);
+            return { x: c.x, y: c.y, z: c.z };
+          }
+        }
+      } catch {
+      }
       return null;
     };
 

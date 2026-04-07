@@ -405,6 +405,14 @@ export default function App() {
         if (st) nextStatuses[id] = st;
       }
       setElementStatuses(nextStatuses);
+      if (Object.keys(nextStatuses).length > 0) {
+        const today = new Date().toISOString();
+        const nextHistory: Record<string, Array<{ status: ConstructionStatus; at: string }>> = {};
+        for (const [id, st] of Object.entries(nextStatuses)) {
+          nextHistory[id] = [{ status: st as ConstructionStatus, at: today }];
+        }
+        setElementHistory(nextHistory);
+      }
     }
 
     const rawHistory = (data as any).history;
