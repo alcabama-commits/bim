@@ -104,7 +104,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
 
   const pipePurchaseSummary = useMemo(() => {
     if (!isSanitaryModel) return [];
-    const map = new Map<string, { tipo: string; diameter: string; totalLength: number; count: number }>();
+    const map = new Map<string, { tipo: string; diameter: string; totalLength: number; count: number; statusLength: Record<PurchaseStatus, number>; statusCount: Record<PurchaseStatus, number> }>();
     const asNumber = (v: string) => {
       const n = parseNumber(v);
       return n !== null ? n : null;
@@ -115,20 +115,47 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       if (!isPipe) continue;
       const len = getMetric(el, 'LONGITUD INTEGRADO', 0);
       if (!(len > 0)) continue;
+      const st: PurchaseStatus = statuses[el.id] ?? 'PENDIENTE';
       const tipoRaw = getProp(el, "NOMBRE INTEGRADO");
       const tipo = tipoRaw !== '-' && tipoRaw !== '' ? tipoRaw : el.name;
       const diameterRaw = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]);
       const diameter = diameterRaw !== '-' && diameterRaw !== '' ? diameterRaw : 'SIN DIÁMETRO';
       const key = `${tipo}||${diameter}`;
-      const cur = map.get(key) ?? { tipo, diameter, totalLength: 0, count: 0 };
+      const cur = map.get(key) ?? {
+        tipo,
+        diameter,
+        totalLength: 0,
+        count: 0,
+        statusLength: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, 'EN BODEGA': 0, INSTALADO: 0 },
+        statusCount: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, 'EN BODEGA': 0, INSTALADO: 0 }
+      };
       cur.totalLength += len;
       cur.count += 1;
+      cur.statusLength[st] += len;
+      cur.statusCount[st] += 1;
       map.set(key, cur);
     }
+    const pickDominantStatus = (v: { statusLength: Record<PurchaseStatus, number>; statusCount: Record<PurchaseStatus, number> }): PurchaseStatus => {
+      let best: PurchaseStatus = 'PENDIENTE';
+      let bestLen = -1;
+      let bestCount = -1;
+      for (const st of STATUS_ORDER) {
+        const len = v.statusLength[st] ?? 0;
+        const cnt = v.statusCount[st] ?? 0;
+        if (len > bestLen || (len === bestLen && cnt > bestCount)) {
+          best = st;
+          bestLen = len;
+          bestCount = cnt;
+        }
+      }
+      return best;
+    };
+
     const arr = Array.from(map.values()).map((v) => {
       const units = Math.ceil(v.totalLength / 6);
       const waste = units * 6 - v.totalLength;
-      return { ...v, units, waste };
+      const dominantStatus = pickDominantStatus(v);
+      return { ...v, units, waste, dominantStatus };
     });
     return arr.sort((a, b) => {
       const t = a.tipo.localeCompare(b.tipo, 'es');
@@ -140,7 +167,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       if (nb !== null) return 1;
       return a.diameter.localeCompare(b.diameter, 'es');
     });
-  }, [elements, getFirstProp, getMetric, getProp, isSanitaryModel]);
+  }, [elements, getFirstProp, getMetric, getProp, isSanitaryModel, statuses]);
 
   const totals = useMemo(() => {
     let area = 0;
@@ -604,6 +631,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
               <tr>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Tipo</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Diámetro</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Estado</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Longitud total (m)</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Unidades (6m)</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-right">Desperdicio (m)</th>
@@ -614,6 +642,14 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                 <tr key={`${r.tipo}||${r.diameter}`}>
                   <td className="px-4 py-2 text-xs font-bold text-slate-700">{r.tipo}</td>
                   <td className="px-4 py-2 text-xs text-slate-700">{r.diameter}</td>
+                  <td className="px-4 py-2">
+                    <div
+                      className={`inline-flex px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${statusTint(r.dominantStatus).pill}`}
+                      title={STATUS_ORDER.map((st) => `${st}: ${format2(r.statusLength[st] ?? 0)}m (${(r.statusCount[st] ?? 0).toLocaleString('es-CO')})`).join('\n')}
+                    >
+                      {r.dominantStatus}
+                    </div>
+                  </td>
                   <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.totalLength)}</td>
                   <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{r.units.toLocaleString('es-CO')}</td>
                   <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.waste)}</td>
@@ -621,7 +657,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
               ))}
               {pipePurchaseSummary.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400 text-xs italic">
+                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-xs italic">
                     No hay tuberías con longitud para resumir con los filtros actuales.
                   </td>
                 </tr>
