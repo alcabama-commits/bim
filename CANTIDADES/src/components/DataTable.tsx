@@ -187,6 +187,71 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     return { pedido: cur.pedido, comprado: cur.comprado, almacen, instalado };
   };
 
+  const elementsById = useMemo(() => {
+    const map = new Map<string, BIMElement>();
+    for (const el of elements) map.set(el.id, el);
+    return map;
+  }, [elements]);
+
+  const applyPipeAssignmentsToModel = (groupKey: string, ids: string[], totalUnits: number, st: PipeStageState) => {
+    const items = ids
+      .map((id) => {
+        const el = elementsById.get(id);
+        if (!el) return null;
+        const len = getMetric(el, 'LONGITUD INTEGRADO', 0);
+        const units = Math.max(1, Math.ceil(len / 6));
+        return { id, units };
+      })
+      .filter(Boolean) as Array<{ id: string; units: number }>;
+    items.sort((a, b) => a.id.localeCompare(b.id, 'es'));
+
+    const tgt = normalizePipeStages(totalUnits, st);
+    let needInst = tgt.instalado;
+    let needAlm = tgt.almacen;
+    let needComp = tgt.comprado;
+    let needPed = tgt.pedido;
+
+    const assigned: Record<PurchaseStatus, string[]> = { PENDIENTE: [], PEDIDO: [], COMPRADO: [], ALMACEN: [], INSTALADO: [] };
+
+    for (const it of items) {
+      if (needInst > 0) {
+        assigned.INSTALADO.push(it.id);
+        needInst -= Math.min(it.units, needInst);
+        continue;
+      }
+      if (needAlm > 0) {
+        assigned.ALMACEN.push(it.id);
+        needAlm -= Math.min(it.units, needAlm);
+        continue;
+      }
+      if (needComp > 0) {
+        assigned.COMPRADO.push(it.id);
+        needComp -= Math.min(it.units, needComp);
+        continue;
+      }
+      if (needPed > 0) {
+        assigned.PEDIDO.push(it.id);
+        needPed -= Math.min(it.units, needPed);
+        continue;
+      }
+      assigned.PENDIENTE.push(it.id);
+    }
+
+    if (onChangeStatusMany) {
+      if (assigned.PENDIENTE.length) onChangeStatusMany(assigned.PENDIENTE, 'PENDIENTE');
+      if (assigned.PEDIDO.length) onChangeStatusMany(assigned.PEDIDO, 'PEDIDO');
+      if (assigned.COMPRADO.length) onChangeStatusMany(assigned.COMPRADO, 'COMPRADO');
+      if (assigned.ALMACEN.length) onChangeStatusMany(assigned.ALMACEN, 'ALMACEN');
+      if (assigned.INSTALADO.length) onChangeStatusMany(assigned.INSTALADO, 'INSTALADO');
+    } else {
+      for (const id of assigned.PENDIENTE) onChangeStatus(id, 'PENDIENTE');
+      for (const id of assigned.PEDIDO) onChangeStatus(id, 'PEDIDO');
+      for (const id of assigned.COMPRADO) onChangeStatus(id, 'COMPRADO');
+      for (const id of assigned.ALMACEN) onChangeStatus(id, 'ALMACEN');
+      for (const id of assigned.INSTALADO) onChangeStatus(id, 'INSTALADO');
+    }
+  };
+
   const pipePurchaseSummary = useMemo(() => {
     if (!isSanitaryModel) return [];
     const map = new Map<string, { tipo: string; diameter: string; ids: string[]; totalLength: number; count: number; statusLength: Record<PurchaseStatus, number>; statusCount: Record<PurchaseStatus, number> }>();
@@ -798,7 +863,12 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                   {(() => {
                     const display = normalizePipeStages(r.units, pipeStagesByGroup[r.groupKey]);
                     const onSet = (stage: 'pedido' | 'comprado' | 'almacen' | 'instalado') => (value: number) => {
-                      setPipeStagesByGroup((prev) => ({ ...prev, [r.groupKey]: movePipeStage(r.units, prev[r.groupKey], stage, value) }));
+                      setPipeStagesByGroup((prev) => {
+                        const next = movePipeStage(r.units, prev[r.groupKey], stage, value);
+                        const updated = { ...prev, [r.groupKey]: next };
+                        applyPipeAssignmentsToModel(r.groupKey, r.ids, r.units, next);
+                        return updated;
+                      });
                     };
                     const toSafeNumber = (raw: string) => {
                       const n = Number(raw);
