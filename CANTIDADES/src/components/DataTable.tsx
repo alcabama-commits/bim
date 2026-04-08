@@ -26,7 +26,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(400);
-  const [activeTab, setActiveTab] = useState<'DETALLE' | 'ESTADOS' | 'HISTORIAL' | 'TUBERIAS'>('DETALLE');
+  const [activeTab, setActiveTab] = useState<'DETALLE' | 'ESTADOS' | 'HISTORIAL' | 'TUBERIAS' | 'UNIONES'>('DETALLE');
   const [bulkStatus, setBulkStatus] = useState<PurchaseStatus>('COMPRADO');
   const [rowHeight, setRowHeight] = useState(() => {
     const stored = Number(localStorage.getItem('cantidades:tableRowHeight'));
@@ -170,6 +170,63 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       return a.diameter.localeCompare(b.diameter, 'es');
     });
   }, [elements, getFirstProp, getMetric, getProp, isSanitaryModel, statuses]);
+
+  const unionsPurchaseSummary = useMemo(() => {
+    if (!isSanitaryModel) return [];
+    const map = new Map<string, { tipo: string; diameter: string; ids: string[]; count: number; statusCount: Record<PurchaseStatus, number> }>();
+    const asNumber = (v: string) => {
+      const n = parseNumber(v);
+      return n !== null ? n : null;
+    };
+    for (const el of elements) {
+      const classif = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]);
+      const isUnion = /union/i.test(classif);
+      if (!isUnion) continue;
+      const st: PurchaseStatus = statuses[el.id] ?? 'PENDIENTE';
+      const tipoRaw = getProp(el, "NOMBRE INTEGRADO");
+      const tipo = tipoRaw !== '-' && tipoRaw !== '' ? tipoRaw : el.name;
+      const diameterRaw = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]);
+      const diameter = diameterRaw !== '-' && diameterRaw !== '' ? diameterRaw : 'SIN DIÁMETRO';
+      const key = `${tipo}||${diameter}`;
+      const cur = map.get(key) ?? {
+        tipo,
+        diameter,
+        ids: [],
+        count: 0,
+        statusCount: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, 'EN BODEGA': 0, INSTALADO: 0 }
+      };
+      cur.ids.push(el.id);
+      cur.count += 1;
+      cur.statusCount[st] += 1;
+      map.set(key, cur);
+    }
+    const pickDominantStatus = (v: { statusCount: Record<PurchaseStatus, number> }): PurchaseStatus => {
+      let best: PurchaseStatus = 'PENDIENTE';
+      let bestCount = -1;
+      for (const st of STATUS_ORDER) {
+        const cnt = v.statusCount[st] ?? 0;
+        if (cnt > bestCount) {
+          best = st;
+          bestCount = cnt;
+        }
+      }
+      return best;
+    };
+    const arr = Array.from(map.values()).map((v) => {
+      const dominantStatus = pickDominantStatus(v);
+      return { ...v, dominantStatus };
+    });
+    return arr.sort((a, b) => {
+      const t = a.tipo.localeCompare(b.tipo, 'es');
+      if (t !== 0) return t;
+      const na = asNumber(a.diameter);
+      const nb = asNumber(b.diameter);
+      if (na !== null && nb !== null) return na - nb;
+      if (na !== null) return -1;
+      if (nb !== null) return 1;
+      return a.diameter.localeCompare(b.diameter, 'es');
+    });
+  }, [elements, getFirstProp, getProp, isSanitaryModel, statuses]);
 
   const applyStatusToIds = (ids: string[], status: PurchaseStatus) => {
     if (onChangeStatusMany) {
@@ -357,6 +414,19 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
               }`}
             >
               Tuberías
+            </button>
+          )}
+          {isSanitaryModel && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('UNIONES')}
+              className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-colors ${
+                activeTab === 'UNIONES'
+                  ? 'bg-[#003d4d] text-white border-[#003d4d]'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              Uniones
             </button>
           )}
         </div>
@@ -634,7 +704,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
             </tbody>
           </table>
         </div>
-      ) : (
+      ) : activeTab === 'TUBERIAS' ? (
         <div className="flex-1 overflow-auto">
           <table className="w-full text-left border-collapse min-w-[900px]">
             <thead className="sticky top-0 bg-[#003d4d] text-white z-10">
@@ -681,7 +751,50 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
             </tbody>
           </table>
         </div>
-      )}
+      ) : activeTab === 'UNIONES' ? (
+        <div className="flex-1 overflow-auto">
+          <table className="w-full text-left border-collapse min-w-[700px]">
+            <thead className="sticky top-0 bg-[#003d4d] text-white z-10">
+              <tr>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Tipo</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Diámetro</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Estado</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-right">Cantidad</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {unionsPurchaseSummary.map((r) => (
+                <tr key={`${r.tipo}||${r.diameter}`}>
+                  <td className="px-4 py-2 text-xs font-bold text-slate-700">{r.tipo}</td>
+                  <td className="px-4 py-2 text-xs text-slate-700">{r.diameter}</td>
+                  <td className="px-4 py-2">
+                    <button
+                      type="button"
+                      onClick={() => applyStatusToIds(r.ids, nextStatus(r.dominantStatus))}
+                      className={`inline-flex px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${statusTint(r.dominantStatus).pill}`}
+                      title={[
+                        'Click: cambia el estado de este grupo (Tipo + Diámetro) al siguiente estado.',
+                        '',
+                        ...STATUS_ORDER.map((st) => `${st}: ${(r.statusCount[st] ?? 0).toLocaleString('es-CO')}`)
+                      ].join('\n')}
+                    >
+                      {r.dominantStatus}
+                    </button>
+                  </td>
+                  <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{r.count.toLocaleString('es-CO')}</td>
+                </tr>
+              ))}
+              {unionsPurchaseSummary.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-slate-400 text-xs italic">
+                    No hay uniones de tubería para resumir con los filtros actuales.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   );
 }
