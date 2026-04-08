@@ -16,16 +16,17 @@ interface DataTableProps {
   onSetSelectedElementIds?: (ids: string[]) => void;
   statuses: Record<string, PurchaseStatus | undefined>;
   history?: Record<string, HistoryEntry[] | undefined>;
+  isSanitaryModel?: boolean;
   onChangeStatus: (id: string, status: PurchaseStatus) => void;
   onChangeStatusMany?: (ids: string[], status: PurchaseStatus) => void;
   onClearFilters?: () => void;
 }
 
-export default function DataTable({ elements, onSelectElement, selectedElementId, selectedElementIds, onSetSelectedElementIds, statuses, history, onChangeStatus, onChangeStatusMany, onClearFilters }: DataTableProps) {
+export default function DataTable({ elements, onSelectElement, selectedElementId, selectedElementIds, onSetSelectedElementIds, statuses, history, isSanitaryModel, onChangeStatus, onChangeStatusMany, onClearFilters }: DataTableProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(400);
-  const [activeTab, setActiveTab] = useState<'DETALLE' | 'ESTADOS' | 'HISTORIAL'>('DETALLE');
+  const [activeTab, setActiveTab] = useState<'DETALLE' | 'ESTADOS' | 'HISTORIAL' | 'TUBERIAS'>('DETALLE');
   const [bulkStatus, setBulkStatus] = useState<PurchaseStatus>('COMPRADO');
   const [rowHeight, setRowHeight] = useState(() => {
     const stored = Number(localStorage.getItem('cantidades:tableRowHeight'));
@@ -100,6 +101,46 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     if (n !== null) return n;
     return fallback ?? 0;
   };
+
+  const pipePurchaseSummary = useMemo(() => {
+    if (!isSanitaryModel) return [];
+    const map = new Map<string, { tipo: string; diameter: string; totalLength: number; count: number }>();
+    const asNumber = (v: string) => {
+      const n = parseNumber(v);
+      return n !== null ? n : null;
+    };
+    for (const el of elements) {
+      const classif = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]);
+      const isPipe = /tuber/i.test(classif) && !/union/i.test(classif);
+      if (!isPipe) continue;
+      const len = getMetric(el, 'LONGITUD INTEGRADO', 0);
+      if (!(len > 0)) continue;
+      const tipoRaw = getProp(el, "NOMBRE INTEGRADO");
+      const tipo = tipoRaw !== '-' && tipoRaw !== '' ? tipoRaw : el.name;
+      const diameterRaw = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]);
+      const diameter = diameterRaw !== '-' && diameterRaw !== '' ? diameterRaw : 'SIN DIÁMETRO';
+      const key = `${tipo}||${diameter}`;
+      const cur = map.get(key) ?? { tipo, diameter, totalLength: 0, count: 0 };
+      cur.totalLength += len;
+      cur.count += 1;
+      map.set(key, cur);
+    }
+    const arr = Array.from(map.values()).map((v) => {
+      const units = Math.ceil(v.totalLength / 6);
+      const waste = units * 6 - v.totalLength;
+      return { ...v, units, waste };
+    });
+    return arr.sort((a, b) => {
+      const t = a.tipo.localeCompare(b.tipo, 'es');
+      if (t !== 0) return t;
+      const na = asNumber(a.diameter);
+      const nb = asNumber(b.diameter);
+      if (na !== null && nb !== null) return na - nb;
+      if (na !== null) return -1;
+      if (nb !== null) return 1;
+      return a.diameter.localeCompare(b.diameter, 'es');
+    });
+  }, [elements, getFirstProp, getMetric, getProp, isSanitaryModel]);
 
   const totals = useMemo(() => {
     let area = 0;
@@ -268,6 +309,19 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
           >
             Historial
           </button>
+          {isSanitaryModel && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('TUBERIAS')}
+              className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-colors ${
+                activeTab === 'TUBERIAS'
+                  ? 'bg-[#003d4d] text-white border-[#003d4d]'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              Tuberías
+            </button>
+          )}
         </div>
 
         <div className="text-[10px] text-slate-600 font-bold uppercase tracking-widest flex items-center gap-4">
@@ -507,7 +561,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
             </tbody>
           </table>
         </div>
-      ) : (
+      ) : activeTab === 'HISTORIAL' ? (
         <div className="flex-1 overflow-auto">
           <table className="w-full text-left border-collapse min-w-[1100px]">
             <thead className="sticky top-0 bg-[#003d4d] text-white z-10">
@@ -540,6 +594,38 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                   </tr>
                 );
               })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-auto">
+          <table className="w-full text-left border-collapse min-w-[900px]">
+            <thead className="sticky top-0 bg-[#003d4d] text-white z-10">
+              <tr>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Tipo</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Diámetro</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Longitud total (m)</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Unidades (6m)</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-right">Desperdicio (m)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {pipePurchaseSummary.map((r) => (
+                <tr key={`${r.tipo}||${r.diameter}`}>
+                  <td className="px-4 py-2 text-xs font-bold text-slate-700">{r.tipo}</td>
+                  <td className="px-4 py-2 text-xs text-slate-700">{r.diameter}</td>
+                  <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.totalLength)}</td>
+                  <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{r.units.toLocaleString('es-CO')}</td>
+                  <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.waste)}</td>
+                </tr>
+              ))}
+              {pipePurchaseSummary.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400 text-xs italic">
+                    No hay tuberías con longitud para resumir con los filtros actuales.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -308,6 +308,7 @@ export default function App() {
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
   const [selectedDiameter, setSelectedDiameter] = useState<string>('Todos');
   const [isIsolateMode, setIsIsolateMode] = useState(false);
+  const isSanitaryModel = useMemo(() => /sanitario/i.test(selectedRemoteModelName ?? ''), [selectedRemoteModelName]);
   const [statusColorsEnabled, setStatusColorsEnabled] = useState(() => {
     const raw = localStorage.getItem('cantidades:statusColorsEnabled');
     if (raw === null) return true;
@@ -680,6 +681,10 @@ export default function App() {
     setSelectedClassifications((prev) => prev.filter((c) => !isSinClasificar(c)));
   }, [baseElements]);
 
+  useEffect(() => {
+    if (!isSanitaryModel) setSelectedDiameter('Todos');
+  }, [isSanitaryModel]);
+
   const filteredElements = useMemo(() => {
     return baseElements.filter(el => {
       const classif = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
@@ -690,11 +695,11 @@ export default function App() {
       const classificationMatch = selectedClassifications.length === 0 || selectedClassifications.includes(classif);
       const categoryMatch = selectedCategories.length === 0 || selectedCategories.includes(nombreIntegrado);
       const levelMatch = selectedLevels.length === 0 || selectedLevels.includes(level);
-      const diameterMatch = selectedDiameter === 'Todos' || diameter === selectedDiameter;
+      const diameterMatch = !isSanitaryModel || selectedDiameter === 'Todos' || diameter === selectedDiameter;
 
       return classificationMatch && categoryMatch && levelMatch && diameterMatch;
     });
-  }, [baseElements, getFirstProp, getProp, selectedClassifications, selectedCategories, selectedDiameter, selectedLevels]);
+  }, [baseElements, getFirstProp, getProp, isSanitaryModel, selectedClassifications, selectedCategories, selectedDiameter, selectedLevels]);
 
   const elementsWithVolume = useMemo(() => {
     const toNumber = (v: unknown) => {
@@ -746,6 +751,7 @@ export default function App() {
   }, [baseElements, getProp]);
 
   const diameters = useMemo(() => {
+    if (!isSanitaryModel) return [];
     const diameterSet = new Set<string>();
     baseElements.forEach(el => {
       const diameter = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]);
@@ -763,7 +769,7 @@ export default function App() {
       if (nb !== null) return 1;
       return a.localeCompare(b, 'es');
     });
-  }, [baseElements, getFirstProp]);
+  }, [baseElements, getFirstProp, isSanitaryModel]);
 
   const toggleClassification = (name: string) => {
     setSelectedClassifications(prev => 
@@ -1780,6 +1786,7 @@ export default function App() {
                       onSetSelectedElementIds={setSelectedElementIds}
                       statuses={elementStatuses}
                       history={elementHistory}
+                      isSanitaryModel={isSanitaryModel}
                       onChangeStatus={handleChangeStatus}
                       onChangeStatusMany={handleChangeStatusMany}
                       onClearFilters={resetFilters}
@@ -1829,6 +1836,7 @@ export default function App() {
                 levels={levels}
                 selectedLevels={selectedLevels}
                 onToggleLevel={toggleLevel}
+                isSanitaryModel={isSanitaryModel}
                 diameters={diameters}
                 selectedDiameter={selectedDiameter}
                 onDiameterChange={setSelectedDiameter}
@@ -1864,6 +1872,7 @@ export default function App() {
               onSetSelectedElementIds={setSelectedElementIds}
               statuses={elementStatuses}
               history={elementHistory}
+              isSanitaryModel={isSanitaryModel}
               onChangeStatus={handleChangeStatus}
               onChangeStatusMany={handleChangeStatusMany}
               onClearFilters={resetFilters}
