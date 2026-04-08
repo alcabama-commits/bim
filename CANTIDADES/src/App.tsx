@@ -1787,6 +1787,7 @@ export default function App() {
                       selectedElementId={selectedElementId || undefined}
                       selectedElementIds={selectedElementIds}
                       onSetSelectedElementIds={setSelectedElementIds}
+                      modelKey={currentModelKey}
                       statuses={elementStatuses}
                       history={elementHistory}
                       isSanitaryModel={isSanitaryModel}
@@ -1873,6 +1874,7 @@ export default function App() {
               selectedElementId={selectedElementId || undefined}
               selectedElementIds={selectedElementIds}
               onSetSelectedElementIds={setSelectedElementIds}
+              modelKey={currentModelKey}
               statuses={elementStatuses}
               history={elementHistory}
               isSanitaryModel={isSanitaryModel}

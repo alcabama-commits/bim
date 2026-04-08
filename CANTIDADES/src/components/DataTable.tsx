@@ -14,6 +14,7 @@ interface DataTableProps {
   selectedElementId?: string;
   selectedElementIds?: string[];
   onSetSelectedElementIds?: (ids: string[]) => void;
+  modelKey?: string;
   statuses: Record<string, PurchaseStatus | undefined>;
   history?: Record<string, HistoryEntry[] | undefined>;
   isSanitaryModel?: boolean;
@@ -22,7 +23,14 @@ interface DataTableProps {
   onClearFilters?: () => void;
 }
 
-export default function DataTable({ elements, onSelectElement, selectedElementId, selectedElementIds, onSetSelectedElementIds, statuses, history, isSanitaryModel, onChangeStatus, onChangeStatusMany, onClearFilters }: DataTableProps) {
+type PipeStageState = {
+  pedido: number;
+  comprado: number;
+  almacen: number;
+  instalado: number;
+};
+
+export default function DataTable({ elements, onSelectElement, selectedElementId, selectedElementIds, onSetSelectedElementIds, modelKey, statuses, history, isSanitaryModel, onChangeStatus, onChangeStatusMany, onClearFilters }: DataTableProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(400);
@@ -102,6 +110,83 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     return fallback ?? 0;
   };
 
+  const pipeStagesStorageKey = useMemo(() => `cantidades:pipeStages:${modelKey || 'local'}`, [modelKey]);
+  const [pipeStagesByGroup, setPipeStagesByGroup] = useState<Record<string, PipeStageState>>({});
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(pipeStagesStorageKey);
+      if (!raw) {
+        setPipeStagesByGroup({});
+        return;
+      }
+      const parsed = JSON.parse(raw) as Record<string, any>;
+      const next: Record<string, PipeStageState> = {};
+      if (parsed && typeof parsed === 'object') {
+        for (const [k, v] of Object.entries(parsed)) {
+          const pedido = Number(v?.pedido ?? 0);
+          const comprado = Number(v?.comprado ?? 0);
+          const almacen = Number(v?.almacen ?? 0);
+          const instalado = Number(v?.instalado ?? 0);
+          next[k] = {
+            pedido: Number.isFinite(pedido) ? Math.max(0, Math.floor(pedido)) : 0,
+            comprado: Number.isFinite(comprado) ? Math.max(0, Math.floor(comprado)) : 0,
+            almacen: Number.isFinite(almacen) ? Math.max(0, Math.floor(almacen)) : 0,
+            instalado: Number.isFinite(instalado) ? Math.max(0, Math.floor(instalado)) : 0
+          };
+        }
+      }
+      setPipeStagesByGroup(next);
+    } catch {
+      setPipeStagesByGroup({});
+    }
+  }, [pipeStagesStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(pipeStagesStorageKey, JSON.stringify(pipeStagesByGroup));
+    } catch {
+    }
+  }, [pipeStagesByGroup, pipeStagesStorageKey]);
+
+  const normalizePipeStages = (totalUnits: number, st: PipeStageState | undefined) => {
+    const installed = Math.min(Math.max(0, Math.floor(st?.instalado ?? 0)), totalUnits);
+    const almacen = Math.min(Math.max(0, Math.floor(st?.almacen ?? 0)), totalUnits - installed);
+    const comprado = Math.min(Math.max(0, Math.floor(st?.comprado ?? 0)), totalUnits - installed - almacen);
+    const pedido = Math.min(Math.max(0, Math.floor(st?.pedido ?? 0)), totalUnits - installed - almacen - comprado);
+    const pendiente = Math.max(0, totalUnits - (pedido + comprado + almacen + installed));
+    return { pendiente, pedido, comprado, almacen, instalado: installed };
+  };
+
+  const movePipeStage = (totalUnits: number, current: PipeStageState | undefined, stage: 'pedido' | 'comprado' | 'almacen' | 'instalado', nextValue: number) => {
+    const cur = normalizePipeStages(totalUnits, current);
+    const target = Math.max(0, Math.floor(nextValue));
+
+    if (stage === 'pedido') {
+      const max = totalUnits - (cur.comprado + cur.almacen + cur.instalado);
+      const pedido = Math.min(target, max);
+      return { pedido, comprado: cur.comprado, almacen: cur.almacen, instalado: cur.instalado };
+    }
+    if (stage === 'comprado') {
+      const total = cur.pedido + cur.comprado;
+      const max = totalUnits - (cur.almacen + cur.instalado);
+      const comprado = Math.min(target, total, max);
+      const pedido = total - comprado;
+      return { pedido, comprado, almacen: cur.almacen, instalado: cur.instalado };
+    }
+    if (stage === 'almacen') {
+      const total = cur.comprado + cur.almacen;
+      const max = totalUnits - cur.instalado;
+      const almacen = Math.min(target, total, max);
+      const comprado = total - almacen;
+      return { pedido: cur.pedido, comprado, almacen, instalado: cur.instalado };
+    }
+    const total = cur.almacen + cur.instalado;
+    const instalado = Math.min(target, total, totalUnits);
+    const almacen = total - instalado;
+    return { pedido: cur.pedido, comprado: cur.comprado, almacen, instalado };
+  };
+
   const pipePurchaseSummary = useMemo(() => {
     if (!isSanitaryModel) return [];
     const map = new Map<string, { tipo: string; diameter: string; ids: string[]; totalLength: number; count: number; statusLength: Record<PurchaseStatus, number>; statusCount: Record<PurchaseStatus, number> }>();
@@ -137,27 +222,11 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       cur.statusCount[st] += 1;
       map.set(key, cur);
     }
-    const pickDominantStatus = (v: { statusLength: Record<PurchaseStatus, number>; statusCount: Record<PurchaseStatus, number> }): PurchaseStatus => {
-      let best: PurchaseStatus = 'PENDIENTE';
-      let bestLen = -1;
-      let bestCount = -1;
-      for (const st of STATUS_ORDER) {
-        const len = v.statusLength[st] ?? 0;
-        const cnt = v.statusCount[st] ?? 0;
-        if (len > bestLen || (len === bestLen && cnt > bestCount)) {
-          best = st;
-          bestLen = len;
-          bestCount = cnt;
-        }
-      }
-      return best;
-    };
-
     const arr = Array.from(map.values()).map((v) => {
       const units = Math.ceil(v.totalLength / 6);
       const waste = units * 6 - v.totalLength;
-      const dominantStatus = pickDominantStatus(v);
-      return { ...v, units, waste, dominantStatus };
+      const groupKey = `${v.tipo}||${v.diameter}`;
+      return { ...v, units, waste, groupKey };
     });
     return arr.sort((a, b) => {
       const t = a.tipo.localeCompare(b.tipo, 'es');
@@ -711,7 +780,11 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
               <tr>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Tipo</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Diámetro</th>
-                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Estado</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Pendiente</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Pedido</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Comprado</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Almacén</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Instalado</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Longitud total (m)</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Unidades (6m)</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-right">Desperdicio (m)</th>
@@ -719,23 +792,60 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
             </thead>
             <tbody className="divide-y divide-slate-100">
               {pipePurchaseSummary.map((r) => (
-                <tr key={`${r.tipo}||${r.diameter}`}>
+                <tr key={r.groupKey}>
                   <td className="px-4 py-2 text-xs font-bold text-slate-700">{r.tipo}</td>
                   <td className="px-4 py-2 text-xs text-slate-700">{r.diameter}</td>
-                  <td className="px-4 py-2">
-                    <button
-                      type="button"
-                      onClick={() => applyStatusToIds(r.ids, nextStatus(r.dominantStatus))}
-                      className={`inline-flex px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${statusTint(r.dominantStatus).pill}`}
-                      title={[
-                        'Click: cambia el estado de este grupo (Tipo + Diámetro) al siguiente estado.',
-                        '',
-                        ...STATUS_ORDER.map((st) => `${st}: ${format2(r.statusLength[st] ?? 0)}m (${(r.statusCount[st] ?? 0).toLocaleString('es-CO')})`)
-                      ].join('\n')}
-                    >
-                      {r.dominantStatus}
-                    </button>
-                  </td>
+                  {(() => {
+                    const display = normalizePipeStages(r.units, pipeStagesByGroup[r.groupKey]);
+                    const onSet = (stage: 'pedido' | 'comprado' | 'almacen' | 'instalado') => (value: number) => {
+                      setPipeStagesByGroup((prev) => ({ ...prev, [r.groupKey]: movePipeStage(r.units, prev[r.groupKey], stage, value) }));
+                    };
+                    const toSafeNumber = (raw: string) => {
+                      const n = Number(raw);
+                      return Number.isFinite(n) ? n : 0;
+                    };
+                    return (
+                      <>
+                        <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{display.pendiente.toLocaleString('es-CO')}</td>
+                        <td className="px-4 py-2 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            value={display.pedido}
+                            onChange={(e) => onSet('pedido')(toSafeNumber(e.target.value))}
+                            className="w-20 text-right bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            value={display.comprado}
+                            onChange={(e) => onSet('comprado')(toSafeNumber(e.target.value))}
+                            className="w-20 text-right bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            value={display.almacen}
+                            onChange={(e) => onSet('almacen')(toSafeNumber(e.target.value))}
+                            className="w-20 text-right bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            value={display.instalado}
+                            onChange={(e) => onSet('instalado')(toSafeNumber(e.target.value))}
+                            className="w-20 text-right bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono"
+                          />
+                        </td>
+                      </>
+                    );
+                  })()}
                   <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.totalLength)}</td>
                   <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{r.units.toLocaleString('es-CO')}</td>
                   <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.waste)}</td>
@@ -743,7 +853,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
               ))}
               {pipePurchaseSummary.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-xs italic">
+                  <td colSpan={10} className="px-4 py-8 text-center text-slate-400 text-xs italic">
                     No hay tuberías con longitud para resumir con los filtros actuales.
                   </td>
                 </tr>
