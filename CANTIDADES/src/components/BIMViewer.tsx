@@ -60,6 +60,8 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
   const allElementsRef = useRef(allElements);
   const elementIdIndexRef = useRef<Map<string, string>>(new Map());
   const selectableIdsRef = useRef<Set<string>>(new Set());
+  const sceneSphereRef = useRef<THREE.Sphere | null>(null);
+  const clippingRafRef = useRef<number | null>(null);
 
   useEffect(() => {
     onSelectionChangeRef.current = onSelectionChange;
@@ -172,6 +174,86 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
     const fragments = components.get(OBC.FragmentsManager);
     const highlighter = components.get(OBCF.Highlighter);
     
+    const getWorld = () => {
+      const worlds = components.get(OBC.Worlds);
+      return Array.from(worlds.list.values())[0] as any;
+    };
+
+    const getControlsTarget = (w: any) => {
+      const target = new THREE.Vector3();
+      const controls: any = w?.camera?.controls;
+      if (controls && typeof controls.getTarget === 'function') {
+        try {
+          controls.getTarget(target);
+          return target;
+        } catch {
+        }
+      }
+      const fallback = (controls && (controls._target || controls.target)) as any;
+      if (fallback && fallback.isVector3) return fallback.clone();
+      return target;
+    };
+
+    const recomputeSceneSphere = (w: any) => {
+      const box = new THREE.Box3();
+      let hasMeshes = false;
+      w?.scene?.three?.traverse?.((obj: any) => {
+        if (obj?.isMesh && obj.visible) {
+          box.expandByObject(obj);
+          hasMeshes = true;
+        }
+      });
+      if (!hasMeshes || box.isEmpty()) {
+        sceneSphereRef.current = null;
+        return;
+      }
+      const sphere = new THREE.Sphere();
+      box.getBoundingSphere(sphere);
+      if (!Number.isFinite(sphere.radius) || sphere.radius <= 0) {
+        sceneSphereRef.current = null;
+        return;
+      }
+      sceneSphereRef.current = sphere;
+    };
+
+    const applyCameraClipping = (w: any) => {
+      const cam = w?.camera?.three as THREE.PerspectiveCamera | THREE.OrthographicCamera | undefined;
+      if (!cam) return;
+      const target = getControlsTarget(w);
+      const dist = cam.position.distanceTo(target);
+      const sphere = sceneSphereRef.current;
+      const radius = sphere?.radius && Number.isFinite(sphere.radius) ? sphere.radius : 50;
+
+      const nearCandidate = Math.max(0.001, dist / 3000, radius / 100000);
+      const farCandidate = Math.max(nearCandidate + 10, dist + radius * 30);
+
+      const nextNear = Math.min(nearCandidate, Math.max(0.01, dist / 50));
+      const nextFar = Math.min(10_000_000, farCandidate);
+
+      const changed = Math.abs((cam.near ?? 0) - nextNear) > nextNear * 0.2 || Math.abs((cam.far ?? 0) - nextFar) > nextFar * 0.2;
+      if (!changed) return;
+      cam.near = nextNear;
+      cam.far = nextFar;
+      cam.updateProjectionMatrix();
+    };
+
+    const scheduleClippingUpdate = (opts: { recomputeSphere: boolean; updateFragments: boolean }) => {
+      if (clippingRafRef.current !== null) return;
+      clippingRafRef.current = window.requestAnimationFrame(() => {
+        clippingRafRef.current = null;
+        const w = getWorld();
+        if (!w) return;
+        if (opts.recomputeSphere) recomputeSceneSphere(w);
+        applyCameraClipping(w);
+        if (opts.updateFragments) {
+          try {
+            fragments.core.update(true);
+          } catch {
+          }
+        }
+      });
+    };
+
     // Inicialización robusta con Blob para evitar problemas de CORS y asegurar que el worker cargue
     const initFragments = async () => {
       if (fragments.initialized) {
@@ -188,14 +270,14 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         setIsInitialized(true);
 
         if (world.camera.hasCameraControls()) {
-          const sync = () => {
-            try {
-              fragments.core.update(true);
-            } catch {
-            }
+          const onRest = () => scheduleClippingUpdate({ recomputeSphere: true, updateFragments: true });
+          const onUpdate = () => scheduleClippingUpdate({ recomputeSphere: false, updateFragments: false });
+          world.camera.controls.addEventListener('rest', onRest);
+          world.camera.controls.addEventListener('update', onUpdate);
+          syncCleanupRef.current = () => {
+            world.camera.controls.removeEventListener('rest', onRest);
+            world.camera.controls.removeEventListener('update', onUpdate);
           };
-          world.camera.controls.addEventListener('rest', sync);
-          syncCleanupRef.current = () => world.camera.controls.removeEventListener('rest', sync);
         }
         
         // Configurar Highlighter
@@ -255,6 +337,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         
         // Configurar eventos
         setupFragmentEvents();
+        scheduleClippingUpdate({ recomputeSphere: true, updateFragments: true });
       } catch (error) {
         console.error("Error al inicializar FragmentsManager:", error);
       }
