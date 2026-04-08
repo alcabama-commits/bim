@@ -51,7 +51,6 @@ const jsonpRequest = <T,>(url: URL, signalOrOptions?: AbortSignal | JsonpOptions
 
     const script = document.createElement('script');
     script.async = true;
-    script.crossOrigin = 'anonymous';
     try {
       (script as any).referrerPolicy = 'no-referrer';
     } catch {
