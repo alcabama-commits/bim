@@ -104,7 +104,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
 
   const pipePurchaseSummary = useMemo(() => {
     if (!isSanitaryModel) return [];
-    const map = new Map<string, { tipo: string; diameter: string; totalLength: number; count: number; statusLength: Record<PurchaseStatus, number>; statusCount: Record<PurchaseStatus, number> }>();
+    const map = new Map<string, { tipo: string; diameter: string; ids: string[]; totalLength: number; count: number; statusLength: Record<PurchaseStatus, number>; statusCount: Record<PurchaseStatus, number> }>();
     const asNumber = (v: string) => {
       const n = parseNumber(v);
       return n !== null ? n : null;
@@ -124,11 +124,13 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       const cur = map.get(key) ?? {
         tipo,
         diameter,
+        ids: [],
         totalLength: 0,
         count: 0,
         statusLength: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, 'EN BODEGA': 0, INSTALADO: 0 },
         statusCount: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, 'EN BODEGA': 0, INSTALADO: 0 }
       };
+      cur.ids.push(el.id);
       cur.totalLength += len;
       cur.count += 1;
       cur.statusLength[st] += len;
@@ -168,6 +170,14 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       return a.diameter.localeCompare(b.diameter, 'es');
     });
   }, [elements, getFirstProp, getMetric, getProp, isSanitaryModel, statuses]);
+
+  const applyStatusToIds = (ids: string[], status: PurchaseStatus) => {
+    if (onChangeStatusMany) {
+      onChangeStatusMany(ids, status);
+      return;
+    }
+    for (const id of ids) onChangeStatus(id, status);
+  };
 
   const totals = useMemo(() => {
     let area = 0;
@@ -643,12 +653,18 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                   <td className="px-4 py-2 text-xs font-bold text-slate-700">{r.tipo}</td>
                   <td className="px-4 py-2 text-xs text-slate-700">{r.diameter}</td>
                   <td className="px-4 py-2">
-                    <div
+                    <button
+                      type="button"
+                      onClick={() => applyStatusToIds(r.ids, nextStatus(r.dominantStatus))}
                       className={`inline-flex px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${statusTint(r.dominantStatus).pill}`}
-                      title={STATUS_ORDER.map((st) => `${st}: ${format2(r.statusLength[st] ?? 0)}m (${(r.statusCount[st] ?? 0).toLocaleString('es-CO')})`).join('\n')}
+                      title={[
+                        'Click: cambia el estado de este grupo (Tipo + Diámetro) al siguiente estado.',
+                        '',
+                        ...STATUS_ORDER.map((st) => `${st}: ${format2(r.statusLength[st] ?? 0)}m (${(r.statusCount[st] ?? 0).toLocaleString('es-CO')})`)
+                      ].join('\n')}
                     >
                       {r.dominantStatus}
-                    </div>
+                    </button>
                   </td>
                   <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.totalLength)}</td>
                   <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{r.units.toLocaleString('es-CO')}</td>
