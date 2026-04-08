@@ -20,7 +20,7 @@ interface BIMViewerProps {
   onModelLoaded: (components: OBC.Components) => void;
   allElements: BIMElement[];
   visibleElements: BIMElement[];
-  statuses: Record<string, 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'EN BODEGA' | 'INSTALADO' | undefined>;
+  statuses: Record<string, 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'ALMACEN' | 'INSTALADO' | undefined>;
   statusColorsEnabled?: boolean;
   gridVisible?: boolean;
   selectedElementId?: string;
@@ -85,7 +85,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
     try {
       const raw = localStorage.getItem('cantidades:statusVisibility');
       if (!raw) {
-        return { PENDIENTE: true, PEDIDO: true, COMPRADO: true, 'EN BODEGA': true, INSTALADO: true };
+        return { PENDIENTE: true, PEDIDO: true, COMPRADO: true, ALMACEN: true, INSTALADO: true };
       }
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const pick = (k: string) => (typeof parsed[k] === 'boolean' ? (parsed[k] as boolean) : true);
@@ -93,11 +93,11 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         PENDIENTE: pick('PENDIENTE'),
         PEDIDO: pick('PEDIDO'),
         COMPRADO: pick('COMPRADO'),
-        'EN BODEGA': pick('EN BODEGA'),
+        ALMACEN: typeof parsed['ALMACEN'] === 'boolean' ? (parsed['ALMACEN'] as boolean) : pick('EN BODEGA'),
         INSTALADO: pick('INSTALADO')
       };
     } catch {
-      return { PENDIENTE: true, PEDIDO: true, COMPRADO: true, 'EN BODEGA': true, INSTALADO: true };
+      return { PENDIENTE: true, PEDIDO: true, COMPRADO: true, ALMACEN: true, INSTALADO: true };
     }
   });
 
@@ -113,7 +113,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       { key: 'PENDIENTE', label: 'Pendiente', color: '#9CA3AF' },
       { key: 'PEDIDO', label: 'Pedido', color: '#3B82F6' },
       { key: 'COMPRADO', label: 'Comprado', color: '#FFA400' },
-      { key: 'EN BODEGA', label: 'En bodega', color: '#A78BFA' },
+      { key: 'ALMACEN', label: 'Almacén', color: '#A78BFA' },
       { key: 'INSTALADO', label: 'Instalado', color: '#22C55E' }
     ] as const;
   }, []);
@@ -310,7 +310,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
           depthWrite: true,
           renderedFaces: FRAGS.RenderedFaces.ONE
         });
-        highlighter.styles.set("status_EN_BODEGA", { 
+        highlighter.styles.set("status_ALMACEN", { 
           color: new THREE.Color(0xa78bfa),
           opacity: 1,
           transparent: false,
@@ -754,7 +754,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       const byStatus: Record<string, BIMElement[]> = {
         PEDIDO: [],
         COMPRADO: [],
-        'EN BODEGA': [],
+        ALMACEN: [],
         INSTALADO: [],
         PENDIENTE: []
       };
@@ -767,8 +767,8 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
           byStatus.PEDIDO.push(el);
         } else if (st === 'COMPRADO') {
           byStatus.COMPRADO.push(el);
-        } else if (st === 'EN BODEGA') {
-          byStatus['EN BODEGA'].push(el);
+        } else if (st === 'ALMACEN') {
+          byStatus.ALMACEN.push(el);
         } else if (st === 'INSTALADO') {
           byStatus.INSTALADO.push(el);
         } else {
@@ -780,7 +780,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       const statusToStyle: Array<{ key: keyof typeof byStatus; style: string; enabled: boolean }> = [
         { key: 'PEDIDO', style: 'status_PEDIDO', enabled: true },
         { key: 'COMPRADO', style: 'status_COMPRADO', enabled: true },
-        { key: 'EN BODEGA', style: 'status_EN_BODEGA', enabled: true },
+        { key: 'ALMACEN', style: 'status_ALMACEN', enabled: true },
         { key: 'INSTALADO', style: 'status_INSTALADO', enabled: true },
         { key: 'PENDIENTE', style: 'status_PENDIENTE', enabled: byStatus.PENDIENTE.length <= pendingLimit }
       ];

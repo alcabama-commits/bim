@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BIMElement } from '../types';
 
-type PurchaseStatus = 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'EN BODEGA' | 'INSTALADO';
+type PurchaseStatus = 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'ALMACEN' | 'INSTALADO';
 
 interface HistoryEntry {
   status: PurchaseStatus;
@@ -35,7 +35,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
   const selectedSet = useMemo(() => new Set(selectedElementIds ?? []), [selectedElementIds]);
   const lastAnchorIndexRef = useRef<number | null>(null);
 
-  const STATUS_ORDER: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'EN BODEGA', 'INSTALADO'];
+  const STATUS_ORDER: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'ALMACEN', 'INSTALADO'];
 
   useEffect(() => {
     const el = containerRef.current;
@@ -127,8 +127,8 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
         ids: [],
         totalLength: 0,
         count: 0,
-        statusLength: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, 'EN BODEGA': 0, INSTALADO: 0 },
-        statusCount: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, 'EN BODEGA': 0, INSTALADO: 0 }
+        statusLength: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, ALMACEN: 0, INSTALADO: 0 },
+        statusCount: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, ALMACEN: 0, INSTALADO: 0 }
       };
       cur.ids.push(el.id);
       cur.totalLength += len;
@@ -193,7 +193,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
         diameter,
         ids: [],
         count: 0,
-        statusCount: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, 'EN BODEGA': 0, INSTALADO: 0 }
+        statusCount: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, ALMACEN: 0, INSTALADO: 0 }
       };
       cur.ids.push(el.id);
       cur.count += 1;
@@ -253,7 +253,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       PENDIENTE: { count: 0, area: 0, length: 0, volume: 0 },
       PEDIDO: { count: 0, area: 0, length: 0, volume: 0 },
       COMPRADO: { count: 0, area: 0, length: 0, volume: 0 },
-      'EN BODEGA': { count: 0, area: 0, length: 0, volume: 0 },
+      ALMACEN: { count: 0, area: 0, length: 0, volume: 0 },
       INSTALADO: { count: 0, area: 0, length: 0, volume: 0 }
     };
     for (const el of elements) {
@@ -308,7 +308,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
         return 'bg-blue-100';
       case 'COMPRADO':
         return 'bg-amber-100';
-      case 'EN BODEGA':
+      case 'ALMACEN':
         return 'bg-violet-100';
       case 'INSTALADO':
         return 'bg-emerald-100';
@@ -323,7 +323,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
         return { row: 'bg-blue-50', hover: 'hover:bg-blue-100', pill: 'bg-blue-200 text-blue-900' };
       case 'COMPRADO':
         return { row: 'bg-amber-50', hover: 'hover:bg-amber-100', pill: 'bg-amber-200 text-amber-900' };
-      case 'EN BODEGA':
+      case 'ALMACEN':
         return { row: 'bg-violet-50', hover: 'hover:bg-violet-100', pill: 'bg-violet-200 text-violet-900' };
       case 'INSTALADO':
         return { row: 'bg-emerald-50', hover: 'hover:bg-emerald-100', pill: 'bg-emerald-200 text-emerald-900' };

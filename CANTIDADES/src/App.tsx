@@ -118,7 +118,7 @@ type RemoteModel = {
   group: string;
 };
 
-type PurchaseStatus = 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'EN BODEGA' | 'INSTALADO';
+type PurchaseStatus = 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'ALMACEN' | 'INSTALADO';
 type HistoryEntry = { status: PurchaseStatus; at: string };
 
 const GITHUB_REPO = {
@@ -182,10 +182,11 @@ export default function App() {
   const currentModelKey = useMemo(() => getModelKey(selectedRemoteModelName), [getModelKey, selectedRemoteModelName]);
 
   const normalizePurchaseStatus = useCallback((v: unknown): PurchaseStatus | null => {
-    const allowed: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'EN BODEGA', 'INSTALADO'];
+    const allowed: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'ALMACEN', 'INSTALADO'];
     const s = String(v ?? '').trim().toUpperCase();
     if (s === 'EN SITIO') return 'INSTALADO';
-    if (s === 'EN_BODEGA') return 'EN BODEGA';
+    if (s === 'EN_BODEGA') return 'ALMACEN';
+    if (s === 'EN BODEGA') return 'ALMACEN';
     if (allowed.includes(s as PurchaseStatus)) return s as PurchaseStatus;
     return null;
   }, []);
@@ -340,11 +341,12 @@ export default function App() {
         return;
       }
       const parsed = JSON.parse(raw) as Record<string, unknown>;
-      const allowed: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'EN BODEGA', 'INSTALADO'];
+      const allowed: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'ALMACEN', 'INSTALADO'];
       const normalize = (v: unknown): PurchaseStatus | null => {
         const s = String(v ?? '').trim().toUpperCase();
         if (s === 'EN SITIO') return 'INSTALADO';
-        if (s === 'EN_BODEGA') return 'EN BODEGA';
+        if (s === 'EN_BODEGA') return 'ALMACEN';
+        if (s === 'EN BODEGA') return 'ALMACEN';
         if (allowed.includes(s as PurchaseStatus)) return s as PurchaseStatus;
         return null;
       };
@@ -371,11 +373,12 @@ export default function App() {
         return;
       }
       const parsed = JSON.parse(raw) as Record<string, unknown>;
-      const allowed: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'EN BODEGA', 'INSTALADO'];
+      const allowed: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'ALMACEN', 'INSTALADO'];
       const normalize = (v: unknown): PurchaseStatus | null => {
         const s = String(v ?? '').trim().toUpperCase();
         if (s === 'EN SITIO') return 'INSTALADO';
-        if (s === 'EN_BODEGA') return 'EN BODEGA';
+        if (s === 'EN_BODEGA') return 'ALMACEN';
+        if (s === 'EN BODEGA') return 'ALMACEN';
         if (allowed.includes(s as PurchaseStatus)) return s as PurchaseStatus;
         return null;
       };
