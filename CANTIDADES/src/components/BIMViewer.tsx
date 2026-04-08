@@ -786,6 +786,13 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
       ];
 
       if (statusColorsEnabled) {
+        for (const { style } of statusToStyle) {
+          try {
+            await highlighter.clear(style);
+          } catch {
+          }
+          prevStatusAppliedRef.current[style] = false;
+        }
         for (const { key, style, enabled } of statusToStyle) {
           if (!enabled) continue;
           const els = byStatus[key];
