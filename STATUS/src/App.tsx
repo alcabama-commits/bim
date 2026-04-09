@@ -1004,6 +1004,23 @@ export default function App() {
     });
   }, [baseElements, deriveFilterCategory, deriveFilterClassification, getFirstProp, getProp, isStructureModel, selectedCategories, selectedClassifications, selectedDiameter, selectedLevels, selectedMaterial]);
 
+  const byPileIndex = useMemo(() => {
+    if (!isStructureModel) return new Map<string, string[]>();
+    const map = new Map<string, string[]>();
+    for (const el of filteredElements) {
+      const pile = getFirstProp(el, ["NÚMERO DE PILOTE", "NUMERO DE PILOTE", "NUMERO PILOTE", "PILOTE NUMBER", "PILOTE"]);
+      if (!pile) continue;
+      const key = String(pile);
+      let arr = map.get(key);
+      if (!arr) {
+        arr = [];
+        map.set(key, arr);
+      }
+      arr.push(el.id);
+    }
+    return map;
+  }, [filteredElements, getFirstProp, isStructureModel]);
+
   useEffect(() => {
     if (!isStructureModel) return;
     const only = selectedPileNumbers;
@@ -1052,23 +1069,6 @@ export default function App() {
     }
     return Array.from(byPile.values());
   }, [filteredElements, getFirstProp, isStructureModel, selectedPileNumbers, showPileNumberLabels]);
-
-  const byPileIndex = useMemo(() => {
-    if (!isStructureModel) return new Map<string, string[]>();
-    const map = new Map<string, string[]>();
-    for (const el of filteredElements) {
-      const pile = getFirstProp(el, ["NÚMERO DE PILOTE", "NUMERO DE PILOTE", "NUMERO PILOTE", "PILOTE NUMBER", "PILOTE"]);
-      if (!pile) continue;
-      const key = String(pile);
-      let arr = map.get(key);
-      if (!arr) {
-        arr = [];
-        map.set(key, arr);
-      }
-      arr.push(el.id);
-    }
-    return map;
-  }, [filteredElements, getFirstProp, isStructureModel]);
 
   const elementsWithVolume = useMemo(() => {
     const toNumber = (v: unknown) => {
