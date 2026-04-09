@@ -11,6 +11,9 @@ export default defineConfig(({mode}) => {
     build: {
       outDir,
       emptyOutDir: true,
+      target: 'es2020',
+      sourcemap: true,
+      minify: false
     },
     plugins: [react(), tailwindcss()],
     define: {
