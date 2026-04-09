@@ -194,6 +194,12 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
     
     if (world.renderer) {
       world.renderer.three.setClearColor(0xffffff);
+      try {
+        const isMobile = window.matchMedia('(max-width: 768px)').matches;
+        const dpr = window.devicePixelRatio || 1;
+        world.renderer.three.setPixelRatio(Math.min(dpr, isMobile ? 1.25 : 2));
+      } catch {
+      }
     }
     
     world.camera.three.position.set(20, 20, 20);
