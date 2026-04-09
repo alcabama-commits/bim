@@ -1006,21 +1006,33 @@ export default function App() {
 
   useEffect(() => {
     if (!isStructureModel) return;
-    if (selectedPileNumbers.length === 0) return;
-
-    const selected = new Set<string>();
-    for (const el of filteredElements) {
-      const pile = getFirstProp(el, ["NÚMERO DE PILOTE", "NUMERO DE PILOTE", "NUMERO PILOTE", "PILOTE NUMBER", "PILOTE"]);
-      if (!pile) continue;
-      if (!selectedPileNumbers.includes(pile)) continue;
-      selected.add(el.id);
+    const only = selectedPileNumbers;
+    if (only.length === 0) return;
+    const next = new Set<string>();
+    for (const p of only) {
+      const ids = byPileIndex.get(p);
+      if (!ids) continue;
+      for (const id of ids) next.add(id);
     }
-
-    const ids = Array.from(selected);
-    setSelectedElementIds(ids);
-    setSelectedElementId(ids[0] ?? null);
+    const arr = Array.from(next);
+    setSelectedElementIds(arr);
+    setSelectedElementId(arr[0] ?? null);
     setIsIsolateMode(false);
-  }, [filteredElements, getFirstProp, isStructureModel, selectedPileNumbers]);
+  }, [byPileIndex, isStructureModel, selectedPileNumbers]);
+
+  const changeStatusForSelectedPiles = useCallback((status: ConstructionStatus) => {
+    if (!isStructureModel) return;
+    if (selectedPileNumbers.length === 0) return;
+    const ids = new Set<string>();
+    for (const p of selectedPileNumbers) {
+      const hit = byPileIndex.get(p);
+      if (!hit) continue;
+      for (const id of hit) ids.add(id);
+    }
+    const arr = Array.from(ids);
+    if (arr.length === 0) return;
+    handleChangeStatusMany(arr, status);
+  }, [byPileIndex, isStructureModel, selectedPileNumbers, handleChangeStatusMany]);
 
   const pileNumberLabels = useMemo(() => {
     if (!isStructureModel) return [] as Array<{ id: string; label: string; modelId: string; localId: number }>;
@@ -1040,6 +1052,23 @@ export default function App() {
     }
     return Array.from(byPile.values());
   }, [filteredElements, getFirstProp, isStructureModel, selectedPileNumbers, showPileNumberLabels]);
+
+  const byPileIndex = useMemo(() => {
+    if (!isStructureModel) return new Map<string, string[]>();
+    const map = new Map<string, string[]>();
+    for (const el of filteredElements) {
+      const pile = getFirstProp(el, ["NÚMERO DE PILOTE", "NUMERO DE PILOTE", "NUMERO PILOTE", "PILOTE NUMBER", "PILOTE"]);
+      if (!pile) continue;
+      const key = String(pile);
+      let arr = map.get(key);
+      if (!arr) {
+        arr = [];
+        map.set(key, arr);
+      }
+      arr.push(el.id);
+    }
+    return map;
+  }, [filteredElements, getFirstProp, isStructureModel]);
 
   const elementsWithVolume = useMemo(() => {
     const toNumber = (v: unknown) => {
@@ -3028,6 +3057,7 @@ export default function App() {
                   onClearPileSelection={clearPileSelection}
                   showPileLabels={showPileNumberLabels}
                   onToggleShowPileLabels={() => setShowPileNumberLabels((v) => !v)}
+                onChangeSelectedPilesStatus={changeStatusForSelectedPiles}
                   onResetFilters={resetFilters}
                   onToggleCollapse={() => setRightPanelCollapsed(true)}
                 />

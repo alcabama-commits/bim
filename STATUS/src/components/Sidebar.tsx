@@ -36,6 +36,7 @@ interface SidebarProps {
   onClearPileSelection?: () => void;
   showPileLabels?: boolean;
   onToggleShowPileLabels?: () => void;
+  onChangeSelectedPilesStatus?: (status: 'NINGUNO' | 'EN PROGRESO' | 'PARA INSPECCION' | 'APROBADO' | 'CERRADO' | 'RECHAZADO') => void;
   onResetFilters: () => void;
   onToggleCollapse?: () => void;
 }
@@ -65,12 +66,14 @@ export default function Sidebar({
   onClearPileSelection,
   showPileLabels = false,
   onToggleShowPileLabels,
+  onChangeSelectedPilesStatus,
   onResetFilters,
   onToggleCollapse
 }: SidebarProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pileMenuOpen, setPileMenuOpen] = useState(false);
   const [pileMulti, setPileMulti] = useState(false);
+  const [pileStatus, setPileStatus] = useState<'NINGUNO' | 'EN PROGRESO' | 'PARA INSPECCION' | 'APROBADO' | 'CERRADO' | 'RECHAZADO'>('EN PROGRESO');
 
   const toggleExpand = (name: string) => {
     setExpanded(prev => ({ ...prev, [name]: !prev[name] }));
@@ -292,6 +295,7 @@ export default function Sidebar({
                             key={p}
                             type="button"
                             onClick={() => togglePile(p)}
+                            onPointerUp={(e) => { e.preventDefault(); togglePile(p); }}
                             className={`aspect-square rounded-lg border text-sm font-black transition-colors ${
                               checked ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
                             }`}
@@ -307,17 +311,29 @@ export default function Sidebar({
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={onToggleShowPileLabels}
-                className={`mt-2 w-full px-3 py-2 rounded-lg border text-[10px] font-bold uppercase tracking-widest transition-all ${
-                  showPileLabels ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                }`}
-                disabled={!onToggleShowPileLabels}
-                title="Mostrar u ocultar números de pilote en el modelo"
-              >
-                {showPileLabels ? 'Ocultar números' : 'Mostrar números'}
-              </button>
+              <div className="mt-3 flex items-center gap-2">
+                <select
+                  value={pileStatus}
+                  onChange={(e) => setPileStatus(e.target.value as any)}
+                  className="bg-white border border-slate-200 rounded px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-slate-600"
+                >
+                  <option value="EN PROGRESO">EN PROGRESO</option>
+                  <option value="PARA INSPECCION">PARA INSPECCION</option>
+                  <option value="APROBADO">APROBADO</option>
+                  <option value="CERRADO">CERRADO</option>
+                  <option value="RECHAZADO">RECHAZADO</option>
+                  <option value="NINGUNO">NINGUNO</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => onChangeSelectedPilesStatus?.(pileStatus)}
+                  className="px-3 py-1 rounded bg-[#003d4d] text-white text-[10px] font-bold uppercase tracking-widest hover:opacity-90 disabled:opacity-40"
+                  disabled={!onChangeSelectedPilesStatus || selectedPileNumbers.length === 0}
+                  title="Aplicar estado a pilotes seleccionados"
+                >
+                  Aplicar
+                </button>
+              </div>
 
               <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 mt-4">Material</h3>
               <select
