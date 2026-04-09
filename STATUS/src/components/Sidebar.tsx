@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, CheckSquare, Square } from 'lucide-react';
 
 interface CategoryNode {
@@ -74,9 +74,23 @@ export default function Sidebar({
   const [pileMenuOpen, setPileMenuOpen] = useState(false);
   const [pileMulti, setPileMulti] = useState(false);
   const [pileStatus, setPileStatus] = useState<'NINGUNO' | 'EN PROGRESO' | 'PARA INSPECCION' | 'APROBADO' | 'CERRADO' | 'RECHAZADO'>('EN PROGRESO');
+  const lastActionAtRef = useRef(0);
+  const tapRef = useRef<{ pointerId: number | null; x: number; y: number; moved: boolean }>({
+    pointerId: null,
+    x: 0,
+    y: 0,
+    moved: false
+  });
 
   const toggleExpand = (name: string) => {
     setExpanded(prev => ({ ...prev, [name]: !prev[name] }));
+  };
+
+  const runAction = (fn: () => void) => {
+    const now = Date.now();
+    if (now - lastActionAtRef.current < 60) return;
+    lastActionAtRef.current = now;
+    fn();
   };
 
   const togglePile = (pile: string) => {
@@ -248,8 +262,9 @@ export default function Sidebar({
               <div className="flex items-center justify-between gap-2 mb-2">
                 <button
                   type="button"
-                  onClick={() => setPileMenuOpen((v) => !v)}
-                  className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-widest"
+                  onClick={() => runAction(() => setPileMenuOpen((v) => !v))}
+                  onPointerUp={() => runAction(() => setPileMenuOpen((v) => !v))}
+                  className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-widest touch-manipulation select-none"
                   title={pileMenuOpen ? 'Ocultar menú' : 'Mostrar menú'}
                 >
                   <span>Número de pilote</span>
@@ -258,18 +273,20 @@ export default function Sidebar({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setPileMulti((v) => !v)}
+                    onClick={() => runAction(() => setPileMulti((v) => !v))}
+                    onPointerUp={() => runAction(() => setPileMulti((v) => !v))}
                     className={`px-2 py-1 rounded-md border text-[10px] font-bold uppercase tracking-widest ${
                       pileMulti ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
+                    } touch-manipulation select-none`}
                     title="Activar o desactivar marcación múltiple"
                   >
                     {pileMulti ? 'Múltiple' : 'Único'}
                   </button>
                   <button
                     type="button"
-                    onClick={onClearPileSelection}
-                    className="px-2 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-[10px] font-bold uppercase tracking-widest text-slate-700 disabled:opacity-60"
+                    onClick={() => runAction(() => onClearPileSelection?.())}
+                    onPointerUp={() => runAction(() => onClearPileSelection?.())}
+                    className="px-2 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-[10px] font-bold uppercase tracking-widest text-slate-700 disabled:opacity-60 touch-manipulation select-none"
                     disabled={!onClearPileSelection || selectedPileNumbers.length === 0}
                     title="Limpiar selección de pilotes"
                   >
@@ -294,11 +311,37 @@ export default function Sidebar({
                           <button
                             key={p}
                             type="button"
-                            onClick={() => togglePile(p)}
-                            onPointerUp={(e) => { e.preventDefault(); togglePile(p); }}
+                            onClick={() => runAction(() => togglePile(p))}
+                            onPointerDown={(e) => {
+                              tapRef.current.pointerId = e.pointerId;
+                              tapRef.current.x = e.clientX;
+                              tapRef.current.y = e.clientY;
+                              tapRef.current.moved = false;
+                              try {
+                                (e.currentTarget as HTMLButtonElement).setPointerCapture(e.pointerId);
+                              } catch {
+                              }
+                            }}
+                            onPointerMove={(e) => {
+                              if (tapRef.current.pointerId !== e.pointerId) return;
+                              const dx = Math.abs(e.clientX - tapRef.current.x);
+                              const dy = Math.abs(e.clientY - tapRef.current.y);
+                              if (dx > 10 || dy > 10) tapRef.current.moved = true;
+                            }}
+                            onPointerUp={(e) => {
+                              if (tapRef.current.pointerId !== e.pointerId) return;
+                              const moved = tapRef.current.moved;
+                              tapRef.current.pointerId = null;
+                              tapRef.current.moved = false;
+                              try {
+                                (e.currentTarget as HTMLButtonElement).releasePointerCapture(e.pointerId);
+                              } catch {
+                              }
+                              if (!moved) runAction(() => togglePile(p));
+                            }}
                             className={`aspect-square rounded-lg border text-sm font-black transition-colors ${
                               checked ? 'bg-[#003E52] text-white border-[#003E52]' : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
-                            }`}
+                            } touch-manipulation select-none active:scale-[0.98]`}
                             disabled={!onTogglePileNumber && !onSetSelectedPileNumbers}
                             title={`Seleccionar pilote ${p}`}
                           >
@@ -326,8 +369,9 @@ export default function Sidebar({
                 </select>
                 <button
                   type="button"
-                  onClick={() => onChangeSelectedPilesStatus?.(pileStatus)}
-                  className="px-3 py-1 rounded bg-[#003d4d] text-white text-[10px] font-bold uppercase tracking-widest hover:opacity-90 disabled:opacity-40"
+                  onClick={() => runAction(() => onChangeSelectedPilesStatus?.(pileStatus))}
+                  onPointerUp={() => runAction(() => onChangeSelectedPilesStatus?.(pileStatus))}
+                  className="px-3 py-1 rounded bg-[#003d4d] text-white text-[10px] font-bold uppercase tracking-widest hover:opacity-90 disabled:opacity-40 touch-manipulation select-none"
                   disabled={!onChangeSelectedPilesStatus || selectedPileNumbers.length === 0}
                   title="Aplicar estado a pilotes seleccionados"
                 >

@@ -1021,20 +1021,41 @@ export default function App() {
     return map;
   }, [filteredElements, getFirstProp, isStructureModel]);
 
+  const pileSelectionTimerRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (!isStructureModel) return;
-    const only = selectedPileNumbers;
-    if (only.length === 0) return;
-    const next = new Set<string>();
-    for (const p of only) {
-      const ids = byPileIndex.get(p);
-      if (!ids) continue;
-      for (const id of ids) next.add(id);
+    if (pileSelectionTimerRef.current !== null) {
+      window.clearTimeout(pileSelectionTimerRef.current);
+      pileSelectionTimerRef.current = null;
     }
-    const arr = Array.from(next);
-    setSelectedElementIds(arr);
-    setSelectedElementId(arr[0] ?? null);
-    setIsIsolateMode(false);
+
+    const only = selectedPileNumbers;
+    if (only.length === 0) {
+      setSelectedElementIds([]);
+      setSelectedElementId(null);
+      return;
+    }
+
+    pileSelectionTimerRef.current = window.setTimeout(() => {
+      const next = new Set<string>();
+      for (const p of only) {
+        const ids = byPileIndex.get(p);
+        if (!ids) continue;
+        for (const id of ids) next.add(id);
+      }
+      const arr = Array.from(next);
+      setSelectedElementIds(arr);
+      setSelectedElementId(arr[0] ?? null);
+      setIsIsolateMode(false);
+    }, 120);
+
+    return () => {
+      if (pileSelectionTimerRef.current !== null) {
+        window.clearTimeout(pileSelectionTimerRef.current);
+        pileSelectionTimerRef.current = null;
+      }
+    };
   }, [byPileIndex, isStructureModel, selectedPileNumbers]);
 
   const pileNumberLabels = useMemo(() => {
