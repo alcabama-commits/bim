@@ -1037,20 +1037,6 @@ export default function App() {
     setIsIsolateMode(false);
   }, [byPileIndex, isStructureModel, selectedPileNumbers]);
 
-  const changeStatusForSelectedPiles = useCallback((status: ConstructionStatus) => {
-    if (!isStructureModel) return;
-    if (selectedPileNumbers.length === 0) return;
-    const ids = new Set<string>();
-    for (const p of selectedPileNumbers) {
-      const hit = byPileIndex.get(p);
-      if (!hit) continue;
-      for (const id of hit) ids.add(id);
-    }
-    const arr = Array.from(ids);
-    if (arr.length === 0) return;
-    handleChangeStatusMany(arr, status);
-  }, [byPileIndex, isStructureModel, selectedPileNumbers, handleChangeStatusMany]);
-
   const pileNumberLabels = useMemo(() => {
     if (!isStructureModel) return [] as Array<{ id: string; label: string; modelId: string; localId: number }>;
     if (!showPileNumberLabels) return [];
@@ -2308,6 +2294,20 @@ export default function App() {
       scheduleRemoteSave(id, status);
     }
   }, [scheduleRemoteSave]);
+
+  const changeStatusForSelectedPiles = useCallback((status: ConstructionStatus) => {
+    if (!isStructureModel) return;
+    if (selectedPileNumbers.length === 0) return;
+    const ids = new Set<string>();
+    for (const p of selectedPileNumbers) {
+      const hit = byPileIndex.get(p);
+      if (!hit) continue;
+      for (const id of hit) ids.add(id);
+    }
+    const arr = Array.from(ids);
+    if (arr.length === 0) return;
+    handleChangeStatusMany(arr, status);
+  }, [byPileIndex, handleChangeStatusMany, isStructureModel, selectedPileNumbers]);
 
   const [expandedModelGroups, setExpandedModelGroups] = useState<Record<string, boolean>>({
     ESTRUCTURA: true,
