@@ -6,6 +6,33 @@
     <meta name="theme-color" content="#003E52" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <meta name="x-app-version" content="20260409-03" />
+    <script>
+      (function () {
+        try {
+          var meta = document.querySelector('meta[name="x-app-version"]');
+          var version = meta && meta.getAttribute('content') || '';
+          var stored = localStorage.getItem('cantidades:appVersion') || '';
+          if (version && version !== stored && 'serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistration().then(function (reg) {
+              if (reg && reg.active) {
+                try { reg.active.postMessage({ type: 'CLEAR_CACHES' }); } catch (e) {}
+              }
+              if (reg) {
+                reg.unregister().then(function () {
+                  localStorage.setItem('cantidades:appVersion', version);
+                  var u = new URL(location.href);
+                  u.searchParams.set('v', version);
+                  location.replace(u.toString());
+                });
+              } else {
+                localStorage.setItem('cantidades:appVersion', version);
+              }
+            });
+          }
+        } catch (e) {}
+      })();
+    </script>
     <title>STATUS</title>
   </head>
   <body>
