@@ -1622,7 +1622,7 @@ export default function App() {
     } catch (err) {
       console.error("Error en processModel:", err);
     }
-  }, [idbGet, idbPut, isStructureModel, selectedRemoteModelName]);
+  }, [isStructureModel, selectedRemoteModelName]);
 
   const handleModelLoaded = useCallback((components: OBC.Components) => {
     componentsRef.current = components;
