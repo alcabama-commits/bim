@@ -4,7 +4,7 @@ import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
 import BIMViewer from './components/BIMViewer';
 import { BIMElement, CategorySummary } from './types';
-import { Folder, File, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, RefreshCw, Eye, EyeOff, Loader2, Maximize2, Minimize2, Palette, Grid3X3 } from 'lucide-react';
+import { Folder, File, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, RefreshCw, Eye, EyeOff, Loader2, Maximize2, Minimize2, Palette, Grid3X3, SlidersHorizontal } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import DataTable from './components/DataTable';
 
@@ -210,6 +210,40 @@ export default function App() {
     const v = Number(localStorage.getItem('cantidades:timelineLevelsDayColWidth'));
     return Number.isFinite(v) && v >= 90 && v <= 260 ? v : 160;
   });
+  const [isMobileLayout, setIsMobileLayout] = useState(() => {
+    try {
+      return window.matchMedia('(max-width: 768px)').matches;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    let mq: MediaQueryList | null = null;
+    try {
+      mq = window.matchMedia('(max-width: 768px)');
+    } catch {
+      mq = null;
+    }
+    if (!mq) return;
+
+    const onChange = () => setIsMobileLayout(mq?.matches ?? false);
+    onChange();
+    try {
+      mq.addEventListener('change', onChange);
+      return () => mq?.removeEventListener('change', onChange);
+    } catch {
+      mq.addListener(onChange);
+      return () => mq?.removeListener(onChange);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileLayout) return;
+    setLeftPanelCollapsed(true);
+    setRightPanelCollapsed(true);
+    setIsTableDocked(true);
+  }, [isMobileLayout]);
 
   const updateApp = useCallback(async () => {
     if (isUpdatingApp) return;
@@ -970,23 +1004,59 @@ export default function App() {
     });
   }, [baseElements, deriveFilterCategory, deriveFilterClassification, getFirstProp, getProp, isStructureModel, selectedCategories, selectedClassifications, selectedDiameter, selectedLevels, selectedMaterial]);
 
-  useEffect(() => {
-    if (!isStructureModel) return;
-    if (selectedPileNumbers.length === 0) return;
-
-    const selected = new Set<string>();
+  const byPileIndex = useMemo(() => {
+    if (!isStructureModel) return new Map<string, string[]>();
+    const map = new Map<string, string[]>();
     for (const el of filteredElements) {
       const pile = getFirstProp(el, ["NÚMERO DE PILOTE", "NUMERO DE PILOTE", "NUMERO PILOTE", "PILOTE NUMBER", "PILOTE"]);
       if (!pile) continue;
-      if (!selectedPileNumbers.includes(pile)) continue;
-      selected.add(el.id);
+      const key = String(pile);
+      let arr = map.get(key);
+      if (!arr) {
+        arr = [];
+        map.set(key, arr);
+      }
+      arr.push(el.id);
+    }
+    return map;
+  }, [filteredElements, getFirstProp, isStructureModel]);
+
+  const pileSelectionTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!isStructureModel) return;
+    if (pileSelectionTimerRef.current !== null) {
+      window.clearTimeout(pileSelectionTimerRef.current);
+      pileSelectionTimerRef.current = null;
     }
 
-    const ids = Array.from(selected);
-    setSelectedElementIds(ids);
-    setSelectedElementId(ids[0] ?? null);
-    setIsIsolateMode(false);
-  }, [filteredElements, getFirstProp, isStructureModel, selectedPileNumbers]);
+    const only = selectedPileNumbers;
+    if (only.length === 0) {
+      setSelectedElementIds([]);
+      setSelectedElementId(null);
+      return;
+    }
+
+    pileSelectionTimerRef.current = window.setTimeout(() => {
+      const next = new Set<string>();
+      for (const p of only) {
+        const ids = byPileIndex.get(p);
+        if (!ids) continue;
+        for (const id of ids) next.add(id);
+      }
+      const arr = Array.from(next);
+      setSelectedElementIds(arr);
+      setSelectedElementId(arr[0] ?? null);
+      setIsIsolateMode(false);
+    }, 120);
+
+    return () => {
+      if (pileSelectionTimerRef.current !== null) {
+        window.clearTimeout(pileSelectionTimerRef.current);
+        pileSelectionTimerRef.current = null;
+      }
+    };
+  }, [byPileIndex, isStructureModel, selectedPileNumbers]);
 
   const pileNumberLabels = useMemo(() => {
     if (!isStructureModel) return [] as Array<{ id: string; label: string; modelId: string; localId: number }>;
@@ -1393,6 +1463,18 @@ export default function App() {
     const categoryMap: Record<string, { totalVolume: number; count: number }> = {};
 
     try {
+      const rawModelKey = selectedRemoteModelName
+        ? selectedRemoteModelName.replace(/\.frag$/i, '')
+        : String(model?.modelId || model?.id || model?.uuid || 'local');
+      const metaKey = `meta:${rawModelKey.trim().toLowerCase()}`;
+
+      const cached = await idbGet<{ key: string; ts: number; elements: BIMElement[]; summaries: CategorySummary[] }>('meta', metaKey);
+      if (cached?.elements && Array.isArray(cached.elements) && cached.elements.length > 0) {
+        setElements(cached.elements);
+        if (cached.summaries && Array.isArray(cached.summaries)) setSummaries(cached.summaries);
+        return;
+      }
+
       const ids = await model.getLocalIds();
       console.log(`Modelo con ${ids.length} elementos locales.`);
 
@@ -1553,11 +1635,13 @@ export default function App() {
       }
 
       setElements(extractedElements);
-      setSummaries(Object.entries(categoryMap).map(([category, data]) => ({
+      const summariesList = Object.entries(categoryMap).map(([category, data]) => ({
         category,
         totalVolume: data.totalVolume,
         count: data.count
-      })));
+      }));
+      setSummaries(summariesList);
+      void idbPut('meta', { key: metaKey, ts: Date.now(), elements: extractedElements, summaries: summariesList }, 4);
       
       console.log(`Preparados ${extractedElements.length} elementos para vinculación.`);
 
@@ -1574,7 +1658,7 @@ export default function App() {
     } catch (err) {
       console.error("Error en processModel:", err);
     }
-  }, [isStructureModel]);
+  }, [isStructureModel, selectedRemoteModelName]);
 
   const handleModelLoaded = useCallback((components: OBC.Components) => {
     componentsRef.current = components;
@@ -1870,11 +1954,12 @@ export default function App() {
     if (idbPromiseRef.current) return idbPromiseRef.current;
 
     idbPromiseRef.current = new Promise<IDBDatabase>((resolve, reject) => {
-      const req = indexedDB.open('cantidades-model-cache-v1', 1);
+      const req = indexedDB.open('cantidades-model-cache-v1', 2);
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains('frag')) db.createObjectStore('frag', { keyPath: 'url' });
         if (!db.objectStoreNames.contains('json')) db.createObjectStore('json', { keyPath: 'url' });
+        if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -1883,7 +1968,9 @@ export default function App() {
     return idbPromiseRef.current;
   };
 
-  const idbGet = async <T,>(storeName: 'frag' | 'json', url: string): Promise<T | null> => {
+  type CacheStoreName = 'frag' | 'json' | 'meta';
+
+  const idbGet = async <T,>(storeName: CacheStoreName, key: string): Promise<T | null> => {
     try {
       const dbPromise = openDiskCache();
       if (!dbPromise) return null;
@@ -1891,7 +1978,7 @@ export default function App() {
       return await new Promise<T | null>((resolve) => {
         const tx = db.transaction(storeName, 'readonly');
         const store = tx.objectStore(storeName);
-        const req = store.get(url);
+        const req = store.get(key);
         req.onsuccess = () => resolve((req.result as T) ?? null);
         req.onerror = () => resolve(null);
       });
@@ -1900,11 +1987,12 @@ export default function App() {
     }
   };
 
-  const idbPut = async (storeName: 'frag' | 'json', record: any, maxEntries: number) => {
+  const idbPut = async (storeName: CacheStoreName, record: any, maxEntries: number) => {
     try {
       const dbPromise = openDiskCache();
       if (!dbPromise) return;
       const db = await dbPromise;
+      const pk = storeName === 'meta' ? 'key' : 'url';
       await new Promise<void>((resolve) => {
         const tx = db.transaction(storeName, 'readwrite');
         tx.oncomplete = () => resolve();
@@ -1928,7 +2016,8 @@ export default function App() {
         tx.onerror = () => resolve();
         const store = tx.objectStore(storeName);
         toDelete.forEach((r) => {
-          if (r?.url) store.delete(r.url);
+          const key = r?.[pk];
+          if (key) store.delete(key);
         });
       });
     } catch {
@@ -1954,8 +2043,8 @@ export default function App() {
     const disk = await idbGet<{ url: string; ts: number; data: ArrayBuffer }>('frag', key);
     if (disk?.data) {
       const bytes = new Uint8Array(disk.data);
-      putLru(remoteCacheRef.current.fragBytesByUrl, key, bytes, 2);
-      void idbPut('frag', { url: key, ts: Date.now(), data: disk.data }, 6);
+      putLru(remoteCacheRef.current.fragBytesByUrl, key, bytes, 6);
+      void idbPut('frag', { url: key, ts: Date.now(), data: disk.data }, 12);
       return bytes;
     }
 
@@ -2007,9 +2096,9 @@ export default function App() {
       bytes.set(part, p);
       p += part.byteLength;
     }
-    putLru(remoteCacheRef.current.fragBytesByUrl, key, bytes, 2);
+    putLru(remoteCacheRef.current.fragBytesByUrl, key, bytes, 6);
     const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    void idbPut('frag', { url: key, ts: Date.now(), data: buffer }, 6);
+    void idbPut('frag', { url: key, ts: Date.now(), data: buffer }, 12);
     return bytes;
   }, []);
 
@@ -2024,8 +2113,8 @@ export default function App() {
 
     const disk = await idbGet<{ url: string; ts: number; data: string }>('json', key);
     if (disk?.data) {
-      putLru(remoteCacheRef.current.jsonTextByUrl, key, disk.data, 2);
-      void idbPut('json', { url: key, ts: Date.now(), data: disk.data }, 6);
+      putLru(remoteCacheRef.current.jsonTextByUrl, key, disk.data, 6);
+      void idbPut('json', { url: key, ts: Date.now(), data: disk.data }, 12);
       return disk.data;
     }
 
@@ -2034,8 +2123,8 @@ export default function App() {
     url.searchParams.set('id', fileId);
     const data = await jsonpRequest<{ text?: string }>(url, { signal, timeoutMs: 30000 });
     const text = data?.text ? String(data.text) : '';
-    putLru(remoteCacheRef.current.jsonTextByUrl, key, text, 2);
-    void idbPut('json', { url: key, ts: Date.now(), data: text }, 6);
+    putLru(remoteCacheRef.current.jsonTextByUrl, key, text, 6);
+    void idbPut('json', { url: key, ts: Date.now(), data: text }, 12);
     return text;
   }, []);
 
@@ -2046,8 +2135,8 @@ export default function App() {
     const disk = await idbGet<{ url: string; ts: number; data: ArrayBuffer }>('frag', url);
     if (disk?.data) {
       const bytes = new Uint8Array(disk.data);
-      putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 2);
-      void idbPut('frag', { url, ts: Date.now(), data: disk.data }, 6);
+      putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 6);
+      void idbPut('frag', { url, ts: Date.now(), data: disk.data }, 12);
       return bytes;
     }
 
@@ -2057,9 +2146,9 @@ export default function App() {
         const match = await cache.match(url);
         if (match) {
           const bytes = new Uint8Array(await match.arrayBuffer());
-          putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 2);
+          putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 6);
           const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-          void idbPut('frag', { url, ts: Date.now(), data: buffer }, 6);
+          void idbPut('frag', { url, ts: Date.now(), data: buffer }, 12);
           return bytes;
         }
       } catch {
@@ -2076,9 +2165,9 @@ export default function App() {
       }
     }
     const bytes = new Uint8Array(await res.arrayBuffer());
-    putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 2);
+    putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 6);
     const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    void idbPut('frag', { url, ts: Date.now(), data: buffer }, 6);
+    void idbPut('frag', { url, ts: Date.now(), data: buffer }, 12);
     return bytes;
   }, []);
 
@@ -2088,8 +2177,8 @@ export default function App() {
 
     const disk = await idbGet<{ url: string; ts: number; data: string }>('json', url);
     if (disk?.data) {
-      putLru(remoteCacheRef.current.jsonTextByUrl, url, disk.data, 2);
-      void idbPut('json', { url, ts: Date.now(), data: disk.data }, 6);
+      putLru(remoteCacheRef.current.jsonTextByUrl, url, disk.data, 6);
+      void idbPut('json', { url, ts: Date.now(), data: disk.data }, 12);
       return disk.data;
     }
 
@@ -2099,8 +2188,8 @@ export default function App() {
         const match = await cache.match(url);
         if (match) {
           const text = await match.text();
-          putLru(remoteCacheRef.current.jsonTextByUrl, url, text, 2);
-          void idbPut('json', { url, ts: Date.now(), data: text }, 6);
+          putLru(remoteCacheRef.current.jsonTextByUrl, url, text, 6);
+          void idbPut('json', { url, ts: Date.now(), data: text }, 12);
           return text;
         }
       } catch {
@@ -2117,8 +2206,8 @@ export default function App() {
       }
     }
     const text = await res.text();
-    putLru(remoteCacheRef.current.jsonTextByUrl, url, text, 2);
-    void idbPut('json', { url, ts: Date.now(), data: text }, 6);
+    putLru(remoteCacheRef.current.jsonTextByUrl, url, text, 6);
+    void idbPut('json', { url, ts: Date.now(), data: text }, 12);
     return text;
   }, []);
 
@@ -2226,6 +2315,20 @@ export default function App() {
       scheduleRemoteSave(id, status);
     }
   }, [scheduleRemoteSave]);
+
+  const changeStatusForSelectedPiles = useCallback((status: ConstructionStatus) => {
+    if (!isStructureModel) return;
+    if (selectedPileNumbers.length === 0) return;
+    const ids = new Set<string>();
+    for (const p of selectedPileNumbers) {
+      const hit = byPileIndex.get(p);
+      if (!hit) continue;
+      for (const id of hit) ids.add(id);
+    }
+    const arr = Array.from(ids);
+    if (arr.length === 0) return;
+    handleChangeStatusMany(arr, status);
+  }, [byPileIndex, handleChangeStatusMany, isStructureModel, selectedPileNumbers]);
 
   const [expandedModelGroups, setExpandedModelGroups] = useState<Record<string, boolean>>({
     ESTRUCTURA: true,
@@ -2672,119 +2775,8 @@ export default function App() {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        <>
-          <div
-            className="bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden"
-            style={{ width: leftPanelCollapsed ? 44 : leftPanelWidth }}
-          >
-            <div className={`border-b border-slate-100 bg-slate-50/50 flex items-center justify-between ${leftPanelCollapsed ? 'p-2' : 'p-4'}`}>
-              {!leftPanelCollapsed && (
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Modelos IFC</h3>
-              )}
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setLeftPanelCollapsed((v) => !v)}
-                  className="p-1 hover:bg-slate-200 rounded transition-colors"
-                  title={leftPanelCollapsed ? 'Mostrar panel' : 'Ocultar panel'}
-                >
-                  {leftPanelCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-                </button>
-                {!leftPanelCollapsed && (
-                  <button
-                    type="button"
-                    onClick={fetchAvailableModels}
-                    className="p-1 hover:bg-slate-200 rounded transition-colors"
-                    title="Actualizar lista"
-                  >
-                    {isModelsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {!leftPanelCollapsed && (
-              <div className="flex-1 overflow-y-auto p-2">
-                {modelsError && (
-                  <div className="p-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
-                    {modelsError}
-                  </div>
-                )}
-
-                {!modelsError && availableModels.length === 0 && !isModelsLoading && (
-                  <div className="p-3 text-xs text-slate-500">
-                    No se encontraron modelos en {GITHUB_REPO.modelsPath}.
-                  </div>
-                )}
-
-                {(['ESTRUCTURA', 'GENERAL', 'DRIVE'] as const).map((group) => {
-                  const items = availableModels.filter((m) => m.group === group);
-                  if (items.length === 0) return null;
-                  const expanded = expandedModelGroups[group];
-                  return (
-                    <div key={group} className="mb-3">
-                      <button
-                        type="button"
-                        onClick={() => setExpandedModelGroups((prev) => ({ ...prev, [group]: !prev[group] }))}
-                        className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 text-left"
-                      >
-                        <Folder className="w-4 h-4 text-slate-500" />
-                        <span className="flex-1 text-[10px] font-black text-slate-600 uppercase tracking-widest">{group}</span>
-                        {expanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
-                      </button>
-
-                      {expanded && (
-                        <div className="mt-1 space-y-1">
-                          {items.map((m) => {
-                            const isSelected = selectedRemoteModelName === m.name;
-                            const isRowLoading = isLoading && isSelected;
-                            return (
-                              <button
-                                key={m.name}
-                                type="button"
-                                onClick={() => loadRemoteModel(m)}
-                                className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg border text-left transition-colors ${
-                                  isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-transparent hover:bg-slate-50'
-                                }`}
-                                title={m.name}
-                              >
-                                <File className="w-4 h-4 text-slate-500" />
-                                <span className="flex-1 text-[11px] text-slate-700 truncate">
-                                  {m.name.replace(/\.frag$/i, '')}
-                                </span>
-                                {isRowLoading ? (
-                                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                                ) : isSelected ? (
-                                  <Eye className="w-4 h-4 text-blue-600" />
-                                ) : (
-                                  <div className="w-4 h-4" />
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {!leftPanelCollapsed && (
-            <div
-              className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
-              onPointerDown={(e) => {
-                const start = leftPanelWidth;
-                startHorizontalDrag(e, (dx) => {
-                  const next = Math.min(520, Math.max(220, start + dx));
-                  setLeftPanelWidth(next);
-                });
-              }}
-            />
-          )}
-
+      {isMobileLayout ? (
+        <div className="flex flex-1 overflow-hidden relative">
           <div className="flex-1 flex flex-col overflow-hidden relative">
             <div className={isViewerMaximized ? "fixed inset-0 z-50 bg-white flex flex-col" : "flex-1 relative bg-slate-50"}>
               {isViewerMaximized && (
@@ -2835,6 +2827,27 @@ export default function App() {
 
                 <div />
 
+                <div className="absolute top-4 left-4 z-30 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLeftPanelCollapsed(false)}
+                    className="p-2 rounded-lg shadow border transition-all flex items-center gap-2 bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white"
+                    title="Modelos"
+                  >
+                    <Folder className="w-4 h-4" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Modelos</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRightPanelCollapsed(false)}
+                    className="p-2 rounded-lg shadow border transition-all flex items-center gap-2 bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white"
+                    title="Filtros"
+                  >
+                    <SlidersHorizontal className="w-4 h-4" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Filtros</span>
+                  </button>
+                </div>
+
                 <div className="absolute top-4 right-4 flex flex-col gap-2">
                   <button
                     onClick={refreshProgressFromSheet}
@@ -2882,174 +2895,610 @@ export default function App() {
             </div>
 
             {!isViewerMaximized && (
-              <>
-                <div
-                  className={`h-3 ${isTableDocked ? 'bg-slate-50' : 'bg-slate-100 hover:bg-blue-200 active:bg-blue-300'} cursor-row-resize select-none touch-none relative z-20`}
-                  onPointerDown={(e) => {
-                    if (isTableDocked) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    try {
-                      (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
-                    } catch {
-                    }
-                    const start = tablePanelHeight;
-                    startVerticalDrag(e, (dy) => {
-                      const next = Math.min(900, Math.max(180, start - dy));
-                      setTablePanelHeight(next);
-                    });
-                  }}
-                />
-
-                <div className="flex flex-col border-t border-slate-200" style={{ height: isTableDocked ? 44 : tablePanelHeight }}>
-                  <div className="h-10 px-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsTableDocked((v) => !v)}
-                        className="p-1 hover:bg-slate-200 rounded transition-colors"
-                        title={isTableDocked ? 'Mostrar panel' : 'Guardar abajo'}
-                      >
-                        {isTableDocked ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsTableVisible((v) => !v)}
-                        className="p-1 hover:bg-slate-200 rounded transition-colors"
-                        title={isTableVisible ? 'Ocultar tabla' : 'Mostrar tabla'}
-                      >
-                        {isTableVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsTableMaximized(true)}
-                        className="p-1 hover:bg-slate-200 rounded transition-colors disabled:opacity-50"
-                        title="Maximizar"
-                        disabled={!isTableVisible || isTableDocked}
-                      >
-                        <Maximize2 className="w-4 h-4" />
-                      </button>
-                    </div>
+              <div className="flex flex-col border-t border-slate-200" style={{ height: isTableDocked ? 44 : tablePanelHeight }}>
+                <div className="h-10 px-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsTableDocked((v) => !v)}
+                      className="p-1 hover:bg-slate-200 rounded transition-colors"
+                      title={isTableDocked ? 'Mostrar panel' : 'Guardar abajo'}
+                    >
+                      {isTableDocked ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsTableVisible((v) => !v)}
+                      className="p-1 hover:bg-slate-200 rounded transition-colors"
+                      title={isTableVisible ? 'Ocultar tabla' : 'Mostrar tabla'}
+                    >
+                      {isTableVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsTableMaximized(true)}
+                      className="p-1 hover:bg-slate-200 rounded transition-colors disabled:opacity-50"
+                      title="Maximizar"
+                      disabled={!isTableVisible || isTableDocked}
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                    </button>
                   </div>
-                  {!isTableMaximized && isTableVisible && !isTableDocked && (
-                    <DataTable
-                      elements={filteredElements}
-                      onSelectElement={(id) => {
-                        setSelectedElementId(id);
-                        setSelectedElementIds(id ? [id] : []);
-                      }}
-                      selectedElementId={selectedElementId || undefined}
-                      selectedElementIds={selectedElementIds}
-                      onSetSelectedElementIds={setSelectedElementIds}
-                      statuses={elementStatuses}
-                      history={elementHistory}
-                      onChangeStatus={handleChangeStatus}
-                      onChangeStatusMany={handleChangeStatusMany}
-                      onClearFilters={resetFilters}
-                    />
-                  )}
-                  {!isTableMaximized && (!isTableVisible || isTableDocked) && (
-                    <div className="flex-1 flex items-center justify-center text-sm text-slate-400">
-                      {isTableDocked ? 'Guardada abajo' : 'Tabla oculta'}
-                    </div>
-                  )}
                 </div>
-              </>
+                {!isTableMaximized && isTableVisible && !isTableDocked && (
+                  <DataTable
+                    elements={filteredElements}
+                    onSelectElement={(id) => {
+                      setSelectedElementId(id);
+                      setSelectedElementIds(id ? [id] : []);
+                    }}
+                    selectedElementId={selectedElementId || undefined}
+                    selectedElementIds={selectedElementIds}
+                    onSetSelectedElementIds={setSelectedElementIds}
+                    statuses={elementStatuses}
+                    history={elementHistory}
+                    onChangeStatus={handleChangeStatus}
+                    onChangeStatusMany={handleChangeStatusMany}
+                    onClearFilters={resetFilters}
+                  />
+                )}
+                {!isTableMaximized && (!isTableVisible || isTableDocked) && (
+                  <div className="flex-1 flex items-center justify-center text-sm text-slate-400">
+                    {isTableDocked ? 'Guardada abajo' : 'Tabla oculta'}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
-          {!rightPanelCollapsed && (
-            <div
-              className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
-              onPointerDown={(e) => {
-                const start = rightPanelWidth;
-                startHorizontalDrag(e, (dx) => {
-                  const next = Math.min(520, Math.max(260, start - dx));
-                  setRightPanelWidth(next);
-                });
-              }}
-            />
+          {!leftPanelCollapsed && (
+            <>
+              <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setLeftPanelCollapsed(true)} />
+              <div className="fixed inset-y-0 left-0 z-50 w-[85vw] max-w-[360px] bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden">
+                <div className="border-b border-slate-100 bg-slate-50/50 flex items-center justify-between p-4">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Modelos IFC</h3>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={fetchAvailableModels}
+                      className="p-1 hover:bg-slate-200 rounded transition-colors"
+                      title="Actualizar lista"
+                    >
+                      {isModelsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLeftPanelCollapsed(true)}
+                      className="p-1 hover:bg-slate-200 rounded transition-colors"
+                      title="Cerrar"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-2">
+                  {modelsError && (
+                    <div className="p-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
+                      {modelsError}
+                    </div>
+                  )}
+
+                  {!modelsError && availableModels.length === 0 && !isModelsLoading && (
+                    <div className="p-3 text-xs text-slate-500">
+                      No se encontraron modelos en {GITHUB_REPO.modelsPath}.
+                    </div>
+                  )}
+
+                  {(['ESTRUCTURA', 'GENERAL', 'DRIVE'] as const).map((group) => {
+                    const items = availableModels.filter((m) => m.group === group);
+                    if (items.length === 0) return null;
+                    const expanded = expandedModelGroups[group];
+                    return (
+                      <div key={group} className="mb-3">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedModelGroups((prev) => ({ ...prev, [group]: !prev[group] }))}
+                          className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 text-left"
+                        >
+                          <Folder className="w-4 h-4 text-slate-500" />
+                          <span className="flex-1 text-[10px] font-black text-slate-600 uppercase tracking-widest">{group}</span>
+                          {expanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                        </button>
+
+                        {expanded && (
+                          <div className="mt-1 space-y-1">
+                            {items.map((m) => {
+                              const isSelected = selectedRemoteModelName === m.name;
+                              const isRowLoading = isLoading && isSelected;
+                              return (
+                                <button
+                                  key={m.name}
+                                  type="button"
+                                  onClick={() => {
+                                    void loadRemoteModel(m);
+                                    setLeftPanelCollapsed(true);
+                                  }}
+                                  className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg border text-left transition-colors ${
+                                    isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-transparent hover:bg-slate-50'
+                                  }`}
+                                  title={m.name}
+                                >
+                                  <File className="w-4 h-4 text-slate-500" />
+                                  <span className="flex-1 text-[11px] text-slate-700 truncate">
+                                    {m.name.replace(/\.frag$/i, '')}
+                                  </span>
+                                  {isRowLoading ? (
+                                    <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                                  ) : isSelected ? (
+                                    <Eye className="w-4 h-4 text-blue-600" />
+                                  ) : (
+                                    <div className="w-4 h-4" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
           )}
 
-          {rightPanelCollapsed ? (
-            <div style={{ width: 44 }} className="bg-white border-l border-slate-200 flex flex-col h-full overflow-hidden">
-              <div className="p-2 border-b border-slate-100 bg-slate-50/50 flex items-center justify-center">
+          {!rightPanelCollapsed && (
+            <>
+              <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setRightPanelCollapsed(true)} />
+              <div className="fixed inset-y-0 right-0 z-50 w-[85vw] max-w-[360px] bg-white border-l border-slate-200 h-full overflow-hidden">
+                <Sidebar
+                  categories={sidebarData}
+                  selectedClassifications={selectedClassifications}
+                  selectedCategories={selectedCategories}
+                  selectedSubCategories={selectedSubCategories}
+                  onToggleClassification={toggleClassification}
+                  onToggleCategory={toggleCategory}
+                  onToggleSubCategory={toggleSubCategory}
+                  levels={levels}
+                  selectedLevels={selectedLevels}
+                  onToggleLevel={toggleLevel}
+                  diameters={diameters}
+                  selectedDiameter={selectedDiameter}
+                  onDiameterChange={setSelectedDiameter}
+                  isStructureModel={isStructureModel}
+                  materials={materials}
+                  selectedMaterial={selectedMaterial}
+                  onMaterialChange={setSelectedMaterial}
+                  pileNumbers={pileNumbers}
+                  selectedPileNumbers={selectedPileNumbers}
+                  onTogglePileNumber={togglePileNumberSelection}
+                  onSetSelectedPileNumbers={setSelectedPileNumbers}
+                  onClearPileSelection={clearPileSelection}
+                  showPileLabels={showPileNumberLabels}
+                  onToggleShowPileLabels={() => setShowPileNumberLabels((v) => !v)}
+                onChangeSelectedPilesStatus={changeStatusForSelectedPiles}
+                  onResetFilters={resetFilters}
+                  onToggleCollapse={() => setRightPanelCollapsed(true)}
+                />
+              </div>
+            </>
+          )}
+
+          {isTableMaximized && (
+            <div className="fixed inset-0 z-50 bg-white flex flex-col">
+              <div className="h-12 px-6 border-b border-slate-200 bg-white flex items-center justify-between">
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
                 <button
                   type="button"
-                  onClick={() => setRightPanelCollapsed(false)}
-                  className="p-1 hover:bg-slate-200 rounded transition-colors"
-                  title="Mostrar panel"
+                  onClick={() => setIsTableMaximized(false)}
+                  className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                  title="Volver"
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  <Minimize2 className="w-4 h-4 text-slate-600" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Volver</span>
                 </button>
               </div>
-            </div>
-          ) : (
-            <div style={{ width: rightPanelWidth }} className="h-full overflow-hidden">
-              <Sidebar
-                categories={sidebarData}
-                selectedClassifications={selectedClassifications}
-                selectedCategories={selectedCategories}
-                selectedSubCategories={selectedSubCategories}
-                onToggleClassification={toggleClassification}
-                onToggleCategory={toggleCategory}
-                onToggleSubCategory={toggleSubCategory}
-                levels={levels}
-                selectedLevels={selectedLevels}
-                onToggleLevel={toggleLevel}
-                diameters={diameters}
-                selectedDiameter={selectedDiameter}
-                onDiameterChange={setSelectedDiameter}
-                isStructureModel={isStructureModel}
-                materials={materials}
-                selectedMaterial={selectedMaterial}
-                onMaterialChange={setSelectedMaterial}
-                pileNumbers={pileNumbers}
-                selectedPileNumbers={selectedPileNumbers}
-                onTogglePileNumber={togglePileNumberSelection}
-                onClearPileSelection={clearPileSelection}
-                showPileLabels={showPileNumberLabels}
-                onToggleShowPileLabels={() => setShowPileNumberLabels((v) => !v)}
-                onResetFilters={resetFilters}
-                onToggleCollapse={() => setRightPanelCollapsed(true)}
+              <DataTable
+                elements={filteredElements}
+                onSelectElement={(id) => {
+                  setSelectedElementId(id);
+                  setSelectedElementIds(id ? [id] : []);
+                }}
+                selectedElementId={selectedElementId || undefined}
+                selectedElementIds={selectedElementIds}
+                onSetSelectedElementIds={setSelectedElementIds}
+                statuses={elementStatuses}
+                history={elementHistory}
+                onChangeStatus={handleChangeStatus}
+                onChangeStatusMany={handleChangeStatusMany}
+                onClearFilters={resetFilters}
               />
             </div>
           )}
-        </>
+        </div>
+      ) : (
+        <div className="flex flex-1 overflow-hidden">
+          <>
+            <div
+              className="bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden"
+              style={{ width: leftPanelCollapsed ? 44 : leftPanelWidth }}
+            >
+              <div className={`border-b border-slate-100 bg-slate-50/50 flex items-center justify-between ${leftPanelCollapsed ? 'p-2' : 'p-4'}`}>
+                {!leftPanelCollapsed && (
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Modelos IFC</h3>
+                )}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setLeftPanelCollapsed((v) => !v)}
+                    className="p-1 hover:bg-slate-200 rounded transition-colors"
+                    title={leftPanelCollapsed ? 'Mostrar panel' : 'Ocultar panel'}
+                  >
+                    {leftPanelCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+                  </button>
+                  {!leftPanelCollapsed && (
+                    <button
+                      type="button"
+                      onClick={fetchAvailableModels}
+                      className="p-1 hover:bg-slate-200 rounded transition-colors"
+                      title="Actualizar lista"
+                    >
+                      {isModelsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    </button>
+                  )}
+                </div>
+              </div>
 
-        {isTableMaximized && (
-          <div className="fixed inset-0 z-50 bg-white flex flex-col">
-            <div className="h-12 px-6 border-b border-slate-200 bg-white flex items-center justify-between">
-              <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
-              <button
-                type="button"
-                onClick={() => setIsTableMaximized(false)}
-                className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2"
-                title="Volver"
-              >
-                <Minimize2 className="w-4 h-4 text-slate-600" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Volver</span>
-              </button>
+              {!leftPanelCollapsed && (
+                <div className="flex-1 overflow-y-auto p-2">
+                  {modelsError && (
+                    <div className="p-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
+                      {modelsError}
+                    </div>
+                  )}
+
+                  {!modelsError && availableModels.length === 0 && !isModelsLoading && (
+                    <div className="p-3 text-xs text-slate-500">
+                      No se encontraron modelos en {GITHUB_REPO.modelsPath}.
+                    </div>
+                  )}
+
+                  {(['ESTRUCTURA', 'GENERAL', 'DRIVE'] as const).map((group) => {
+                    const items = availableModels.filter((m) => m.group === group);
+                    if (items.length === 0) return null;
+                    const expanded = expandedModelGroups[group];
+                    return (
+                      <div key={group} className="mb-3">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedModelGroups((prev) => ({ ...prev, [group]: !prev[group] }))}
+                          className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 text-left"
+                        >
+                          <Folder className="w-4 h-4 text-slate-500" />
+                          <span className="flex-1 text-[10px] font-black text-slate-600 uppercase tracking-widest">{group}</span>
+                          {expanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                        </button>
+
+                        {expanded && (
+                          <div className="mt-1 space-y-1">
+                            {items.map((m) => {
+                              const isSelected = selectedRemoteModelName === m.name;
+                              const isRowLoading = isLoading && isSelected;
+                              return (
+                                <button
+                                  key={m.name}
+                                  type="button"
+                                  onClick={() => loadRemoteModel(m)}
+                                  className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg border text-left transition-colors ${
+                                    isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-transparent hover:bg-slate-50'
+                                  }`}
+                                  title={m.name}
+                                >
+                                  <File className="w-4 h-4 text-slate-500" />
+                                  <span className="flex-1 text-[11px] text-slate-700 truncate">
+                                    {m.name.replace(/\.frag$/i, '')}
+                                  </span>
+                                  {isRowLoading ? (
+                                    <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                                  ) : isSelected ? (
+                                    <Eye className="w-4 h-4 text-blue-600" />
+                                  ) : (
+                                    <div className="w-4 h-4" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <DataTable
-              elements={filteredElements}
-              onSelectElement={(id) => {
-                setSelectedElementId(id);
-                setSelectedElementIds(id ? [id] : []);
-              }}
-              selectedElementId={selectedElementId || undefined}
-              selectedElementIds={selectedElementIds}
-              onSetSelectedElementIds={setSelectedElementIds}
-              statuses={elementStatuses}
-              history={elementHistory}
-              onChangeStatus={handleChangeStatus}
-              onChangeStatusMany={handleChangeStatusMany}
-              onClearFilters={resetFilters}
-            />
-          </div>
-        )}
-      </div>
+
+            {!leftPanelCollapsed && (
+              <div
+                className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
+                onPointerDown={(e) => {
+                  const start = leftPanelWidth;
+                  startHorizontalDrag(e, (dx) => {
+                    const next = Math.min(520, Math.max(220, start + dx));
+                    setLeftPanelWidth(next);
+                  });
+                }}
+              />
+            )}
+
+            <div className="flex-1 flex flex-col overflow-hidden relative">
+              <div className={isViewerMaximized ? "fixed inset-0 z-50 bg-white flex flex-col" : "flex-1 relative bg-slate-50"}>
+                {isViewerMaximized && (
+                  <div className="h-12 px-6 border-b border-slate-200 bg-white flex items-center justify-between">
+                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Modelo 3D</div>
+                    <button
+                      type="button"
+                      onClick={() => setIsViewerMaximized(false)}
+                      className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                      title="Volver"
+                    >
+                      <Minimize2 className="w-4 h-4 text-slate-600" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Volver</span>
+                    </button>
+                  </div>
+                )}
+
+                <div className={isViewerMaximized ? "flex-1 relative bg-slate-50" : "absolute inset-0"}>
+                  {showWelcome && !isLoading && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+                      <div className="bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-slate-200 max-w-md text-center pointer-events-auto">
+                        <h2 className="text-2xl font-light text-slate-900 mb-2">Extractor de Cantidades</h2>
+                        <p className="text-slate-500 text-sm">
+                          Selecciona un modelo del menú izquierdo.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <BIMViewer
+                    onModelLoaded={handleModelLoaded}
+                    allElements={baseElements}
+                    visibleElements={filteredElements}
+                    statuses={viewerStatuses}
+                    statusColorsEnabled={statusColorsEnabled}
+                    gridVisible={gridVisible}
+                    isLoading={isLoading}
+                    showPileNumberLabels={isStructureModel && showPileNumberLabels}
+                    pileNumberLabels={pileNumberLabels}
+                    selectedElementId={selectedElementId || undefined}
+                    selectedElementIds={selectedElementIds}
+                    onSelectionChange={(ids) => {
+                      setSelectedElementIds(ids);
+                      setSelectedElementId(ids[0] ?? null);
+                    }}
+                    isIsolateMode={isIsolateMode}
+                  />
+
+                  <div />
+
+                  <div className="absolute top-4 right-4 flex flex-col gap-2">
+                    <button
+                      onClick={refreshProgressFromSheet}
+                      className="p-2 rounded-lg shadow border transition-all flex items-center gap-2 bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white disabled:opacity-60"
+                      title="Actualizar avance desde Google Sheets"
+                      disabled={isRefreshingProgress}
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isRefreshingProgress ? 'animate-spin' : ''}`} />
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Actualizar</span>
+                    </button>
+                    <button
+                      onClick={() => setIsViewerMaximized((v) => !v)}
+                      className="p-2 rounded-lg shadow border transition-all flex items-center gap-2 bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white"
+                      title={isViewerMaximized ? 'Volver' : 'Maximizar modelo'}
+                    >
+                      {isViewerMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                      <span className="text-[10px] font-bold uppercase tracking-widest">{isViewerMaximized ? 'Volver' : 'Maximizar'}</span>
+                    </button>
+                    <button
+                      onClick={() => setIsIsolateMode(!isIsolateMode)}
+                      className={`p-2 rounded-lg shadow border transition-all flex items-center gap-2 ${isIsolateMode ? 'bg-blue-600 text-white border-blue-500' : 'bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white'}`}
+                      title={isIsolateMode ? "Desactivar Aislamiento" : "Activar Aislamiento"}
+                    >
+                      <div className={`w-2 h-2 rounded-full ${isIsolateMode ? 'bg-white animate-pulse' : 'bg-slate-300'}`} />
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Aislar Selección</span>
+                    </button>
+                    <button
+                      onClick={() => setStatusColorsEnabled((v) => !v)}
+                      className={`p-2 rounded-lg shadow border transition-all flex items-center gap-2 ${statusColorsEnabled ? 'bg-[#024959] text-white border-[#003E52]' : 'bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white'}`}
+                      title={statusColorsEnabled ? 'Apagar colores' : 'Encender colores'}
+                    >
+                      <Palette className="w-4 h-4" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Colores</span>
+                    </button>
+                    <button
+                      onClick={() => setGridVisible((v) => !v)}
+                      className={`p-2 rounded-lg shadow border transition-all flex items-center gap-2 ${gridVisible ? 'bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white' : 'bg-white/70 backdrop-blur-md text-slate-400 border-slate-200 hover:bg-white'}`}
+                      title={gridVisible ? 'Apagar rejilla' : 'Encender rejilla'}
+                    >
+                      <Grid3X3 className="w-4 h-4" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Rejilla</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {!isViewerMaximized && (
+                <>
+                  <div
+                    className={`h-3 ${isTableDocked ? 'bg-slate-50' : 'bg-slate-100 hover:bg-blue-200 active:bg-blue-300'} cursor-row-resize select-none touch-none relative z-20`}
+                    onPointerDown={(e) => {
+                      if (isTableDocked) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      try {
+                        (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+                      } catch {
+                      }
+                      const start = tablePanelHeight;
+                      startVerticalDrag(e, (dy) => {
+                        const next = Math.min(900, Math.max(180, start - dy));
+                        setTablePanelHeight(next);
+                      });
+                    }}
+                  />
+
+                  <div className="flex flex-col border-t border-slate-200" style={{ height: isTableDocked ? 44 : tablePanelHeight }}>
+                    <div className="h-10 px-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                      <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsTableDocked((v) => !v)}
+                          className="p-1 hover:bg-slate-200 rounded transition-colors"
+                          title={isTableDocked ? 'Mostrar panel' : 'Guardar abajo'}
+                        >
+                          {isTableDocked ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsTableVisible((v) => !v)}
+                          className="p-1 hover:bg-slate-200 rounded transition-colors"
+                          title={isTableVisible ? 'Ocultar tabla' : 'Mostrar tabla'}
+                        >
+                          {isTableVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsTableMaximized(true)}
+                          className="p-1 hover:bg-slate-200 rounded transition-colors disabled:opacity-50"
+                          title="Maximizar"
+                          disabled={!isTableVisible || isTableDocked}
+                        >
+                          <Maximize2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    {!isTableMaximized && isTableVisible && !isTableDocked && (
+                      <DataTable
+                        elements={filteredElements}
+                        onSelectElement={(id) => {
+                          setSelectedElementId(id);
+                          setSelectedElementIds(id ? [id] : []);
+                        }}
+                        selectedElementId={selectedElementId || undefined}
+                        selectedElementIds={selectedElementIds}
+                        onSetSelectedElementIds={setSelectedElementIds}
+                        statuses={elementStatuses}
+                        history={elementHistory}
+                        onChangeStatus={handleChangeStatus}
+                        onChangeStatusMany={handleChangeStatusMany}
+                        onClearFilters={resetFilters}
+                      />
+                    )}
+                    {!isTableMaximized && (!isTableVisible || isTableDocked) && (
+                      <div className="flex-1 flex items-center justify-center text-sm text-slate-400">
+                        {isTableDocked ? 'Guardada abajo' : 'Tabla oculta'}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {!rightPanelCollapsed && (
+              <div
+                className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
+                onPointerDown={(e) => {
+                  const start = rightPanelWidth;
+                  startHorizontalDrag(e, (dx) => {
+                    const next = Math.min(520, Math.max(260, start - dx));
+                    setRightPanelWidth(next);
+                  });
+                }}
+              />
+            )}
+
+            {rightPanelCollapsed ? (
+              <div style={{ width: 44 }} className="bg-white border-l border-slate-200 flex flex-col h-full overflow-hidden">
+                <div className="p-2 border-b border-slate-100 bg-slate-50/50 flex items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setRightPanelCollapsed(false)}
+                    className="p-1 hover:bg-slate-200 rounded transition-colors"
+                    title="Mostrar panel"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ width: rightPanelWidth }} className="h-full overflow-hidden">
+                <Sidebar
+                  categories={sidebarData}
+                  selectedClassifications={selectedClassifications}
+                  selectedCategories={selectedCategories}
+                  selectedSubCategories={selectedSubCategories}
+                  onToggleClassification={toggleClassification}
+                  onToggleCategory={toggleCategory}
+                  onToggleSubCategory={toggleSubCategory}
+                  levels={levels}
+                  selectedLevels={selectedLevels}
+                  onToggleLevel={toggleLevel}
+                  diameters={diameters}
+                  selectedDiameter={selectedDiameter}
+                  onDiameterChange={setSelectedDiameter}
+                  isStructureModel={isStructureModel}
+                  materials={materials}
+                  selectedMaterial={selectedMaterial}
+                  onMaterialChange={setSelectedMaterial}
+                  pileNumbers={pileNumbers}
+                  selectedPileNumbers={selectedPileNumbers}
+                  onTogglePileNumber={togglePileNumberSelection}
+                  onSetSelectedPileNumbers={setSelectedPileNumbers}
+                  onClearPileSelection={clearPileSelection}
+                  showPileLabels={showPileNumberLabels}
+                  onToggleShowPileLabels={() => setShowPileNumberLabels((v) => !v)}
+                  onResetFilters={resetFilters}
+                  onToggleCollapse={() => setRightPanelCollapsed(true)}
+                />
+              </div>
+            )}
+          </>
+
+          {isTableMaximized && (
+            <div className="fixed inset-0 z-50 bg-white flex flex-col">
+              <div className="h-12 px-6 border-b border-slate-200 bg-white flex items-center justify-between">
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
+                <button
+                  type="button"
+                  onClick={() => setIsTableMaximized(false)}
+                  className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                  title="Volver"
+                >
+                  <Minimize2 className="w-4 h-4 text-slate-600" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Volver</span>
+                </button>
+              </div>
+              <DataTable
+                elements={filteredElements}
+                onSelectElement={(id) => {
+                  setSelectedElementId(id);
+                  setSelectedElementIds(id ? [id] : []);
+                }}
+                selectedElementId={selectedElementId || undefined}
+                selectedElementIds={selectedElementIds}
+                onSetSelectedElementIds={setSelectedElementIds}
+                statuses={elementStatuses}
+                history={elementHistory}
+                onChangeStatus={handleChangeStatus}
+                onChangeStatusMany={handleChangeStatusMany}
+                onClearFilters={resetFilters}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

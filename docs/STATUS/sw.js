@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'status-cache-';
-const CACHE_NAME = `${CACHE_PREFIX}v1`;
+const CACHE_NAME = `${CACHE_PREFIX}v3`;
 
 const isCacheableRequest = (req) => {
   if (req.method !== 'GET') return false;
