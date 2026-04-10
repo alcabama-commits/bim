@@ -4,7 +4,7 @@ import * as OBC from '@thatopen/components';
 import * as OBCF from '@thatopen/components-front';
 import * as FRAGS from '@thatopen/fragments';
 import { BIMElement } from '../types';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Move } from 'lucide-react';
 
 const FRAGMENTS_WORKER_URL = 'https://thatopen.github.io/engine_fragment/resources/worker.mjs';
 
@@ -1010,13 +1010,12 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         </div>
       )}
 
-      <div className="absolute top-24 right-2 md:top-auto md:bottom-6 md:right-6 flex gap-2 z-40">
-        <button 
+      <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40 md:hidden">
+        <button
           onClick={() => {
             if (componentsRef.current && visibleElements.length > 0) {
               const worlds = componentsRef.current.get(OBC.Worlds);
               const world = Array.from(worlds.list.values())[0] as any;
-              
               if (world && world.camera && "hasCameraControls" in world.camera && world.camera.hasCameraControls()) {
                 const box = new THREE.Box3();
                 let hasMeshes = false;
@@ -1032,10 +1031,36 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
               }
             }
           }}
-          className="bg-[#024959] text-white px-4 py-3 md:py-2 rounded-full shadow-lg border border-[#003E52] text-[10px] font-bold uppercase tracking-widest hover:bg-[#003E52] transition-all touch-manipulation"
+          className="w-12 h-12 rounded-full bg-[#024959] text-white shadow-lg border border-[#003E52] flex items-center justify-center active:scale-95 transition-transform"
+          title="Enfocar filtrados"
         >
-          <span className="md:hidden">Enfocar</span>
-          <span className="hidden md:inline">Enfocar Filtrados</span>
+          <Move className="w-6 h-6" />
+        </button>
+      </div>
+      <div className="hidden md:flex absolute bottom-6 right-6 z-40">
+        <button 
+          onClick={() => {
+            if (componentsRef.current && visibleElements.length > 0) {
+              const worlds = componentsRef.current.get(OBC.Worlds);
+              const world = Array.from(worlds.list.values())[0] as any;
+              if (world && world.camera && "hasCameraControls" in world.camera && world.camera.hasCameraControls()) {
+                const box = new THREE.Box3();
+                let hasMeshes = false;
+                world.scene.three.traverse((obj: any) => {
+                  if (obj?.isMesh && obj.visible) {
+                    box.expandByObject(obj);
+                    hasMeshes = true;
+                  }
+                });
+                if (hasMeshes && !box.isEmpty()) {
+                  world.camera.controls.fitToBox(box, true);
+                }
+              }
+            }
+          }}
+          className="bg-[#024959] text-white px-4 py-2 rounded-full shadow-lg border border-[#003E52] text-[10px] font-bold uppercase tracking-widest hover:bg-[#003E52] transition-all"
+        >
+          Enfocar Filtrados
         </button>
       </div>
 
