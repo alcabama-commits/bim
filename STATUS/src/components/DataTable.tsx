@@ -281,11 +281,11 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
           </button>
         </div>
 
-        <div className="text-[10px] text-slate-600 font-bold uppercase tracking-widest flex items-center gap-4">
-          <span>Elementos: {totals.count.toLocaleString('es-CO')}</span>
-          <span>Área: {format2(totals.area)} m²</span>
-          <span>Longitud: {format2(totals.length)} m</span>
-          <span>Volumen: {format2(totals.volume)} m³</span>
+        <div className="text-[10px] text-slate-600 font-bold uppercase tracking-widest flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+          <span className="whitespace-nowrap">Elementos: {totals.count.toLocaleString('es-CO')}</span>
+          <span className="whitespace-nowrap">Área: {format2(totals.area)} m²</span>
+          <span className="whitespace-nowrap hidden sm:inline">Longitud: {format2(totals.length)} m</span>
+          <span className="whitespace-nowrap">Volumen: {format2(totals.volume)} m³</span>
         </div>
       </div>
 
