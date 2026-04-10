@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback, useTransition } from 'react';
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
@@ -297,6 +297,14 @@ export default function App() {
   const [selectedDiameter, setSelectedDiameter] = useState<string>('Todos');
   const [selectedMaterial, setSelectedMaterial] = useState<string>('Todos');
   const [selectedPileNumbers, setSelectedPileNumbers] = useState<string[]>([]);
+  const [appliedClassifications, setAppliedClassifications] = useState<string[]>([]);
+  const [appliedCategories, setAppliedCategories] = useState<string[]>([]);
+  const [appliedSubCategories, setAppliedSubCategories] = useState<string[]>([]);
+  const [appliedLevels, setAppliedLevels] = useState<string[]>([]);
+  const [appliedDiameter, setAppliedDiameter] = useState<string>('Todos');
+  const [appliedMaterial, setAppliedMaterial] = useState<string>('Todos');
+  const [appliedPileNumbers, setAppliedPileNumbers] = useState<string[]>([]);
+  const [, startTransition] = useTransition();
   const [showPileNumberLabels, setShowPileNumberLabels] = useState(() => {
     const raw = localStorage.getItem('cantidades:showPileNumberLabels');
     if (raw === null) return false;
@@ -314,6 +322,37 @@ export default function App() {
     if (raw === null) return true;
     return raw === 'true';
   });
+  const [statusVisibility, setStatusVisibility] = useState<Record<ConstructionStatus, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem('cantidades:statusVisibility');
+      if (!raw) {
+        return { 'NINGUNO': true, 'EN PROGRESO': true, 'PARA INSPECCION': true, 'APROBADO': true, 'CERRADO': true, 'RECHAZADO': true };
+      }
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const pick = (k: string) => (typeof parsed[k] === 'boolean' ? (parsed[k] as boolean) : true);
+      const hasNewKeys = ['NINGUNO', 'EN PROGRESO', 'PARA INSPECCION', 'APROBADO', 'CERRADO', 'RECHAZADO'].some((k) => k in parsed);
+      if (!hasNewKeys) {
+        return {
+          'NINGUNO': pick('PENDIENTE'),
+          'EN PROGRESO': pick('PEDIDO'),
+          'PARA INSPECCION': pick('COMPRADO'),
+          'APROBADO': true,
+          'CERRADO': pick('INSTALADO'),
+          'RECHAZADO': true
+        };
+      }
+      return {
+        'NINGUNO': pick('NINGUNO'),
+        'EN PROGRESO': pick('EN PROGRESO'),
+        'PARA INSPECCION': pick('PARA INSPECCION'),
+        'APROBADO': pick('APROBADO'),
+        'CERRADO': pick('CERRADO'),
+        'RECHAZADO': pick('RECHAZADO')
+      };
+    } catch {
+      return { 'NINGUNO': true, 'EN PROGRESO': true, 'PARA INSPECCION': true, 'APROBADO': true, 'CERRADO': true, 'RECHAZADO': true };
+    }
+  });
   const [gridVisible, setGridVisible] = useState(() => {
     const raw = localStorage.getItem('cantidades:gridVisible');
     if (raw === null) return true;
@@ -324,6 +363,28 @@ export default function App() {
     if (raw === null) return true;
     return raw === 'true';
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('cantidades:statusVisibility', JSON.stringify(statusVisibility));
+    } catch {
+    }
+  }, [statusVisibility]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      startTransition(() => {
+        setAppliedClassifications(selectedClassifications);
+        setAppliedCategories(selectedCategories);
+        setAppliedSubCategories(selectedSubCategories);
+        setAppliedLevels(selectedLevels);
+        setAppliedDiameter(selectedDiameter);
+        setAppliedMaterial(selectedMaterial);
+        setAppliedPileNumbers(selectedPileNumbers);
+      });
+    }, 350);
+    return () => window.clearTimeout(t);
+  }, [selectedCategories, selectedClassifications, selectedDiameter, selectedLevels, selectedMaterial, selectedPileNumbers, selectedSubCategories, startTransition]);
 
   const isStructureModel = useMemo(() => {
     const name = selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : '';
@@ -991,18 +1052,25 @@ export default function App() {
       const material = getFirstProp(el, ["MATERIAL INTEGRADO", "MATERIAL"]) || "";
       const pileNumber = getFirstProp(el, ["NÚMERO DE PILOTE", "NUMERO DE PILOTE", "NUMERO PILOTE", "PILOTE NUMBER", "PILOTE"]) || "";
 
-      const classificationMatch = selectedClassifications.length === 0 || selectedClassifications.includes(classif);
-      const categoryMatch = selectedCategories.length === 0 || selectedCategories.includes(categoryLabel);
-      const levelMatch = selectedLevels.length === 0 || selectedLevels.includes(level);
-      const diameterMatch = selectedDiameter === 'Todos' || diameter === selectedDiameter;
-      const materialMatch = selectedMaterial === 'Todos' || material === selectedMaterial;
+      const classificationMatch = appliedClassifications.length === 0 || appliedClassifications.includes(classif);
+      const categoryMatch = appliedCategories.length === 0 || appliedCategories.includes(categoryLabel);
+      const levelMatch = appliedLevels.length === 0 || appliedLevels.includes(level);
+      const diameterMatch = appliedDiameter === 'Todos' || diameter === appliedDiameter;
+      const materialMatch = appliedMaterial === 'Todos' || material === appliedMaterial;
 
       if (isStructureModel) {
         return classificationMatch && categoryMatch && levelMatch && materialMatch;
       }
       return classificationMatch && categoryMatch && levelMatch && diameterMatch;
     });
-  }, [baseElements, deriveFilterCategory, deriveFilterClassification, getFirstProp, getProp, isStructureModel, selectedCategories, selectedClassifications, selectedDiameter, selectedLevels, selectedMaterial]);
+  }, [appliedCategories, appliedClassifications, appliedDiameter, appliedLevels, appliedMaterial, baseElements, deriveFilterCategory, deriveFilterClassification, getFirstProp, getProp, isStructureModel]);
+
+  const statusFilteredElements = useMemo(() => {
+    return filteredElements.filter((el) => {
+      const st = viewerStatuses[el.id] ?? 'NINGUNO';
+      return statusVisibility[st] !== false;
+    });
+  }, [filteredElements, statusVisibility, viewerStatuses]);
 
   const byPileIndex = useMemo(() => {
     if (!isStructureModel) return new Map<string, string[]>();
@@ -2260,6 +2328,14 @@ export default function App() {
     setSelectedLevels([]);
     setSelectedDiameter('Todos');
     setSelectedMaterial('Todos');
+    setSelectedPileNumbers([]);
+    setAppliedClassifications([]);
+    setAppliedCategories([]);
+    setAppliedSubCategories([]);
+    setAppliedLevels([]);
+    setAppliedDiameter('Todos');
+    setAppliedMaterial('Todos');
+    setAppliedPileNumbers([]);
   };
 
   const togglePileNumberSelection = useCallback((pile: string) => {
@@ -2361,8 +2437,8 @@ export default function App() {
 
         <div className="flex items-center gap-4">
           <img
-            src="https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg"
-            alt="Arboré"
+            src="https://i.postimg.cc/Hsrt7fXx/LOGO-TREVOLY.jpg"
+            alt="TREVOLY"
             className="h-10 w-auto object-contain"
             loading="eager"
             decoding="async"
@@ -2809,8 +2885,10 @@ export default function App() {
                 <BIMViewer
                   onModelLoaded={handleModelLoaded}
                   allElements={baseElements}
-                  visibleElements={filteredElements}
+                  visibleElements={statusFilteredElements}
                   statuses={viewerStatuses}
+                  statusVisibility={statusVisibility}
+                  onToggleStatusVisibility={(key) => setStatusVisibility((prev) => ({ ...prev, [key]: !(prev[key] !== false) }))}
                   statusColorsEnabled={statusColorsEnabled}
                   gridVisible={gridVisible}
                   isLoading={isLoading}
@@ -2928,7 +3006,7 @@ export default function App() {
                 </div>
                 {!isTableMaximized && isTableVisible && !isTableDocked && (
                   <DataTable
-                    elements={filteredElements}
+                    elements={statusFilteredElements}
                     onSelectElement={(id) => {
                       setSelectedElementId(id);
                       setSelectedElementIds(id ? [id] : []);
@@ -2936,7 +3014,7 @@ export default function App() {
                     selectedElementId={selectedElementId || undefined}
                     selectedElementIds={selectedElementIds}
                     onSetSelectedElementIds={setSelectedElementIds}
-                    statuses={elementStatuses}
+                    statuses={viewerStatuses}
                     history={elementHistory}
                     onChangeStatus={handleChangeStatus}
                     onChangeStatusMany={handleChangeStatusMany}
@@ -3101,7 +3179,7 @@ export default function App() {
                 </button>
               </div>
               <DataTable
-                elements={filteredElements}
+                elements={statusFilteredElements}
                 onSelectElement={(id) => {
                   setSelectedElementId(id);
                   setSelectedElementIds(id ? [id] : []);
@@ -3109,7 +3187,7 @@ export default function App() {
                 selectedElementId={selectedElementId || undefined}
                 selectedElementIds={selectedElementIds}
                 onSetSelectedElementIds={setSelectedElementIds}
-                statuses={elementStatuses}
+                statuses={viewerStatuses}
                 history={elementHistory}
                 onChangeStatus={handleChangeStatus}
                 onChangeStatusMany={handleChangeStatusMany}
@@ -3264,8 +3342,10 @@ export default function App() {
                   <BIMViewer
                     onModelLoaded={handleModelLoaded}
                     allElements={baseElements}
-                    visibleElements={filteredElements}
+                    visibleElements={statusFilteredElements}
                     statuses={viewerStatuses}
+                    statusVisibility={statusVisibility}
+                    onToggleStatusVisibility={(key) => setStatusVisibility((prev) => ({ ...prev, [key]: !(prev[key] !== false) }))}
                     statusColorsEnabled={statusColorsEnabled}
                     gridVisible={gridVisible}
                     isLoading={isLoading}
@@ -3381,7 +3461,7 @@ export default function App() {
                     </div>
                     {!isTableMaximized && isTableVisible && !isTableDocked && (
                       <DataTable
-                        elements={filteredElements}
+                        elements={statusFilteredElements}
                         onSelectElement={(id) => {
                           setSelectedElementId(id);
                           setSelectedElementIds(id ? [id] : []);
@@ -3389,7 +3469,7 @@ export default function App() {
                         selectedElementId={selectedElementId || undefined}
                         selectedElementIds={selectedElementIds}
                         onSetSelectedElementIds={setSelectedElementIds}
-                        statuses={elementStatuses}
+                        statuses={viewerStatuses}
                         history={elementHistory}
                         onChangeStatus={handleChangeStatus}
                         onChangeStatusMany={handleChangeStatusMany}
@@ -3481,7 +3561,7 @@ export default function App() {
                 </button>
               </div>
               <DataTable
-                elements={filteredElements}
+                elements={statusFilteredElements}
                 onSelectElement={(id) => {
                   setSelectedElementId(id);
                   setSelectedElementIds(id ? [id] : []);
@@ -3489,7 +3569,7 @@ export default function App() {
                 selectedElementId={selectedElementId || undefined}
                 selectedElementIds={selectedElementIds}
                 onSetSelectedElementIds={setSelectedElementIds}
-                statuses={elementStatuses}
+                statuses={viewerStatuses}
                 history={elementHistory}
                 onChangeStatus={handleChangeStatus}
                 onChangeStatusMany={handleChangeStatusMany}

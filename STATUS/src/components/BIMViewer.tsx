@@ -21,6 +21,8 @@ interface BIMViewerProps {
   allElements: BIMElement[];
   visibleElements: BIMElement[];
   statuses: Record<string, ConstructionStatus | undefined>;
+  statusVisibility: Record<ConstructionStatus, boolean>;
+  onToggleStatusVisibility: (key: ConstructionStatus) => void;
   statusColorsEnabled?: boolean;
   gridVisible?: boolean;
   selectedElementId?: string;
@@ -42,7 +44,7 @@ type ConstructionStatus =
 
 const statusStyleKey = (st: ConstructionStatus) => `status_${st.replace(/\s+/g, '_')}`;
 
-export default function BIMViewer({ onModelLoaded, allElements, visibleElements, statuses, statusColorsEnabled = true, gridVisible = true, selectedElementId, selectedElementIds, onSelectionChange, isLoading, isIsolateMode, showPileNumberLabels = false, pileNumberLabels = [] }: BIMViewerProps) {
+export default function BIMViewer({ onModelLoaded, allElements, visibleElements, statuses, statusVisibility, onToggleStatusVisibility, statusColorsEnabled = true, gridVisible = true, selectedElementId, selectedElementIds, onSelectionChange, isLoading, isIsolateMode, showPileNumberLabels = false, pileNumberLabels = [] }: BIMViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const componentsRef = useRef<OBC.Components | null>(null);
   const workerUrlRef = useRef<string | null>(null);
@@ -108,45 +110,6 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
     elementIdIndexRef.current = index;
     selectableIdsRef.current = ids;
   }, [allElements]);
-  const [statusVisibility, setStatusVisibility] = useState<Record<string, boolean>>(() => {
-    try {
-      const raw = localStorage.getItem('cantidades:statusVisibility');
-      if (!raw) {
-        return { 'NINGUNO': true, 'EN PROGRESO': true, 'PARA INSPECCION': true, 'APROBADO': true, 'CERRADO': true, 'RECHAZADO': true };
-      }
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
-      const pick = (k: string) => (typeof parsed[k] === 'boolean' ? (parsed[k] as boolean) : true);
-      const hasNewKeys = ['NINGUNO', 'EN PROGRESO', 'PARA INSPECCION', 'APROBADO', 'CERRADO', 'RECHAZADO'].some((k) => k in parsed);
-      if (!hasNewKeys) {
-        return {
-          'NINGUNO': pick('PENDIENTE'),
-          'EN PROGRESO': pick('PEDIDO'),
-          'PARA INSPECCION': pick('COMPRADO'),
-          'APROBADO': true,
-          'CERRADO': pick('INSTALADO'),
-          'RECHAZADO': true,
-        };
-      }
-      return {
-        'NINGUNO': pick('NINGUNO'),
-        'EN PROGRESO': pick('EN PROGRESO'),
-        'PARA INSPECCION': pick('PARA INSPECCION'),
-        'APROBADO': pick('APROBADO'),
-        'CERRADO': pick('CERRADO'),
-        'RECHAZADO': pick('RECHAZADO'),
-      };
-    } catch {
-      return { 'NINGUNO': true, 'EN PROGRESO': true, 'PARA INSPECCION': true, 'APROBADO': true, 'CERRADO': true, 'RECHAZADO': true };
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('cantidades:statusVisibility', JSON.stringify(statusVisibility));
-    } catch {
-    }
-  }, [statusVisibility]);
-
   const statusButtons = useMemo(() => {
     return [
       { key: 'NINGUNO', label: 'Ninguno', color: '#9CA3AF' },
@@ -656,17 +619,11 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         finalVisible = allElements.filter((e) => selectedIdSet.has(e.id) && (!filterActive || visibleIdSet.has(e.id)));
       }
 
-      finalVisible = finalVisible.filter((e) => {
-        const st = statuses[e.id] ?? 'NINGUNO';
-        return statusVisibility[st] !== false;
-      });
-
       const totalCount = allElements.length;
       const visibleCount = finalVisible.length;
       const hiddenCount = Math.max(0, totalCount - visibleCount);
 
-      const statusFilterActive = Object.values(statusVisibility).some((v) => v === false);
-      const shouldShowAll = !filterActive && !isolateSelection && !statusFilterActive;
+      const shouldShowAll = !filterActive && !isolateSelection;
       if (shouldShowAll) {
         if (seq !== updateSeqRef.current) return;
         if (allHiddenRef.current) {
@@ -1081,15 +1038,15 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         </button>
       </div>
 
-      <div className="absolute bottom-6 left-6 flex gap-2">
+      <div className="absolute bottom-6 left-2 right-2 md:left-6 md:right-auto flex flex-wrap gap-2 justify-center md:justify-start max-w-[calc(100vw-1rem)] md:max-w-none">
         {statusButtons.map((s) => {
           const enabled = statusVisibility[s.key] !== false;
           return (
             <button
               key={s.key}
               type="button"
-              onClick={() => setStatusVisibility((prev) => ({ ...prev, [s.key]: !(prev[s.key] !== false) }))}
-              className={`px-3 py-2 rounded-full shadow-lg border text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${
+              onClick={() => onToggleStatusVisibility(s.key)}
+              className={`px-4 py-3 md:px-3 md:py-2 rounded-full shadow-lg border text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 touch-manipulation ${
                 enabled ? 'bg-white/90 backdrop-blur-md border-white text-slate-700' : 'bg-white/70 backdrop-blur-md border-white text-slate-400'
               }`}
               title={enabled ? `Ocultar ${s.label}` : `Mostrar ${s.label}`}

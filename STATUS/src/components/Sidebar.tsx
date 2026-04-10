@@ -150,7 +150,7 @@ export default function Sidebar({
           {categories.map(classif => (
             <div key={classif.name} className="mb-2">
               <div 
-                className="flex items-center gap-1 py-1 px-2 bg-slate-100/50 rounded cursor-pointer mb-1 group"
+                className="flex items-center gap-2 py-3 md:py-1 px-3 md:px-2 bg-slate-100/50 rounded cursor-pointer mb-1 group touch-manipulation select-none"
               >
                 <button 
                   onClick={(e) => {
@@ -167,9 +167,9 @@ export default function Sidebar({
                   className="flex items-center gap-2 flex-1 text-left"
                 >
                   {selectedClassifications.includes(classif.name) ? (
-                    <CheckSquare className="w-4 h-4 text-blue-600" />
+                    <CheckSquare className="w-5 h-5 md:w-4 md:h-4 text-blue-600" />
                   ) : (
-                    <Square className="w-4 h-4 text-slate-300" />
+                    <Square className="w-5 h-5 md:w-4 md:h-4 text-slate-300" />
                   )}
                   <span className="text-[10px] font-black text-slate-600 uppercase tracking-tighter">{classif.name}</span>
                 </button>
@@ -179,7 +179,7 @@ export default function Sidebar({
                 <div className="ml-2 space-y-1">
                   {classif.categories.map(cat => (
                     <div key={cat.name} className="mb-1">
-                      <div className="flex items-center gap-1 py-1 px-2 hover:bg-slate-50 rounded cursor-pointer group">
+                      <div className="flex items-center gap-2 py-3 md:py-1 px-3 md:px-2 hover:bg-slate-50 rounded cursor-pointer group touch-manipulation select-none">
                         {cat.children.length > 0 ? (
                           <button 
                             onClick={() => toggleExpand(`${classif.name}-${cat.name}`)}
@@ -195,9 +195,9 @@ export default function Sidebar({
                           className="flex items-center gap-2 flex-1 text-left"
                         >
                           {selectedCategories.includes(cat.name) ? (
-                            <CheckSquare className="w-4 h-4 text-blue-600" />
+                            <CheckSquare className="w-5 h-5 md:w-4 md:h-4 text-blue-600" />
                           ) : (
-                            <Square className="w-4 h-4 text-slate-300" />
+                            <Square className="w-5 h-5 md:w-4 md:h-4 text-slate-300" />
                           )}
                           <span className="text-[11px] font-bold text-slate-700 uppercase">{cat.name}</span>
                         </button>
@@ -209,12 +209,12 @@ export default function Sidebar({
                             <button 
                               key={sub}
                               onClick={() => onToggleSubCategory(sub)}
-                              className="flex items-center gap-2 w-full py-1 px-2 hover:bg-slate-50 rounded text-left"
+                              className="flex items-center gap-2 w-full py-3 md:py-1 px-3 md:px-2 hover:bg-slate-50 rounded text-left touch-manipulation select-none"
                             >
                               {selectedSubCategories.includes(sub) ? (
-                                <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
+                                <CheckSquare className="w-5 h-5 md:w-3.5 md:h-3.5 text-blue-600" />
                               ) : (
-                                <Square className="w-3.5 h-3.5 text-slate-300" />
+                                <Square className="w-5 h-5 md:w-3.5 md:h-3.5 text-slate-300" />
                               )}
                               <span className="text-[10px] text-slate-600">{sub}</span>
                             </button>
@@ -243,7 +243,7 @@ export default function Sidebar({
                   key={level}
                   type="button"
                   onClick={() => onToggleLevel(level)}
-                  className={`px-2 py-2 text-[10px] font-medium rounded transition-all border text-center leading-tight ${
+                  className={`px-2 py-3 md:py-2 text-[11px] md:text-[10px] font-medium rounded transition-all border text-center leading-tight touch-manipulation select-none ${
                     isSelected
                       ? 'bg-blue-600 border-blue-700 text-white shadow-sm'
                       : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
