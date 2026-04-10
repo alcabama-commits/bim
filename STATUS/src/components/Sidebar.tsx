@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, CheckSquare, Square } from 'lucide-react';
+import { ChevronDown, ChevronRight, CheckSquare, Square, Move } from 'lucide-react';
 
 interface CategoryNode {
   name: string;
@@ -37,6 +37,7 @@ interface SidebarProps {
   showPileLabels?: boolean;
   onToggleShowPileLabels?: () => void;
   onChangeSelectedPilesStatus?: (status: 'NINGUNO' | 'EN PROGRESO' | 'PARA INSPECCION' | 'APROBADO' | 'CERRADO' | 'RECHAZADO') => void;
+  onFocusFiltered?: () => void;
   onResetFilters: () => void;
   onToggleCollapse?: () => void;
 }
@@ -67,6 +68,7 @@ export default function Sidebar({
   showPileLabels = false,
   onToggleShowPileLabels,
   onChangeSelectedPilesStatus,
+  onFocusFiltered,
   onResetFilters,
   onToggleCollapse
 }: SidebarProps) {
@@ -125,6 +127,14 @@ export default function Sidebar({
       <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Clasificación / Categoría</h3>
         <div className="flex items-center gap-1">
+          <button
+            onClick={onFocusFiltered}
+            className="p-1 hover:bg-slate-200 rounded transition-colors disabled:opacity-40"
+            title="Enfocar filtrados"
+            disabled={!onFocusFiltered}
+          >
+            <Move className="w-4 h-4" />
+          </button>
           <button 
             onClick={onResetFilters}
             className="p-1 hover:bg-slate-200 rounded transition-colors"

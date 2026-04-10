@@ -2411,31 +2411,46 @@ export default function App() {
     GENERAL: true,
     DRIVE: true
   });
+  const focusFilteredRef = useRef<null | (() => void)>(null);
+  const registerFocusFiltered = useCallback((fn: (() => void) | null) => {
+    focusFilteredRef.current = fn;
+  }, []);
+  const onFocusFiltered = useCallback(() => {
+    focusFilteredRef.current?.();
+  }, []);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-white overflow-hidden font-sans">
       {/* Header */}
-      <header className="h-20 flex items-center justify-between px-8 border-b border-slate-200 bg-white">
-        <div className="flex items-center gap-4">
-          <div className="h-12 flex items-center">
+      <header className="min-h-16 flex flex-col sm:flex-row sm:items-center sm:justify-between px-3 sm:px-8 py-2 sm:py-0 gap-2 border-b border-slate-200 bg-white">
+        <div className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-4">
+          <div className="flex items-center">
             <img
               src="https://i.postimg.cc/RVp8pZwc/artis_urbano.png"
               alt="Artis Urbano"
-              className="h-10 w-auto object-contain"
+              className="h-7 sm:h-10 w-auto object-contain"
               loading="eager"
               decoding="async"
               referrerPolicy="no-referrer"
             />
           </div>
+          <img
+            src="https://i.postimg.cc/Hsrt7fXx/LOGO-TREVOLY.jpg"
+            alt="TREVOLY"
+            className="h-7 sm:hidden w-auto object-contain"
+            loading="eager"
+            decoding="async"
+            referrerPolicy="no-referrer"
+          />
         </div>
         
-        <div className="flex-1 max-w-3xl mx-8">
-          <div className="bg-[#003E52] text-white py-1.5 px-6 rounded-sm text-center font-bold uppercase tracking-widest text-sm shadow-inner">
+        <div className="w-full sm:flex-1 sm:max-w-3xl sm:mx-8">
+          <div className="bg-[#003E52] text-white py-1.5 px-4 sm:px-6 rounded-sm text-center font-bold uppercase tracking-widest text-xs sm:text-sm shadow-inner truncate">
             {selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'CANTIDADES'}
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="hidden sm:flex items-center gap-4">
           <img
             src="https://i.postimg.cc/Hsrt7fXx/LOGO-TREVOLY.jpg"
             alt="TREVOLY"
@@ -2901,6 +2916,7 @@ export default function App() {
                     setSelectedElementId(ids[0] ?? null);
                   }}
                   isIsolateMode={isIsolateMode}
+                  onRegisterFocusToFiltered={registerFocusFiltered}
                 />
 
                 <div />
@@ -3157,6 +3173,7 @@ export default function App() {
                   showPileLabels={showPileNumberLabels}
                   onToggleShowPileLabels={() => setShowPileNumberLabels((v) => !v)}
                 onChangeSelectedPilesStatus={changeStatusForSelectedPiles}
+                  onFocusFiltered={onFocusFiltered}
                   onResetFilters={resetFilters}
                   onToggleCollapse={() => setRightPanelCollapsed(true)}
                 />
@@ -3539,6 +3556,7 @@ export default function App() {
                   onClearPileSelection={clearPileSelection}
                   showPileLabels={showPileNumberLabels}
                   onToggleShowPileLabels={() => setShowPileNumberLabels((v) => !v)}
+                  onFocusFiltered={onFocusFiltered}
                   onResetFilters={resetFilters}
                   onToggleCollapse={() => setRightPanelCollapsed(true)}
                 />
