@@ -1010,7 +1010,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         </div>
       )}
 
-      <div className="absolute bottom-32 md:bottom-6 right-2 md:right-6 flex gap-2 z-40">
+      <div className="absolute top-24 right-2 md:top-auto md:bottom-6 md:right-6 flex gap-2 z-40">
         <button 
           onClick={() => {
             if (componentsRef.current && visibleElements.length > 0) {
@@ -1034,7 +1034,8 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
           }}
           className="bg-[#024959] text-white px-4 py-3 md:py-2 rounded-full shadow-lg border border-[#003E52] text-[10px] font-bold uppercase tracking-widest hover:bg-[#003E52] transition-all touch-manipulation"
         >
-          Enfocar Filtrados
+          <span className="md:hidden">Enfocar</span>
+          <span className="hidden md:inline">Enfocar Filtrados</span>
         </button>
       </div>
 

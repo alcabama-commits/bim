@@ -244,8 +244,8 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
 
   return (
     <div className="flex flex-col h-full bg-white overflow-hidden">
-      <div className="h-10 px-4 border-b border-slate-100 bg-white flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+      <div className="min-h-10 px-4 py-2 border-b border-slate-100 bg-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setActiveTab('DETALLE')}
@@ -281,7 +281,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
           </button>
         </div>
 
-        <div className="text-[10px] text-slate-600 font-bold uppercase tracking-widest flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+        <div className="text-[10px] text-slate-600 font-bold uppercase tracking-widest flex flex-wrap items-center sm:justify-end gap-x-3 gap-y-1">
           <span className="whitespace-nowrap">Elementos: {totals.count.toLocaleString('es-CO')}</span>
           <span className="whitespace-nowrap">Área: {format2(totals.area)} m²</span>
           <span className="whitespace-nowrap hidden sm:inline">Longitud: {format2(totals.length)} m</span>
