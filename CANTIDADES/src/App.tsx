@@ -308,13 +308,44 @@ export default function App() {
   const [selectedSubCategories, setSelectedSubCategories] = useState<string[]>([]);
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
   const [selectedDiameter, setSelectedDiameter] = useState<string>('Todos');
+  const [appliedClassifications, setAppliedClassifications] = useState<string[]>([]);
+  const [appliedCategories, setAppliedCategories] = useState<string[]>([]);
+  const [appliedSubCategories, setAppliedSubCategories] = useState<string[]>([]);
+  const [appliedLevels, setAppliedLevels] = useState<string[]>([]);
+  const [appliedDiameter, setAppliedDiameter] = useState<string>('Todos');
   const [isIsolateMode, setIsIsolateMode] = useState(false);
   const isSanitaryModel = useMemo(() => /sanitario/i.test(selectedRemoteModelName ?? ''), [selectedRemoteModelName]);
+  const [statusVisibility, setStatusVisibility] = useState<Record<PurchaseStatus, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem('cantidades:statusVisibility');
+      if (!raw) {
+        return { PENDIENTE: true, PEDIDO: true, COMPRADO: true, ALMACEN: true, INSTALADO: true };
+      }
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const pick = (k: string) => (typeof parsed[k] === 'boolean' ? (parsed[k] as boolean) : true);
+      return {
+        PENDIENTE: pick('PENDIENTE'),
+        PEDIDO: pick('PEDIDO'),
+        COMPRADO: pick('COMPRADO'),
+        ALMACEN: typeof parsed['ALMACEN'] === 'boolean' ? (parsed['ALMACEN'] as boolean) : pick('EN BODEGA'),
+        INSTALADO: pick('INSTALADO')
+      };
+    } catch {
+      return { PENDIENTE: true, PEDIDO: true, COMPRADO: true, ALMACEN: true, INSTALADO: true };
+    }
+  });
   const [statusColorsEnabled, setStatusColorsEnabled] = useState(() => {
     const raw = localStorage.getItem('cantidades:statusColorsEnabled');
     if (raw === null) return true;
     return raw === 'true';
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('cantidades:statusVisibility', JSON.stringify(statusVisibility));
+    } catch {
+    }
+  }, [statusVisibility]);
   const [gridVisible, setGridVisible] = useState(() => {
     const raw = localStorage.getItem('cantidades:gridVisible');
     if (raw === null) return true;
@@ -688,6 +719,17 @@ export default function App() {
     if (!isSanitaryModel) setSelectedDiameter('Todos');
   }, [isSanitaryModel]);
 
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setAppliedClassifications(selectedClassifications);
+      setAppliedCategories(selectedCategories);
+      setAppliedSubCategories(selectedSubCategories);
+      setAppliedLevels(selectedLevels);
+      setAppliedDiameter(selectedDiameter);
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [selectedCategories, selectedClassifications, selectedDiameter, selectedLevels, selectedSubCategories]);
+
   const filteredElements = useMemo(() => {
     return baseElements.filter(el => {
       const classif = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
@@ -695,14 +737,21 @@ export default function App() {
       const level = getProp(el, "NIVEL INTEGRADO") || "";
       const diameter = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]) || "";
 
-      const classificationMatch = selectedClassifications.length === 0 || selectedClassifications.includes(classif);
-      const categoryMatch = selectedCategories.length === 0 || selectedCategories.includes(nombreIntegrado);
-      const levelMatch = selectedLevels.length === 0 || selectedLevels.includes(level);
-      const diameterMatch = !isSanitaryModel || selectedDiameter === 'Todos' || diameter === selectedDiameter;
+      const classificationMatch = appliedClassifications.length === 0 || appliedClassifications.includes(classif);
+      const categoryMatch = appliedCategories.length === 0 || appliedCategories.includes(nombreIntegrado);
+      const levelMatch = appliedLevels.length === 0 || appliedLevels.includes(level);
+      const diameterMatch = !isSanitaryModel || appliedDiameter === 'Todos' || diameter === appliedDiameter;
 
       return classificationMatch && categoryMatch && levelMatch && diameterMatch;
     });
-  }, [baseElements, getFirstProp, getProp, isSanitaryModel, selectedClassifications, selectedCategories, selectedDiameter, selectedLevels]);
+  }, [appliedCategories, appliedClassifications, appliedDiameter, appliedLevels, baseElements, getFirstProp, getProp, isSanitaryModel]);
+
+  const statusFilteredElements = useMemo(() => {
+    return filteredElements.filter((el) => {
+      const st = elementStatuses[el.id] ?? 'PENDIENTE';
+      return statusVisibility[st] !== false;
+    });
+  }, [elementStatuses, filteredElements, statusVisibility]);
 
   const elementsWithVolume = useMemo(() => {
     const toNumber = (v: unknown) => {
@@ -1467,6 +1516,11 @@ export default function App() {
     setSelectedSubCategories([]);
     setSelectedLevels([]);
     setSelectedDiameter('Todos');
+    setAppliedClassifications([]);
+    setAppliedCategories([]);
+    setAppliedSubCategories([]);
+    setAppliedLevels([]);
+    setAppliedDiameter('Todos');
   };
 
   const handleChangeStatus = useCallback((id: string, status: PurchaseStatus) => {
@@ -1540,8 +1594,8 @@ export default function App() {
 
         <div className="flex items-center gap-4">
           <img
-            src="https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg"
-            alt="Arboré"
+            src="https://i.postimg.cc/Hsrt7fXx/LOGO-TREVOLY.jpg"
+            alt="TREVOLY"
             className="h-10 w-auto object-contain"
             loading="eager"
             decoding="async"
@@ -1695,8 +1749,10 @@ export default function App() {
                 <BIMViewer
                   onModelLoaded={handleModelLoaded}
                   allElements={baseElements}
-                  visibleElements={filteredElements}
+                  visibleElements={statusFilteredElements}
                   statuses={elementStatuses}
+                  statusVisibility={statusVisibility}
+                  onToggleStatusVisibility={(key) => setStatusVisibility((prev) => ({ ...prev, [key]: !(prev[key] !== false) }))}
                   statusColorsEnabled={statusColorsEnabled}
                   gridVisible={gridVisible}
                   isLoading={isLoading}
@@ -1779,7 +1835,7 @@ export default function App() {
                   </div>
                   {!isTableMaximized && (
                     <DataTable
-                      elements={filteredElements}
+                      elements={statusFilteredElements}
                       onSelectElement={(id) => {
                         setSelectedElementId(id);
                         setSelectedElementIds(id ? [id] : []);
@@ -1866,7 +1922,7 @@ export default function App() {
               </button>
             </div>
             <DataTable
-              elements={filteredElements}
+              elements={statusFilteredElements}
               onSelectElement={(id) => {
                 setSelectedElementId(id);
                 setSelectedElementIds(id ? [id] : []);
