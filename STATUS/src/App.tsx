@@ -4,7 +4,7 @@ import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
 import BIMViewer from './components/BIMViewer';
 import { BIMElement, CategorySummary } from './types';
-import { Folder, File, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, RefreshCw, Eye, EyeOff, Loader2, Maximize2, Minimize2, Palette, Grid3X3, SlidersHorizontal } from 'lucide-react';
+import { Folder, File, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, RefreshCw, Eye, EyeOff, Loader2, Maximize2, Minimize2, Palette, Grid3X3, SlidersHorizontal, Move } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import DataTable from './components/DataTable';
 
@@ -2411,6 +2411,8 @@ export default function App() {
     GENERAL: true,
     DRIVE: true
   });
+  const [artisLogoOk, setArtisLogoOk] = useState(true);
+  const [trevolyLogoOk, setTrevolyLogoOk] = useState(true);
   const focusFilteredRef = useRef<null | (() => void)>(null);
   const registerFocusFiltered = useCallback((fn: (() => void) | null) => {
     focusFilteredRef.current = fn;
@@ -2425,23 +2427,33 @@ export default function App() {
       <header className="min-h-16 flex flex-col sm:flex-row sm:items-center sm:justify-between px-3 sm:px-8 py-2 sm:py-0 gap-2 border-b border-slate-200 bg-white">
         <div className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-4">
           <div className="flex items-center">
+            {artisLogoOk ? (
+              <img
+                src="https://i.postimg.cc/RVp8pZwc/artis_urbano.png"
+                alt="Artis Urbano"
+                className="h-7 sm:h-10 w-auto object-contain"
+                loading="eager"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                onError={() => setArtisLogoOk(false)}
+              />
+            ) : (
+              <div className="text-[11px] font-black tracking-widest text-slate-700">ARTIS</div>
+            )}
+          </div>
+          {trevolyLogoOk ? (
             <img
-              src="https://i.postimg.cc/RVp8pZwc/artis_urbano.png"
-              alt="Artis Urbano"
-              className="h-7 sm:h-10 w-auto object-contain"
+              src="https://i.postimg.cc/Hsrt7fXx/LOGO-TREVOLY.jpg"
+              alt="TREVOLY"
+              className="h-7 sm:hidden w-auto object-contain"
               loading="eager"
               decoding="async"
               referrerPolicy="no-referrer"
+              onError={() => setTrevolyLogoOk(false)}
             />
-          </div>
-          <img
-            src="https://i.postimg.cc/Hsrt7fXx/LOGO-TREVOLY.jpg"
-            alt="TREVOLY"
-            className="h-7 sm:hidden w-auto object-contain"
-            loading="eager"
-            decoding="async"
-            referrerPolicy="no-referrer"
-          />
+          ) : (
+            <div className="text-[11px] font-black tracking-widest text-slate-700 sm:hidden">TREVOLY</div>
+          )}
         </div>
         
         <div className="w-full sm:flex-1 sm:max-w-3xl sm:mx-8">
@@ -2451,14 +2463,19 @@ export default function App() {
         </div>
 
         <div className="hidden sm:flex items-center gap-4">
-          <img
-            src="https://i.postimg.cc/Hsrt7fXx/LOGO-TREVOLY.jpg"
-            alt="TREVOLY"
-            className="h-10 w-auto object-contain"
-            loading="eager"
-            decoding="async"
-            referrerPolicy="no-referrer"
-          />
+          {trevolyLogoOk ? (
+            <img
+              src="https://i.postimg.cc/Hsrt7fXx/LOGO-TREVOLY.jpg"
+              alt="TREVOLY"
+              className="h-10 w-auto object-contain"
+              loading="eager"
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={() => setTrevolyLogoOk(false)}
+            />
+          ) : (
+            <div className="text-xs font-black tracking-widest text-slate-700">TREVOLY</div>
+          )}
         </div>
       </header>
 
@@ -2959,6 +2976,15 @@ export default function App() {
                   >
                     {isViewerMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                     <span className="text-[10px] font-bold uppercase tracking-widest">{isViewerMaximized ? 'Volver' : 'Maximizar'}</span>
+                  </button>
+                  <button
+                    onClick={onFocusFiltered}
+                    className="p-2 rounded-lg shadow border transition-all flex items-center gap-2 bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white disabled:opacity-60"
+                    title="Enfocar filtrados"
+                    disabled={!focusFilteredRef.current}
+                  >
+                    <Move className="w-4 h-4" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Enfocar</span>
                   </button>
                   <button
                     onClick={() => setIsIsolateMode(!isIsolateMode)}
