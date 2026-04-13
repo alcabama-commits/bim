@@ -402,6 +402,83 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     for (const id of ids) onChangeStatus(id, status);
   };
 
+  const normalizeUnionStages = (totalUnits: number, counts?: Partial<Record<PurchaseStatus, number>>) => {
+    const instalado = Math.min(Math.max(0, Math.floor(counts?.INSTALADO ?? 0)), totalUnits);
+    const almacen = Math.min(Math.max(0, Math.floor(counts?.ALMACEN ?? 0)), totalUnits - instalado);
+    const comprado = Math.min(Math.max(0, Math.floor(counts?.COMPRADO ?? 0)), totalUnits - instalado - almacen);
+    const pedido = Math.min(Math.max(0, Math.floor(counts?.PEDIDO ?? 0)), totalUnits - instalado - almacen - comprado);
+    const pendiente = Math.max(0, totalUnits - (pedido + comprado + almacen + instalado));
+    return { pendiente, pedido, comprado, almacen, instalado };
+  };
+
+  const moveUnionStage = (totalUnits: number, current: Partial<Record<PurchaseStatus, number>> | undefined, stage: 'pedido' | 'comprado' | 'almacen' | 'instalado', nextValue: number) => {
+    const cur = normalizeUnionStages(totalUnits, current);
+    const target = Math.max(0, Math.floor(nextValue));
+
+    if (stage === 'pedido') {
+      const max = totalUnits - (cur.comprado + cur.almacen + cur.instalado);
+      const pedido = Math.min(target, max);
+      return { pedido, comprado: cur.comprado, almacen: cur.almacen, instalado: cur.instalado };
+    }
+    if (stage === 'comprado') {
+      const total = cur.pedido + cur.comprado;
+      const max = totalUnits - (cur.almacen + cur.instalado);
+      const comprado = Math.min(target, total, max);
+      const pedido = total - comprado;
+      return { pedido, comprado, almacen: cur.almacen, instalado: cur.instalado };
+    }
+    if (stage === 'almacen') {
+      const total = cur.comprado + cur.almacen;
+      const max = totalUnits - cur.instalado;
+      const almacen = Math.min(target, total, max);
+      const comprado = total - almacen;
+      return { pedido: cur.pedido, comprado, almacen, instalado: cur.instalado };
+    }
+    const total = cur.almacen + cur.instalado;
+    const instalado = Math.min(target, total, totalUnits);
+    const almacen = total - instalado;
+    return { pedido: cur.pedido, comprado: cur.comprado, almacen, instalado };
+  };
+
+  const applyUnionAssignmentsToModel = (ids: string[], counts: { pedido: number; comprado: number; almacen: number; instalado: number }) => {
+    const orderedIds = [...ids].sort((a, b) => a.localeCompare(b, 'es'));
+    let needInst = counts.instalado;
+    let needAlm = counts.almacen;
+    let needComp = counts.comprado;
+    let needPed = counts.pedido;
+    const assigned: Record<PurchaseStatus, string[]> = { PENDIENTE: [], PEDIDO: [], COMPRADO: [], ALMACEN: [], INSTALADO: [] };
+
+    for (const id of orderedIds) {
+      if (needInst > 0) {
+        assigned.INSTALADO.push(id);
+        needInst -= 1;
+        continue;
+      }
+      if (needAlm > 0) {
+        assigned.ALMACEN.push(id);
+        needAlm -= 1;
+        continue;
+      }
+      if (needComp > 0) {
+        assigned.COMPRADO.push(id);
+        needComp -= 1;
+        continue;
+      }
+      if (needPed > 0) {
+        assigned.PEDIDO.push(id);
+        needPed -= 1;
+        continue;
+      }
+      assigned.PENDIENTE.push(id);
+    }
+
+    if (assigned.PENDIENTE.length) applyStatusToIds(assigned.PENDIENTE, 'PENDIENTE');
+    if (assigned.PEDIDO.length) applyStatusToIds(assigned.PEDIDO, 'PEDIDO');
+    if (assigned.COMPRADO.length) applyStatusToIds(assigned.COMPRADO, 'COMPRADO');
+    if (assigned.ALMACEN.length) applyStatusToIds(assigned.ALMACEN, 'ALMACEN');
+    if (assigned.INSTALADO.length) applyStatusToIds(assigned.INSTALADO, 'INSTALADO');
+  };
+
   const totals = useMemo(() => {
     let area = 0;
     let length = 0;
@@ -971,13 +1048,17 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
         </div>
       ) : activeTab === 'UNIONES' ? (
         <div className="flex-1 overflow-auto">
-          <table className="w-full text-left border-collapse min-w-[700px]">
+          <table className="w-full text-left border-collapse min-w-[1050px]">
             <thead className="sticky top-0 bg-[#003d4d] text-white z-10">
               <tr>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Tipo</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Diámetro</th>
-                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Estado</th>
-                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-right">Cantidad</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Unidades totales</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Unidades pendientes</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Pedido</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Comprado</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Almacén</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-right">Instalado</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -985,26 +1066,64 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                 <tr key={`${r.tipo}||${r.diameter}`}>
                   <td className="px-4 py-2 text-xs font-bold text-slate-700">{r.tipo}</td>
                   <td className="px-4 py-2 text-xs text-slate-700">{r.diameter}</td>
-                  <td className="px-4 py-2">
-                    <button
-                      type="button"
-                      onClick={() => applyStatusToIds(r.ids, nextStatus(r.dominantStatus))}
-                      className={`inline-flex px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${statusTint(r.dominantStatus).pill}`}
-                      title={[
-                        'Click: cambia el estado de este grupo (Tipo + Diámetro) al siguiente estado.',
-                        '',
-                        ...STATUS_ORDER.map((st) => `${st}: ${(r.statusCount[st] ?? 0).toLocaleString('es-CO')}`)
-                      ].join('\n')}
-                    >
-                      {r.dominantStatus}
-                    </button>
-                  </td>
-                  <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{r.count.toLocaleString('es-CO')}</td>
+                  {(() => {
+                    const display = normalizeUnionStages(r.count, r.statusCount);
+                    const onSet = (stage: 'pedido' | 'comprado' | 'almacen' | 'instalado') => (value: number) => {
+                      const next = moveUnionStage(r.count, r.statusCount, stage, value);
+                      applyUnionAssignmentsToModel(r.ids, next);
+                    };
+                    const toSafeNumber = (raw: string) => {
+                      const n = Number(raw);
+                      return Number.isFinite(n) ? n : 0;
+                    };
+                    return (
+                      <>
+                        <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{r.count.toLocaleString('es-CO')}</td>
+                        <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{display.pendiente.toLocaleString('es-CO')}</td>
+                        <td className="px-4 py-2 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            value={display.pedido}
+                            onChange={(e) => onSet('pedido')(toSafeNumber(e.target.value))}
+                            className="w-20 text-right bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            value={display.comprado}
+                            onChange={(e) => onSet('comprado')(toSafeNumber(e.target.value))}
+                            className="w-20 text-right bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            value={display.almacen}
+                            onChange={(e) => onSet('almacen')(toSafeNumber(e.target.value))}
+                            className="w-20 text-right bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono"
+                          />
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            value={display.instalado}
+                            onChange={(e) => onSet('instalado')(toSafeNumber(e.target.value))}
+                            className="w-20 text-right bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono"
+                          />
+                        </td>
+                      </>
+                    );
+                  })()}
                 </tr>
               ))}
               {unionsPurchaseSummary.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-slate-400 text-xs italic">
+                  <td colSpan={8} className="px-4 py-8 text-center text-slate-400 text-xs italic">
                     No hay uniones de tubería para resumir con los filtros actuales.
                   </td>
                 </tr>

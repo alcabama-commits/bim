@@ -1798,6 +1798,14 @@ export default function App() {
                     <Grid3X3 className="w-4 h-4" />
                     <span className="text-[10px] font-bold uppercase tracking-widest">Rejilla</span>
                   </button>
+                  <button
+                    onClick={resetFilters}
+                    className="p-2 rounded-lg shadow border transition-all flex items-center gap-2 bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white"
+                    title="Limpiar filtros"
+                  >
+                    <ChevronLeft className="w-4 h-4 rotate-180" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Limpiar filtros</span>
+                  </button>
                 </div>
               </div>
             </div>
