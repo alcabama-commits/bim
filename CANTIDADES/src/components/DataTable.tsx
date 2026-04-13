@@ -857,13 +857,14 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
               <tr>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Tipo</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Diámetro</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Unidades (6m)</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Pendiente</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Pedido</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Comprado</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Almacén</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Instalado</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Longitud total (m)</th>
-                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Unidades (6m)</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Restante (m)</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-right">Desperdicio (m)</th>
               </tr>
             </thead>
@@ -872,6 +873,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                 <tr key={r.groupKey}>
                   <td className="px-4 py-2 text-xs font-bold text-slate-700">{r.tipo}</td>
                   <td className="px-4 py-2 text-xs text-slate-700">{r.diameter}</td>
+                  <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{r.units.toLocaleString('es-CO')}</td>
                   {(() => {
                     const display = normalizePipeStages(r.units, pipeStagesByGroup[r.groupKey]);
                     const onSet = (stage: 'pedido' | 'comprado' | 'almacen' | 'instalado') => (value: number) => {
@@ -929,7 +931,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                     );
                   })()}
                   <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.totalLength)}</td>
-                  <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{r.units.toLocaleString('es-CO')}</td>
+                  <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{format2(normalizePipeStageMeters(r.totalLength, r.units, pipeStagesByGroup[r.groupKey]).pendiente)}</td>
                   <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.waste)}</td>
                 </tr>
               ))}
