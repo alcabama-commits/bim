@@ -266,7 +266,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
 
   const pipePurchaseSummary = useMemo(() => {
     if (!isSanitaryModel) return [];
-    const map = new Map<string, { tipo: string; diameter: string; ids: string[]; totalLength: number; count: number; statusLength: Record<PurchaseStatus, number>; statusCount: Record<PurchaseStatus, number> }>();
+    const map = new Map<string, { tipo: string; diameter: string; level: string; ids: string[]; totalLength: number; count: number; statusLength: Record<PurchaseStatus, number>; statusCount: Record<PurchaseStatus, number> }>();
     const asNumber = (v: string) => {
       const n = parseNumber(v);
       return n !== null ? n : null;
@@ -282,10 +282,13 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       const tipo = tipoRaw !== '-' && tipoRaw !== '' ? tipoRaw : el.name;
       const diameterRaw = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]);
       const diameter = diameterRaw !== '-' && diameterRaw !== '' ? diameterRaw : 'SIN DIÁMETRO';
-      const key = `${tipo}||${diameter}`;
+      const levelRaw = getProp(el, 'NIVEL INTEGRADO');
+      const level = levelRaw !== '-' && levelRaw !== '' ? levelRaw : 'SIN NIVEL';
+      const key = `${tipo}||${diameter}||${level}`;
       const cur = map.get(key) ?? {
         tipo,
         diameter,
+        level,
         ids: [],
         totalLength: 0,
         count: 0,
@@ -302,7 +305,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     const arr = Array.from(map.values()).map((v) => {
       const units = Math.ceil(v.totalLength / 6);
       const waste = units * 6 - v.totalLength;
-      const groupKey = `${v.tipo}||${v.diameter}`;
+      const groupKey = `${v.tipo}||${v.diameter}||${v.level}`;
       return { ...v, units, waste, groupKey };
     });
     return arr.sort((a, b) => {
@@ -313,7 +316,9 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       if (na !== null && nb !== null) return na - nb;
       if (na !== null) return -1;
       if (nb !== null) return 1;
-      return a.diameter.localeCompare(b.diameter, 'es');
+      const d = a.diameter.localeCompare(b.diameter, 'es');
+      if (d !== 0) return d;
+      return a.level.localeCompare(b.level, 'es');
     });
   }, [elements, getFirstProp, getMetric, getProp, isSanitaryModel, statuses]);
 
@@ -857,6 +862,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
               <tr>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Tipo</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Diámetro</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Nivel</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Unidades (6m)</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Pendiente</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Pedido</th>
@@ -873,6 +879,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                 <tr key={r.groupKey}>
                   <td className="px-4 py-2 text-xs font-bold text-slate-700">{r.tipo}</td>
                   <td className="px-4 py-2 text-xs text-slate-700">{r.diameter}</td>
+                  <td className="px-4 py-2 text-xs text-slate-700">{r.level}</td>
                   <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{r.units.toLocaleString('es-CO')}</td>
                   {(() => {
                     const display = normalizePipeStages(r.units, pipeStagesByGroup[r.groupKey]);
@@ -937,7 +944,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
               ))}
               {pipePurchaseSummary.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-slate-400 text-xs italic">
+                  <td colSpan={12} className="px-4 py-8 text-center text-slate-400 text-xs italic">
                     No hay tuberías con longitud para resumir con los filtros actuales.
                   </td>
                 </tr>
