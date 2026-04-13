@@ -172,6 +172,21 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     return { pendiente: remaining, pedido, comprado, almacen, instalado };
   };
 
+  const derivePipeStagesFromStatusLength = (totalUnits: number, statusLength: Record<PurchaseStatus, number>): PipeStageState => {
+    const unitsFromLength = (length: number) => {
+      if (!(length > 0)) return 0;
+      return Math.min(totalUnits, Math.ceil((length - 1e-9) / 6));
+    };
+    const instalado = unitsFromLength(statusLength.INSTALADO);
+    const uptoAlmacen = unitsFromLength(statusLength.INSTALADO + statusLength.ALMACEN);
+    const almacen = Math.max(0, uptoAlmacen - instalado);
+    const uptoComprado = unitsFromLength(statusLength.INSTALADO + statusLength.ALMACEN + statusLength.COMPRADO);
+    const comprado = Math.max(0, uptoComprado - uptoAlmacen);
+    const uptoPedido = unitsFromLength(statusLength.INSTALADO + statusLength.ALMACEN + statusLength.COMPRADO + statusLength.PEDIDO);
+    const pedido = Math.max(0, uptoPedido - uptoComprado);
+    return normalizePipeStages(totalUnits, { pedido, comprado, almacen, instalado });
+  };
+
   const movePipeStage = (totalUnits: number, current: PipeStageState | undefined, stage: 'pedido' | 'comprado' | 'almacen' | 'instalado', nextValue: number) => {
     const cur = normalizePipeStages(totalUnits, current);
     const target = Math.max(0, Math.floor(nextValue));
@@ -882,10 +897,12 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                   <td className="px-4 py-2 text-xs text-slate-700">{r.level}</td>
                   <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{r.units.toLocaleString('es-CO')}</td>
                   {(() => {
-                    const display = normalizePipeStages(r.units, pipeStagesByGroup[r.groupKey]);
+                    const baseState = pipeStagesByGroup[r.groupKey] ?? derivePipeStagesFromStatusLength(r.units, r.statusLength);
+                    const display = normalizePipeStages(r.units, baseState);
                     const onSet = (stage: 'pedido' | 'comprado' | 'almacen' | 'instalado') => (value: number) => {
                       setPipeStagesByGroup((prev) => {
-                        const next = movePipeStage(r.units, prev[r.groupKey], stage, value);
+                        const current = prev[r.groupKey] ?? derivePipeStagesFromStatusLength(r.units, r.statusLength);
+                        const next = movePipeStage(r.units, current, stage, value);
                         const updated = { ...prev, [r.groupKey]: next };
                         applyPipeAssignmentsToModel(r.groupKey, r.ids, r.units, r.totalLength, next);
                         return updated;
@@ -938,7 +955,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                     );
                   })()}
                   <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.totalLength)}</td>
-                  <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{format2(normalizePipeStageMeters(r.totalLength, r.units, pipeStagesByGroup[r.groupKey]).pendiente)}</td>
+                  <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{format2(normalizePipeStageMeters(r.totalLength, r.units, pipeStagesByGroup[r.groupKey] ?? derivePipeStagesFromStatusLength(r.units, r.statusLength)).pendiente)}</td>
                   <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.waste)}</td>
                 </tr>
               ))}
