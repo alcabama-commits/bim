@@ -112,6 +112,10 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
 
   const pipeStagesStorageKey = useMemo(() => `cantidades:pipeStages:${modelKey || 'local'}`, [modelKey]);
   const [pipeStagesByGroup, setPipeStagesByGroup] = useState<Record<string, PipeStageState>>({});
+  const pipeAdditionsStorageKey = useMemo(() => `cantidades:pipeAdditions:${modelKey || 'local'}`, [modelKey]);
+  const [pipeAdditionsByGroup, setPipeAdditionsByGroup] = useState<Record<string, number>>({});
+  const unionAdditionsStorageKey = useMemo(() => `cantidades:unionAdditions:${modelKey || 'local'}`, [modelKey]);
+  const [unionAdditionsByGroup, setUnionAdditionsByGroup] = useState<Record<string, number>>({});
 
   useEffect(() => {
     try {
@@ -148,6 +152,62 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     } catch {
     }
   }, [pipeStagesByGroup, pipeStagesStorageKey]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(pipeAdditionsStorageKey);
+      if (!raw) {
+        setPipeAdditionsByGroup({});
+        return;
+      }
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const next: Record<string, number> = {};
+      if (parsed && typeof parsed === 'object') {
+        for (const [k, v] of Object.entries(parsed)) {
+          const n = Number(v);
+          next[k] = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+        }
+      }
+      setPipeAdditionsByGroup(next);
+    } catch {
+      setPipeAdditionsByGroup({});
+    }
+  }, [pipeAdditionsStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(pipeAdditionsStorageKey, JSON.stringify(pipeAdditionsByGroup));
+    } catch {
+    }
+  }, [pipeAdditionsByGroup, pipeAdditionsStorageKey]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(unionAdditionsStorageKey);
+      if (!raw) {
+        setUnionAdditionsByGroup({});
+        return;
+      }
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const next: Record<string, number> = {};
+      if (parsed && typeof parsed === 'object') {
+        for (const [k, v] of Object.entries(parsed)) {
+          const n = Number(v);
+          next[k] = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+        }
+      }
+      setUnionAdditionsByGroup(next);
+    } catch {
+      setUnionAdditionsByGroup({});
+    }
+  }, [unionAdditionsStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(unionAdditionsStorageKey, JSON.stringify(unionAdditionsByGroup));
+    } catch {
+    }
+  }, [unionAdditionsByGroup, unionAdditionsStorageKey]);
 
   const normalizePipeStages = (totalUnits: number, st: PipeStageState | undefined) => {
     const installed = Math.min(Math.max(0, Math.floor(st?.instalado ?? 0)), totalUnits);
@@ -380,7 +440,8 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     };
     const arr = Array.from(map.values()).map((v) => {
       const dominantStatus = pickDominantStatus(v);
-      return { ...v, dominantStatus };
+      const groupKey = `${v.tipo}||${v.diameter}`;
+      return { ...v, dominantStatus, groupKey };
     });
     return arr.sort((a, b) => {
       const t = a.tipo.localeCompare(b.tipo, 'es');
@@ -963,7 +1024,8 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Instalado</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Longitud total (m)</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Restante (m)</th>
-                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-right">Desperdicio (m)</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Desperdicio (m)</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-right">Adicionales</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1034,11 +1096,23 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                   <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.totalLength)}</td>
                   <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{format2(normalizePipeStageMeters(r.totalLength, r.units, pipeStagesByGroup[r.groupKey] ?? derivePipeStagesFromStatusLength(r.units, r.statusLength)).pendiente)}</td>
                   <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.waste)}</td>
+                  <td className="px-4 py-2 text-right">
+                    <input
+                      type="number"
+                      min={0}
+                      value={pipeAdditionsByGroup[r.groupKey] ?? 0}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        setPipeAdditionsByGroup((prev) => ({ ...prev, [r.groupKey]: Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0 }));
+                      }}
+                      className="w-20 text-right bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono"
+                    />
+                  </td>
                 </tr>
               ))}
               {pipePurchaseSummary.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-4 py-8 text-center text-slate-400 text-xs italic">
+                  <td colSpan={13} className="px-4 py-8 text-center text-slate-400 text-xs italic">
                     No hay tuberías con longitud para resumir con los filtros actuales.
                   </td>
                 </tr>
@@ -1058,12 +1132,13 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Pedido</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Comprado</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Almacén</th>
-                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-right">Instalado</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Instalado</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-right">Adicionales</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {unionsPurchaseSummary.map((r) => (
-                <tr key={`${r.tipo}||${r.diameter}`}>
+                <tr key={r.groupKey}>
                   <td className="px-4 py-2 text-xs font-bold text-slate-700">{r.tipo}</td>
                   <td className="px-4 py-2 text-xs text-slate-700">{r.diameter}</td>
                   {(() => {
@@ -1116,6 +1191,18 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                             className="w-20 text-right bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono"
                           />
                         </td>
+                        <td className="px-4 py-2 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            value={unionAdditionsByGroup[r.groupKey] ?? 0}
+                            onChange={(e) => {
+                              const n = Number(e.target.value);
+                              setUnionAdditionsByGroup((prev) => ({ ...prev, [r.groupKey]: Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0 }));
+                            }}
+                            className="w-20 text-right bg-white border border-slate-200 rounded px-2 py-1 text-xs font-mono"
+                          />
+                        </td>
                       </>
                     );
                   })()}
@@ -1123,7 +1210,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
               ))}
               {unionsPurchaseSummary.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-slate-400 text-xs italic">
+                  <td colSpan={9} className="px-4 py-8 text-center text-slate-400 text-xs italic">
                     No hay uniones de tubería para resumir con los filtros actuales.
                   </td>
                 </tr>
