@@ -158,6 +158,20 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     return { pendiente, pedido, comprado, almacen, instalado: installed };
   };
 
+  const normalizePipeStageMeters = (totalLength: number, totalUnits: number, st: PipeStageState | undefined) => {
+    const units = normalizePipeStages(totalUnits, st);
+    let remaining = Math.max(0, totalLength);
+    const instalado = Math.min(remaining, units.instalado * 6);
+    remaining -= instalado;
+    const almacen = Math.min(remaining, units.almacen * 6);
+    remaining -= almacen;
+    const comprado = Math.min(remaining, units.comprado * 6);
+    remaining -= comprado;
+    const pedido = Math.min(remaining, units.pedido * 6);
+    remaining -= pedido;
+    return { pendiente: remaining, pedido, comprado, almacen, instalado };
+  };
+
   const movePipeStage = (totalUnits: number, current: PipeStageState | undefined, stage: 'pedido' | 'comprado' | 'almacen' | 'instalado', nextValue: number) => {
     const cur = normalizePipeStages(totalUnits, current);
     const target = Math.max(0, Math.floor(nextValue));
@@ -193,19 +207,17 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     return map;
   }, [elements]);
 
-  const applyPipeAssignmentsToModel = (groupKey: string, ids: string[], totalUnits: number, st: PipeStageState) => {
+  const applyPipeAssignmentsToModel = (groupKey: string, ids: string[], totalUnits: number, totalLength: number, st: PipeStageState) => {
     const items = ids
       .map((id) => {
         const el = elementsById.get(id);
         if (!el) return null;
-        const len = getMetric(el, 'LONGITUD INTEGRADO', 0);
-        const units = Math.max(1, Math.ceil(len / 6));
-        return { id, units };
+        const length = Math.max(0, getMetric(el, 'LONGITUD INTEGRADO', 0));
+        return { id, length };
       })
-      .filter(Boolean) as Array<{ id: string; units: number }>;
-    items.sort((a, b) => a.id.localeCompare(b.id, 'es'));
+      .filter(Boolean) as Array<{ id: string; length: number }>;
 
-    const tgt = normalizePipeStages(totalUnits, st);
+    const tgt = normalizePipeStageMeters(totalLength, totalUnits, st);
     let needInst = tgt.instalado;
     let needAlm = tgt.almacen;
     let needComp = tgt.comprado;
@@ -216,22 +228,22 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     for (const it of items) {
       if (needInst > 0) {
         assigned.INSTALADO.push(it.id);
-        needInst -= Math.min(it.units, needInst);
+        needInst -= it.length;
         continue;
       }
       if (needAlm > 0) {
         assigned.ALMACEN.push(it.id);
-        needAlm -= Math.min(it.units, needAlm);
+        needAlm -= it.length;
         continue;
       }
       if (needComp > 0) {
         assigned.COMPRADO.push(it.id);
-        needComp -= Math.min(it.units, needComp);
+        needComp -= it.length;
         continue;
       }
       if (needPed > 0) {
         assigned.PEDIDO.push(it.id);
-        needPed -= Math.min(it.units, needPed);
+        needPed -= it.length;
         continue;
       }
       assigned.PENDIENTE.push(it.id);
@@ -866,7 +878,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                       setPipeStagesByGroup((prev) => {
                         const next = movePipeStage(r.units, prev[r.groupKey], stage, value);
                         const updated = { ...prev, [r.groupKey]: next };
-                        applyPipeAssignmentsToModel(r.groupKey, r.ids, r.units, next);
+                        applyPipeAssignmentsToModel(r.groupKey, r.ids, r.units, r.totalLength, next);
                         return updated;
                       });
                     };
