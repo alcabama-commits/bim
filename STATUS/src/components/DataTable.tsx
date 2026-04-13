@@ -28,13 +28,14 @@ interface DataTableProps {
 }
 
 export default function DataTable({ elements, onSelectElement, selectedElementId, selectedElementIds, onSetSelectedElementIds, statuses, history, onChangeStatus, onChangeStatusMany, onClearFilters }: DataTableProps) {
+  const tableRowHeightKey = 'status:tableRowHeight';
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(400);
   const [activeTab, setActiveTab] = useState<'DETALLE' | 'ESTADOS' | 'HISTORIAL'>('DETALLE');
   const [bulkStatus, setBulkStatus] = useState<ConstructionStatus>('EN PROGRESO');
   const [rowHeight, setRowHeight] = useState(() => {
-    const stored = Number(localStorage.getItem('cantidades:tableRowHeight'));
+    const stored = Number(localStorage.getItem(tableRowHeightKey));
     return Number.isFinite(stored) && stored >= 18 && stored <= 40 ? stored : 24;
   });
   const selectedSet = useMemo(() => new Set(selectedElementIds ?? []), [selectedElementIds]);
@@ -152,10 +153,10 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
 
   useEffect(() => {
     try {
-      localStorage.setItem('cantidades:tableRowHeight', String(rowHeight));
+      localStorage.setItem(tableRowHeightKey, String(rowHeight));
     } catch {
     }
-  }, [rowHeight]);
+  }, [rowHeight, tableRowHeightKey]);
 
   const { paddingTop, paddingBottom, visibleElements, startIndex } = useMemo(() => {
     const safeScrollTop = Math.max(0, scrollTop);

@@ -129,6 +129,8 @@ const GITHUB_REPO = {
 const DRIVE_MODELS_FOLDER_ID = '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8';
 const DRIVE_SCRIPT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwz1XYlqzxUCLLsTeXsxW7uNzRiqRhT82OC_Y1dSt4iOvaWNFpAPWAZc74UE28iiwI/exec';
 const STATUS_SHEET_ID = '1GSaNTuafarE8l7VFlJNLJcu0GIXaNUS-VDwJ9UB9038';
+const STATUS_LS_PREFIX = 'status';
+const statusLsKey = (suffix: string) => `${STATUS_LS_PREFIX}:${suffix}`;
 
 const rawUrlFor = (path: string) =>
   `https://raw.githubusercontent.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/${GITHUB_REPO.branch}/${path.split('/').map(encodeURIComponent).join('/')}`;
@@ -175,21 +177,21 @@ export default function App() {
   const [timelineIndex, setTimelineIndex] = useState<number | null>(null);
 
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
-    const stored = Number(localStorage.getItem('cantidades:leftPanelWidth'));
+    const stored = Number(localStorage.getItem(statusLsKey('leftPanelWidth')));
     return Number.isFinite(stored) && stored > 0 ? stored : 300;
   });
   const [rightPanelWidth, setRightPanelWidth] = useState(() => {
-    const stored = Number(localStorage.getItem('cantidades:rightPanelWidth'));
+    const stored = Number(localStorage.getItem(statusLsKey('rightPanelWidth')));
     return Number.isFinite(stored) && stored > 0 ? stored : 320;
   });
-  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(() => localStorage.getItem('cantidades:leftPanelCollapsed') === 'true');
-  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(() => localStorage.getItem('cantidades:rightPanelCollapsed') === 'true');
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(() => localStorage.getItem(statusLsKey('leftPanelCollapsed')) === 'true');
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(() => localStorage.getItem(statusLsKey('rightPanelCollapsed')) === 'true');
   const [tablePanelHeight, setTablePanelHeight] = useState(() => {
-    const stored = Number(localStorage.getItem('cantidades:tablePanelHeight'));
+    const stored = Number(localStorage.getItem(statusLsKey('tablePanelHeight')));
     return Number.isFinite(stored) && stored > 0 ? stored : 320;
   });
   const [isTableVisible, setIsTableVisible] = useState(() => {
-    const raw = localStorage.getItem('cantidades:isTableVisible');
+    const raw = localStorage.getItem(statusLsKey('isTableVisible'));
     if (raw === null) return true;
     return raw === 'true';
   });
@@ -197,17 +199,17 @@ export default function App() {
   const [isViewerMaximized, setIsViewerMaximized] = useState(false);
   const [isUpdatingApp, setIsUpdatingApp] = useState(false);
   const [isRefreshingProgress, setIsRefreshingProgress] = useState(false);
-  const [isTableDocked, setIsTableDocked] = useState(() => localStorage.getItem('cantidades:isTableDocked') === 'true');
+  const [isTableDocked, setIsTableDocked] = useState(() => localStorage.getItem(statusLsKey('isTableDocked')) === 'true');
   const [timelineDayWidth, setTimelineDayWidth] = useState(() => {
-    const v = Number(localStorage.getItem('cantidades:timelineDayWidth'));
+    const v = Number(localStorage.getItem(statusLsKey('timelineDayWidth')));
     return Number.isFinite(v) && v >= 24 && v <= 64 ? v : 44;
   });
   const [timelineLevelsLevelColWidth, setTimelineLevelsLevelColWidth] = useState(() => {
-    const v = Number(localStorage.getItem('cantidades:timelineLevelsLevelColWidth'));
+    const v = Number(localStorage.getItem(statusLsKey('timelineLevelsLevelColWidth')));
     return Number.isFinite(v) && v >= 180 && v <= 600 ? v : 360;
   });
   const [timelineLevelsDayColWidth, setTimelineLevelsDayColWidth] = useState(() => {
-    const v = Number(localStorage.getItem('cantidades:timelineLevelsDayColWidth'));
+    const v = Number(localStorage.getItem(statusLsKey('timelineLevelsDayColWidth')));
     return Number.isFinite(v) && v >= 90 && v <= 260 ? v : 160;
   });
   const [isMobileLayout, setIsMobileLayout] = useState(() => {
@@ -306,25 +308,25 @@ export default function App() {
   const [appliedPileNumbers, setAppliedPileNumbers] = useState<string[]>([]);
   const [, startTransition] = useTransition();
   const [showPileNumberLabels, setShowPileNumberLabels] = useState(() => {
-    const raw = localStorage.getItem('cantidades:showPileNumberLabels');
+    const raw = localStorage.getItem(statusLsKey('showPileNumberLabels'));
     if (raw === null) return false;
     return raw === 'true';
   });
   const [showTimelineLevelsDetail, setShowTimelineLevelsDetail] = useState(() => {
-    const raw = localStorage.getItem('cantidades:showTimelineLevelsDetail');
+    const raw = localStorage.getItem(statusLsKey('showTimelineLevelsDetail'));
     if (raw === null) return false;
     return raw === 'true';
   });
   const [isTimelineSummaryMaximized, setIsTimelineSummaryMaximized] = useState(false);
   const [isIsolateMode, setIsIsolateMode] = useState(false);
   const [statusColorsEnabled, setStatusColorsEnabled] = useState(() => {
-    const raw = localStorage.getItem('cantidades:statusColorsEnabled');
+    const raw = localStorage.getItem(statusLsKey('statusColorsEnabled'));
     if (raw === null) return true;
     return raw === 'true';
   });
   const [statusVisibility, setStatusVisibility] = useState<Record<ConstructionStatus, boolean>>(() => {
     try {
-      const raw = localStorage.getItem('cantidades:statusVisibility');
+      const raw = localStorage.getItem(statusLsKey('statusVisibility'));
       if (!raw) {
         return { 'NINGUNO': true, 'EN PROGRESO': true, 'PARA INSPECCION': true, 'APROBADO': true, 'CERRADO': true, 'RECHAZADO': true };
       }
@@ -354,19 +356,19 @@ export default function App() {
     }
   });
   const [gridVisible, setGridVisible] = useState(() => {
-    const raw = localStorage.getItem('cantidades:gridVisible');
+    const raw = localStorage.getItem(statusLsKey('gridVisible'));
     if (raw === null) return true;
     return raw === 'true';
   });
   const [timelineBarOpen, setTimelineBarOpen] = useState(() => {
-    const raw = localStorage.getItem('cantidades:timelineBarOpen');
+    const raw = localStorage.getItem(statusLsKey('timelineBarOpen'));
     if (raw === null) return true;
     return raw === 'true';
   });
 
   useEffect(() => {
     try {
-      localStorage.setItem('cantidades:statusVisibility', JSON.stringify(statusVisibility));
+      localStorage.setItem(statusLsKey('statusVisibility'), JSON.stringify(statusVisibility));
     } catch {
     }
   }, [statusVisibility]);
@@ -394,12 +396,12 @@ export default function App() {
   const statusStorageKey = useMemo(() => {
     const base = selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'local';
     const safe = base.trim().toLowerCase();
-    return `cantidades:statuses:${safe}`;
+    return statusLsKey(`statuses:${safe}`);
   }, [selectedRemoteModelName]);
   const historyStorageKey = useMemo(() => {
     const base = selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'local';
     const safe = base.trim().toLowerCase();
-    return `cantidades:history:${safe}`;
+    return statusLsKey(`history:${safe}`);
   }, [selectedRemoteModelName]);
 
   useEffect(() => {
@@ -722,62 +724,62 @@ export default function App() {
   }, [elementHistory, elementStatuses, elements, timelineDate]);
 
   useEffect(() => {
-    localStorage.setItem('cantidades:leftPanelWidth', String(leftPanelWidth));
+    localStorage.setItem(statusLsKey('leftPanelWidth'), String(leftPanelWidth));
   }, [leftPanelWidth]);
 
   useEffect(() => {
-    localStorage.setItem('cantidades:rightPanelWidth', String(rightPanelWidth));
+    localStorage.setItem(statusLsKey('rightPanelWidth'), String(rightPanelWidth));
   }, [rightPanelWidth]);
 
   useEffect(() => {
-    localStorage.setItem('cantidades:leftPanelCollapsed', String(leftPanelCollapsed));
+    localStorage.setItem(statusLsKey('leftPanelCollapsed'), String(leftPanelCollapsed));
   }, [leftPanelCollapsed]);
 
   useEffect(() => {
-    localStorage.setItem('cantidades:rightPanelCollapsed', String(rightPanelCollapsed));
+    localStorage.setItem(statusLsKey('rightPanelCollapsed'), String(rightPanelCollapsed));
   }, [rightPanelCollapsed]);
 
   useEffect(() => {
-    localStorage.setItem('cantidades:tablePanelHeight', String(tablePanelHeight));
+    localStorage.setItem(statusLsKey('tablePanelHeight'), String(tablePanelHeight));
   }, [tablePanelHeight]);
 
   useEffect(() => {
-    localStorage.setItem('cantidades:isTableVisible', String(isTableVisible));
+    localStorage.setItem(statusLsKey('isTableVisible'), String(isTableVisible));
   }, [isTableVisible]);
 
   useEffect(() => {
-    localStorage.setItem('cantidades:isTableDocked', String(isTableDocked));
+    localStorage.setItem(statusLsKey('isTableDocked'), String(isTableDocked));
   }, [isTableDocked]);
 
   useEffect(() => {
-    localStorage.setItem('cantidades:timelineDayWidth', String(timelineDayWidth));
+    localStorage.setItem(statusLsKey('timelineDayWidth'), String(timelineDayWidth));
   }, [timelineDayWidth]);
 
   useEffect(() => {
-    localStorage.setItem('cantidades:timelineLevelsLevelColWidth', String(timelineLevelsLevelColWidth));
+    localStorage.setItem(statusLsKey('timelineLevelsLevelColWidth'), String(timelineLevelsLevelColWidth));
   }, [timelineLevelsLevelColWidth]);
 
   useEffect(() => {
-    localStorage.setItem('cantidades:timelineLevelsDayColWidth', String(timelineLevelsDayColWidth));
+    localStorage.setItem(statusLsKey('timelineLevelsDayColWidth'), String(timelineLevelsDayColWidth));
   }, [timelineLevelsDayColWidth]);
   useEffect(() => {
-    localStorage.setItem('cantidades:statusColorsEnabled', String(statusColorsEnabled));
+    localStorage.setItem(statusLsKey('statusColorsEnabled'), String(statusColorsEnabled));
   }, [statusColorsEnabled]);
 
   useEffect(() => {
-    localStorage.setItem('cantidades:gridVisible', String(gridVisible));
+    localStorage.setItem(statusLsKey('gridVisible'), String(gridVisible));
   }, [gridVisible]);
 
   useEffect(() => {
-    localStorage.setItem('cantidades:timelineBarOpen', String(timelineBarOpen));
+    localStorage.setItem(statusLsKey('timelineBarOpen'), String(timelineBarOpen));
   }, [timelineBarOpen]);
 
   useEffect(() => {
-    localStorage.setItem('cantidades:showPileNumberLabels', String(showPileNumberLabels));
+    localStorage.setItem(statusLsKey('showPileNumberLabels'), String(showPileNumberLabels));
   }, [showPileNumberLabels]);
 
   useEffect(() => {
-    localStorage.setItem('cantidades:showTimelineLevelsDetail', String(showTimelineLevelsDetail));
+    localStorage.setItem(statusLsKey('showTimelineLevelsDetail'), String(showTimelineLevelsDetail));
   }, [showTimelineLevelsDetail]);
 
   const startHorizontalDrag = useCallback((startEvent: React.PointerEvent, onDeltaX: (dx: number) => void) => {

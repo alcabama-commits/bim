@@ -1594,8 +1594,8 @@ export default function App() {
 
         <div className="flex items-center gap-4">
           <img
-            src="https://i.postimg.cc/Hsrt7fXx/LOGO-TREVOLY.jpg"
-            alt="TREVOLY"
+            src="https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg"
+            alt="Arboré"
             className="h-10 w-auto object-contain"
             loading="eager"
             decoding="async"
