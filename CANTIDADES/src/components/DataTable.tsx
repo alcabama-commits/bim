@@ -552,6 +552,111 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     return { count: elements.length, area, length, volume };
   }, [elements]);
 
+  const escapeCsvCell = (value: unknown) => {
+    const text = String(value ?? '');
+    if (/[;"\r\n]/.test(text)) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+  };
+
+  const downloadCsv = (rows: Array<Array<unknown>>, baseName: string) => {
+    const content = rows.map((row) => row.map(escapeCsvCell).join(';')).join('\r\n');
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${baseName}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCurrentTab = () => {
+    const safeModel = (modelKey || 'local').replace(/[^\w.-]+/g, '_');
+    if (activeTab === 'DETALLE') {
+      const rows: Array<Array<unknown>> = [[
+        'Sel', 'Estado', 'Clasificación', 'Tipo', 'Categoría', 'Elemento', 'Detalle', 'Material Integrado', 'Ubicación', 'Área M2', 'Longitud M', 'Volumen M3'
+      ]];
+      for (const el of elements) {
+        const st = statuses[el.id] ?? 'PENDIENTE';
+        const tipoRaw = getProp(el, "NOMBRE INTEGRADO");
+        const tipo = tipoRaw !== '-' && tipoRaw !== '' ? tipoRaw : el.name;
+        rows.push([
+          selectedSet.has(el.id) ? 'X' : '',
+          st,
+          (() => {
+            const v = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]);
+            return v !== '-' ? v : 'SIN CLASIFICAR';
+          })(),
+          tipo,
+          el.category ?? '',
+          getProp(el, "NOMBRE INTEGRADO") || el.name,
+          getProp(el, "DETALLE") || '-',
+          getProp(el, "MATERIAL INTEGRADO"),
+          getProp(el, "NIVEL INTEGRADO"),
+          format2FromRaw(getProp(el, "AREA INTEGRADO")),
+          format2FromRaw(getProp(el, "LONGITUD INTEGRADO")),
+          format2FromRaw(getProp(el, "VOLUMEN INTEGRADO"), el.volume)
+        ]);
+      }
+      downloadCsv(rows, `${safeModel}_detalle`);
+      return;
+    }
+    if (activeTab === 'ESTADOS') {
+      const rows: Array<Array<unknown>> = [['Estado', 'Cantidad', 'Área m2', 'Longitud m', 'Volumen m3']];
+      for (const st of STATUS_ORDER) {
+        const v = statusTotals[st];
+        rows.push([st, v.count, format2(v.area), format2(v.length), format2(v.volume)]);
+      }
+      rows.push(['TOTAL', totals.count, format2(totals.area), format2(totals.length), format2(totals.volume)]);
+      downloadCsv(rows, `${safeModel}_estados`);
+      return;
+    }
+    if (activeTab === 'HISTORIAL') {
+      const rows: Array<Array<unknown>> = [['ID', 'Tipo', ...STATUS_ORDER]];
+      for (const el of elements) {
+        const tipoRaw = getProp(el, "NOMBRE INTEGRADO");
+        const tipo = tipoRaw !== '-' && tipoRaw !== '' ? tipoRaw : el.name;
+        const entries = (history?.[el.id] ?? []).slice().sort((a, b) => a.at.localeCompare(b.at));
+        const latestByStatus = new Map<PurchaseStatus, string>();
+        for (const entry of entries) latestByStatus.set(entry.status, entry.at);
+        rows.push([el.id, tipo, ...STATUS_ORDER.map((st) => latestByStatus.get(st) ?? '-')]);
+      }
+      downloadCsv(rows, `${safeModel}_historial`);
+      return;
+    }
+    if (activeTab === 'TUBERIAS') {
+      const rows: Array<Array<unknown>> = [[
+        'Tipo', 'Diámetro', 'Nivel', 'Unidades (6m)', 'Pendiente', 'Pedido', 'Comprado', 'Almacén', 'Instalado', 'Longitud total (m)', 'Restante (m)', 'Desperdicio (m)', 'Adicionales'
+      ]];
+      for (const r of pipePurchaseSummary) {
+        const baseState = pipeStagesByGroup[r.groupKey] ?? derivePipeStagesFromStatusLength(r.units, r.statusLength);
+        const display = normalizePipeStages(r.units, baseState);
+        const remaining = normalizePipeStageMeters(r.totalLength, r.units, baseState).pendiente;
+        rows.push([
+          r.tipo, r.diameter, r.level, r.units, display.pendiente, display.pedido, display.comprado, display.almacen, display.instalado,
+          format2(r.totalLength), format2(remaining), format2(r.waste), pipeAdditionsByGroup[r.groupKey] ?? 0
+        ]);
+      }
+      downloadCsv(rows, `${safeModel}_tuberias`);
+      return;
+    }
+    if (activeTab === 'UNIONES') {
+      const rows: Array<Array<unknown>> = [[
+        'Tipo', 'Diámetro', 'Unidades totales', 'Unidades pendientes', 'Pedido', 'Comprado', 'Almacén', 'Instalado', 'Adicionales'
+      ]];
+      for (const r of unionsPurchaseSummary) {
+        const display = normalizeUnionStages(r.count, r.statusCount);
+        rows.push([
+          r.tipo, r.diameter, r.count, display.pendiente, display.pedido, display.comprado, display.almacen, display.instalado, unionAdditionsByGroup[r.groupKey] ?? 0
+        ]);
+      }
+      downloadCsv(rows, `${safeModel}_uniones`);
+    }
+  };
+
   const statusTotals = useMemo(() => {
     const base: Record<PurchaseStatus, { count: number; area: number; length: number; volume: number }> = {
       PENDIENTE: { count: 0, area: 0, length: 0, volume: 0 },
@@ -733,6 +838,14 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
               Uniones
             </button>
           )}
+          <button
+            type="button"
+            onClick={exportCurrentTab}
+            className="px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest border transition-colors bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+            title="Descargar CSV separado por punto y coma"
+          >
+            Exportar CSV
+          </button>
         </div>
 
         <div className="text-[10px] text-slate-600 font-bold uppercase tracking-widest flex items-center gap-4">
