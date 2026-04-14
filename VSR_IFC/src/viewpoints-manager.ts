@@ -870,10 +870,12 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         }
 
         let users: ActiveUser[] = [];
+        let usersLoadError = '';
         try {
             users = await this._repository.loadActiveUsers();
         } catch (e) {
             console.warn('[Viewpoints] No se pudo cargar la lista de usuarios activos:', e);
+            usersLoadError = e instanceof Error ? e.message : 'No se pudo cargar la lista de usuarios activos.';
         }
 
         const currentList = Array.isArray(view.sharedWith) ? view.sharedWith : [];
@@ -886,7 +888,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             if (!userMap.has(key)) userMap.set(key, { ...user, id: String(user.id).trim() });
         }
         const selectableUsers = Array.from(userMap.values()).sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, 'es'));
-        const selection = await this.openShareUsersModal(view.title, selectableUsers, currentList);
+        const selection = await this.openShareUsersModal(view.title, selectableUsers, currentList, usersLoadError);
         if (selection === null) return;
         view.sharedWith = selection;
 
@@ -911,7 +913,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         }
     }
 
-    private openShareUsersModal(title: string, users: ActiveUser[], preselected: string[]): Promise<string[] | null> {
+    private openShareUsersModal(title: string, users: ActiveUser[], preselected: string[], loadError: string = ''): Promise<string[] | null> {
         return new Promise((resolve) => {
             const overlay = document.createElement('div');
             overlay.style.position = 'fixed';
@@ -946,6 +948,12 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             sub.style.color = '#aaa';
             sub.textContent = 'Selecciona usuarios dentro de la plataforma (no se envía correo).';
 
+            const warning = document.createElement('div');
+            warning.style.fontSize = '11px';
+            warning.style.color = '#fca5a5';
+            warning.style.display = loadError ? 'block' : 'none';
+            warning.textContent = loadError ? `No se pudo cargar la hoja de usuarios: ${loadError}` : '';
+
             const search = document.createElement('input');
             search.type = 'text';
             search.placeholder = 'Buscar usuario...';
@@ -958,6 +966,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
             header.appendChild(h);
             header.appendChild(sub);
+            header.appendChild(warning);
             header.appendChild(search);
 
             const list = document.createElement('div');
@@ -988,7 +997,9 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                     const empty = document.createElement('div');
                     empty.style.padding = '10px';
                     empty.style.color = '#888';
-                    empty.textContent = 'No hay usuarios para mostrar.';
+                    empty.textContent = loadError
+                        ? 'No se pudieron cargar usuarios desde la plataforma.'
+                        : 'No hay usuarios para mostrar.';
                     list.appendChild(empty);
                     return;
                 }

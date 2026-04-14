@@ -249,6 +249,9 @@ export class ViewpointRepository {
             const response = await fetch(`${VIEWPOINTS_API_URL}?action=users&t=${Date.now()}`);
             if (!response.ok) return [];
             const data = await response.json();
+            if (data && typeof data === 'object' && !Array.isArray(data) && data.status === 'error') {
+                throw new Error(String(data.message || 'No se pudo cargar la lista de usuarios.'));
+            }
             const rawUsers = Array.isArray(data)
                 ? data
                 : Array.isArray(data?.users)
