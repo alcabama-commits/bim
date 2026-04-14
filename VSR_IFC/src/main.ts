@@ -5303,6 +5303,74 @@ function setupViewpoints() {
     }
 }
 
+const LOGIN_URL = 'https://alcabama-commits.github.io/bim/inse.html';
+
+function getStoredUserAccount() {
+    const userAccountStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+    if (!userAccountStr) return null;
+    try {
+        const userAccount = JSON.parse(userAccountStr);
+        if (!userAccount || typeof userAccount !== 'object') return null;
+        return userAccount;
+    } catch (e) {
+        console.error('[Auth] Error parsing user account:', e);
+        return null;
+    }
+}
+
+function enforceAuthenticatedAccess() {
+    const app = document.getElementById('app');
+    if (!app) return;
+    const userAccount = getStoredUserAccount();
+    const existingGate = document.getElementById('auth-gate-overlay');
+
+    if (userAccount) {
+        existingGate?.remove();
+        app.style.pointerEvents = '';
+        app.style.userSelect = '';
+        app.style.filter = '';
+        document.body.style.overflow = '';
+        return;
+    }
+
+    if (existingGate) return;
+
+    app.style.pointerEvents = 'none';
+    app.style.userSelect = 'none';
+    app.style.filter = 'blur(4px)';
+    document.body.style.overflow = 'hidden';
+
+    const overlay = document.createElement('div');
+    overlay.id = 'auth-gate-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.zIndex = '10000';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.padding = '24px';
+    overlay.style.background = 'linear-gradient(135deg, rgba(7, 25, 44, 0.88), rgba(9, 88, 112, 0.78))';
+    overlay.innerHTML = `
+        <div style="width:min(520px, 100%); background:#ffffff; border-radius:20px; padding:32px; box-shadow:0 30px 80px rgba(0,0,0,0.25); text-align:center; font-family:Inter, Arial, sans-serif;">
+            <div style="width:72px; height:72px; margin:0 auto 18px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#eff6ff; color:#0f766e; font-size:28px;">
+                <i class="fa-solid fa-lock"></i>
+            </div>
+            <h1 style="margin:0 0 10px; font-size:28px; line-height:1.15; color:#0f172a;">Inicia sesión para continuar</h1>
+            <p style="margin:0 0 22px; font-size:15px; line-height:1.6; color:#475569;">
+                Debes autenticarte para acceder al visor VSR IFC. Si abriste este enlace directamente, primero inicia sesión y luego vuelve a entrar.
+            </p>
+            <a href="${LOGIN_URL}" style="display:inline-flex; align-items:center; justify-content:center; gap:10px; min-width:220px; padding:14px 18px; border-radius:12px; background:#0f766e; color:#fff; text-decoration:none; font-weight:700; font-size:15px;">
+                <i class="fa-solid fa-right-to-bracket"></i>
+                <span>Ir a iniciar sesión</span>
+            </a>
+            <p style="margin:16px 0 0; font-size:12px; color:#64748b;">
+                Cuando tu sesión esté activa, recarga esta página para ingresar.
+            </p>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+}
+
 // Initialize Viewpoints
 setupViewpoints();
 
@@ -5317,12 +5385,10 @@ function setupUserAuthentication() {
         return;
     }
 
-    // Try to get user from sessionStorage or localStorage
-    const userAccountStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+    const userAccount = getStoredUserAccount();
     
-    if (userAccountStr) {
+    if (userAccount) {
         try {
-            const userAccount = JSON.parse(userAccountStr);
             console.log('[Auth] User found:', userAccount.name);
             
             // User Name Display
@@ -5387,7 +5453,7 @@ function setupUserAuthentication() {
             userContainer.appendChild(logoutBtn);
             
         } catch (e) {
-            console.error('[Auth] Error parsing user account:', e);
+            console.error('[Auth] Error rendering user account:', e);
             renderGuestMode(userContainer);
         }
     } else {
@@ -5398,8 +5464,7 @@ function setupUserAuthentication() {
 
 function renderGuestMode(container: HTMLElement) {
     const loginLink = document.createElement('a');
-    // Use the production URL for login
-    loginLink.href = "https://alcabama-commits.github.io/bim/inse.html"; 
+    loginLink.href = LOGIN_URL; 
     loginLink.innerHTML = '<i class="fa-solid fa-user"></i> <span style="margin-left:5px; font-size:14px;">Iniciar Sesión</span>';
     loginLink.style.textDecoration = "none";
     loginLink.style.color = "var(--primary-color)"; // Brand color
@@ -5412,6 +5477,7 @@ function renderGuestMode(container: HTMLElement) {
 }
 
 // Call it
+enforceAuthenticatedAccess();
 setupUserAuthentication();
 
 // --- Test Runner ---
