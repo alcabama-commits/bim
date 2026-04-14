@@ -5349,21 +5349,22 @@ function enforceAuthenticatedAccess() {
     overlay.style.alignItems = 'center';
     overlay.style.justifyContent = 'center';
     overlay.style.padding = '24px';
-    overlay.style.background = 'linear-gradient(135deg, rgba(7, 25, 44, 0.88), rgba(9, 88, 112, 0.78))';
+    overlay.style.background = 'radial-gradient(circle at top, rgba(211, 4, 92, 0.22), rgba(211, 4, 92, 0) 30%), linear-gradient(135deg, rgba(255,255,255,0.96), rgba(245,245,245,0.96))';
     overlay.innerHTML = `
-        <div style="width:min(520px, 100%); background:#ffffff; border-radius:20px; padding:32px; box-shadow:0 30px 80px rgba(0,0,0,0.25); text-align:center; font-family:Inter, Arial, sans-serif;">
-            <div style="width:72px; height:72px; margin:0 auto 18px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#eff6ff; color:#0f766e; font-size:28px;">
+        <div style="width:min(520px, 100%); background:#ffffff; border:1px solid rgba(211, 4, 92, 0.14); border-radius:24px; padding:36px 32px; box-shadow:0 30px 80px rgba(96, 94, 98, 0.18); text-align:center; font-family:Inter, Arial, sans-serif;">
+            <img src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png" alt="Alcabama" style="height:44px; width:auto; margin:0 auto 22px; display:block;" />
+            <div style="width:72px; height:72px; margin:0 auto 18px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(211, 4, 92, 0.08); color:#d3045c; font-size:28px;">
                 <i class="fa-solid fa-lock"></i>
             </div>
-            <h1 style="margin:0 0 10px; font-size:28px; line-height:1.15; color:#0f172a;">Inicia sesión para continuar</h1>
-            <p style="margin:0 0 22px; font-size:15px; line-height:1.6; color:#475569;">
+            <h1 style="margin:0 0 10px; font-size:28px; line-height:1.15; color:#1f1f1f;">Inicia sesión para continuar</h1>
+            <p style="margin:0 0 22px; font-size:15px; line-height:1.6; color:#605e62;">
                 Debes autenticarte para acceder al visor VSR IFC. Si abriste este enlace directamente, primero inicia sesión y luego vuelve a entrar.
             </p>
-            <a href="${LOGIN_URL}" style="display:inline-flex; align-items:center; justify-content:center; gap:10px; min-width:220px; padding:14px 18px; border-radius:12px; background:#0f766e; color:#fff; text-decoration:none; font-weight:700; font-size:15px;">
+            <a href="${LOGIN_URL}" style="display:inline-flex; align-items:center; justify-content:center; gap:10px; min-width:220px; padding:14px 18px; border-radius:12px; background:#d3045c; color:#fff; text-decoration:none; font-weight:700; font-size:15px; box-shadow:0 12px 28px rgba(211, 4, 92, 0.28);">
                 <i class="fa-solid fa-right-to-bracket"></i>
                 <span>Ir a iniciar sesión</span>
             </a>
-            <p style="margin:16px 0 0; font-size:12px; color:#64748b;">
+            <p style="margin:16px 0 0; font-size:12px; color:#a49fa6;">
                 Cuando tu sesión esté activa, recarga esta página para ingresar.
             </p>
         </div>
