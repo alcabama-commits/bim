@@ -107,6 +107,29 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         this._stateProvider = provider;
     }
 
+    private isCurrentUser(userId?: string | null) {
+        if (!userId || !this._currentUserId) return false;
+        return String(userId).trim().toLowerCase() === String(this._currentUserId).trim().toLowerCase();
+    }
+
+    private collectKnownUsers(): ActiveUser[] {
+        const users = new Map<string, ActiveUser>();
+        for (const view of this._savedViewpoints) {
+            const rawId = String(view.userId || '').trim();
+            if (!rawId) continue;
+            const key = rawId.toLowerCase();
+            if (this.isCurrentUser(rawId)) continue;
+            if (!users.has(key)) {
+                users.set(key, {
+                    id: rawId,
+                    name: rawId,
+                    email: rawId.includes('@') ? rawId.toLowerCase() : undefined
+                });
+            }
+        }
+        return Array.from(users.values());
+    }
+
     // --- Repository Integration ---
 
     async importViewpointFromFile(file: File) {
@@ -664,21 +687,22 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             filtered = filtered.filter(v => v.title.toLowerCase().includes(filterTerm) || v.category.toLowerCase().includes(filterTerm));
         }
 
-        // Group by category
+        const ownedViews = filtered.filter(v => this.isCurrentUser(v.userId));
+        const sharedViews = filtered.filter(v => !this.isCurrentUser(v.userId));
+
         const categories: {[key: string]: ViewpointData[]} = {};
-        filtered.forEach(v => {
+        ownedViews.forEach(v => {
             const cat = v.category || 'General';
             if (!categories[cat]) categories[cat] = [];
             categories[cat].push(v);
         });
 
-        if (Object.keys(categories).length === 0) {
+        if (Object.keys(categories).length === 0 && sharedViews.length === 0) {
             this._listContainer.innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">No hay vistas guardadas</div>';
             return;
         }
 
-        // Render groups
-        for (const [cat, views] of Object.entries(categories)) {
+        const renderGroup = (cat: string, views: ViewpointData[], sectionName?: string) => {
             const groupDiv = document.createElement('div');
             groupDiv.className = 'viewpoint-group';
             groupDiv.style.marginBottom = '10px';
@@ -686,7 +710,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             // Header
             groupDiv.innerHTML = `
                 <div style="background: #444; padding: 5px 10px; font-weight: bold; font-size: 12px; border-radius: 4px 4px 0 0; display: flex; align-items: center; justify-content: space-between;">
-                    <span>${cat}</span>
+                    <span>${sectionName ? `${sectionName} / ${cat}` : cat}</span>
                     <span style="font-size: 10px; background: #666; padding: 2px 6px; border-radius: 10px;">${views.length}</span>
                 </div>
             `;
@@ -710,17 +734,21 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 
                 // Format date
                 const date = new Date(v.date).toLocaleDateString();
+                const isOwned = this.isCurrentUser(v.userId);
+                const metaLine = isOwned
+                    ? date
+                    : `${date} • Compartida por ${v.userId}`;
                 
                 item.innerHTML = `
                     <div style="display: flex; flex-direction: column; overflow: hidden; width: 60%;">
                         <span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${v.title}</span>
-                        <span style="font-size: 10px; color: #aaa;">${date}</span>
+                        <span style="font-size: 10px; color: #aaa;">${metaLine}</span>
                     </div>
                     <div style="display: flex; gap: 5px;">
-                        ${v.userId === this._currentUserId ? `<button class="share-view-btn" title="Compartir" style="background:none; border:none; color: #ff9800; cursor: pointer;"><i class="fa-solid fa-share-nodes"></i></button>` : ``}
+                        ${isOwned ? `<button class="share-view-btn" title="Compartir" style="background:none; border:none; color: #ff9800; cursor: pointer;"><i class="fa-solid fa-share-nodes"></i></button>` : ``}
                         <button class="restore-view-btn" title="Restaurar" style="background:none; border:none; color: #4caf50; cursor: pointer;"><i class="fa-solid fa-eye"></i></button>
-                        <button class="export-view-btn" title="Exportar a Repositorio" style="background:none; border:none; color: #2196f3; cursor: pointer;"><i class="fa-solid fa-file-export"></i></button>
-                        <button class="delete-view-btn" title="Eliminar" style="background:none; border:none; color: #e91e63; cursor: pointer;"><i class="fa-solid fa-trash"></i></button>
+                        ${isOwned ? `<button class="export-view-btn" title="Exportar a Repositorio" style="background:none; border:none; color: #2196f3; cursor: pointer;"><i class="fa-solid fa-file-export"></i></button>` : ``}
+                        ${isOwned ? `<button class="delete-view-btn" title="Eliminar" style="background:none; border:none; color: #e91e63; cursor: pointer;"><i class="fa-solid fa-trash"></i></button>` : ``}
                     </div>
                 `;
                 
@@ -772,6 +800,22 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             
             groupDiv.appendChild(listDiv);
             this._listContainer.appendChild(groupDiv);
+        };
+
+        for (const [cat, views] of Object.entries(categories)) {
+            renderGroup(cat, views);
+        }
+
+        if (sharedViews.length > 0) {
+            const sharedByCategory: {[key: string]: ViewpointData[]} = {};
+            sharedViews.forEach(v => {
+                const cat = v.category || 'General';
+                if (!sharedByCategory[cat]) sharedByCategory[cat] = [];
+                sharedByCategory[cat].push(v);
+            });
+            for (const [cat, views] of Object.entries(sharedByCategory)) {
+                renderGroup(cat, views, 'Compartidas');
+            }
         }
     }
 
@@ -833,7 +877,15 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         }
 
         const currentList = Array.isArray(view.sharedWith) ? view.sharedWith : [];
-        const selectableUsers = users.filter(u => u?.id && u.id !== this._currentUserId);
+        const mergedUsers = [...users, ...this.collectKnownUsers(), ...currentList.map(id => ({ id, name: id, email: id.includes('@') ? id : undefined }))];
+        const userMap = new Map<string, ActiveUser>();
+        for (const user of mergedUsers) {
+            if (!user?.id) continue;
+            const key = String(user.id).trim().toLowerCase();
+            if (!key || this.isCurrentUser(key)) continue;
+            if (!userMap.has(key)) userMap.set(key, { ...user, id: String(user.id).trim() });
+        }
+        const selectableUsers = Array.from(userMap.values()).sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, 'es'));
         const selection = await this.openShareUsersModal(view.title, selectableUsers, currentList);
         if (selection === null) return;
         view.sharedWith = selection;

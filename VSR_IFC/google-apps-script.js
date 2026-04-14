@@ -328,16 +328,24 @@ function listActiveUsers() {
       return -1;
     };
 
-    const colId = findCol(["id", "userid", "user_id", "uid"]);
-    const colEmail = findCol(["email", "correo", "mail", "e-mail"]);
-    const colName = findCol(["name", "nombre", "displayname", "display_name", "usuario", "user"]);
+    const colId = findCol(["id", "userid", "user_id", "uid", "usuario id", "identificador"]);
+    const colEmail = findCol(["email", "correo", "correo electronico", "correo electrónico", "mail", "e-mail"]);
+    const colName = findCol(["name", "nombre", "displayname", "display_name", "usuario", "user", "nombre completo"]);
+    const colActive = findCol(["activo", "active", "estado", "status", "habilitado", "enabled"]);
 
     const result = [];
     const seen = {};
+    const isActiveValue = function(value) {
+      if (colActive === -1) return true;
+      const raw = String(value || "").trim().toLowerCase();
+      if (!raw) return false;
+      return raw === "true" || raw === "1" || raw === "si" || raw === "sí" || raw === "yes" || raw === "activo" || raw === "active" || raw === "habilitado";
+    };
 
     for (let r = 1; r < values.length; r++) {
       const row = values[r];
       if (!row) continue;
+      if (!isActiveValue(row[colActive])) continue;
 
       const rawId = colId !== -1 ? String(row[colId] || "").trim() : "";
       const rawEmail = colEmail !== -1 ? String(row[colEmail] || "").trim() : "";

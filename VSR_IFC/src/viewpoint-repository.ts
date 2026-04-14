@@ -249,20 +249,52 @@ export class ViewpointRepository {
             const response = await fetch(`${VIEWPOINTS_API_URL}?action=users&t=${Date.now()}`);
             if (!response.ok) return [];
             const data = await response.json();
-            if (Array.isArray(data)) {
-                if (data.length > 0 && typeof data[0] === 'object' && data[0] !== null) {
-                    return data
-                        .map((u: any) => ({
-                            id: String(u.id ?? u.userId ?? u.email ?? '').trim(),
-                            name: String(u.name ?? u.displayName ?? u.email ?? u.id ?? '').trim(),
-                            email: u.email ? String(u.email).trim() : undefined
-                        }))
-                        .filter(u => u.id);
+            const rawUsers = Array.isArray(data)
+                ? data
+                : Array.isArray(data?.users)
+                    ? data.users
+                    : Array.isArray(data?.data)
+                        ? data.data
+                        : [];
+
+            if (Array.isArray(rawUsers)) {
+                const normalized = rawUsers
+                    .map((u: any) => {
+                        if (u && typeof u === 'object') {
+                            const id = String(
+                                u.id ??
+                                u.userId ??
+                                u.user_id ??
+                                u.email ??
+                                u.correo ??
+                                u.mail ??
+                                ''
+                            ).trim();
+                            const emailRaw = u.email ?? u.correo ?? u.mail ?? u['e-mail'];
+                            const email = emailRaw ? String(emailRaw).trim().toLowerCase() : undefined;
+                            const name = String(
+                                u.name ??
+                                u.nombre ??
+                                u.displayName ??
+                                u.display_name ??
+                                u.usuario ??
+                                email ??
+                                id
+                            ).trim();
+                            return { id, name, email };
+                        }
+                        const v = String(u ?? '').trim();
+                        return v ? { id: v, name: v } : null;
+                    })
+                    .filter((u): u is ActiveUser => !!u && !!u.id);
+
+                const deduped = new Map<string, ActiveUser>();
+                for (const user of normalized) {
+                    const key = user.id.trim().toLowerCase();
+                    if (!key) continue;
+                    if (!deduped.has(key)) deduped.set(key, user);
                 }
-                return data
-                    .map(v => String(v).trim())
-                    .filter(Boolean)
-                    .map(v => ({ id: v, name: v }));
+                return Array.from(deduped.values());
             }
             return [];
         } catch (e) {
