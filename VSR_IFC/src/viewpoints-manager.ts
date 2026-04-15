@@ -946,7 +946,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             const sub = document.createElement('div');
             sub.style.fontSize = '12px';
             sub.style.color = '#aaa';
-            sub.textContent = 'Selecciona usuarios dentro de la plataforma (no se envía correo).';
+            sub.textContent = 'Selecciona usuarios o agrega correos manualmente (no se envía correo).';
 
             const warning = document.createElement('div');
             warning.style.fontSize = '11px';
@@ -969,6 +969,34 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             header.appendChild(warning);
             header.appendChild(search);
 
+            const manualRow = document.createElement('div');
+            manualRow.style.display = 'flex';
+            manualRow.style.gap = '8px';
+            manualRow.style.marginTop = '6px';
+
+            const manualInput = document.createElement('input');
+            manualInput.type = 'text';
+            manualInput.placeholder = 'Agregar correo (ej: usuario@empresa.com)';
+            manualInput.style.flex = '1';
+            manualInput.style.padding = '8px';
+            manualInput.style.background = '#333';
+            manualInput.style.border = '1px solid #555';
+            manualInput.style.color = '#fff';
+            manualInput.style.borderRadius = '6px';
+
+            const addBtn = document.createElement('button');
+            addBtn.textContent = 'Añadir';
+            addBtn.style.padding = '8px 12px';
+            addBtn.style.background = '#333';
+            addBtn.style.border = '1px solid #555';
+            addBtn.style.color = '#fff';
+            addBtn.style.borderRadius = '8px';
+            addBtn.style.cursor = 'pointer';
+
+            manualRow.appendChild(manualInput);
+            manualRow.appendChild(addBtn);
+            header.appendChild(manualRow);
+
             const list = document.createElement('div');
             list.style.marginTop = '10px';
             list.style.maxHeight = '320px';
@@ -978,11 +1006,32 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             list.style.background = 'rgba(0,0,0,0.2)';
 
             const selected = new Set((preselected || []).map(v => String(v).trim()).filter(Boolean));
+            const allUsers: ActiveUser[] = Array.isArray(users) ? [...users] : [];
+
+            const normalizeEmail = (raw: string) => String(raw || '').trim().toLowerCase();
+            const isValidEmail = (raw: string) => {
+                const v = normalizeEmail(raw);
+                return v.includes('@') && v.includes('.') && v.length >= 6;
+            };
+
+            const ensureUser = (id: string) => {
+                const key = String(id || '').trim().toLowerCase();
+                if (!key) return;
+                if (this.isCurrentUser(key)) return;
+                if (!allUsers.some(u => String(u.id || '').trim().toLowerCase() === key)) {
+                    allUsers.push({
+                        id: key,
+                        name: key,
+                        email: key.includes('@') ? key : undefined
+                    });
+                }
+            };
+
             const render = (term: string) => {
                 const q = term.trim().toLowerCase();
                 list.innerHTML = '';
 
-                const filtered = users
+                const filtered = allUsers
                     .filter(u => u?.id)
                     .filter(u => {
                         if (!q) return true;
@@ -1048,6 +1097,28 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
             render('');
             search.addEventListener('input', () => render(search.value));
+
+            const addManual = () => {
+                const raw = manualInput.value || '';
+                if (!isValidEmail(raw)) {
+                    alert('Correo inválido. Ejemplo: usuario@empresa.com');
+                    return;
+                }
+                const email = normalizeEmail(raw);
+                ensureUser(email);
+                selected.add(email);
+                manualInput.value = '';
+                render(search.value);
+                updateCount();
+            };
+
+            addBtn.onclick = () => addManual();
+            manualInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addManual();
+                }
+            });
 
             const footer = document.createElement('div');
             footer.style.display = 'flex';

@@ -390,6 +390,9 @@ function listActiveUsers() {
     result.sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
     return result;
   } catch (e) {
-    return { status: "error", message: e.toString() };
+    return {
+      users: [],
+      warning: "No se pudo leer la hoja de usuarios. Solución recomendada: re-implementar el Web App como 'Ejecutar como: Yo (propietario)' y autorizar SpreadsheetApp. Error: " + e.toString()
+    };
   }
 }

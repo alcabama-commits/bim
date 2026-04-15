@@ -1,6 +1,5 @@
 import { ViewpointsManager, ViewpointData } from '../viewpoints-manager';
 import * as THREE from 'three';
-import { describe, it } from 'vitest';
 
 // Mock Dependencies
 const mockComponents = {
@@ -131,9 +130,3 @@ export async function runViewpointAuthTests() {
         console.groupEnd();
     }
 }
-
-describe.skip('auth-viewpoints', () => {
-    it('runs auth/viewpoint isolation checks', async () => {
-        await runViewpointAuthTests();
-    });
-});
