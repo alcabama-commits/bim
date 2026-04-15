@@ -45,8 +45,13 @@ function handleRequest(e) {
         const body = JSON.parse(e.postData.contents);
         if (body.action) action = body.action;
         if (body.data) payload = body.data;
-        // Solo sobrescribir payload con ID si no existe data (para evitar conflictos)
-        if (body.id && !payload) payload = { id: body.id }; 
+        // Si no viene body.data, aceptar campos directos del body (compatibilidad share/delete/get/list)
+        if (!payload && body && typeof body === 'object') {
+          payload = {};
+          if (body.id) payload.id = body.id;
+          if (body.userId) payload.userId = body.userId;
+          if (body.sharedWith !== undefined) payload.sharedWith = body.sharedWith;
+        }
       } catch (err) {
         // Si no es JSON, ignorar
       }

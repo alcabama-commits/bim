@@ -100,7 +100,23 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     // ensuring that no operation proceeds without ownership validation.
     private checkOwnership(viewpoint: ViewpointData): boolean {
         if (!this._currentUserId || this._currentUserId === 'guest') return false;
-        return viewpoint.userId === this._currentUserId;
+        return String(viewpoint.userId || '').trim().toLowerCase() === String(this._currentUserId).trim().toLowerCase();
+    }
+
+    private canAccess(viewpoint: ViewpointData): boolean {
+        if (!this._currentUserId || this._currentUserId === 'guest') return false;
+        const me = String(this._currentUserId).trim().toLowerCase();
+        if (!me) return false;
+        const owner = String(viewpoint.userId || '').trim().toLowerCase();
+        if (owner && owner === me) return true;
+        const sharedWith = (viewpoint as any).sharedWith;
+        if (Array.isArray(sharedWith)) {
+            for (const v of sharedWith) {
+                const key = String(v || '').trim().toLowerCase();
+                if (key && key === me) return true;
+            }
+        }
+        return false;
     }
 
     setStateProvider(provider: ViewpointStateProvider) {
@@ -175,8 +191,9 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
             let loadedCount = 0;
             for (const item of index) {
-                const isOwner = item.userId === this._currentUserId;
-                const isShared = Array.isArray((item as any).sharedWith) && (item as any).sharedWith.includes(this._currentUserId);
+                const me = String(this._currentUserId || '').trim().toLowerCase();
+                const isOwner = String(item.userId || '').trim().toLowerCase() === me;
+                const isShared = Array.isArray((item as any).sharedWith) && (item as any).sharedWith.some((v: any) => String(v || '').trim().toLowerCase() === me);
                 if (!isOwner && !isShared) {
                     continue;
                 }
@@ -428,7 +445,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
              return;
         }
         
-        if (!this.checkOwnership(view)) {
+        if (!this.canAccess(view)) {
              console.error('403 Forbidden: You do not have permission to access this view.');
              alert('Error 403: No tiene permisos para acceder a esta vista.');
              return;
