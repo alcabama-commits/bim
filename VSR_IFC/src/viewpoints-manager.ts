@@ -895,9 +895,9 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         const originalCursor = document.body.style.cursor;
         document.body.style.cursor = 'wait';
         try {
-            const ok = await this._repository.shareViewpointToCloud(view.id, this._currentUserId, view.sharedWith || []);
-            if (!ok) {
-                alert('No se pudo compartir la vista en la nube. Ver consola.');
+            const res = await this._repository.shareViewpointToCloud(view.id, this._currentUserId, view.sharedWith || []);
+            if (!res.ok) {
+                alert(`No se pudo compartir la vista en la nube.\n\n${res.message || 'Ver consola.'}`);
                 return;
             }
 

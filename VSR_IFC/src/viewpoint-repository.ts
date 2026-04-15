@@ -252,6 +252,9 @@ export class ViewpointRepository {
             if (data && typeof data === 'object' && !Array.isArray(data) && data.status === 'error') {
                 throw new Error(String(data.message || 'No se pudo cargar la lista de usuarios.'));
             }
+            if (data && typeof data === 'object' && !Array.isArray(data) && typeof (data as any).warning === 'string' && (data as any).warning.trim()) {
+                throw new Error(String((data as any).warning));
+            }
             const rawUsers = Array.isArray(data)
                 ? data
                 : Array.isArray(data?.users)
@@ -306,9 +309,9 @@ export class ViewpointRepository {
         }
     }
 
-    async shareViewpointToCloud(id: string, requesterUserId: string, sharedWith: string[]): Promise<boolean> {
+    async shareViewpointToCloud(id: string, requesterUserId: string, sharedWith: string[]): Promise<{ ok: boolean; message?: string }> {
         if (!VIEWPOINTS_API_URL) {
-            return false;
+            return { ok: false, message: 'VIEWPOINTS_API_URL no configurada.' };
         }
 
         try {
@@ -325,12 +328,26 @@ export class ViewpointRepository {
                 })
             });
 
-            if (!response.ok) return false;
-            const result = await response.json();
-            return result.status === 'success';
+            const raw = await response.text();
+            let result: any = null;
+            try {
+                result = JSON.parse(raw);
+            } catch {
+                result = null;
+            }
+
+            if (!response.ok) {
+                const msg = result?.message ? String(result.message) : `HTTP ${response.status}`;
+                return { ok: false, message: msg };
+            }
+            if (!result || typeof result !== 'object') {
+                return { ok: false, message: 'Respuesta inválida del servidor.' };
+            }
+            if (result.status === 'success') return { ok: true };
+            return { ok: false, message: String(result.message || 'No se pudo compartir la vista.') };
         } catch (e) {
             console.error('[Repository] Error sharing viewpoint to cloud:', e);
-            return false;
+            return { ok: false, message: e instanceof Error ? e.message : String(e) };
         }
     }
 }
