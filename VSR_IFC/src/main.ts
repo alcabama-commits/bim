@@ -94,6 +94,61 @@ const getSectionSnapCandidates = (vertices: THREE.Vector3[], hitPoint?: THREE.Ve
 
 const hasActiveMaskSnap = () => getActiveSnapClippingPlanes().length > 0;
 
+const getMaskVerticesFromClipStyler = (referencePoint?: THREE.Vector3): THREE.Vector3[] => {
+    const candidates: THREE.Vector3[] = [];
+    try {
+        const clipStylerAny = clipStyler as any;
+        const clipList = clipStylerAny?.list;
+        if (!clipList) return candidates;
+
+        const entries = typeof clipList.entries === 'function'
+            ? Array.from(clipList.entries())
+            : Array.isArray(clipList)
+                ? clipList
+                : [];
+
+        for (const [, clipEdges] of entries as any[]) {
+            const plane = clipEdges?.plane as THREE.Plane | undefined;
+            if (referencePoint && plane && Math.abs(plane.distanceToPoint(referencePoint)) > 0.25) {
+                continue;
+            }
+
+            const group = clipEdges?.three as THREE.Group | undefined;
+            if (!group) continue;
+            group.updateMatrixWorld(true);
+
+            group.traverse((child: any) => {
+                const geometry = child?.geometry as THREE.BufferGeometry | undefined;
+                if (!geometry?.attributes) return;
+
+                const pushWorldPoint = (x: number, y: number, z: number) => {
+                    const point = new THREE.Vector3(x, y, z).applyMatrix4(child.matrixWorld);
+                    pushUniqueSnapPoint(candidates, point);
+                };
+
+                const position = geometry.attributes.position as THREE.BufferAttribute | undefined;
+                if (position) {
+                    for (let i = 0; i < position.count; i++) {
+                        pushWorldPoint(position.getX(i), position.getY(i), position.getZ(i));
+                    }
+                }
+
+                const instanceStart = geometry.attributes.instanceStart as THREE.BufferAttribute | undefined;
+                const instanceEnd = geometry.attributes.instanceEnd as THREE.BufferAttribute | undefined;
+                if (instanceStart && instanceEnd) {
+                    for (let i = 0; i < instanceStart.count; i++) {
+                        pushWorldPoint(instanceStart.getX(i), instanceStart.getY(i), instanceStart.getZ(i));
+                        pushWorldPoint(instanceEnd.getX(i), instanceEnd.getY(i), instanceEnd.getZ(i));
+                    }
+                }
+            });
+        }
+    } catch (error) {
+        console.warn('[SNAP] No se pudieron leer vértices reales de la máscara.', error);
+    }
+    return candidates;
+};
+
 type SnapTriangleCache = {
     triangles: Array<{ indices: [number, number, number]; normal: THREE.Vector3; constant: number }>;
     vertexToTriangles: Map<number, number[]>;
@@ -248,7 +303,9 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
                 const vc = getV(c);
                 const coplanarVertices = getConnectedCoplanarVertices(closest);
                 const sectionSourceVertices = coplanarVertices.length > 0 ? coplanarVertices : [va, vb, vc];
-                const maskCandidates = getSectionSnapCandidates(sectionSourceVertices, closest.point);
+                const maskCandidates = maskOnlyMode
+                    ? getMaskVerticesFromClipStyler(closest.point)
+                    : getSectionSnapCandidates(sectionSourceVertices, closest.point);
                 
                 let bestPoint: THREE.Vector3 | null = null;
                 let minD = Infinity;
@@ -3855,7 +3912,9 @@ function setupMeasurementTools_Deprecated() {
 
                                 const coplanarVertices = getConnectedCoplanarVertices(valid);
                                 const visualVertexPool = coplanarVertices.length > 0 ? coplanarVertices : [vA, vB, vC];
-                                const sectionPoints = getSectionSnapCandidates(visualVertexPool, hitPoint);
+                                const sectionPoints = maskOnlyMode
+                                    ? getMaskVerticesFromClipStyler(hitPoint)
+                                    : getSectionSnapCandidates(visualVertexPool, hitPoint);
                                 for (const point of sectionPoints) {
                                     pushUniquePoint(sectionCandidates, point);
                                 }
