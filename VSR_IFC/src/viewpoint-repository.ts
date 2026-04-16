@@ -397,17 +397,18 @@ export class ViewpointRepository {
         }
 
         try {
+            const formBody = new URLSearchParams();
+            formBody.set('action', 'share');
+            formBody.set('id', id);
+            formBody.set('userId', requesterUserId);
+            formBody.set('sharedWith', (sharedWith || []).join(';'));
+
             const response = await fetch(VIEWPOINTS_API_URL, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'text/plain;charset=utf-8',
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
                 },
-                body: JSON.stringify({
-                    action: 'share',
-                    id,
-                    userId: requesterUserId,
-                    sharedWith
-                })
+                body: formBody.toString()
             });
 
             const raw = await response.text();
