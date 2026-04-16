@@ -120,7 +120,7 @@ export class ViewpointRepository {
     /**
      * Saves a viewpoint to the cloud via Google Apps Script.
      */
-    async saveViewpointToCloud(viewpoint: ViewpointData): Promise<boolean> {
+    async saveViewpointToCloud(viewpoint: ViewpointData, requesterUserId?: string): Promise<boolean> {
         if (!VIEWPOINTS_API_URL) {
             console.warn('[Repository] No Cloud API URL configured.');
             return false;
@@ -137,7 +137,8 @@ export class ViewpointRepository {
                 },
                 body: JSON.stringify({
                     action: 'save',
-                    data: viewpoint
+                    data: viewpoint,
+                    requesterUserId
                 })
             });
 

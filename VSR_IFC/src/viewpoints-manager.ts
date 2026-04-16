@@ -4,6 +4,13 @@ import * as OBF from '@thatopen/components-front';
 import { ViewpointRepository } from './viewpoint-repository';
 import type { ActiveUser } from './viewpoint-repository';
 
+export type ViewpointSharePermission = 'view' | 'edit';
+
+export interface ViewpointShareEntry {
+    userId: string;
+    permission: ViewpointSharePermission;
+}
+
 export interface ViewpointData {
     id: string;
     userId: string; // Foreign Key to User
@@ -24,6 +31,7 @@ export interface ViewpointData {
     clippingPlanes: { normal: number[], constant: number }[]; // Serialized clipping planes
     loadedModels: { uuid: string, url: string }[]; // List of loaded models
     sharedWith?: string[]; // Emails/userIds that can access this viewpoint
+    sharedAccess?: ViewpointShareEntry[];
 }
 
 export interface ViewpointStateProvider {
@@ -50,6 +58,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     private _savedViewpoints: ViewpointData[] = [];
     private _stateProvider?: ViewpointStateProvider;
     private _currentUserId: string | null = null;
+    private _activeViewpointId: string | null = null;
+    private _activeLibraryTab: 'mine' | 'shared-with-me' | 'shared-by-me' = 'mine';
 
     // Repository
     private _repository: ViewpointRepository;
@@ -103,20 +113,55 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         return String(viewpoint.userId || '').trim().toLowerCase() === String(this._currentUserId).trim().toLowerCase();
     }
 
-    private canAccess(viewpoint: ViewpointData): boolean {
-        if (!this._currentUserId || this._currentUserId === 'guest') return false;
-        const me = String(this._currentUserId).trim().toLowerCase();
-        if (!me) return false;
-        const owner = String(viewpoint.userId || '').trim().toLowerCase();
-        if (owner && owner === me) return true;
-        const sharedWith = (viewpoint as any).sharedWith;
-        if (Array.isArray(sharedWith)) {
-            for (const v of sharedWith) {
-                const key = String(v || '').trim().toLowerCase();
-                if (key && key === me) return true;
+    private normalizeUserId(userId?: string | null) {
+        return String(userId || '').trim().toLowerCase();
+    }
+
+    private getSharedEntries(viewpoint: ViewpointData): ViewpointShareEntry[] {
+        const entries = new Map<string, ViewpointShareEntry>();
+        const sharedAccess = Array.isArray(viewpoint.sharedAccess) ? viewpoint.sharedAccess : [];
+        for (const item of sharedAccess) {
+            const userId = this.normalizeUserId(item?.userId);
+            if (!userId) continue;
+            const permission: ViewpointSharePermission = item?.permission === 'edit' ? 'edit' : 'view';
+            entries.set(userId, { userId, permission });
+        }
+        const sharedWith = Array.isArray(viewpoint.sharedWith) ? viewpoint.sharedWith : [];
+        for (const item of sharedWith) {
+            const userId = this.normalizeUserId(item);
+            if (!userId) continue;
+            if (!entries.has(userId)) {
+                entries.set(userId, { userId, permission: 'view' });
             }
         }
-        return false;
+        return Array.from(entries.values());
+    }
+
+    private syncShareFields(viewpoint: ViewpointData, entries: ViewpointShareEntry[]) {
+        const normalized = entries
+            .map((entry) => ({
+                userId: this.normalizeUserId(entry.userId),
+                permission: entry.permission === 'edit' ? 'edit' as ViewpointSharePermission : 'view' as ViewpointSharePermission
+            }))
+            .filter((entry) => !!entry.userId && entry.userId !== this.normalizeUserId(this._currentUserId));
+        viewpoint.sharedAccess = normalized;
+        viewpoint.sharedWith = normalized.map((entry) => entry.userId);
+    }
+
+    private getMySharePermission(viewpoint: ViewpointData): ViewpointSharePermission | null {
+        if (this.checkOwnership(viewpoint)) return 'edit';
+        const me = this.normalizeUserId(this._currentUserId);
+        if (!me) return null;
+        const entry = this.getSharedEntries(viewpoint).find((item) => item.userId === me);
+        return entry?.permission ?? null;
+    }
+
+    private canEdit(viewpoint: ViewpointData): boolean {
+        return this.getMySharePermission(viewpoint) === 'edit';
+    }
+
+    private canAccess(viewpoint: ViewpointData): boolean {
+        return this.getMySharePermission(viewpoint) !== null;
     }
 
     setStateProvider(provider: ViewpointStateProvider) {
@@ -125,7 +170,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
     private isCurrentUser(userId?: string | null) {
         if (!userId || !this._currentUserId) return false;
-        return String(userId).trim().toLowerCase() === String(this._currentUserId).trim().toLowerCase();
+        return this.normalizeUserId(userId) === this.normalizeUserId(this._currentUserId);
     }
 
     private collectKnownUsers(): ActiveUser[] {
@@ -230,7 +275,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             try {
                 // 1. Try to save to Cloud first
                 console.log('[Viewpoints] Attempting cloud save...');
-                const cloudSuccess = await this._repository.saveViewpointToCloud(view);
+                const cloudSuccess = await this._repository.saveViewpointToCloud(view, this._currentUserId || undefined);
                 
                 if (cloudSuccess) {
                     alert(`Vista "${view.title}" guardada exitosamente en la nube.`);
@@ -248,26 +293,20 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         }
     }
 
-    public async saveViewpoint(title: string, category: string = 'General', description: string = '') {
-        console.log('[Viewpoints] Attempting to save view:', title);
-
+    private captureViewpointState(base?: Partial<ViewpointData>): ViewpointData | null {
         if (!this._world.camera.controls) {
             console.error('[Viewpoints] Camera controls not found!');
             alert('Error: No se pudo acceder a la cámara para guardar la vista.');
-            return;
+            return null;
         }
 
-        // 1. Capture Camera
         const camera = this._world.camera.three;
         const controls = this._world.camera.controls;
-        
         const position = new THREE.Vector3();
         const target = new THREE.Vector3();
-        
         camera.getWorldPosition(position);
         controls.getTarget(target);
 
-        // 2. Capture Selection
         const selection: { [fragmentID: string]: number[] } = {};
         const selectionMap = this._highlighter.selection.select;
         if (selectionMap) {
@@ -276,7 +315,6 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             }
         }
 
-        // 3. Capture Visibility & Annotations via Provider
         let hidden: Record<string, number[]> = {};
         let annotations: any[] = [];
         let clippingPlanes: { normal: number[], constant: number }[] = [];
@@ -287,12 +325,38 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 hidden = this._stateProvider.getHiddenItems() || {};
                 annotations = this._stateProvider.getMeasurements() || [];
                 clippingPlanes = this._stateProvider.getClippingPlanes() || [];
-                console.log(`[Viewpoints] Retrieved ${clippingPlanes.length} clipping planes from provider.`);
                 loadedModels = this._stateProvider.getLoadedModels() || [];
             } catch (e) {
                 console.error('[Viewpoints] Error retrieving state from provider:', e);
             }
         }
+
+        return {
+            id: base?.id || THREE.MathUtils.generateUUID(),
+            userId: base?.userId || this._currentUserId || 'guest',
+            title: base?.title || 'Sin título',
+            description: base?.description || '',
+            category: base?.category || 'General',
+            date: Date.now(),
+            tags: base?.tags || [],
+            camera: {
+                position: position.toArray(),
+                target: target.toArray(),
+                projection: ((this._world.camera as any).projection?.current || 'Perspective').toLowerCase()
+            },
+            selection,
+            isolation: [],
+            hidden,
+            annotations,
+            clippingPlanes,
+            loadedModels,
+            sharedWith: [...(base?.sharedWith || [])],
+            sharedAccess: [...(base?.sharedAccess || [])]
+        };
+    }
+
+    public async saveViewpoint(title: string, category: string = 'General', description: string = '') {
+        console.log('[Viewpoints] Attempting to save view:', title);
 
         // Validate Authentication
         if (!this._currentUserId || this._currentUserId === 'guest') {
@@ -300,27 +364,15 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             return;
         }
 
-        const viewpointData: ViewpointData = {
-            id: THREE.MathUtils.generateUUID(),
+        const viewpointData = this.captureViewpointState({
             userId: this._currentUserId,
             title,
             description,
             category,
-            date: Date.now(),
-            tags: [],
-            camera: {
-                position: position.toArray(),
-                target: target.toArray(),
-                projection: ((this._world.camera as any).projection?.current || 'Perspective').toLowerCase()
-            },
-            selection,
-            isolation: [], 
-            hidden,
-            annotations,
-            clippingPlanes,
-            loadedModels,
-            sharedWith: []
-        };
+            sharedWith: [],
+            sharedAccess: []
+        });
+        if (!viewpointData) return;
 
         console.log('[Viewpoints] Saving viewpoint data:', JSON.stringify(viewpointData, null, 2));
 
@@ -333,7 +385,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             const originalCursor = document.body.style.cursor;
             document.body.style.cursor = 'wait';
             
-            this._repository.saveViewpointToCloud(viewpointData).then(success => {
+            this._repository.saveViewpointToCloud(viewpointData, this._currentUserId || undefined).then(success => {
                 document.body.style.cursor = originalCursor;
                 if (success) {
                     alert(`Vista "${title}" guardada en la nube y localmente.`);
@@ -350,6 +402,40 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         this.renderList();
         
         return viewpointData;
+    }
+
+    public async updateViewpoint(id: string) {
+        const existing = this._savedViewpoints.find(v => v.id === id);
+        if (!existing) {
+            alert('No se encontró la vista activa para actualizar.');
+            return;
+        }
+        if (!this.canEdit(existing)) {
+            alert('No tienes permiso de edición sobre esta vista.');
+            return;
+        }
+
+        const updated = this.captureViewpointState(existing);
+        if (!updated) return;
+        const idx = this._savedViewpoints.findIndex(v => v.id === id);
+        if (idx === -1) return;
+        this._savedViewpoints[idx] = updated;
+        this._activeViewpointId = updated.id;
+        this.saveToStorage();
+        this.renderList();
+
+        const originalCursor = document.body.style.cursor;
+        document.body.style.cursor = 'wait';
+        try {
+            const success = await this._repository.saveViewpointToCloud(updated, this._currentUserId || undefined);
+            if (success) {
+                alert(`Vista "${updated.title}" actualizada correctamente.`);
+            } else {
+                alert(`Vista "${updated.title}" actualizada localmente, pero no se pudo sincronizar en la nube.`);
+            }
+        } finally {
+            document.body.style.cursor = originalCursor;
+        }
     }
 
     // CONFIGURACIÓN DE GITHUB
@@ -450,6 +536,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
              alert('Error 403: No tiene permisos para acceder a esta vista.');
              return;
         }
+
+        this._activeViewpointId = view.id;
 
         console.log(`Restoring viewpoint '${view.title}'...`);
 
@@ -568,7 +656,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         const userName = this._currentUserId === 'guest' ? 'Invitado' : (this._currentUserId || 'Usuario');
         
         this._container.innerHTML = `
-            <div class="viewpoints-ui" style="padding: 10px; color: #eee;">
+            <div class="viewpoints-ui" style="padding: 10px; color: #eee; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; min-height: 0;">
                 <div style="margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #444;">
                     <small style="color: #aaa; font-size: 11px;">DASHBOARD DE VISTAS</small>
                     <div style="font-weight: bold; color: var(--primary-color, #D8005E);">${userName}</div>
@@ -594,7 +682,13 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                     <input type="text" id="vp-search" placeholder="Buscar vistas..." style="width: 100%; padding: 5px; background: #333; border: 1px solid #555; color: white; border-radius: 4px;">
                 </div>
 
-                <div id="vp-list" style="max-height: 400px; overflow-y: auto;">
+                <div id="vp-library-tabs" style="display: flex; gap: 6px; margin-bottom: 10px;">
+                    <button data-vp-tab="mine" class="vp-library-tab" style="flex:1; padding: 6px 8px; border-radius: 6px; border: 1px solid #555; background: var(--primary-color, #D8005E); color: white; font-size: 11px; font-weight: 700; cursor: pointer;">Mías</button>
+                    <button data-vp-tab="shared-with-me" class="vp-library-tab" style="flex:1; padding: 6px 8px; border-radius: 6px; border: 1px solid #555; background: #333; color: #ddd; font-size: 11px; font-weight: 700; cursor: pointer;">Compartidas</button>
+                    <button data-vp-tab="shared-by-me" class="vp-library-tab" style="flex:1; padding: 6px 8px; border-radius: 6px; border: 1px solid #555; background: #333; color: #ddd; font-size: 11px; font-weight: 700; cursor: pointer;">Yo compartí</button>
+                </div>
+
+                <div id="vp-list" style="flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px;">
                     <!-- List items will be injected here -->
                 </div>
             </div>
@@ -636,6 +730,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         const nameInput = this._container.querySelector('#vp-name-input') as HTMLInputElement;
         const categoryInput = this._container.querySelector('#vp-category-input') as HTMLSelectElement;
         const searchInput = this._container.querySelector('#vp-search') as HTMLInputElement;
+        const saveBtn = this._container.querySelector('#vp-save-btn');
+        const libraryTabs = Array.from(this._container.querySelectorAll('.vp-library-tab'));
 
         if (createBtn) {
             createBtn.addEventListener('click', () => {
@@ -669,6 +765,16 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 if (icon) icon.classList.remove('fa-spin');
             });
         }
+
+        if (saveBtn) {
+            saveBtn.addEventListener('click', async () => {
+                if (!this._activeViewpointId) {
+                    alert('Primero restaura una vista para poder actualizarla.');
+                    return;
+                }
+                await this.updateViewpoint(this._activeViewpointId);
+            });
+        }
         
         if (cancelBtn) {
             cancelBtn.addEventListener('click', () => {
@@ -692,6 +798,19 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             });
         }
 
+        libraryTabs.forEach((tabBtn) => {
+            tabBtn.addEventListener('click', () => {
+                const nextTab = String((tabBtn as HTMLElement).dataset.vpTab || 'mine') as 'mine' | 'shared-with-me' | 'shared-by-me';
+                this._activeLibraryTab = nextTab;
+                libraryTabs.forEach((btn) => {
+                    const isActive = String((btn as HTMLElement).dataset.vpTab) === nextTab;
+                    (btn as HTMLElement).style.background = isActive ? 'var(--primary-color, #D8005E)' : '#333';
+                    (btn as HTMLElement).style.color = isActive ? '#fff' : '#ddd';
+                });
+                this.renderList(searchInput?.value?.toLowerCase() || '');
+            });
+        });
+
         this.renderList();
     }
 
@@ -705,21 +824,36 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         }
 
         const ownedViews = filtered.filter(v => this.isCurrentUser(v.userId));
-        const sharedViews = filtered.filter(v => !this.isCurrentUser(v.userId));
+        const sharedWithMeViews = filtered.filter(v => !this.isCurrentUser(v.userId));
+        const sharedByMeViews = ownedViews.filter(v => this.getSharedEntries(v).length > 0);
+
+        let visibleViews: ViewpointData[] = [];
+        if (this._activeLibraryTab === 'shared-with-me') {
+            visibleViews = sharedWithMeViews;
+        } else if (this._activeLibraryTab === 'shared-by-me') {
+            visibleViews = sharedByMeViews;
+        } else {
+            visibleViews = ownedViews;
+        }
 
         const categories: {[key: string]: ViewpointData[]} = {};
-        ownedViews.forEach(v => {
+        visibleViews.forEach(v => {
             const cat = v.category || 'General';
             if (!categories[cat]) categories[cat] = [];
             categories[cat].push(v);
         });
 
-        if (Object.keys(categories).length === 0 && sharedViews.length === 0) {
-            this._listContainer.innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">No hay vistas guardadas</div>';
+        if (Object.keys(categories).length === 0) {
+            const emptyMessage = this._activeLibraryTab === 'shared-with-me'
+                ? 'No tienes vistas compartidas.'
+                : this._activeLibraryTab === 'shared-by-me'
+                    ? 'Aun no has compartido vistas con otros.'
+                    : 'No tienes vistas creadas.';
+            this._listContainer.innerHTML = `<div style="text-align: center; color: #888; padding: 20px;">${emptyMessage}</div>`;
             return;
         }
 
-        const renderGroup = (cat: string, views: ViewpointData[], sectionName?: string) => {
+        const renderGroup = (cat: string, views: ViewpointData[]) => {
             const groupDiv = document.createElement('div');
             groupDiv.className = 'viewpoint-group';
             groupDiv.style.marginBottom = '10px';
@@ -727,7 +861,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             // Header
             groupDiv.innerHTML = `
                 <div style="background: #444; padding: 5px 10px; font-weight: bold; font-size: 12px; border-radius: 4px 4px 0 0; display: flex; align-items: center; justify-content: space-between;">
-                    <span>${sectionName ? `${sectionName} / ${cat}` : cat}</span>
+                    <span>${cat}</span>
                     <span style="font-size: 10px; background: #666; padding: 2px 6px; border-radius: 10px;">${views.length}</span>
                 </div>
             `;
@@ -752,9 +886,12 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 // Format date
                 const date = new Date(v.date).toLocaleDateString();
                 const isOwned = this.isCurrentUser(v.userId);
+                const permission = this.getMySharePermission(v);
+                const sharedCount = this.getSharedEntries(v).length;
                 const metaLine = isOwned
-                    ? date
-                    : `${date} • Compartida por ${v.userId}`;
+                    ? (sharedCount > 0 ? `${date} • Compartida con ${sharedCount}` : date)
+                    : `${date} • Compartida por ${v.userId} • ${permission === 'edit' ? 'Puede editar' : 'Solo lectura'}`;
+                const canEdit = this.canEdit(v);
                 
                 item.innerHTML = `
                     <div style="display: flex; flex-direction: column; overflow: hidden; width: 60%;">
@@ -764,6 +901,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                     <div style="display: flex; gap: 5px;">
                         ${isOwned ? `<button class="share-view-btn" title="Compartir" style="background:none; border:none; color: #ff9800; cursor: pointer;"><i class="fa-solid fa-share-nodes"></i></button>` : ``}
                         <button class="restore-view-btn" title="Restaurar" style="background:none; border:none; color: #4caf50; cursor: pointer;"><i class="fa-solid fa-eye"></i></button>
+                        ${canEdit ? `<button class="update-view-btn" title="Actualizar vista" style="background:none; border:none; color: #29b6f6; cursor: pointer;"><i class="fa-solid fa-pen-to-square"></i></button>` : ``}
                         ${isOwned ? `<button class="export-view-btn" title="Exportar a Repositorio" style="background:none; border:none; color: #2196f3; cursor: pointer;"><i class="fa-solid fa-file-export"></i></button>` : ``}
                         ${isOwned ? `<button class="delete-view-btn" title="Eliminar" style="background:none; border:none; color: #e91e63; cursor: pointer;"><i class="fa-solid fa-trash"></i></button>` : ``}
                     </div>
@@ -795,6 +933,14 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                     });
                 }
 
+                const updateBtn = item.querySelector('.update-view-btn');
+                if (updateBtn) {
+                    updateBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        await this.updateViewpoint(v.id);
+                    });
+                }
+
                 const exportBtn = item.querySelector('.export-view-btn');
                 if (exportBtn) {
                     exportBtn.addEventListener('click', (e) => {
@@ -822,18 +968,6 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         for (const [cat, views] of Object.entries(categories)) {
             renderGroup(cat, views);
         }
-
-        if (sharedViews.length > 0) {
-            const sharedByCategory: {[key: string]: ViewpointData[]} = {};
-            sharedViews.forEach(v => {
-                const cat = v.category || 'General';
-                if (!sharedByCategory[cat]) sharedByCategory[cat] = [];
-                sharedByCategory[cat].push(v);
-            });
-            for (const [cat, views] of Object.entries(sharedByCategory)) {
-                renderGroup(cat, views, 'Compartidas');
-            }
-        }
     }
 
     private getStorageKey(): string {
@@ -859,8 +993,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 // Verify ownership integrity on load (Middleware check)
                 this._savedViewpoints = this._savedViewpoints.filter(v => {
                     if (!this._currentUserId || this._currentUserId === 'guest') return false;
-                    if (v.userId === this._currentUserId) return true;
-                    if (Array.isArray(v.sharedWith) && v.sharedWith.includes(this._currentUserId)) return true;
+                    if (this.canAccess(v)) return true;
                     console.warn(`[Security] Filtered out unauthorized view ${v.id} belonging to ${v.userId}`);
                     return false;
                 });
@@ -895,7 +1028,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             usersLoadError = e instanceof Error ? e.message : 'No se pudo cargar la lista de usuarios activos.';
         }
 
-        const currentList = Array.isArray(view.sharedWith) ? view.sharedWith : [];
+        const currentEntries = this.getSharedEntries(view);
+        const currentList = currentEntries.map(entry => entry.userId);
         const mergedUsers = [...users, ...this.collectKnownUsers(), ...currentList.map(id => ({ id, name: id, email: id.includes('@') ? id : undefined }))];
         const userMap = new Map<string, ActiveUser>();
         for (const user of mergedUsers) {
@@ -905,16 +1039,16 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             if (!userMap.has(key)) userMap.set(key, { ...user, id: String(user.id).trim() });
         }
         const selectableUsers = Array.from(userMap.values()).sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, 'es'));
-        const selection = await this.openShareUsersModal(view.title, selectableUsers, currentList, usersLoadError);
+        const selection = await this.openShareUsersModal(view.title, selectableUsers, currentEntries, usersLoadError);
         if (selection === null) return;
-        view.sharedWith = selection;
+        this.syncShareFields(view, selection);
 
         const originalCursor = document.body.style.cursor;
         document.body.style.cursor = 'wait';
         try {
-            const res = await this._repository.shareViewpointToCloud(view.id, this._currentUserId, view.sharedWith || []);
-            if (!res.ok) {
-                alert(`No se pudo compartir la vista en la nube.\n\n${res.message || 'Ver consola.'}`);
+            const success = await this._repository.saveViewpointToCloud(view, this._currentUserId || undefined);
+            if (!success) {
+                alert('No se pudo actualizar la compartición en la nube.');
                 return;
             }
 
@@ -930,7 +1064,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         }
     }
 
-    private openShareUsersModal(title: string, users: ActiveUser[], preselected: string[], loadError: string = ''): Promise<string[] | null> {
+    private openShareUsersModal(title: string, users: ActiveUser[], preselected: ViewpointShareEntry[], loadError: string = ''): Promise<ViewpointShareEntry[] | null> {
         return new Promise((resolve) => {
             const overlay = document.createElement('div');
             overlay.style.position = 'fixed';
@@ -1022,7 +1156,12 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             list.style.borderRadius = '8px';
             list.style.background = 'rgba(0,0,0,0.2)';
 
-            const selected = new Set((preselected || []).map(v => String(v).trim()).filter(Boolean));
+            const selected = new Map<string, ViewpointSharePermission>();
+            for (const entry of preselected || []) {
+                const key = this.normalizeUserId(entry.userId);
+                if (!key) continue;
+                selected.set(key, entry.permission === 'edit' ? 'edit' : 'view');
+            }
             const allUsers: ActiveUser[] = Array.isArray(users) ? [...users] : [];
 
             const normalizeEmail = (raw: string) => String(raw || '').trim().toLowerCase();
@@ -1081,15 +1220,19 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
                     const cb = document.createElement('input');
                     cb.type = 'checkbox';
-                    cb.checked = selected.has(u.id);
+                    cb.checked = selected.has(this.normalizeUserId(u.id));
                     cb.onchange = () => {
-                        if (cb.checked) selected.add(u.id);
-                        else selected.delete(u.id);
+                        const key = this.normalizeUserId(u.id);
+                        if (cb.checked) selected.set(key, selected.get(key) || 'view');
+                        else selected.delete(key);
+                        permissionSelect.disabled = !cb.checked;
+                        updateCount();
                     };
 
                     const text = document.createElement('div');
                     text.style.display = 'flex';
                     text.style.flexDirection = 'column';
+                    text.style.flex = '1';
                     text.style.overflow = 'hidden';
 
                     const primary = document.createElement('div');
@@ -1108,6 +1251,24 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
                     row.appendChild(cb);
                     row.appendChild(text);
+                    const permissionSelect = document.createElement('select');
+                    permissionSelect.style.padding = '6px';
+                    permissionSelect.style.background = '#2f2f2f';
+                    permissionSelect.style.border = '1px solid #555';
+                    permissionSelect.style.color = '#fff';
+                    permissionSelect.style.borderRadius = '6px';
+                    permissionSelect.innerHTML = `
+                        <option value="view">Solo ver</option>
+                        <option value="edit">Puede editar</option>
+                    `;
+                    permissionSelect.value = selected.get(this.normalizeUserId(u.id)) || 'view';
+                    permissionSelect.disabled = !cb.checked;
+                    permissionSelect.onchange = () => {
+                        const key = this.normalizeUserId(u.id);
+                        if (!cb.checked) return;
+                        selected.set(key, permissionSelect.value === 'edit' ? 'edit' : 'view');
+                    };
+                    row.appendChild(permissionSelect);
                     list.appendChild(row);
                 }
             };
@@ -1123,7 +1284,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 }
                 const email = normalizeEmail(raw);
                 ensureUser(email);
-                selected.add(email);
+                selected.set(email, selected.get(email) || 'view');
                 manualInput.value = '';
                 render(search.value);
                 updateCount();
@@ -1182,7 +1343,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             list.addEventListener('change', updateCount);
 
             cancel.onclick = () => cleanup(null);
-            save.onclick = () => cleanup(Array.from(selected));
+            save.onclick = () => cleanup(Array.from(selected.entries()).map(([userId, permission]) => ({ userId, permission })));
 
             overlay.addEventListener('click', (e) => {
                 if (e.target === overlay) cleanup(null);

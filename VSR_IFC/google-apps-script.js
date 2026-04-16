@@ -75,8 +75,9 @@ function handleRequest(e) {
     } else if (action === "save") {
       // Guardar una nueva vista
       const data = e.parameter.data || (payload ? payload : null);
+      const requesterUserId = e.parameter.requesterUserId || (payload ? payload.requesterUserId : null);
       if (data) {
-        result = saveViewpoint(data);
+        result = saveViewpoint(data, requesterUserId);
       } else {
         result = { status: "error", message: "Missing data" };
       }
@@ -158,6 +159,7 @@ function listViewpoints(requestUserId) {
           userId: data.userId || "anonymous",
           date: data.date || new Date(file.getLastUpdated()).getTime(),
           sharedWith: data.sharedWith || [],
+          sharedAccess: data.sharedAccess || [],
           file: `${scriptUrl}?action=get&id=${data.id}${userQuery}`
         });
       } catch (e) {
@@ -192,7 +194,25 @@ function getViewpoint(id, requestUserId) {
   return { error: "Not found" };
 }
 
-function saveViewpoint(data) {
+function canEditViewpoint(data, userId) {
+  if (!userId) return false;
+  if (!data) return false;
+  const me = String(userId).trim().toLowerCase();
+  if (!me) return false;
+  if (data.userId && String(data.userId).trim().toLowerCase() === me) return true;
+  const sharedAccess = data.sharedAccess;
+  if (Array.isArray(sharedAccess)) {
+    for (let i = 0; i < sharedAccess.length; i++) {
+      const entry = sharedAccess[i] || {};
+      const targetUser = String(entry.userId || "").trim().toLowerCase();
+      const permission = String(entry.permission || "view").trim().toLowerCase();
+      if (targetUser && targetUser === me && permission === "edit") return true;
+    }
+  }
+  return false;
+}
+
+function saveViewpoint(data, requesterUserId) {
   const folder = getFolder();
   const id = data.id;
   
@@ -206,6 +226,11 @@ function saveViewpoint(data) {
     if (file.isTrashed()) {
        // Si estaba en la papelera, restaurar
        file.setTrashed(false);
+    }
+    const currentContent = file.getBlob().getDataAsString();
+    const currentData = JSON.parse(currentContent);
+    if (!canEditViewpoint(currentData, requesterUserId || data.userId)) {
+      return { status: "error", message: "Unauthorized to edit viewpoint", id: id };
     }
     file.setContent(JSON.stringify(data, null, 2));
     return { status: "success", action: "updated", id: id };
@@ -261,6 +286,14 @@ function canAccessViewpoint(data, userId) {
   if (!userId) return true;
   if (!data) return false;
   if (data.userId && String(data.userId).toLowerCase() === String(userId).toLowerCase()) return true;
+  const sharedAccess = data.sharedAccess;
+  if (Array.isArray(sharedAccess)) {
+    for (let i = 0; i < sharedAccess.length; i++) {
+      const entry = sharedAccess[i] || {};
+      const v = String(entry.userId || "").trim().toLowerCase();
+      if (v && v === String(userId).trim().toLowerCase()) return true;
+    }
+  }
   const sharedWith = data.sharedWith;
   if (Array.isArray(sharedWith)) {
     const set = {};
