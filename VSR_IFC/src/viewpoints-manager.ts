@@ -32,6 +32,7 @@ export interface ViewpointData {
     loadedModels: { uuid: string, url: string }[]; // List of loaded models
     sharedWith?: string[]; // Emails/userIds that can access this viewpoint
     sharedAccess?: ViewpointShareEntry[];
+    previewImage?: string;
 }
 
 export interface ViewpointStateProvider {
@@ -146,6 +147,31 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             .filter((entry) => !!entry.userId && entry.userId !== this.normalizeUserId(this._currentUserId));
         viewpoint.sharedAccess = normalized;
         viewpoint.sharedWith = normalized.map((entry) => entry.userId);
+    }
+
+    private capturePreviewImage(): string | undefined {
+        try {
+            const rendererThree = (this._world.renderer as any)?.three;
+            const canvas = rendererThree?.domElement as HTMLCanvasElement | undefined;
+            if (!canvas || typeof canvas.toDataURL !== 'function') return undefined;
+            if (canvas.width < 2 || canvas.height < 2) return undefined;
+
+            const sourceWidth = canvas.width;
+            const sourceHeight = canvas.height;
+            const targetWidth = 320;
+            const targetHeight = Math.max(180, Math.round((sourceHeight / Math.max(1, sourceWidth)) * targetWidth));
+
+            const previewCanvas = document.createElement('canvas');
+            previewCanvas.width = targetWidth;
+            previewCanvas.height = targetHeight;
+            const ctx = previewCanvas.getContext('2d');
+            if (!ctx) return undefined;
+            ctx.drawImage(canvas, 0, 0, sourceWidth, sourceHeight, 0, 0, targetWidth, targetHeight);
+            return previewCanvas.toDataURL('image/jpeg', 0.72);
+        } catch (error) {
+            console.warn('[Viewpoints] No se pudo capturar la vista previa:', error);
+            return undefined;
+        }
     }
 
     private getMySharePermission(viewpoint: ViewpointData): ViewpointSharePermission | null {
@@ -351,7 +377,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             clippingPlanes,
             loadedModels,
             sharedWith: [...(base?.sharedWith || [])],
-            sharedAccess: [...(base?.sharedAccess || [])]
+            sharedAccess: [...(base?.sharedAccess || [])],
+            previewImage: this.capturePreviewImage() || base?.previewImage
         };
     }
 
@@ -892,11 +919,17 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                     ? (sharedCount > 0 ? `${date} • Compartida con ${sharedCount}` : date)
                     : `${date} • Compartida por ${v.userId} • ${permission === 'edit' ? 'Puede editar' : 'Solo lectura'}`;
                 const canEdit = this.canEdit(v);
+                const previewHtml = v.previewImage
+                    ? `<img src="${v.previewImage}" alt="Preview ${v.title}" style="width: 72px; height: 54px; object-fit: cover; border-radius: 6px; border: 1px solid #555; background: #1f1f1f; flex-shrink: 0;" />`
+                    : `<div style="width: 72px; height: 54px; border-radius: 6px; border: 1px solid #555; background: linear-gradient(135deg, #2a2a2a, #1f1f1f); color: #aaa; display:flex; align-items:center; justify-content:center; font-size:10px; text-align:center; padding:4px; box-sizing:border-box; flex-shrink:0;">Sin preview</div>`;
                 
                 item.innerHTML = `
-                    <div style="display: flex; flex-direction: column; overflow: hidden; width: 60%;">
-                        <span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${v.title}</span>
-                        <span style="font-size: 10px; color: #aaa;">${metaLine}</span>
+                    <div style="display: flex; gap: 10px; align-items: center; overflow: hidden; width: 68%;">
+                        ${previewHtml}
+                        <div style="display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
+                            <span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${v.title}</span>
+                            <span style="font-size: 10px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${metaLine}</span>
+                        </div>
                     </div>
                     <div style="display: flex; gap: 5px;">
                         ${isOwned ? `<button class="share-view-btn" title="Compartir" style="background:none; border:none; color: #ff9800; cursor: pointer;"><i class="fa-solid fa-share-nodes"></i></button>` : ``}
