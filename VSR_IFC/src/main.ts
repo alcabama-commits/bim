@@ -373,21 +373,6 @@ setTimeout(patchAcceleratedRaycast, 1000);
 // But for "Edges", we can try to find if there is an alternative.
 // Since we are fixing the build, we will remove the calls to missing components for now.
 
-console.log('VSR_IFC Version: v2026-03-09-v33-LoadedModelsFix');
-const versionDiv = document.createElement('div');
-versionDiv.style.position = 'fixed';
-versionDiv.style.bottom = '10px';
-versionDiv.style.right = '10px';
-versionDiv.style.background = 'rgba(0, 0, 0, 0.7)';
-versionDiv.style.color = '#00ff00';
-versionDiv.style.padding = '5px 10px';
-versionDiv.style.zIndex = '10000';
-versionDiv.style.borderRadius = '4px';
-versionDiv.style.fontFamily = 'monospace';
-versionDiv.style.fontSize = '12px';
-versionDiv.textContent = 'v2026-03-09-v33-LoadedModelsFix';
-document.body.appendChild(versionDiv);
-
 // --- Global Error Handler (Added for debugging "Destruiste el visor") ---
 window.addEventListener('error', (event) => {
     const box = document.createElement('div');
@@ -2380,6 +2365,7 @@ initPropertiesPanel();
 
 const consoleToggle = document.getElementById('console-toggle');
 if (consoleToggle) {
+    (consoleToggle as HTMLElement).style.display = 'none';
     consoleToggle.addEventListener('click', () => {
         const consoleEl = document.getElementById('debug-console');
         if (consoleEl) {
@@ -3208,17 +3194,6 @@ function initPropertiesPanel() {
     if (resizer && panel) {
         let isResizing = false;
         
-                const header = panel.querySelector('.properties-header');
-                if (header && !header.querySelector('.version-tag')) {
-                     const v = document.createElement('span');
-                     v.className = 'version-tag';
-                     v.style.fontSize = '10px';
-                     v.style.color = '#888';
-                     v.style.marginLeft = '10px';
-                    v.innerText = 'v2026-02-09-Fix-v17-EmergencyPatched';
-                    header.appendChild(v);
-                }
-
         resizer.addEventListener('mousedown', (e) => {
             isResizing = true;
             resizer.classList.add('resizing');
