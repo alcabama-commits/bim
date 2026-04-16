@@ -152,22 +152,53 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     private capturePreviewImage(): string | undefined {
         try {
             const rendererThree = (this._world.renderer as any)?.three;
-            const canvas = rendererThree?.domElement as HTMLCanvasElement | undefined;
-            if (!canvas || typeof canvas.toDataURL !== 'function') return undefined;
-            if (canvas.width < 2 || canvas.height < 2) return undefined;
+            const scene = this._world.scene?.three as THREE.Scene | undefined;
+            const liveCamera = this._world.camera?.three as THREE.Camera | undefined;
+            const liveCanvas = rendererThree?.domElement as HTMLCanvasElement | undefined;
+            if (!scene || !liveCamera || !liveCanvas) return undefined;
+            if (liveCanvas.width < 2 || liveCanvas.height < 2) return undefined;
 
-            const sourceWidth = canvas.width;
-            const sourceHeight = canvas.height;
+            const sourceWidth = liveCanvas.width;
+            const sourceHeight = liveCanvas.height;
             const targetWidth = 320;
             const targetHeight = Math.max(180, Math.round((sourceHeight / Math.max(1, sourceWidth)) * targetWidth));
 
-            const previewCanvas = document.createElement('canvas');
-            previewCanvas.width = targetWidth;
-            previewCanvas.height = targetHeight;
-            const ctx = previewCanvas.getContext('2d');
-            if (!ctx) return undefined;
-            ctx.drawImage(canvas, 0, 0, sourceWidth, sourceHeight, 0, 0, targetWidth, targetHeight);
-            return previewCanvas.toDataURL('image/jpeg', 0.72);
+            const previewRenderer = new THREE.WebGLRenderer({
+                antialias: true,
+                alpha: false,
+                preserveDrawingBuffer: true
+            });
+
+            previewRenderer.setPixelRatio(1);
+            previewRenderer.setSize(targetWidth, targetHeight, false);
+            previewRenderer.outputColorSpace = rendererThree?.outputColorSpace || THREE.SRGBColorSpace;
+
+            const previewCamera = liveCamera.clone() as THREE.Camera;
+            if ((previewCamera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+                const perspectiveCamera = previewCamera as THREE.PerspectiveCamera;
+                perspectiveCamera.aspect = targetWidth / targetHeight;
+                perspectiveCamera.updateProjectionMatrix();
+            } else if ((previewCamera as THREE.OrthographicCamera).isOrthographicCamera) {
+                const orthoCamera = previewCamera as THREE.OrthographicCamera;
+                orthoCamera.updateProjectionMatrix();
+            }
+
+            const rendererClippingPlanes = Array.isArray(rendererThree?.clippingPlanes)
+                ? rendererThree.clippingPlanes
+                : [];
+            (previewRenderer as any).clippingPlanes = rendererClippingPlanes;
+            (previewRenderer as any).localClippingEnabled = !!rendererThree?.localClippingEnabled;
+
+            scene.updateMatrixWorld(true);
+            previewCamera.updateMatrixWorld(true);
+            previewRenderer.render(scene, previewCamera);
+
+            const dataUrl = previewRenderer.domElement.toDataURL('image/jpeg', 0.78);
+            previewRenderer.dispose();
+            if (typeof (previewRenderer as any).forceContextLoss === 'function') {
+                (previewRenderer as any).forceContextLoss();
+            }
+            return dataUrl;
         } catch (error) {
             console.warn('[Viewpoints] No se pudo capturar la vista previa:', error);
             return undefined;
