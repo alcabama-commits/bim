@@ -57,6 +57,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     private _hider: OBC.Hider;
     
     private _savedViewpoints: ViewpointData[] = [];
+    private _deletedViewpointIds = new Set<string>();
     private _stateProvider?: ViewpointStateProvider;
     private _currentUserId: string | null = null;
     private _activeViewpointId: string | null = null;
@@ -99,6 +100,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         this._repository = new ViewpointRepository();
 
         this.initializeUser();
+        this.loadDeletedViewpointIds();
         this.loadFromStorage();
         this.loadFromRepository();
         this.setupAutoSync();
@@ -293,6 +295,53 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         void this.loadFromRepository({ silent: true, reason });
     }
 
+    private normalizeViewId(id?: string | null) {
+        return String(id || '').trim();
+    }
+
+    private getDeletedStorageKey(): string {
+        if (!this._currentUserId || this._currentUserId === 'guest') {
+            return 'vsr-ifc-viewpoints-deleted-guest';
+        }
+        return `vsr-ifc-viewpoints-deleted-${this._currentUserId}`;
+    }
+
+    private loadDeletedViewpointIds() {
+        const raw = localStorage.getItem(this.getDeletedStorageKey());
+        this._deletedViewpointIds = new Set<string>();
+        if (!raw) return;
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                for (const id of parsed) {
+                    const normalized = this.normalizeViewId(id);
+                    if (normalized) this._deletedViewpointIds.add(normalized);
+                }
+            }
+        } catch (e) {
+            console.warn('[Viewpoints] No se pudo leer la lista de vistas eliminadas.', e);
+        }
+    }
+
+    private saveDeletedViewpointIds() {
+        localStorage.setItem(this.getDeletedStorageKey(), JSON.stringify(Array.from(this._deletedViewpointIds)));
+    }
+
+    private markViewpointDeleted(id: string) {
+        const normalized = this.normalizeViewId(id);
+        if (!normalized) return;
+        this._deletedViewpointIds.add(normalized);
+        this.saveDeletedViewpointIds();
+    }
+
+    private clearDeletedMark(id: string) {
+        const normalized = this.normalizeViewId(id);
+        if (!normalized) return;
+        if (this._deletedViewpointIds.delete(normalized)) {
+            this.saveDeletedViewpointIds();
+        }
+    }
+
     private setupAutoSync() {
         if (this._syncTimer !== null) return;
         if (typeof window !== 'undefined') {
@@ -361,6 +410,10 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             let loadedCount = 0;
             const accessibleCloudIds = new Set<string>();
             for (const item of index) {
+                const itemId = this.normalizeViewId(item.id);
+                if (itemId && this._deletedViewpointIds.has(itemId)) {
+                    continue;
+                }
                 const me = String(this._currentUserId || '').trim().toLowerCase();
                 const isOwner = String(item.userId || '').trim().toLowerCase() === me;
                 const isShared = (
@@ -387,6 +440,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 }
             }
             this._savedViewpoints = this._savedViewpoints.filter((view) => {
+                if (this._deletedViewpointIds.has(this.normalizeViewId(view.id))) return false;
                 if (this.checkOwnership(view)) return true;
                 return accessibleCloudIds.has(String(view.id));
             });
@@ -515,6 +569,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             sharedAccess: []
         });
         if (!viewpointData) return;
+        this.clearDeletedMark(viewpointData.id);
 
         console.log('[Viewpoints] Saving viewpoint data:', JSON.stringify(viewpointData, null, 2));
 
@@ -561,6 +616,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
         const updated = this.captureViewpointState(existing);
         if (!updated) return;
+        this.clearDeletedMark(updated.id);
         const idx = this._savedViewpoints.findIndex(v => v.id === id);
         if (idx === -1) return;
         this._savedViewpoints[idx] = updated;
@@ -776,7 +832,11 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         }
 
         // 2. Delete Locally
+        this.markViewpointDeleted(id);
         this._savedViewpoints = this._savedViewpoints.filter(v => v.id !== id);
+        if (this._activeViewpointId === id) {
+            this._activeViewpointId = null;
+        }
         this.saveToStorage();
         this.renderList();
         this._lastSyncAt = 0;
@@ -1152,6 +1212,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 
                 // Verify ownership integrity on load (Middleware check)
                 this._savedViewpoints = this._savedViewpoints.filter(v => {
+                    if (this._deletedViewpointIds.has(this.normalizeViewId(v.id))) return false;
                     if (!this._currentUserId || this._currentUserId === 'guest') return false;
                     if (this.canAccess(v)) return true;
                     console.warn(`[Security] Filtered out unauthorized view ${v.id} belonging to ${v.userId}`);
