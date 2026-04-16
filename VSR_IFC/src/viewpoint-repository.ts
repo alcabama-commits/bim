@@ -1,5 +1,5 @@
 import { ViewpointData } from './viewpoints-manager';
-import { VIEWPOINTS_API_URL } from './config';
+import { AUTHORIZED_USERS_SHEET_GID, AUTHORIZED_USERS_SHEET_ID, VIEWPOINTS_API_URL } from './config';
 
 export interface ViewpointIndexItem {
     id: string;
@@ -240,73 +240,155 @@ export class ViewpointRepository {
         URL.revokeObjectURL(url);
     }
 
+    private normalizeActiveUsers(rawUsers: any[]): ActiveUser[] {
+        const normalized = rawUsers
+            .map((u: any) => {
+                if (u && typeof u === 'object') {
+                    const id = String(
+                        u.id ??
+                        u.userId ??
+                        u.user_id ??
+                        u.email ??
+                        u.correo ??
+                        u.mail ??
+                        ''
+                    ).trim();
+                    const emailRaw = u.email ?? u.correo ?? u.mail ?? u['e-mail'];
+                    const email = emailRaw ? String(emailRaw).trim().toLowerCase() : undefined;
+                    const name = String(
+                        u.name ??
+                        u.nombre ??
+                        u.displayName ??
+                        u.display_name ??
+                        u.usuario ??
+                        email ??
+                        id
+                    ).trim();
+                    return { id, name, email };
+                }
+                const v = String(u ?? '').trim();
+                return v ? { id: v, name: v } : null;
+            })
+            .filter((u): u is ActiveUser => !!u && !!u.id);
+
+        const deduped = new Map<string, ActiveUser>();
+        for (const user of normalized) {
+            const key = user.id.trim().toLowerCase();
+            if (!key) continue;
+            if (!deduped.has(key)) deduped.set(key, user);
+        }
+        return Array.from(deduped.values());
+    }
+
+    private parseGoogleVisualizationUsers(rawText: string): ActiveUser[] {
+        const start = rawText.indexOf('{');
+        const end = rawText.lastIndexOf('}');
+        if (start === -1 || end === -1 || end <= start) {
+            throw new Error('Respuesta inválida de Google Sheets.');
+        }
+
+        const payload = JSON.parse(rawText.slice(start, end + 1));
+        const rows = payload?.table?.rows;
+        if (!Array.isArray(rows) || rows.length === 0) return [];
+
+        const matrix = rows.map((row: any) =>
+            Array.isArray(row?.c) ? row.c.map((cell: any) => cell?.v ?? '') : []
+        );
+        if (matrix.length === 0) return [];
+
+        const header = matrix[0].map((value: any) => String(value || '').trim().toLowerCase());
+        const findCol = (candidates: string[]) => {
+            for (const candidate of candidates) {
+                const idx = header.indexOf(candidate);
+                if (idx !== -1) return idx;
+            }
+            return -1;
+        };
+
+        const colEmail = findCol(['email', 'correo', 'mail', 'e-mail']);
+        const colName = findCol(['nombre', 'name', 'usuario', 'displayname', 'display_name']);
+        const colRole = findCol(['rol', 'role', 'roles']);
+        if (colEmail === -1 && colName === -1) {
+            throw new Error('La hoja no contiene columnas de usuario reconocibles.');
+        }
+
+        const users: ActiveUser[] = [];
+        for (let i = 1; i < matrix.length; i++) {
+            const row = matrix[i];
+            const email = colEmail !== -1 ? String(row[colEmail] || '').trim().toLowerCase() : '';
+            const name = colName !== -1 ? String(row[colName] || '').trim() : '';
+            const role = colRole !== -1 ? String(row[colRole] || '').trim() : '';
+            const id = email || name;
+            if (!id) continue;
+            users.push({
+                id,
+                name: name || email || id,
+                email: email || undefined
+            });
+            if (role) {
+                // role is currently ignored in UI, but keeping the parse makes the source resilient.
+            }
+        }
+
+        return this.normalizeActiveUsers(users);
+    }
+
+    private async loadActiveUsersFromSheetDirect(): Promise<ActiveUser[]> {
+        if (!AUTHORIZED_USERS_SHEET_ID) return [];
+        const url = `https://docs.google.com/spreadsheets/d/${AUTHORIZED_USERS_SHEET_ID}/gviz/tq?tqx=out:json&gid=${AUTHORIZED_USERS_SHEET_GID}&t=${Date.now()}`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Google Sheets respondió HTTP ${response.status}`);
+        }
+        const text = await response.text();
+        return this.parseGoogleVisualizationUsers(text);
+    }
+
     async loadActiveUsers(): Promise<ActiveUser[]> {
-        if (!VIEWPOINTS_API_URL) {
-            return [];
+        const errors: string[] = [];
+
+        if (VIEWPOINTS_API_URL) {
+            try {
+                const response = await fetch(`${VIEWPOINTS_API_URL}?action=users&t=${Date.now()}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                if (data && typeof data === 'object' && !Array.isArray(data) && data.status === 'error') {
+                    throw new Error(String(data.message || 'No se pudo cargar la lista de usuarios.'));
+                }
+                if (data && typeof data === 'object' && !Array.isArray(data) && typeof (data as any).warning === 'string' && (data as any).warning.trim()) {
+                    throw new Error(String((data as any).warning));
+                }
+                const rawUsers = Array.isArray(data)
+                    ? data
+                    : Array.isArray(data?.users)
+                        ? data.users
+                        : Array.isArray(data?.data)
+                            ? data.data
+                            : [];
+
+                if (Array.isArray(rawUsers)) {
+                    const users = this.normalizeActiveUsers(rawUsers);
+                    if (users.length > 0) return users;
+                }
+                errors.push('La API no devolvió usuarios.');
+            } catch (e) {
+                const message = e instanceof Error ? e.message : String(e);
+                console.warn('[Repository] Failed to load users list from API:', e);
+                errors.push(`API: ${message}`);
+            }
         }
 
         try {
-            const response = await fetch(`${VIEWPOINTS_API_URL}?action=users&t=${Date.now()}`);
-            if (!response.ok) return [];
-            const data = await response.json();
-            if (data && typeof data === 'object' && !Array.isArray(data) && data.status === 'error') {
-                throw new Error(String(data.message || 'No se pudo cargar la lista de usuarios.'));
-            }
-            if (data && typeof data === 'object' && !Array.isArray(data) && typeof (data as any).warning === 'string' && (data as any).warning.trim()) {
-                throw new Error(String((data as any).warning));
-            }
-            const rawUsers = Array.isArray(data)
-                ? data
-                : Array.isArray(data?.users)
-                    ? data.users
-                    : Array.isArray(data?.data)
-                        ? data.data
-                        : [];
-
-            if (Array.isArray(rawUsers)) {
-                const normalized = rawUsers
-                    .map((u: any) => {
-                        if (u && typeof u === 'object') {
-                            const id = String(
-                                u.id ??
-                                u.userId ??
-                                u.user_id ??
-                                u.email ??
-                                u.correo ??
-                                u.mail ??
-                                ''
-                            ).trim();
-                            const emailRaw = u.email ?? u.correo ?? u.mail ?? u['e-mail'];
-                            const email = emailRaw ? String(emailRaw).trim().toLowerCase() : undefined;
-                            const name = String(
-                                u.name ??
-                                u.nombre ??
-                                u.displayName ??
-                                u.display_name ??
-                                u.usuario ??
-                                email ??
-                                id
-                            ).trim();
-                            return { id, name, email };
-                        }
-                        const v = String(u ?? '').trim();
-                        return v ? { id: v, name: v } : null;
-                    })
-                    .filter((u): u is ActiveUser => !!u && !!u.id);
-
-                const deduped = new Map<string, ActiveUser>();
-                for (const user of normalized) {
-                    const key = user.id.trim().toLowerCase();
-                    if (!key) continue;
-                    if (!deduped.has(key)) deduped.set(key, user);
-                }
-                return Array.from(deduped.values());
-            }
-            return [];
+            const directUsers = await this.loadActiveUsersFromSheetDirect();
+            if (directUsers.length > 0) return directUsers;
+            errors.push('La hoja no devolvió usuarios.');
         } catch (e) {
-            console.warn('[Repository] Failed to load users list:', e);
-            return [];
+            const message = e instanceof Error ? e.message : String(e);
+            console.warn('[Repository] Failed to load users list from Google Sheet:', e);
+            errors.push(`Google Sheet: ${message}`);
         }
+
+        throw new Error(errors.join(' | ') || 'No se pudo cargar la lista de usuarios autorizados.');
     }
 
     async shareViewpointToCloud(id: string, requesterUserId: string, sharedWith: string[]): Promise<{ ok: boolean; message?: string }> {
