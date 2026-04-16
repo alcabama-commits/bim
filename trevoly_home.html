@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Trevoly | Portal BIM Alcabama</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#D8005E",
+            "trevoly-bg": "#c8ccbd",
+            "trevoly-card": "#d7dbc9",
+            "trevoly-accent": "#d7c451",
+            "trevoly-muted": "#6f7567",
+            "background-light": "#FFFFFF",
+            "background-dark": "#343434",
+            "text-light": "#111827",
+            "text-dark": "#F3F4F6",
+            "border-light": "#E5E7EB",
+            "border-dark": "#4B5563"
+          },
+          fontFamily: {
+            sans: ["Inter", "sans-serif"],
+            display: ['"Source Sans Pro"', "sans-serif"]
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@700;900&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+</head>
+<body class="bg-background-light text-text-light dark:bg-background-dark dark:text-text-dark">
+  <div class="min-h-screen bg-trevoly-bg dark:bg-[#4c5147]">
+    <header class="absolute top-0 left-0 w-full z-10 px-6 py-4 md:px-8">
+      <div class="container mx-auto flex items-center justify-between">
+        <a href="home.html" class="flex items-center">
+          <img alt="Portal BIM Alcabama Logo" class="h-11 dark:hidden" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png"/>
+          <img alt="Portal BIM Alcabama Logo" class="h-11 hidden dark:block" src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png"/>
+        </a>
+        <div class="flex items-center space-x-4">
+          <button id="theme-toggle" aria-label="Cambiar tema" class="text-text-light dark:text-white hover:text-primary">
+            <span class="material-symbols-outlined">dark_mode</span>
+          </button>
+          <div id="auth-container" class="flex items-center space-x-4">
+            <a href="https://alcabama-commits.github.io/bim/inse.html" class="text-sm font-medium text-text-light dark:text-white hover:text-primary">Iniciar sesión</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="px-6 pb-16 pt-28 md:px-10">
+      <div class="container mx-auto">
+        <div class="mb-10 flex items-center justify-between gap-4">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.35em] text-trevoly-muted dark:text-[#d4dacb]">Proyecto</p>
+            <h1 class="font-display text-4xl font-black tracking-tight text-[#252a20] dark:text-white md:text-6xl">Trevoly</h1>
+          </div>
+          <a href="home.html" class="rounded-full border border-[#252a20] px-4 py-2 text-sm font-semibold text-[#252a20] transition hover:bg-[#252a20] hover:text-white dark:border-white dark:text-white dark:hover:bg-white dark:hover:text-[#252a20]">Volver al portal</a>
+        </div>
+
+        <section class="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+          <article class="rounded-[2.5rem] border-2 border-[#252a20] bg-trevoly-card shadow-[0_24px_60px_rgba(37,42,32,0.14)] overflow-hidden lg:max-w-md lg:ml-8">
+            <div class="flex items-center justify-between px-6 pt-6">
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 overflow-hidden rounded-full border border-[#252a20] bg-white">
+                  <img alt="Trevoly avatar" class="h-full w-full object-cover" src="https://i.postimg.cc/RVp8pZwc/artis-urbano.png"/>
+                </div>
+                <div>
+                  <p class="text-[11px] uppercase tracking-[0.28em] text-trevoly-muted">Dashboard</p>
+                  <p class="text-sm font-semibold text-[#252a20] dark:text-[#252a20]">Vista general</p>
+                </div>
+              </div>
+              <span class="text-xl tracking-[0.2em] text-[#252a20]">:::</span>
+            </div>
+
+            <div class="px-6 pb-6 pt-5">
+              <p class="text-lg text-[#88907f]">Home del proyecto</p>
+              <h2 class="font-display text-4xl font-black leading-none text-[#252a20]">Trevoly BIM Home</h2>
+            </div>
+
+            <div class="bg-trevoly-accent px-6 py-8">
+              <div class="mb-10 flex items-start justify-between">
+                <div>
+                  <p class="text-xs uppercase tracking-[0.28em] text-[#252a20]">Estado</p>
+                  <p class="mt-2 text-sm font-medium text-[#252a20]">Coordinación activa</p>
+                </div>
+                <div class="text-right">
+                  <p class="text-xs uppercase tracking-[0.28em] text-[#252a20]">Sprint</p>
+                  <p class="mt-2 text-sm font-medium text-[#252a20]">Semana 16</p>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-center py-8">
+                <div class="relative h-20 w-20">
+                  <span class="absolute left-1/2 top-0 h-full w-[3px] -translate-x-1/2 bg-[#252a20]"></span>
+                  <span class="absolute top-1/2 left-0 h-[3px] w-full -translate-y-1/2 bg-[#252a20]"></span>
+                </div>
+              </div>
+
+              <div class="mt-8 grid grid-cols-2 gap-4 text-[#252a20]">
+                <div>
+                  <p class="text-[11px] uppercase tracking-[0.24em]">Modelos</p>
+                  <p class="mt-1 text-2xl font-bold">12</p>
+                </div>
+                <div class="text-right">
+                  <p class="text-[11px] uppercase tracking-[0.24em]">Vistas</p>
+                  <p class="mt-1 text-2xl font-bold">38</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="divide-y divide-[#8a9184] bg-[#6f7567] text-white">
+              <a href="VSR_IFC/index.html" class="flex items-center justify-between px-6 py-5 transition hover:bg-[#646a5d]">
+                <span class="text-xs uppercase tracking-[0.24em]">Visor IFC</span>
+                <span class="text-sm font-semibold">Abrir</span>
+              </a>
+              <a href="Publicaciones.html" class="flex items-center justify-between px-6 py-5 transition hover:bg-[#646a5d]">
+                <span class="text-xs uppercase tracking-[0.24em]">Publicaciones</span>
+                <span class="text-sm font-semibold">Ver</span>
+              </a>
+              <a href="index.html" class="flex items-center justify-between px-6 py-5 transition hover:bg-[#646a5d]">
+                <span class="text-xs uppercase tracking-[0.24em]">Solicitudes</span>
+                <span class="text-sm font-semibold">Gestionar</span>
+              </a>
+              <a href="lista_usuarios.html" class="flex items-center justify-between px-6 py-5 transition hover:bg-[#646a5d]">
+                <span class="text-xs uppercase tracking-[0.24em]">Equipo</span>
+                <span class="text-sm font-semibold">Consultar</span>
+              </a>
+            </div>
+          </article>
+
+          <article class="rounded-[2.5rem] border-2 border-[#252a20] bg-[#d7dbc9] shadow-[0_24px_60px_rgba(37,42,32,0.14)] overflow-hidden lg:max-w-md lg:justify-self-end lg:mr-8">
+            <div class="flex items-center justify-between px-6 pt-6">
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 overflow-hidden rounded-full border border-[#252a20] bg-[#7f8575]">
+                  <img alt="Alcabama avatar" class="h-full w-full object-cover" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png"/>
+                </div>
+                <div>
+                  <p class="text-[11px] uppercase tracking-[0.28em] text-trevoly-muted">Actividad</p>
+                  <p class="text-sm font-semibold text-[#252a20]">Módulos recientes</p>
+                </div>
+              </div>
+              <span class="text-xl tracking-[0.2em] text-[#252a20]">:::</span>
+            </div>
+
+            <div class="px-6 pb-4 pt-5">
+              <p class="text-lg text-[#88907f]">All Recent</p>
+              <h2 class="font-display text-4xl font-black leading-none text-[#252a20]">Transactions</h2>
+            </div>
+
+            <div class="pb-6">
+              <div class="grid grid-cols-[78px_1fr] border-y border-[#8a9184]">
+                <div class="space-y-px bg-[#8e9685]">
+                  <div class="flex h-[84px] items-center justify-center bg-[#62695c] text-white">◔</div>
+                  <div class="flex h-[84px] items-center justify-center bg-[#76806e] text-white">⌘</div>
+                  <div class="flex h-[84px] items-center justify-center bg-[#87917d] text-white">□</div>
+                  <div class="flex h-[84px] items-center justify-center bg-[#98a28d] text-white">◌</div>
+                </div>
+                <div class="divide-y divide-[#c0c6b8]">
+                  <div class="flex items-center justify-between gap-4 px-6 py-5">
+                    <div>
+                      <p class="text-2xl font-semibold text-[#252a20]">Visor IFC</p>
+                      <p class="text-xs uppercase tracking-[0.2em] text-[#7b8272]">Model coordination</p>
+                    </div>
+                    <a href="VSR_IFC/index.html" class="text-lg font-bold text-[#252a20]">Entrar</a>
+                  </div>
+                  <div class="flex items-center justify-between gap-4 px-6 py-5">
+                    <div>
+                      <p class="text-2xl font-semibold text-[#252a20]">Publicaciones</p>
+                      <p class="text-xs uppercase tracking-[0.2em] text-[#7b8272]">Project updates</p>
+                    </div>
+                    <a href="Publicaciones.html" class="text-lg font-bold text-[#252a20]">Abrir</a>
+                  </div>
+                  <div class="flex items-center justify-between gap-4 px-6 py-5">
+                    <div>
+                      <p class="text-2xl font-semibold text-[#252a20]">Solicitudes</p>
+                      <p class="text-xs uppercase tracking-[0.2em] text-[#7b8272]">Access and workflows</p>
+                    </div>
+                    <a href="index.html" class="text-lg font-bold text-[#252a20]">Ir</a>
+                  </div>
+                  <div class="flex items-center justify-between gap-4 px-6 py-5">
+                    <div>
+                      <p class="text-2xl font-semibold text-[#252a20]">Métricas</p>
+                      <p class="text-xs uppercase tracking-[0.2em] text-[#7b8272]">Tracking</p>
+                    </div>
+                    <a href="home.html#metricas" class="text-lg font-bold text-[#252a20]">Ver</a>
+                  </div>
+                </div>
+              </div>
+
+              <div class="px-6 pt-5 text-center">
+                <p class="text-xs font-semibold uppercase tracking-[0.28em] text-[#252a20]">Show More</p>
+              </div>
+            </div>
+          </article>
+        </section>
+      </div>
+    </main>
+
+    <footer class="px-8 py-8">
+      <div class="container mx-auto text-center text-gray-600 dark:text-gray-300">
+        <div class="mb-4 flex items-center justify-center gap-4">
+          <img alt="Artis Urbano logo" class="h-8" src="https://i.postimg.cc/RVp8pZwc/artis-urbano.png"/>
+          <div class="h-8 w-px bg-black dark:bg-white"></div>
+          <img alt="Alcabama logo" class="h-8 dark:hidden" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png"/>
+          <img alt="Alcabama logo" class="hidden h-8 dark:block" src="https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png"/>
+        </div>
+        <p class="text-sm">© 2026 Portal BIM Alcabama - Todos los derechos reservados.</p>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const authContainer = document.getElementById('auth-container');
+      const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
+
+      if (userAccount) {
+        authContainer.innerHTML = `
+          <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
+          <button id="logout-button" class="text-sm font-medium text-text-light dark:text-white hover:text-primary">Cerrar sesión</button>
+        `;
+        document.getElementById('logout-button').addEventListener('click', () => {
+          sessionStorage.removeItem('userAccount');
+          localStorage.removeItem('userAccount');
+          window.location.reload();
+        });
+      }
+
+      const themeToggle = document.getElementById('theme-toggle');
+      const htmlEl = document.documentElement;
+      const applyTheme = (theme) => {
+        if (theme === 'dark') {
+          htmlEl.classList.add('dark');
+          themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode';
+        } else {
+          htmlEl.classList.remove('dark');
+          themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode';
+        }
+      };
+
+      const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      applyTheme(savedTheme);
+
+      themeToggle.addEventListener('click', () => {
+        const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
+        localStorage.setItem('theme', newTheme);
+        applyTheme(newTheme);
+      });
+    });
+  </script>
+</body>
+</html>
