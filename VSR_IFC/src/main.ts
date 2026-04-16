@@ -83,6 +83,122 @@ const getSectionSnapCandidates = (vertices: THREE.Vector3[], hitPoint?: THREE.Ve
     return candidates;
 };
 
+type SnapTriangleCache = {
+    triangles: Array<{ indices: [number, number, number]; normal: THREE.Vector3; constant: number }>;
+    vertexToTriangles: Map<number, number[]>;
+};
+
+const getSnapTriangleCache = (geom: THREE.BufferGeometry): SnapTriangleCache | null => {
+    const pos = geom.attributes.position;
+    if (!pos) return null;
+    const cached = (geom.userData.__snapTriangleCache || null) as SnapTriangleCache | null;
+    if (cached) return cached;
+
+    const triangles: SnapTriangleCache['triangles'] = [];
+    const vertexToTriangles = new Map<number, number[]>();
+    const readVertex = (idx: number) => new THREE.Vector3().fromBufferAttribute(pos, idx);
+    const registerTriangle = (a: number, b: number, c: number) => {
+        const va = readVertex(a);
+        const vb = readVertex(b);
+        const vc = readVertex(c);
+        const normal = new THREE.Vector3().subVectors(vb, va).cross(new THREE.Vector3().subVectors(vc, va));
+        if (normal.lengthSq() < 1e-12) return;
+        normal.normalize();
+        const constant = normal.dot(va);
+        const triangleIndex = triangles.length;
+        triangles.push({ indices: [a, b, c], normal, constant });
+        for (const idx of [a, b, c]) {
+            const list = vertexToTriangles.get(idx) || [];
+            list.push(triangleIndex);
+            vertexToTriangles.set(idx, list);
+        }
+    };
+
+    if (geom.index) {
+        const index = geom.index;
+        for (let i = 0; i < index.count; i += 3) {
+            registerTriangle(index.getX(i), index.getX(i + 1), index.getX(i + 2));
+        }
+    } else {
+        for (let i = 0; i < pos.count; i += 3) {
+            registerTriangle(i, i + 1, i + 2);
+        }
+    }
+
+    const cache = { triangles, vertexToTriangles };
+    geom.userData.__snapTriangleCache = cache;
+    return cache;
+};
+
+const getConnectedCoplanarVertices = (intersection: THREE.Intersection): THREE.Vector3[] => {
+    if (!intersection.face) return [];
+    const geom = (intersection.object as any)?.geometry as THREE.BufferGeometry | undefined;
+    const pos = geom?.attributes?.position;
+    if (!geom || !pos) return [];
+
+    const cache = getSnapTriangleCache(geom);
+    if (!cache) return [];
+
+    const seedIndices = [intersection.face.a, intersection.face.b, intersection.face.c];
+    const seedTriangle = cache.triangles.find((triangle) =>
+        triangle.indices[0] === seedIndices[0] &&
+        triangle.indices[1] === seedIndices[1] &&
+        triangle.indices[2] === seedIndices[2]
+    ) || cache.triangles.find((triangle) => {
+        const triSet = new Set(triangle.indices);
+        return seedIndices.every((idx) => triSet.has(idx));
+    });
+    if (!seedTriangle) return [];
+
+    const pending: number[] = [];
+    const visited = new Set<number>();
+    for (const idx of seedTriangle.indices) {
+        const triangles = cache.vertexToTriangles.get(idx) || [];
+        pending.push(...triangles);
+    }
+
+    const normalTolerance = 0.999;
+    const planeTolerance = 1e-4;
+    const collectedIndices = new Set<number>();
+
+    while (pending.length > 0) {
+        const triIndex = pending.pop()!;
+        if (visited.has(triIndex)) continue;
+        visited.add(triIndex);
+
+        const triangle = cache.triangles[triIndex];
+        if (!triangle) continue;
+        if (Math.abs(triangle.normal.dot(seedTriangle.normal)) < normalTolerance) continue;
+        if (Math.abs(triangle.constant - seedTriangle.constant) > planeTolerance) continue;
+
+        for (const idx of triangle.indices) {
+            collectedIndices.add(idx);
+            const neighbors = cache.vertexToTriangles.get(idx) || [];
+            for (const neighbor of neighbors) {
+                if (!visited.has(neighbor)) pending.push(neighbor);
+            }
+        }
+    }
+
+    const worldVertices: THREE.Vector3[] = [];
+    const transformVertex = (idx: number) => {
+        const v = new THREE.Vector3().fromBufferAttribute(pos, idx);
+        if (intersection.object instanceof THREE.InstancedMesh && intersection.instanceId !== undefined) {
+            const instanceMatrix = new THREE.Matrix4();
+            intersection.object.getMatrixAt(intersection.instanceId, instanceMatrix);
+            v.applyMatrix4(instanceMatrix);
+        }
+        intersection.object.updateMatrixWorld();
+        v.applyMatrix4(intersection.object.matrixWorld);
+        return v;
+    };
+
+    for (const idx of collectedIndices) {
+        pushUniqueSnapPoint(worldVertices, transformVertex(idx));
+    }
+    return worldVertices;
+};
+
 const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
     if (!intersects || intersects.length === 0) return intersects;
     
@@ -90,8 +206,8 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
     if (!closest) return intersects;
 
     try {
-        const VERTEX_THRESHOLD = 0.25; // Adjusted to 25cm for v29-SmartSnap
-        const EDGE_THRESHOLD = 0.15; // Adjusted to 15cm for v29-SmartSnap
+        const VERTEX_THRESHOLD = 0.18;
+        const EDGE_THRESHOLD = 0.08;
         
         if (closest.face && (closest.object as any).geometry) {
             const geom = (closest.object as any).geometry;
@@ -118,13 +234,15 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
                 const va = getV(a);
                 const vb = getV(b);
                 const vc = getV(c);
+                const coplanarVertices = getConnectedCoplanarVertices(closest);
                 
                 let bestPoint: THREE.Vector3 | null = null;
                 let minD = Infinity;
                 let type = '';
 
                 // 1. Check Vertices
-                [va, vb, vc].forEach(v => {
+                const vertexPool = coplanarVertices.length > 0 ? coplanarVertices : [va, vb, vc];
+                vertexPool.forEach(v => {
                     const d = v.distanceTo(closest.point);
                     if (d < minD) {
                         minD = d;
@@ -575,9 +693,9 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
         // Section/vertex-first snapping: prefer section corners on active cuts,
         // then exact mesh corners, then edges as fallback.
         // NOTE: Threshold is in world units (meters in typical IFC scenes).
-        const SNAP_SECTION_THRESHOLD = 0.08; // 8cm
-        const SNAP_VERTEX_THRESHOLD = 0.08; // 8cm
-        const SNAP_EDGE_THRESHOLD = 0.04;   // 4cm
+        const SNAP_SECTION_THRESHOLD = 0.08;
+        const SNAP_VERTEX_THRESHOLD = 0.12;
+        const SNAP_EDGE_THRESHOLD = 0.025;
 
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
@@ -606,7 +724,9 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              const va = getVertexWorld(indices[0]);
              const vb = getVertexWorld(indices[1]);
              const vc = getVertexWorld(indices[2]);
-             const sectionCandidates = getSectionSnapCandidates([va, vb, vc], valid.point);
+             const coplanarVertices = getConnectedCoplanarVertices(valid);
+             const vertexPool = coplanarVertices.length > 0 ? coplanarVertices : [va, vb, vc];
+             const sectionCandidates = getSectionSnapCandidates(vertexPool.slice(0, 3), valid.point);
              let closestSection: THREE.Vector3 | null = null;
              let minSectionDist = SNAP_SECTION_THRESHOLD;
              for (const candidate of sectionCandidates) {
@@ -621,8 +741,7 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              let minDist = SNAP_VERTEX_THRESHOLD;
 
              // Check only the 3 vertices of the hit triangle
-             for (const idx of indices) {
-                 const vertex = getVertexWorld(idx);
+             for (const vertex of vertexPool) {
                  const dist = vertex.distanceTo(valid.point); // 3D Distance
                  
                  // Debug distance
@@ -3566,8 +3685,8 @@ function setupMeasurementTools_Deprecated() {
                 let snapPoint = hitPoint.clone();
                 let isSnapped = false;
                 const mouseScreen = { x: event.clientX, y: event.clientY };
-                const VERTEX_THRESHOLD_PX = 18;
-                const EDGE_THRESHOLD_PX = 7;
+                const VERTEX_THRESHOLD_PX = 24;
+                const EDGE_THRESHOLD_PX = 5;
                 const SNAP_LOCK_RELEASE_PX = 24;
 
                 if (snapLock) {
@@ -3708,15 +3827,17 @@ function setupMeasurementTools_Deprecated() {
                                     };
                                 };
 
+                                const coplanarVertices = getConnectedCoplanarVertices(valid);
                                 const sectionPoints = getSectionSnapCandidates([vA, vB, vC], hitPoint);
                                 for (const point of sectionPoints) {
                                     pushUniquePoint(sectionCandidates, point);
                                 }
 
-                                // Exact corners have next priority.
-                                pushUniquePoint(vertexCandidates, vA);
-                                pushUniquePoint(vertexCandidates, vB);
-                                pushUniquePoint(vertexCandidates, vC);
+                                // Exact corners from the full coplanar face have next priority.
+                                const visualVertexPool = coplanarVertices.length > 0 ? coplanarVertices : [vA, vB, vC];
+                                for (const vertex of visualVertexPool) {
+                                    pushUniquePoint(vertexCandidates, vertex);
+                                }
 
                                 // Candidates: Dynamic Edge Snapping (Screen Space Project)
                                 const edges = [
@@ -3792,7 +3913,7 @@ function setupMeasurementTools_Deprecated() {
                         const bestSection = findBestCandidate(sectionCandidates, SECTION_THRESHOLD_PX);
                         const bestVertex = bestSection ? null : findBestCandidate(vertexCandidates, VERTEX_THRESHOLD_PX);
                         const bestEdge = (bestSection || bestVertex) ? null : findBestCandidate(edgeCandidates, EDGE_THRESHOLD_PX);
-                        const bestPoint = bestSection || bestVertex || bestEdge;
+                const bestPoint = bestSection || bestVertex || bestEdge;
 
                         if (bestPoint) {
                             snapPoint = bestPoint;
