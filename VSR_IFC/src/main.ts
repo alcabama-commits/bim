@@ -467,17 +467,10 @@ container.addEventListener('mousemove', (event) => {
 
 const debugConsole = document.getElementById('debug-console');
 if (debugConsole) {
-    debugConsole.style.display = 'block'; // Force visible
-    const log = (msg) => {
-        const line = document.createElement('div');
-        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-        debugConsole.appendChild(line);
-        debugConsole.scrollTop = debugConsole.scrollHeight;
-        if (debugConsole.children.length > 20) debugConsole.removeChild(debugConsole.firstChild);
-    };
-    window.debugLog = log;
+    debugConsole.style.display = 'none';
+    window.debugLog = () => {};
 } else {
-    window.debugLog = console.log;
+    window.debugLog = () => {};
 }
 
 const fragments = components.get(OBC.FragmentsManager);
@@ -521,9 +514,10 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
     }
 
     try {
-        // STRICT VERTEX SNAPPING LOGIC (Based on User Request: "Puntos Finales")
-        // We only look at the vertices of the hit face (Triangulation).
-        const SNAP_THRESHOLD = 2.0; // 2.0m Radius (Huge for testing)
+        // Vertex-first snapping: prefer exact corners, then edges as fallback.
+        // NOTE: Threshold is in world units (meters in typical IFC scenes).
+        const SNAP_VERTEX_THRESHOLD = 0.08; // 8cm
+        const SNAP_EDGE_THRESHOLD = 0.04;   // 4cm
 
         if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
              const geom = (valid.object as any).geometry;
@@ -550,7 +544,7 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
              };
 
              let closestVertex: THREE.Vector3 | null = null;
-             let minDist = SNAP_THRESHOLD;
+             let minDist = SNAP_VERTEX_THRESHOLD;
 
              // Check only the 3 vertices of the hit triangle
              for (const idx of indices) {
@@ -566,7 +560,7 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
                  }
              }
              
-             if (closestVertex) {
+             if (closestVertex && minDist <= SNAP_VERTEX_THRESHOLD) {
                  valid.point.copy(closestVertex);
                  
                  // Visual Debug
@@ -579,6 +573,29 @@ const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
                  
                  if (window.debugLog) window.debugLog(`SNAP! Vertex (Dist: ${minDist.toFixed(3)})`);
              } else {
+                 // Edge fallback if vertex is not within threshold.
+                 const va = getVertexWorld(indices[0]);
+                 const vb = getVertexWorld(indices[1]);
+                 const vc = getVertexWorld(indices[2]);
+                 const edges = [
+                     new THREE.Line3(va, vb),
+                     new THREE.Line3(vb, vc),
+                     new THREE.Line3(vc, va)
+                 ];
+                 let bestEdgeDist = Infinity;
+                 let bestEdgePoint: THREE.Vector3 | null = null;
+                 for (const edge of edges) {
+                     const target = new THREE.Vector3();
+                     edge.closestPointToPoint(valid.point, true, target);
+                     const d = target.distanceTo(valid.point);
+                     if (d < bestEdgeDist) {
+                         bestEdgeDist = d;
+                         bestEdgePoint = target;
+                     }
+                 }
+                 if (bestEdgePoint && bestEdgeDist <= SNAP_EDGE_THRESHOLD) {
+                     valid.point.copy(bestEdgePoint);
+                 }
                  if (typeof debugSphere !== 'undefined') debugSphere.visible = false;
              }
         }
@@ -931,15 +948,6 @@ let propertiesTableElement: HTMLElement | null = null;
 
 // Helper to log to screen
 function logToScreen(msg: string, isError = false) {
-    const debugEl = document.getElementById('debug-console');
-    if (debugEl) {
-        // debugEl.style.display = 'block'; // Removed to keep it hidden by default
-        const line = document.createElement('div');
-        line.textContent = `> ${msg}`;
-        if (isError) line.style.color = '#ff4444';
-        debugEl.appendChild(line);
-        debugEl.scrollTop = debugEl.scrollHeight;
-    }
     if (isError) console.error(msg);
     else console.log(msg);
 }
@@ -3416,25 +3424,7 @@ function setupMeasurementTools_Deprecated() {
 
     const mouse = new THREE.Vector2();
 
-    // --- DEBUG PANEL ---
-    const debugPanel = document.createElement('div');
-    debugPanel.style.position = 'fixed';
-    debugPanel.style.bottom = '40px';
-    debugPanel.style.right = '10px';
-    debugPanel.style.background = 'rgba(0, 0, 0, 0.8)';
-    debugPanel.style.color = '#00ff00';
-    debugPanel.style.padding = '8px';
-    debugPanel.style.borderRadius = '4px';
-    debugPanel.style.fontFamily = 'monospace';
-    debugPanel.style.fontSize = '12px';
-    debugPanel.style.pointerEvents = 'none';
-    debugPanel.style.zIndex = '10000';
-    debugPanel.style.whiteSpace = 'pre-wrap';
-    debugPanel.textContent = 'Ready';
-    document.body.appendChild(debugPanel);
-
     const logToScreen = (msg: string) => {
-        debugPanel.textContent = msg;
         console.log('[UI]', msg);
     };
 
@@ -3482,7 +3472,10 @@ function setupMeasurementTools_Deprecated() {
                 
                 try {
                     const geom = (valid.object as any).geometry;
-                    const candidates: THREE.Vector3[] = [];
+                    const vertexCandidates: THREE.Vector3[] = [];
+                    const edgeCandidates: THREE.Vector3[] = [];
+                    const VERTEX_THRESHOLD_PX = 12;
+                    const EDGE_THRESHOLD_PX = 6;
 
                     // Handle Meshes
                     if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
@@ -3617,15 +3610,8 @@ function setupMeasurementTools_Deprecated() {
                                     };
                                 };
 
-                                // Candidates: Vertices
-                                candidates.push(vA, vB, vC);
-                                
-                                // Candidates: Midpoints
-                                candidates.push(
-                                    new THREE.Vector3().addVectors(vA, vB).multiplyScalar(0.5),
-                                    new THREE.Vector3().addVectors(vB, vC).multiplyScalar(0.5),
-                                    new THREE.Vector3().addVectors(vC, vA).multiplyScalar(0.5)
-                                );
+                                // Exact corners have absolute priority.
+                                vertexCandidates.push(vA, vB, vC);
 
                                 // Candidates: Dynamic Edge Snapping (Screen Space Project)
                                 const edges = [
@@ -3636,11 +3622,11 @@ function setupMeasurementTools_Deprecated() {
 
                                 for (const edge of edges) {
                                     const res = distToSegment(mouseScreen, edge.start, edge.end);
-                                    if (res.dist < SNAP_THRESHOLD_PX) {
+                                    if (res.dist < EDGE_THRESHOLD_PX) {
                                         // Interpolate 3D point
                                         const edgeVec = new THREE.Vector3().subVectors(edge.vEnd, edge.vStart);
                                         const snapPt = new THREE.Vector3().copy(edge.vStart).add(edgeVec.multiplyScalar(res.t));
-                                        candidates.push(snapPt);
+                                        edgeCandidates.push(snapPt);
                                     }
                                 }
                             }
@@ -3677,11 +3663,11 @@ function setupMeasurementTools_Deprecated() {
                              vA.applyMatrix4(valid.object.matrixWorld);
                              vB.applyMatrix4(valid.object.matrixWorld);
                              
-                             candidates.push(vA, vB, new THREE.Vector3().addVectors(vA, vB).multiplyScalar(0.5));
+                            vertexCandidates.push(vA, vB);
                          }
                     }
 
-                    if (candidates.length > 0) {
+                    if (vertexCandidates.length > 0 || edgeCandidates.length > 0) {
                         // Project to Screen Space for "Visual" Snapping
                         const toScreen = (v: THREE.Vector3) => {
                             const p = v.clone().project(world.camera.three);
@@ -3694,24 +3680,28 @@ function setupMeasurementTools_Deprecated() {
                         };
 
                         const mouseScreen = { x: event.clientX, y: event.clientY };
-                        
-                        let bestDist = SNAP_THRESHOLD_PX;
-                        let bestPoint = null;
 
-                        for (const p of candidates) {
-                            const s = toScreen(p);
-                            if (Math.abs(s.z) > 1) continue; 
-
-                            const dx = s.x - mouseScreen.x;
-                            const dy = s.y - mouseScreen.y;
-                            const dist = Math.sqrt(dx*dx + dy*dy);
-
-                            if (dist < bestDist) {
-                                bestDist = dist;
-                                bestPoint = p;
+                        const findBestCandidate = (points: THREE.Vector3[], thresholdPx: number) => {
+                            let bestDist = thresholdPx;
+                            let bestPoint: THREE.Vector3 | null = null;
+                            for (const p of points) {
+                                const s = toScreen(p);
+                                if (Math.abs(s.z) > 1) continue;
+                                const dx = s.x - mouseScreen.x;
+                                const dy = s.y - mouseScreen.y;
+                                const dist = Math.sqrt(dx * dx + dy * dy);
+                                if (dist < bestDist) {
+                                    bestDist = dist;
+                                    bestPoint = p;
+                                }
                             }
-                        }
-                        
+                            return bestPoint;
+                        };
+
+                        const bestVertex = findBestCandidate(vertexCandidates, VERTEX_THRESHOLD_PX);
+                        const bestEdge = bestVertex ? null : findBestCandidate(edgeCandidates, EDGE_THRESHOLD_PX);
+                        const bestPoint = bestVertex || bestEdge;
+
                         if (bestPoint) {
                             snapPoint = bestPoint;
                             isSnapped = true;
