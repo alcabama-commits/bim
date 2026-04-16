@@ -49,39 +49,50 @@ const getSectionSnapCandidates = (vertices: THREE.Vector3[], hitPoint?: THREE.Ve
     if (!vertices || vertices.length < 3) return [];
     const planes = getActiveSnapClippingPlanes();
     if (planes.length === 0) return [];
-    const triangleEdges: Array<[THREE.Vector3, THREE.Vector3]> = [
-        [vertices[0], vertices[1]],
-        [vertices[1], vertices[2]],
-        [vertices[2], vertices[0]]
-    ];
     const candidates: THREE.Vector3[] = [];
     const planeTolerance = 0.02;
 
     for (const plane of planes) {
         if (hitPoint && Math.abs(plane.distanceToPoint(hitPoint)) > 0.2) continue;
-        const intersections: THREE.Vector3[] = [];
+        const maskPoints: THREE.Vector3[] = [];
 
-        for (const [start, end] of triangleEdges) {
-            const d1 = plane.distanceToPoint(start);
-            const d2 = plane.distanceToPoint(end);
-
-            if (Math.abs(d1) <= planeTolerance) pushUniqueSnapPoint(intersections, start.clone());
-            if (Math.abs(d2) <= planeTolerance) pushUniqueSnapPoint(intersections, end.clone());
-
-            if (d1 * d2 < 0) {
-                const t = d1 / (d1 - d2);
-                const point = start.clone().lerp(end, t);
-                pushUniqueSnapPoint(intersections, point);
+        for (const vertex of vertices) {
+            if (Math.abs(plane.distanceToPoint(vertex)) <= planeTolerance) {
+                pushUniqueSnapPoint(maskPoints, vertex.clone());
             }
         }
 
-        for (const point of intersections) {
+        if (maskPoints.length === 0 && vertices.length === 3) {
+            const triangleEdges: Array<[THREE.Vector3, THREE.Vector3]> = [
+                [vertices[0], vertices[1]],
+                [vertices[1], vertices[2]],
+                [vertices[2], vertices[0]]
+            ];
+
+            for (const [start, end] of triangleEdges) {
+                const d1 = plane.distanceToPoint(start);
+                const d2 = plane.distanceToPoint(end);
+
+                if (Math.abs(d1) <= planeTolerance) pushUniqueSnapPoint(maskPoints, start.clone());
+                if (Math.abs(d2) <= planeTolerance) pushUniqueSnapPoint(maskPoints, end.clone());
+
+                if (d1 * d2 < 0) {
+                    const t = d1 / (d1 - d2);
+                    const point = start.clone().lerp(end, t);
+                    pushUniqueSnapPoint(maskPoints, point);
+                }
+            }
+        }
+
+        for (const point of maskPoints) {
             pushUniqueSnapPoint(candidates, point);
         }
     }
 
     return candidates;
 };
+
+const hasActiveMaskSnap = () => getActiveSnapClippingPlanes().length > 0;
 
 type SnapTriangleCache = {
     triangles: Array<{ indices: [number, number, number]; normal: THREE.Vector3; constant: number }>;
@@ -208,6 +219,7 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
     try {
         const VERTEX_THRESHOLD = 0.18;
         const EDGE_THRESHOLD = 0.08;
+        const maskOnlyMode = hasActiveMaskSnap();
         
         if (closest.face && (closest.object as any).geometry) {
             const geom = (closest.object as any).geometry;
@@ -235,24 +247,37 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
                 const vb = getV(b);
                 const vc = getV(c);
                 const coplanarVertices = getConnectedCoplanarVertices(closest);
+                const sectionSourceVertices = coplanarVertices.length > 0 ? coplanarVertices : [va, vb, vc];
+                const maskCandidates = getSectionSnapCandidates(sectionSourceVertices, closest.point);
                 
                 let bestPoint: THREE.Vector3 | null = null;
                 let minD = Infinity;
                 let type = '';
 
-                // 1. Check Vertices
-                const vertexPool = coplanarVertices.length > 0 ? coplanarVertices : [va, vb, vc];
-                vertexPool.forEach(v => {
-                    const d = v.distanceTo(closest.point);
-                    if (d < minD) {
-                        minD = d;
-                        bestPoint = v;
-                        type = 'VERTEX';
+                if (maskOnlyMode) {
+                    for (const candidate of maskCandidates) {
+                        const d = candidate.distanceTo(closest.point);
+                        if (d < minD) {
+                            minD = d;
+                            bestPoint = candidate;
+                            type = 'SECTION';
+                        }
                     }
-                });
+                } else {
+                    // 1. Check Vertices
+                    const vertexPool = coplanarVertices.length > 0 ? coplanarVertices : [va, vb, vc];
+                    vertexPool.forEach(v => {
+                        const d = v.distanceTo(closest.point);
+                        if (d < minD) {
+                            minD = d;
+                            bestPoint = v;
+                            type = 'VERTEX';
+                        }
+                    });
+                }
 
                 // Only stick to vertex if within threshold
-                if (minD > VERTEX_THRESHOLD) {
+                if (!maskOnlyMode && minD > VERTEX_THRESHOLD) {
                     // 2. Check Edges if vertex is too far
                     // Edges: va-vb, vb-vc, vc-va
                     const edges = [
@@ -293,7 +318,7 @@ const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
                         (window as any).debugSphere.visible = true;
                         
                         // Color Code: Green = Vertex, Yellow = Edge
-                        if (type === 'VERTEX') {
+                        if (type === 'VERTEX' || type === 'SECTION') {
                             ((window as any).debugSphere.material as THREE.MeshBasicMaterial).color.setHex(0x00ff00);
                              (window as any).debugSphere.scale.set(1, 1, 1);
                         } else {
@@ -3685,6 +3710,7 @@ function setupMeasurementTools_Deprecated() {
                 let snapPoint = hitPoint.clone();
                 let isSnapped = false;
                 const mouseScreen = { x: event.clientX, y: event.clientY };
+                const maskOnlyMode = hasActiveMaskSnap();
                 const VERTEX_THRESHOLD_PX = 24;
                 const EDGE_THRESHOLD_PX = 5;
                 const SNAP_LOCK_RELEASE_PX = 24;
@@ -3828,31 +3854,33 @@ function setupMeasurementTools_Deprecated() {
                                 };
 
                                 const coplanarVertices = getConnectedCoplanarVertices(valid);
-                                const sectionPoints = getSectionSnapCandidates([vA, vB, vC], hitPoint);
+                                const visualVertexPool = coplanarVertices.length > 0 ? coplanarVertices : [vA, vB, vC];
+                                const sectionPoints = getSectionSnapCandidates(visualVertexPool, hitPoint);
                                 for (const point of sectionPoints) {
                                     pushUniquePoint(sectionCandidates, point);
                                 }
 
-                                // Exact corners from the full coplanar face have next priority.
-                                const visualVertexPool = coplanarVertices.length > 0 ? coplanarVertices : [vA, vB, vC];
-                                for (const vertex of visualVertexPool) {
-                                    pushUniquePoint(vertexCandidates, vertex);
+                                if (!maskOnlyMode) {
+                                    for (const vertex of visualVertexPool) {
+                                        pushUniquePoint(vertexCandidates, vertex);
+                                    }
                                 }
 
                                 // Candidates: Dynamic Edge Snapping (Screen Space Project)
-                                const edges = [
-                                    { start: sA, end: sB, vStart: vA, vEnd: vB },
-                                    { start: sB, end: sC, vStart: vB, vEnd: vC },
-                                    { start: sC, end: sA, vStart: vC, vEnd: vA }
-                                ];
+                                if (!maskOnlyMode) {
+                                    const edges = [
+                                        { start: sA, end: sB, vStart: vA, vEnd: vB },
+                                        { start: sB, end: sC, vStart: vB, vEnd: vC },
+                                        { start: sC, end: sA, vStart: vC, vEnd: vA }
+                                    ];
 
-                                for (const edge of edges) {
-                                    const res = distToSegment(mouseScreen, edge.start, edge.end);
-                                    if (res.dist < EDGE_THRESHOLD_PX) {
-                                        // Interpolate 3D point
-                                        const edgeVec = new THREE.Vector3().subVectors(edge.vEnd, edge.vStart);
-                                        const snapPt = new THREE.Vector3().copy(edge.vStart).add(edgeVec.multiplyScalar(res.t));
-                                        pushUniquePoint(edgeCandidates, snapPt);
+                                    for (const edge of edges) {
+                                        const res = distToSegment(mouseScreen, edge.start, edge.end);
+                                        if (res.dist < EDGE_THRESHOLD_PX) {
+                                            const edgeVec = new THREE.Vector3().subVectors(edge.vEnd, edge.vStart);
+                                            const snapPt = new THREE.Vector3().copy(edge.vStart).add(edgeVec.multiplyScalar(res.t));
+                                            pushUniquePoint(edgeCandidates, snapPt);
+                                        }
                                     }
                                 }
                             }
@@ -3894,7 +3922,7 @@ function setupMeasurementTools_Deprecated() {
                          }
                     }
 
-                    if (!isSnapped && (sectionCandidates.length > 0 || vertexCandidates.length > 0 || edgeCandidates.length > 0)) {
+                    if (!isSnapped && (sectionCandidates.length > 0 || (!maskOnlyMode && (vertexCandidates.length > 0 || edgeCandidates.length > 0)))) {
                         const findBestCandidate = (points: THREE.Vector3[], thresholdPx: number) => {
                             let bestDist = thresholdPx;
                             let bestPoint: THREE.Vector3 | null = null;
@@ -3911,9 +3939,9 @@ function setupMeasurementTools_Deprecated() {
                         };
 
                         const bestSection = findBestCandidate(sectionCandidates, SECTION_THRESHOLD_PX);
-                        const bestVertex = bestSection ? null : findBestCandidate(vertexCandidates, VERTEX_THRESHOLD_PX);
-                        const bestEdge = (bestSection || bestVertex) ? null : findBestCandidate(edgeCandidates, EDGE_THRESHOLD_PX);
-                const bestPoint = bestSection || bestVertex || bestEdge;
+                        const bestVertex = (bestSection || maskOnlyMode) ? null : findBestCandidate(vertexCandidates, VERTEX_THRESHOLD_PX);
+                        const bestEdge = (bestSection || bestVertex || maskOnlyMode) ? null : findBestCandidate(edgeCandidates, EDGE_THRESHOLD_PX);
+                        const bestPoint = bestSection || bestVertex || bestEdge;
 
                         if (bestPoint) {
                             snapPoint = bestPoint;
