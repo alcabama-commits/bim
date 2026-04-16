@@ -61,6 +61,20 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     private _currentUserId: string | null = null;
     private _activeViewpointId: string | null = null;
     private _activeLibraryTab: 'mine' | 'shared-with-me' | 'shared-by-me' = 'mine';
+    private _isSyncing = false;
+    private _lastSyncAt = 0;
+    private _syncTimer: number | null = null;
+    private _syncStatusEl: HTMLElement | null = null;
+    private readonly _autoSyncIntervalMs = 15000;
+    private readonly _focusSyncMinGapMs = 5000;
+    private readonly _boundVisibilitySync = () => {
+        if (document.visibilityState === 'visible') {
+            this.triggerSmartSync('visible');
+        }
+    };
+    private readonly _boundFocusSync = () => {
+        this.triggerSmartSync('focus');
+    };
 
     // Repository
     private _repository: ViewpointRepository;
@@ -87,6 +101,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         this.initializeUser();
         this.loadFromStorage();
         this.loadFromRepository();
+        this.setupAutoSync();
     }
 
     private initializeUser() {
@@ -257,6 +272,40 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         return Array.from(users.values());
     }
 
+    private updateSyncStatus(message?: string, tone: 'idle' | 'syncing' | 'error' = 'idle') {
+        if (!this._syncStatusEl) return;
+        const fallback = this._lastSyncAt
+            ? `Buffer activo · sincronizado ${new Date(this._lastSyncAt).toLocaleTimeString()}`
+            : 'Buffer activo';
+        this._syncStatusEl.textContent = message || fallback;
+        this._syncStatusEl.style.color = tone === 'error'
+            ? '#fca5a5'
+            : tone === 'syncing'
+                ? '#facc15'
+                : '#aaa';
+    }
+
+    private triggerSmartSync(reason: string) {
+        if (document.visibilityState === 'hidden') return;
+        const now = Date.now();
+        if (this._isSyncing) return;
+        if (now - this._lastSyncAt < this._focusSyncMinGapMs) return;
+        void this.loadFromRepository({ silent: true, reason });
+    }
+
+    private setupAutoSync() {
+        if (this._syncTimer !== null) return;
+        if (typeof window !== 'undefined') {
+            this._syncTimer = window.setInterval(() => {
+                this.triggerSmartSync('interval');
+            }, this._autoSyncIntervalMs);
+            window.addEventListener('focus', this._boundFocusSync);
+        }
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', this._boundVisibilitySync);
+        }
+    }
+
     // --- Repository Integration ---
 
     async importViewpointFromFile(file: File) {
@@ -291,8 +340,17 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         }
     }
 
-    async loadFromRepository() {
-        console.log('[Viewpoints] Loading from repository...');
+    async loadFromRepository(options: { silent?: boolean; force?: boolean; reason?: string } = {}) {
+        if (this._isSyncing && !options.force) return;
+        if (!this._currentUserId || this._currentUserId === 'guest') return;
+        this._isSyncing = true;
+        this.updateSyncStatus(
+            options.reason === 'manual'
+                ? 'Sincronizando vistas...'
+                : 'Sincronizando en segundo plano...',
+            'syncing'
+        );
+        console.log('[Viewpoints] Loading from repository...', options.reason || 'default');
         try {
             const index = await this._repository.loadIndex(this._currentUserId);
             
@@ -301,13 +359,18 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             }
 
             let loadedCount = 0;
+            const accessibleCloudIds = new Set<string>();
             for (const item of index) {
                 const me = String(this._currentUserId || '').trim().toLowerCase();
                 const isOwner = String(item.userId || '').trim().toLowerCase() === me;
-                const isShared = Array.isArray((item as any).sharedWith) && (item as any).sharedWith.some((v: any) => String(v || '').trim().toLowerCase() === me);
+                const isShared = (
+                    (Array.isArray((item as any).sharedWith) && (item as any).sharedWith.some((v: any) => String(v || '').trim().toLowerCase() === me)) ||
+                    (Array.isArray((item as any).sharedAccess) && (item as any).sharedAccess.some((entry: any) => String(entry?.userId || '').trim().toLowerCase() === me))
+                );
                 if (!isOwner && !isShared) {
                     continue;
                 }
+                accessibleCloudIds.add(String(item.id));
                 try {
                     const fullView = await this._repository.loadViewpointData(item.file, this._currentUserId);
                     if (fullView) {
@@ -323,11 +386,23 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                     console.error(`[Viewpoints] Failed to load view ${item.id}`, e);
                 }
             }
+            this._savedViewpoints = this._savedViewpoints.filter((view) => {
+                if (this.checkOwnership(view)) return true;
+                return accessibleCloudIds.has(String(view.id));
+            });
             console.log(`[Viewpoints] Synced ${loadedCount} views from repository.`);
+            this._lastSyncAt = Date.now();
+            this.saveToStorage();
             this.renderList();
+            this.updateSyncStatus();
         } catch (e) {
             console.error('[Viewpoints] Error in repository sync:', e);
-            alert('Error al sincronizar con el repositorio de vistas.');
+            this.updateSyncStatus('Error de sincronización. Conservando buffer local.', 'error');
+            if (!options.silent) {
+                alert('Error al sincronizar con el repositorio de vistas.');
+            }
+        } finally {
+            this._isSyncing = false;
         }
     }
 
@@ -455,6 +530,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             this._repository.saveViewpointToCloud(viewpointData, this._currentUserId || undefined).then(success => {
                 document.body.style.cursor = originalCursor;
                 if (success) {
+                    this._lastSyncAt = 0;
+                    this.triggerSmartSync('post-save');
                     alert(`Vista "${title}" guardada en la nube y localmente.`);
                 } else {
                     alert(`Vista "${title}" guardada LOCALMENTE.\n\nNo se pudo conectar con la nube. Puedes intentar exportarla manualmente más tarde.`);
@@ -496,6 +573,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         try {
             const success = await this._repository.saveViewpointToCloud(updated, this._currentUserId || undefined);
             if (success) {
+                this._lastSyncAt = 0;
+                this.triggerSmartSync('post-update');
                 alert(`Vista "${updated.title}" actualizada correctamente.`);
             } else {
                 alert(`Vista "${updated.title}" actualizada localmente, pero no se pudo sincronizar en la nube.`);
@@ -700,6 +779,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         this._savedViewpoints = this._savedViewpoints.filter(v => v.id !== id);
         this.saveToStorage();
         this.renderList();
+        this._lastSyncAt = 0;
+        this.triggerSmartSync('post-delete');
     }
 
     // --- UI Logic ---
@@ -747,6 +828,10 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 
                 <div style="margin-bottom: 10px;">
                     <input type="text" id="vp-search" placeholder="Buscar vistas..." style="width: 100%; padding: 5px; background: #333; border: 1px solid #555; color: white; border-radius: 4px;">
+                </div>
+
+                <div id="vp-sync-status" style="margin-bottom: 10px; font-size: 11px; color: #aaa;">
+                    Buffer activo
                 </div>
 
                 <div id="vp-library-tabs" style="display: flex; gap: 6px; margin-bottom: 10px;">
@@ -799,6 +884,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         const searchInput = this._container.querySelector('#vp-search') as HTMLInputElement;
         const saveBtn = this._container.querySelector('#vp-save-btn');
         const libraryTabs = Array.from(this._container.querySelectorAll('.vp-library-tab'));
+        this._syncStatusEl = this._container.querySelector('#vp-sync-status') as HTMLElement | null;
+        this.updateSyncStatus();
 
         if (createBtn) {
             createBtn.addEventListener('click', () => {
@@ -828,7 +915,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             refreshBtn.addEventListener('click', async () => {
                 const icon = refreshBtn.querySelector('i');
                 if (icon) icon.classList.add('fa-spin');
-                await this.loadFromRepository();
+                await this.loadFromRepository({ force: true, reason: 'manual' });
                 if (icon) icon.classList.remove('fa-spin');
             });
         }
@@ -1127,6 +1214,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
 
             this.saveToStorage();
             this.renderList();
+            this._lastSyncAt = 0;
+            this.triggerSmartSync('post-share');
             if (!view.sharedWith || view.sharedWith.length === 0) {
                 alert('Acceso compartido eliminado.');
             } else {
@@ -1438,6 +1527,14 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     }
 
     async dispose() {
+        if (this._syncTimer !== null && typeof window !== 'undefined') {
+            window.clearInterval(this._syncTimer);
+            this._syncTimer = null;
+            window.removeEventListener('focus', this._boundFocusSync);
+        }
+        if (typeof document !== 'undefined') {
+            document.removeEventListener('visibilitychange', this._boundVisibilitySync);
+        }
         // this._viewpoints.dispose(); // If needed
     }
 
