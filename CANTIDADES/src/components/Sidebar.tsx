@@ -22,7 +22,6 @@ interface SidebarProps {
   levels: string[];
   selectedLevels: string[];
   onToggleLevel: (level: string) => void;
-  isSanitaryModel?: boolean;
   diameters: string[];
   selectedDiameter: string;
   onDiameterChange: (diameter: string) => void;
@@ -41,7 +40,6 @@ export default function Sidebar({
   levels,
   selectedLevels,
   onToggleLevel,
-  isSanitaryModel,
   diameters,
   selectedDiameter,
   onDiameterChange,
@@ -189,21 +187,19 @@ export default function Sidebar({
         </div>
       </div>
 
-      {isSanitaryModel && (
-        <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Diámetros</h3>
-          <select 
-            value={selectedDiameter}
-            onChange={(e) => onDiameterChange(e.target.value)}
-            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-          >
-            <option value="Todos">Todos</option>
-            {diameters.map((d) => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </select>
-        </div>
-      )}
+      <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Diámetros</h3>
+        <select 
+          value={selectedDiameter}
+          onChange={(e) => onDiameterChange(e.target.value)}
+          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+        >
+          <option value="Todos">Todos</option>
+          {diameters.map((d) => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }

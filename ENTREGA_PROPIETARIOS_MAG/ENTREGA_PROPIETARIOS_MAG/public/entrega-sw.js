@@ -3,17 +3,10 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    (async () => {
-      const keep = new Set([CACHE_NAME]);
-      const keys = await caches.keys();
-      await Promise.all(keys.map((k) => (keep.has(k) ? Promise.resolve() : caches.delete(k))));
-      await self.clients.claim();
-    })(),
-  );
+  event.waitUntil(self.clients.claim());
 });
 
-const CACHE_NAME = 'entregas-assets-v3';
+const CACHE_NAME = 'entregas-assets-v1';
 
 const shouldHandle = (request) => {
   if (request.method !== 'GET') return false;

@@ -4,15 +4,14 @@
   font-weight: 400;
 
   /* Color Palette - Light Mode (Default) */
-  --primary-color: #024959;
-  --secondary-color: #ffa400;
+  --primary-color: #d3045c;
   --bg-white: #FFFFFF;
-  --bg-light-gray: #f6f6f4;
-  --bg-darker: #ecece8;
-  --text-black: #0d0d0d;
-  --text-med-gray: #8a8a84;
-  --text-dark-gray: #404542;
-  --border-color: #e5e7e4;
+  --bg-light-gray: #f5f5f5;
+  --bg-darker: #e0e0e0;
+  --text-black: #000000;
+  --text-med-gray: #A49FA6;
+  --text-dark-gray: #605E62;
+  --border-color: #e0e0e0;
   --console-bg: rgba(30, 30, 30, 0.9);
   --console-text: #0f0;
 
@@ -28,13 +27,13 @@
 
 /* Dark Mode Overrides */
 .dark-mode {
-  --bg-white: #171b1d;
-  --bg-light-gray: #21282b;
-  --bg-darker: #111517;
+  --bg-white: #1e1e1e;
+  --bg-light-gray: #2d2d2d;
+  --bg-darker: #1a1a1a;
   --text-black: #ffffff;
-  --text-med-gray: #a4aba7;
-  --text-dark-gray: #e4e8e6;
-  --border-color: #2d3538;
+  --text-med-gray: #999999;
+  --text-dark-gray: #dddddd;
+  --border-color: #444444;
   --console-bg: rgba(0, 0, 0, 0.9);
   
   color-scheme: dark;
@@ -395,7 +394,7 @@ body {
 }
 
 .model-item:hover {
-  background: rgba(2, 73, 89, 0.08);
+  background: rgba(211, 4, 92, 0.1); /* Light primary */
   color: var(--primary-color);
 }
 

@@ -53,9 +53,9 @@
     <div class="container mx-auto flex items-center justify-between">
         <div class="flex items-center">
             <!-- Logo para modo claro -->
-            <img alt="Portal BIM Alcabama Logo" class="h-12 dark:hidden" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png"/>
+            <img alt="Portal BIM Alcabama Logo" class="h-12 dark:hidden" src="https://i.postimg.cc/wMDNvJB5/Portal-BIM-Alcabama-7-1.png"/>
             <!-- Logo para modo oscuro -->
-            <img alt="Portal BIM Alcabama Logo" class="h-12 hidden dark:block" src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png"/>
+            <img alt="Portal BIM Alcabama Logo" class="h-12 hidden dark:block" src="https://i.postimg.cc/mgpPTVwf/Portal-BIM-Alcabama-7-2.png"/>
         </div>
         <div class="flex items-center space-x-4">
             <button id="theme-toggle" aria-label="Cambiar tema" class="text-text-light dark:text-white hover:text-primary"><span class="material-symbols-outlined">dark_mode</span></button>
@@ -69,7 +69,7 @@
     <div class="w-[30%] bg-[#f6f6f6]">
     </div>
     <!-- Panel Derecho (70%) con imagen -->
-    <div id="home-hero-image" class="w-[70%] bg-cover bg-center" style="background-image: url('https://i.postimg.cc/MZr8NLjq/1752525357-ciien-00000-mejora-de-color-8.png');">
+    <div class="w-[70%] bg-cover bg-center" style="background-image: url('https://i.postimg.cc/MZr8NLjq/1752525357-ciien-00000-mejora-de-color-8.png');">
     </div>
 </section>
 <section class="bg-background-light dark:bg-background-dark py-16 px-8">
@@ -87,7 +87,7 @@
 <li><a class="hover:text-primary dark:hover:text-primary" href="#">Madero</a></li>
 <li><a class="hover:text-primary dark:hover:text-primary" href="#">Magnolias</a></li>
 <li><a class="hover:text-primary dark:hover:text-primary" href="#">Orión</a></li>
-<li><a class="hover:text-primary dark:hover:text-primary" href="trevoly_home.html">Trevoly</a></li>
+<li><a class="hover:text-primary dark:hover:text-primary" href="#">Trevoly</a></li>
 <li><a class="hover:text-primary dark:hover:text-primary" href="#">Ventura</a></li>
 </ul>
 </div>
@@ -119,31 +119,17 @@
 </main>
 <footer class="bg-background-light dark:bg-background-dark py-8 px-8 mt-auto">
 <div class="container mx-auto text-center text-gray-500 dark:text-gray-400">
-<div class="flex items-center justify-center gap-4 mb-4">
-<img alt="Artis Urbano logo" class="h-8" src="https://i.postimg.cc/RVp8pZwc/artis-urbano.png"/>
-<div class="h-8 w-px bg-black"></div>
 <!-- Logo para modo claro -->
-<img alt="Alcabama logo" class="h-8 dark:hidden" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png"/>
+<img alt="Alcabama logo" class="h-8 mx-auto mb-4 dark:hidden" src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png"/>
 <!-- Logo para modo oscuro -->
-<img alt="Alcabama logo" class="h-8 hidden dark:block" src="https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png"/>
-</div>
-<p class="text-sm">© 2026 Portal BIM Alcabama - Todos los derechos reservados.</p>
+<img alt="Alcabama logo" class="h-8 mx-auto mb-4 hidden dark:block" src="https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png"/>
+<p class="text-sm">© 2023 Portal BIM Alcabama - Todos los derechos reservados.</p>
 </div>
 </footer>
 </div>
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const heroImage = document.getElementById('home-hero-image');
-        const heroImages = [
-            'https://i.postimg.cc/MZr8NLjq/1752525357-ciien-00000-mejora-de-color-8.png',
-            'https://i.postimg.cc/G2Pb01t0/1773237154-render-torca-fachada-tarde-v1-01.png'
-        ];
-        if (heroImage) {
-            const selectedImage = heroImages[Math.floor(Math.random() * heroImages.length)];
-            heroImage.style.backgroundImage = `url('${selectedImage}')`;
-        }
-
         const authContainer = document.getElementById('auth-container');
         // Buscar usuario en sessionStorage y luego en localStorage
         const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));

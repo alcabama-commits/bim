@@ -50,10 +50,6 @@
                 </svg>
                 Iniciar sesión con Microsoft
             </button>
-            <button id="switch-user-button" class="w-full mt-3 flex items-center justify-center bg-white text-primary font-bold py-3 px-4 rounded-md border border-primary hover:bg-pink-50 transition duration-300">
-                <span class="material-symbols-outlined mr-2">swap_horiz</span>
-                Iniciar con otro usuario
-            </button>
             <div id="error-message" class="mt-4 text-red-500 text-sm text-center"></div>
         </div>
         <a href="https://alcabama-commits.github.io/bim/home.html" class="mt-6 text-sm text-primary hover:underline">Volver a la página principal</a>
@@ -63,13 +59,11 @@
         // --- CONFIGURACIÓN DE AUTENTICACIÓN MSAL ---
         // --- LÓGICA DE INICIO DE SESIÓN ---
         const loginButton = document.getElementById('login-button');
-        const switchUserButton = document.getElementById('switch-user-button');
         const errorMessage = document.getElementById('error-message');
         const keepSignedInCheckbox = document.getElementById('keep-signed-in');
 
-        async function handleLogin(forceAccountSelection = false) {
+        loginButton.addEventListener('click', async () => {
             try {
-                errorMessage.textContent = "";
                 const cacheLocation = keepSignedInCheckbox.checked ? "localStorage" : "sessionStorage";
                 console.log(`Using cache location: ${cacheLocation}`);
 
@@ -87,14 +81,8 @@
 
                 const msalInstance = new msal.PublicClientApplication(msalConfig);
 
-                if (forceAccountSelection) {
-                    sessionStorage.removeItem('userAccount');
-                    localStorage.removeItem('userAccount');
-                }
-
                 await msalInstance.loginPopup({
-                    scopes: ["User.Read"], // Solo necesitamos leer el perfil del usuario
-                    prompt: forceAccountSelection ? "select_account" : undefined
+                    scopes: ["User.Read"] // Solo necesitamos leer el perfil del usuario
                 });
 
                 const account = msalInstance.getAllAccounts()[0];
@@ -146,10 +134,7 @@
                 console.error(error);
                 errorMessage.textContent = "Error al iniciar sesión. Por favor, inténtalo de nuevo.";
             }
-        }
-
-        loginButton.addEventListener('click', () => handleLogin(false));
-        switchUserButton.addEventListener('click', () => handleLogin(true));
+        });
 
         // --- GESTIÓN DEL TEMA (MODO OSCURO/CLARO) ---
         // Para mantener consistencia visual si el usuario navega aquí
