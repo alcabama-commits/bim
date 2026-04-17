@@ -5,8 +5,14 @@ import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
+  const outDir = process.env.VITE_OUTDIR ?? path.resolve(__dirname, '../../../CONVERTIR_FRAG');
   return {
     plugins: [react(), tailwindcss()],
+    base: './',
+    build: {
+      outDir,
+      emptyOutDir: true,
+    },
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },

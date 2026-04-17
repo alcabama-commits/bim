@@ -665,7 +665,7 @@ const hider = components.get(OBC.Hider);
 
 // --- App Init ---
     const versionStr = '2026-02-27-LocalPersistence-Fix';
-    console.warn(`VSR_IFC Version: ${versionStr}`);
+    console.warn(`VSR_IFCA Version: ${versionStr}`);
     
     // UI Update for version (optional, but good for user confirmation)
     const versionEl = document.getElementById('version-display');
@@ -992,7 +992,7 @@ clipper.onAfterDelete.add((plane) => {
         world, // Pass the world instance to enable raycasting
         select: {
             name: 'select',
-            material: new THREE.MeshBasicMaterial({ color: 0xd3045c, depthTest: false, opacity: 0.8, transparent: true })
+            material: new THREE.MeshBasicMaterial({ color: 0x024959, depthTest: false, opacity: 0.8, transparent: true })
         },
         hover: {
             name: 'hover',
@@ -1162,7 +1162,7 @@ export function ensureModelEdges(model: any) {
 }
 
 // --- IndexedDB Helper for Local Models Persistence ---
-const DB_NAME = 'VSR_IFC_Storage';
+const DB_NAME = 'VSR_IFCA_Storage';
 const STORE_NAME = 'models';
 let _dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -1802,7 +1802,7 @@ async function updateClassificationUI() {
         header.className = 'classification-header';
         header.style.padding = '10px 10px 5px 10px';
         header.style.fontWeight = 'bold';
-        header.style.color = '#e91e63'; // Main pink color
+        header.style.color = 'var(--primary-color)';
         header.style.borderBottom = '1px solid #eee';
         header.style.marginTop = '10px';
         header.innerHTML = `<i class="fa-solid fa-tags"></i> ${systemName}`;
@@ -2195,14 +2195,14 @@ function initTheme() {
         if (dark) {
             document.body.classList.add('dark-mode');
             if(icon) icon.className = 'fa-solid fa-sun';
-            if(logoImg) logoImg.src = 'https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png';
+            if(logoImg) logoImg.src = 'https://i.postimg.cc/3xdLSg9g/artis-urbano2-(1).png';
             if (world && world.scene && world.scene.three) {
                  world.scene.three.background = new THREE.Color(0x1e1e1e); 
             }
         } else {
             document.body.classList.remove('dark-mode');
             if(icon) icon.className = 'fa-solid fa-moon';
-            if(logoImg) logoImg.src = 'https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png';
+            if(logoImg) logoImg.src = 'https://i.postimg.cc/vmKVZndP/artis-urbano2.png';
             if (world && world.scene && world.scene.three) {
                  world.scene.three.background = new THREE.Color(0xf5f5f5); 
             }
@@ -2341,7 +2341,7 @@ async function loadModelList() {
     }
 
     try {
-        const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
+        const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFCA/models';
         logToScreen('Scanning GitHub for models...');
         
         const response = await fetch(GITHUB_API_URL);
@@ -5534,18 +5534,18 @@ function enforceAuthenticatedAccess() {
     overlay.style.alignItems = 'center';
     overlay.style.justifyContent = 'center';
     overlay.style.padding = '24px';
-    overlay.style.background = 'radial-gradient(circle at top, rgba(211, 4, 92, 0.22), rgba(211, 4, 92, 0) 30%), linear-gradient(135deg, rgba(255,255,255,0.96), rgba(245,245,245,0.96))';
+    overlay.style.background = 'radial-gradient(circle at top, rgba(2, 73, 89, 0.18), rgba(2, 73, 89, 0) 30%), linear-gradient(135deg, rgba(255,255,255,0.97), rgba(246,246,244,0.97))';
     overlay.innerHTML = `
-        <div style="width:min(520px, 100%); background:#ffffff; border:1px solid rgba(211, 4, 92, 0.14); border-radius:24px; padding:36px 32px; box-shadow:0 30px 80px rgba(96, 94, 98, 0.18); text-align:center; font-family:Inter, Arial, sans-serif;">
-            <img src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png" alt="Alcabama" style="height:44px; width:auto; margin:0 auto 22px; display:block;" />
-            <div style="width:72px; height:72px; margin:0 auto 18px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(211, 4, 92, 0.08); color:#d3045c; font-size:28px;">
+        <div style="width:min(520px, 100%); background:#ffffff; border:1px solid rgba(2, 73, 89, 0.12); border-radius:24px; padding:36px 32px; box-shadow:0 30px 80px rgba(64, 69, 66, 0.14); text-align:center; font-family:Inter, Arial, sans-serif;">
+            <img src="https://i.postimg.cc/vmKVZndP/artis-urbano2.png" alt="Artis Urbano" style="height:44px; width:auto; margin:0 auto 22px; display:block;" />
+            <div style="width:72px; height:72px; margin:0 auto 18px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(2, 73, 89, 0.08); color:#024959; font-size:28px;">
                 <i class="fa-solid fa-lock"></i>
             </div>
             <h1 style="margin:0 0 10px; font-size:28px; line-height:1.15; color:#1f1f1f;">Inicia sesión para continuar</h1>
             <p style="margin:0 0 22px; font-size:15px; line-height:1.6; color:#605e62;">
-                Debes autenticarte para acceder al visor VSR IFC. Si abriste este enlace directamente, primero inicia sesión y luego vuelve a entrar.
+                Debes autenticarte para acceder al visor VSR IFCA de Artis Urbano. Si abriste este enlace directamente, primero inicia sesión y luego vuelve a entrar.
             </p>
-            <a href="${LOGIN_URL}" style="display:inline-flex; align-items:center; justify-content:center; gap:10px; min-width:220px; padding:14px 18px; border-radius:12px; background:#d3045c; color:#fff; text-decoration:none; font-weight:700; font-size:15px; box-shadow:0 12px 28px rgba(211, 4, 92, 0.28);">
+            <a href="${LOGIN_URL}" style="display:inline-flex; align-items:center; justify-content:center; gap:10px; min-width:220px; padding:14px 18px; border-radius:12px; background:#024959; color:#fff; text-decoration:none; font-weight:700; font-size:15px; box-shadow:0 12px 28px rgba(2, 73, 89, 0.22);">
                 <i class="fa-solid fa-right-to-bracket"></i>
                 <span>Ir a iniciar sesión</span>
             </a>
@@ -5623,7 +5623,7 @@ function setupUserAuthentication() {
             logoutBtn.style.color = '#666';
             logoutBtn.style.marginLeft = '5px';
             
-            logoutBtn.onmouseover = () => { logoutBtn.style.color = '#e91e63'; };
+            logoutBtn.onmouseover = () => { logoutBtn.style.color = 'var(--primary-color)'; };
             logoutBtn.onmouseout = () => { logoutBtn.style.color = '#666'; };
             
             logoutBtn.onclick = () => {

@@ -244,7 +244,7 @@ export default defineConfig({
   base: './', // Ensures relative paths for GitHub Pages
   build: {
     target: 'esnext', // Enable top-level await
-    outDir: '../docs/VSR_IFC', // Deploys to docs/VSR_IFC for GitHub Pages
+    outDir: '../docs/VSR_IFCA', // Deploys to docs/VSR_IFCA for GitHub Pages
     emptyOutDir: false,
     rollupOptions: {
       input: {

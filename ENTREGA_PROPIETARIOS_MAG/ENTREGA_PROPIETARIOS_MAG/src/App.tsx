@@ -9,7 +9,7 @@ import { Building2, CheckCircle2, Clock, Info, Search, Lock, Save, Loader2, Eye,
 import { 
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell 
 } from 'recharts';
-import { fetchSheetData, updateSheetStatus, SheetData } from './services/sheetService';
+import { fetchSheetData, triggerSync, updateSheetStatus, SheetData } from './services/sheetService';
 import { API_CONFIG } from './config';
 
 // --- Types ---
@@ -17,11 +17,18 @@ import { API_CONFIG } from './config';
 type Status = 'owner_delivered' | 'post_construction_delivered' | 'notarized' | 'weekly_goal' | 'in_process' | 'special' | 'under_construction';
 type Tab = 'towers' | 'charts';
 
+const getLocalISODate = (d: Date = new Date()): string => {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 const normalizeToISODate = (v: unknown): string | null => {
   if (!v) return null;
 
   if (v instanceof Date && !Number.isNaN(v.getTime())) {
-    return v.toISOString().slice(0, 10);
+    return getLocalISODate(v);
   }
 
   if (typeof v !== 'string') return null;
@@ -42,10 +49,79 @@ const normalizeToISODate = (v: unknown): string | null => {
 
   const parsed = new Date(s);
   if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
+    return getLocalISODate(parsed);
   }
 
   return null;
+};
+
+const getTime24Now = () => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+const time24ToAmPm = (time24: string): string | null => {
+  const m = String(time24 ?? '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  const hh12 = ((hh + 11) % 12) + 1;
+  return `${String(hh12).padStart(2, '0')}:${String(mm).padStart(2, '0')} ${ampm}`;
+};
+
+const tsToAmPm = (ts: number): string | null => {
+  if (!Number.isFinite(ts)) return null;
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return null;
+  const hh = d.getHours();
+  const mm = d.getMinutes();
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  const hh12 = ((hh + 11) % 12) + 1;
+  return `${String(hh12).padStart(2, '0')}:${String(mm).padStart(2, '0')} ${ampm}`;
+};
+
+const extractTime24 = (v: unknown): string | null => {
+  if (!v) return null;
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    return `${String(v.getHours()).padStart(2, '0')}:${String(v.getMinutes()).padStart(2, '0')}`;
+  }
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  if (!s) return null;
+
+  const iso = s.match(/(?:T| )(\d{2}):(\d{2})/);
+  if (iso) return `${iso[1]}:${iso[2]}`;
+
+  const ampm = s.match(/(\d{1,2}):(\d{2})\s*([AP]M)\b/i);
+  if (ampm) {
+    const hhRaw = Number(ampm[1]);
+    const mm = Number(ampm[2]);
+    const mer = String(ampm[3]).toUpperCase();
+    if (hhRaw < 1 || hhRaw > 12 || mm < 0 || mm > 59) return null;
+    let hh = hhRaw % 12;
+    if (mer === 'PM') hh += 12;
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  }
+
+  return null;
+};
+
+const formatWeeklyGoalDateTime = (v: unknown): string | null => {
+  const date = normalizeToISODate(v);
+  if (!date) return null;
+  const time24 = extractTime24(v);
+  const ampm = time24 ? time24ToAmPm(time24) : null;
+  return ampm ? `${date} ${ampm}` : date;
+};
+
+const buildWeeklyGoalDateTimeValue = (dateIso: string, time24: string): string => {
+  const date = normalizeToISODate(dateIso) ?? dateIso;
+  const ampm = time24ToAmPm(time24);
+  return ampm ? `${date} ${ampm}` : date;
 };
 
 const getStatusLabel = (status: Status) => {
@@ -139,7 +215,7 @@ const generateStructure = (): Tower[] => {
   return towers;
 };
 
-const DATA_CACHE_KEY = 'entrega_propi_mag_cache_v1';
+const DATA_CACHE_KEY = 'entrega_propi_mag_cache_v2';
 const TIMELINE_EVENTS_KEY = 'entrega_propi_mag_timeline_events_v1';
 
 type TimelineEvent = {
@@ -215,9 +291,12 @@ const mergeSheetDataIntoTowers = (baseTowers: Tower[], data: SheetData[]): Tower
     const status = normalizeStatus(item.status);
     const towerId = Number(item.towerId);
     const aptNumber = String(item.aptNumber).trim();
+    const rawWeekly = (item as SheetData).weeklyGoalDate;
+    const weeklyStr = rawWeekly == null ? '' : String(rawWeekly);
+    const weeklyValue = normalizeToISODate(weeklyStr) ? weeklyStr : null;
     statusMap.set(`${towerId}-${aptNumber}`, {
       status,
-      weeklyGoalDate: normalizeToISODate((item as SheetData).weeklyGoalDate) ?? null
+      weeklyGoalDate: weeklyValue
     });
   }
 
@@ -274,7 +353,7 @@ const ApartmentCell = ({
         transition-all duration-200 hover:scale-110 hover:z-10 cursor-pointer shadow-sm
         ${getStatusStyles(apartment.status)}
       `}
-      title={`Apartamento ${apartment.number} - ${getStatusLabel(apartment.status)}${apartment.status === 'weekly_goal' && apartment.weeklyGoalDate ? ` (${apartment.weeklyGoalDate})` : ''}`}
+      title={`Apartamento ${apartment.number} - ${getStatusLabel(apartment.status)}${apartment.status === 'weekly_goal' && apartment.weeklyGoalDate ? ` (${formatWeeklyGoalDateTime(apartment.weeklyGoalDate) ?? apartment.weeklyGoalDate})` : ''}`}
     >
       {apartment.number}
     </div>
@@ -323,7 +402,7 @@ const TowerCard = ({
   const filteredCount = statusFilter
     ? tower.apartments.filter(a =>
         a.status === statusFilter &&
-        (statusFilter !== 'weekly_goal' || !weeklyGoalDateFilter || a.weeklyGoalDate === weeklyGoalDateFilter)
+        (statusFilter !== 'weekly_goal' || !weeklyGoalDateFilter || normalizeToISODate(a.weeklyGoalDate) === weeklyGoalDateFilter)
       ).length
     : towerStats.total;
 
@@ -365,7 +444,7 @@ const TowerCard = ({
                 {apts.map((apt) => (
                   statusFilter && (
                     apt.status !== statusFilter ||
-                    (statusFilter === 'weekly_goal' && weeklyGoalDateFilter && apt.weeklyGoalDate !== weeklyGoalDateFilter)
+                    (statusFilter === 'weekly_goal' && weeklyGoalDateFilter && normalizeToISODate(apt.weeklyGoalDate) !== weeklyGoalDateFilter)
                   )
                     ? <div key={apt.id} className="h-8 w-full" />
                     : (
@@ -416,13 +495,16 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<Status | null>(null);
   const [weeklyGoalDateFilter, setWeeklyGoalDateFilter] = useState<string | null>(null);
-  const [weeklyGoalDateInput, setWeeklyGoalDateInput] = useState(() => new Date().toISOString().slice(0, 10));
-  const [timelineDateFilter, setTimelineDateFilter] = useState(() => new Date().toISOString().slice(0, 10));
+  const [weeklyGoalDateInput, setWeeklyGoalDateInput] = useState(() => getLocalISODate());
+  const [weeklyGoalTimeInput, setWeeklyGoalTimeInput] = useState(() => getTime24Now());
+  const [timelineDateFilter, setTimelineDateFilter] = useState(() => getLocalISODate());
   // activeTab removed
   const [allTowers, setAllTowers] = useState<Tower[]>(() => generateStructure());
   const [editingApartment, setEditingApartment] = useState<{ towerId: number, apartment: Apartment } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [isUsingCachedData, setIsUsingCachedData] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
@@ -433,14 +515,15 @@ export default function App() {
     setStatusFilter(null);
     setWeeklyGoalDateFilter(null);
     setSearchTerm('');
-    setTimelineDateFilter(new Date().toISOString().slice(0, 10));
+    setTimelineDateFilter(getLocalISODate());
   };
 
   React.useEffect(() => {
     if (!editingApartment) return;
     const d = editingApartment.apartment.weeklyGoalDate;
-    const fallback = new Date().toISOString().slice(0, 10);
+    const fallback = getLocalISODate();
     setWeeklyGoalDateInput(normalizeToISODate(d) ?? fallback);
+    setWeeklyGoalTimeInput(extractTime24(d) ?? getTime24Now());
   }, [editingApartment]);
 
   React.useEffect(() => {
@@ -477,6 +560,22 @@ export default function App() {
       setIsRefreshing(false);
     }
   }, []);
+
+  const syncEscrituras = React.useCallback(async () => {
+    if (!isOnline) return;
+    setIsSyncing(true);
+    setSyncError(null);
+    try {
+      const ok = await triggerSync();
+      if (!ok) {
+        setSyncError('No se pudo sincronizar. Revisa el Apps Script (permisos / Drive API / despliegue).');
+        return;
+      }
+      await refreshData();
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isOnline, refreshData]);
 
   React.useEffect(() => {
     if (isLoading) return;
@@ -524,9 +623,13 @@ export default function App() {
 
   const handleStatusChange = (newStatus: Status) => {
     if (!editingApartment) return;
+    if (newStatus === 'notarized') return;
     
     // If in edit mode, apply change immediately
     if (isEditMode) {
+      const weeklyGoalValue = buildWeeklyGoalDateTimeValue(weeklyGoalDateInput, weeklyGoalTimeInput);
+      const nowDate = getLocalISODate();
+      const nowTs = Date.now();
       // Optimistic update
       setAllTowers(prev => prev.map(tower => {
         if (tower.id !== editingApartment.towerId) return tower;
@@ -534,7 +637,7 @@ export default function App() {
           ...tower,
           apartments: tower.apartments.map(apt => 
             apt.id === editingApartment.apartment.id
-              ? { ...apt, status: newStatus, weeklyGoalDate: newStatus === 'weekly_goal' ? weeklyGoalDateInput : null }
+              ? { ...apt, status: newStatus, weeklyGoalDate: newStatus === 'weekly_goal' ? weeklyGoalValue : null }
               : apt
           )
         };
@@ -548,7 +651,7 @@ export default function App() {
           towerId: editingApartment.towerId,
           aptNumber: editingApartment.apartment.number,
           status: newStatus,
-          weeklyGoalDate: newStatus === 'weekly_goal' ? weeklyGoalDateInput : null
+          weeklyGoalDate: newStatus === 'weekly_goal' ? weeklyGoalValue : null
         });
         return newMap;
       });
@@ -558,8 +661,8 @@ export default function App() {
           towerId: editingApartment.towerId,
           aptNumber: editingApartment.apartment.number,
           status: newStatus,
-          date: new Date().toISOString().slice(0, 10),
-          ts: Date.now()
+          date: nowDate,
+          ts: nowTs
         };
 
         setTimelineEvents(prev => {
@@ -576,6 +679,47 @@ export default function App() {
       // If not in edit mode, this shouldn't happen via UI but as a safeguard
       // we can prompt for edit mode or just ignore. 
     }
+  };
+
+  const handleRestoreApartment = () => {
+    if (!editingApartment) return;
+    if (!isEditMode) return;
+    if (editingApartment.apartment.status === 'special') return;
+
+    const key = `${editingApartment.towerId}-${editingApartment.apartment.number}`;
+
+    setTimelineEvents(prev => {
+      const next = prev.filter((e) => !(e.towerId === editingApartment.towerId && e.aptNumber === editingApartment.apartment.number));
+      writeTimelineEvents(next);
+      return next;
+    });
+
+    setPendingChanges(prev => {
+      const next = new Map(prev);
+      next.set(key, {
+        towerId: editingApartment.towerId,
+        aptNumber: editingApartment.apartment.number,
+        status: 'under_construction',
+        weeklyGoalDate: null
+      });
+      return next;
+    });
+
+    setAllTowers(prev => prev.map(tower => {
+      if (tower.id !== editingApartment.towerId) return tower;
+      return {
+        ...tower,
+        apartments: tower.apartments.map(apt =>
+          apt.id === editingApartment.apartment.id
+            ? { ...apt, status: 'under_construction', weeklyGoalDate: null }
+            : apt
+        )
+      };
+    }));
+
+    setIsUsingCachedData(false);
+    setLastUpdatedAt(Date.now());
+    setEditingApartment(null);
   };
 
   const handleSaveChanges = async () => {
@@ -677,12 +821,12 @@ export default function App() {
   }, [allTowers]);
 
   const weeklyGoalTimeline = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalISODate();
 
     const addDaysISO = (iso: string, days: number) => {
       const d = new Date(`${iso}T00:00:00`);
       d.setDate(d.getDate() + days);
-      return d.toISOString().slice(0, 10);
+      return getLocalISODate(d);
     };
 
     const getDayOfWeekLabel = (iso: string) => {
@@ -711,6 +855,16 @@ export default function App() {
       return acc + tower.apartments.filter(a => a.status === 'weekly_goal' && !normalizeToISODate(a.weeklyGoalDate)).length;
     }, 0);
 
+    type TimelineItem = {
+      towerId: number;
+      towerName: string;
+      aptNumber: string;
+      status: Status;
+      date: string;
+      timeLabel?: string | null;
+      ts?: number | null;
+    };
+
     const scheduled = allTowers.flatMap(tower =>
       tower.apartments
         .filter(a => a.status !== 'special')
@@ -723,27 +877,35 @@ export default function App() {
               towerName: tower.name,
               aptNumber: a.number,
               status: ev.status,
-              date: ev.date
-            }];
+              date: ev.date,
+              timeLabel: tsToAmPm(ev.ts),
+              ts: ev.ts
+            } satisfies TimelineItem];
           }
 
           if (a.status === 'weekly_goal') {
             const date = normalizeToISODate(a.weeklyGoalDate);
             if (!date) return [];
+            const timeLabel = (() => {
+              const t24 = extractTime24(a.weeklyGoalDate);
+              return t24 ? time24ToAmPm(t24) : null;
+            })();
             return [{
               towerId: tower.id,
               towerName: tower.name,
               aptNumber: a.number,
               status: 'weekly_goal' as const,
-              date
-            }];
+              date,
+              timeLabel,
+              ts: null
+            } satisfies TimelineItem];
           }
 
           return [];
         })
     );
 
-    const byDate = new Map<string, typeof scheduled>();
+    const byDate = new Map<string, TimelineItem[]>();
     for (const item of scheduled) {
       const current = byDate.get(item.date);
       if (current) current.push(item);
@@ -752,6 +914,7 @@ export default function App() {
 
     for (const items of byDate.values()) {
       items.sort((a, b) => {
+        if ((a.ts ?? 0) !== (b.ts ?? 0)) return (a.ts ?? 0) - (b.ts ?? 0);
         if (a.towerId !== b.towerId) return a.towerId - b.towerId;
         return a.aptNumber.localeCompare(b.aptNumber);
       });
@@ -798,7 +961,7 @@ export default function App() {
       .sort(([a], [b]) => a.localeCompare(b))
       .flatMap(([, items]) => items);
 
-    const upcomingWeeksMap = new Map<string, typeof scheduled>();
+    const upcomingWeeksMap = new Map<string, TimelineItem[]>();
     for (const [d, items] of byDate.entries()) {
       if (d <= weekEnd) continue;
       const wk = getWeekStartISO(d);
@@ -810,6 +973,7 @@ export default function App() {
     for (const items of upcomingWeeksMap.values()) {
       items.sort((a, b) => {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
+        if ((a.ts ?? 0) !== (b.ts ?? 0)) return (a.ts ?? 0) - (b.ts ?? 0);
         if (a.towerId !== b.towerId) return a.towerId - b.towerId;
         return a.aptNumber.localeCompare(b.aptNumber);
       });
@@ -941,11 +1105,23 @@ export default function App() {
                   {isRefreshing ? <Loader2 size={16} className="animate-spin text-alcabama-grey" /> : <RefreshCw size={16} className="text-alcabama-grey" />}
                   Actualizar
                 </button>
+
+                <button
+                  type="button"
+                  onClick={syncEscrituras}
+                  disabled={isSyncing || !isOnline}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold bg-white border border-alcabama-light-grey hover:bg-alcabama-light-grey/10 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                  title="Sincronizar Escriturados desde Magnolias - Escrituras.xlsx"
+                >
+                  {isSyncing ? <Loader2 size={16} className="animate-spin text-alcabama-grey" /> : <RefreshCw size={16} className="text-alcabama-grey" />}
+                  Sincronizar
+                </button>
               </div>
 
               <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">
                 {isUsingCachedData ? 'Mostrando última información guardada' : (isOnline ? 'En línea' : 'Sin señal')}
                 {lastUpdatedAt ? ` • Última: ${new Date(lastUpdatedAt).toLocaleString('es-CO', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
+                {syncError ? ` • ${syncError}` : ''}
               </div>
             </div>
           </div>
@@ -1207,9 +1383,10 @@ export default function App() {
                                   type="button"
                                   onClick={() => showTimelineItemInTower(item.towerId, day.date)}
                                   className={`w-full px-1.5 py-1 rounded-md border text-[9px] font-black shadow-sm transition-colors ${getStatusChipClass(item.status)} ${isSelected ? 'ring-1 ring-alcabama-pink/40' : ''}`}
-                                  title={`${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                                  title={`${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}${item.timeLabel ? ` • ${item.timeLabel}` : ''}`}
                                 >
-                                  T{item.towerId}-{item.aptNumber}
+                                  <div className="leading-none">T{item.towerId}-{item.aptNumber}</div>
+                                  {item.timeLabel && <div className="mt-0.5 text-[8px] font-black leading-none opacity-90">{item.timeLabel}</div>}
                                 </button>
                               ))}
                               {day.items.length > 5 && (
@@ -1251,9 +1428,9 @@ export default function App() {
                             type="button"
                             onClick={() => showTimelineItemInTower(item.towerId, weeklyGoalTimeline.today)}
                             className={`px-2 py-1 rounded-md border text-[10px] font-black transition-colors ${getStatusChipClass(item.status)}`}
-                            title={`${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                            title={`${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}${item.timeLabel ? ` • ${item.timeLabel}` : ''}`}
                           >
-                            T{item.towerId}-{item.aptNumber}
+                            T{item.towerId}-{item.aptNumber}{item.timeLabel ? ` ${item.timeLabel}` : ''}
                           </button>
                         ))}
                         {(weeklyGoalTimeline.byDate.get(weeklyGoalTimeline.today) ?? []).length === 0 && (
@@ -1287,9 +1464,9 @@ export default function App() {
                                     type="button"
                                     onClick={() => showTimelineItemInTower(item.towerId, d.date)}
                                     className={`px-2 py-1 rounded-md border text-[10px] font-black transition-colors ${getStatusChipClass(item.status)}`}
-                                    title={`${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                                    title={`${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}${item.timeLabel ? ` • ${item.timeLabel}` : ''}`}
                                   >
-                                    T{item.towerId}-{item.aptNumber}
+                                    T{item.towerId}-{item.aptNumber}{item.timeLabel ? ` ${item.timeLabel}` : ''}
                                   </button>
                                 ))}
                               </div>
@@ -1322,9 +1499,9 @@ export default function App() {
                                     type="button"
                                     onClick={() => showTimelineItemInTower(item.towerId, item.date)}
                                     className={`px-2 py-1 rounded-md border text-[10px] font-black transition-colors ${getStatusChipClass(item.status)}`}
-                                    title={`${item.date} • ${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}`}
+                                    title={`${item.date}${item.timeLabel ? ` • ${item.timeLabel}` : ''} • ${getStatusLabel(item.status)} • Torre ${item.towerId} • Apt ${item.aptNumber}`}
                                   >
-                                    {item.date.slice(8, 10)}/{item.date.slice(5, 7)} T{item.towerId}-{item.aptNumber}
+                                    {item.date.slice(8, 10)}/{item.date.slice(5, 7)} T{item.towerId}-{item.aptNumber}{item.timeLabel ? ` ${item.timeLabel}` : ''}
                                   </button>
                                 ))}
                                 {w.items.length > 24 && (
@@ -1390,10 +1567,10 @@ export default function App() {
                         return <div className="mt-3 text-sm text-alcabama-grey">No hay registros para este día.</div>;
                       }
 
-                      const byTower = new Map<number, { aptNumber: string; status: Status }[]>();
+                      const byTower = new Map<number, { aptNumber: string; status: Status; timeLabel?: string | null; ts?: number | null }[]>();
                       for (const item of selectedItems) {
                         const current = byTower.get(item.towerId);
-                        const payload = { aptNumber: item.aptNumber, status: item.status };
+                        const payload = { aptNumber: item.aptNumber, status: item.status, timeLabel: item.timeLabel ?? null, ts: item.ts ?? null };
                         if (current) current.push(payload);
                         else byTower.set(item.towerId, [payload]);
                       }
@@ -1409,11 +1586,11 @@ export default function App() {
                               </span>
                               {apts.slice(0, 30).map((apt) => (
                                 <span
-                                  key={`${towerId}-${apt.aptNumber}-${apt.status}`}
+                                  key={`${towerId}-${apt.aptNumber}-${apt.status}-${apt.timeLabel ?? ''}-${apt.ts ?? ''}`}
                                   className={`px-2 py-1 rounded-md border text-[10px] font-bold ${getStatusChipClass(apt.status)}`}
-                                  title={getStatusLabel(apt.status)}
+                                  title={`${getStatusLabel(apt.status)}${apt.timeLabel ? ` • ${apt.timeLabel}` : ''}`}
                                 >
-                                  {apt.aptNumber}
+                                  {apt.aptNumber}{apt.timeLabel ? ` ${apt.timeLabel}` : ''}
                                 </span>
                               ))}
                               {apts.length > 30 && (
@@ -1549,7 +1726,7 @@ export default function App() {
                       {editingApartment.apartment.status === 'weekly_goal' && (
                         <div className="mt-2 text-xs text-alcabama-grey">
                           {editingApartment.apartment.weeklyGoalDate
-                            ? `Fecha meta semanal: ${normalizeToISODate(editingApartment.apartment.weeklyGoalDate)}`
+                            ? `Fecha meta semanal: ${formatWeeklyGoalDateTime(editingApartment.apartment.weeklyGoalDate) ?? editingApartment.apartment.weeklyGoalDate}`
                             : 'Fecha meta semanal: sin fecha definida'}
                         </div>
                       )}
@@ -1583,22 +1760,22 @@ export default function App() {
                   <span className="text-sm font-medium text-alcabama-dark-grey group-hover:text-green-700">Entregado a Post construcción</span>
                 </button>
 
-                <button 
-                  onClick={() => handleStatusChange('notarized')}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl border border-alcabama-light-grey hover:border-orange-500 hover:bg-orange-50 transition-all group"
-                >
-                  <div className="w-4 h-4 bg-orange-500 rounded-full" />
-                  <span className="text-sm font-medium text-alcabama-dark-grey group-hover:text-orange-700">Escriturado</span>
-                </button>
-
                 <div className="w-full flex items-center justify-between gap-4 px-1">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey">Fecha meta semanal</span>
-                  <input
-                    type="date"
-                    value={weeklyGoalDateInput}
-                    onChange={(e) => setWeeklyGoalDateInput(e.target.value)}
-                    className="h-9 rounded-lg border border-alcabama-light-grey px-3 text-xs text-alcabama-dark-grey"
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={weeklyGoalDateInput}
+                      onChange={(e) => setWeeklyGoalDateInput(e.target.value)}
+                      className="h-9 rounded-lg border border-alcabama-light-grey px-3 text-xs text-alcabama-dark-grey"
+                    />
+                    <input
+                      type="time"
+                      value={weeklyGoalTimeInput}
+                      onChange={(e) => setWeeklyGoalTimeInput(e.target.value)}
+                      className="h-9 rounded-lg border border-alcabama-light-grey px-3 text-xs text-alcabama-dark-grey"
+                    />
+                  </div>
                 </div>
 
                 <button 
@@ -1623,6 +1800,15 @@ export default function App() {
                 >
                   <div className="w-4 h-4 bg-white border border-alcabama-light-grey rounded-full" />
                   <span className="text-sm font-medium text-alcabama-dark-grey group-hover:text-alcabama-black">Sin proceso</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRestoreApartment}
+                  className="w-full flex items-center gap-4 p-4 rounded-xl border border-alcabama-light-grey hover:border-alcabama-black hover:bg-alcabama-light-grey/10 transition-all group"
+                >
+                  <div className="w-4 h-4 bg-alcabama-black rounded-full" />
+                  <span className="text-sm font-medium text-alcabama-dark-grey group-hover:text-alcabama-black">Restaurar (En obra)</span>
                 </button>
 
                 <div className="pt-4">
