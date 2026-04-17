@@ -395,7 +395,7 @@ body {
 }
 
 .model-item:hover {
-  background: rgba(211, 4, 92, 0.1); /* Light primary */
+  background: rgba(2, 73, 89, 0.08);
   color: var(--primary-color);
 }
 
