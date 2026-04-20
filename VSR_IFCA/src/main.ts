@@ -1954,11 +1954,30 @@ const normalizeValue = (v: unknown) => {
     const s = String(v ?? '').trim();
     return s ? s : '(En blanco)';
 };
+const normalizePropKey = (v: unknown) => {
+    const s = String(v ?? '');
+    return s
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '');
+};
 const entityValue = (entity: any, key: string) => {
     if (!entity) return undefined;
     const raw = entity[key] ?? entity[key.toLowerCase()] ?? entity[key.toUpperCase()];
     if (raw && typeof raw === 'object' && 'value' in raw) return (raw as any).value;
-    return raw;
+    if (raw !== undefined) return raw;
+
+    const target = normalizePropKey(key);
+    if (!target) return undefined;
+    for (const k of Object.keys(entity)) {
+        if (normalizePropKey(k) === target) {
+            const v = entity[k];
+            if (v && typeof v === 'object' && 'value' in v) return (v as any).value;
+            return v;
+        }
+    }
+    return undefined;
 };
 const clearModelFromIndex = (modelUUID: string) => {
     for (const field of Object.keys(integratedIndex) as IntegratedClassificationField[]) {
