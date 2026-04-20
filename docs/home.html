@@ -3,6 +3,9 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Portal BIM Alcabama</title>
+<meta name="theme-color" content="#D8005E"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
 <script>
     tailwind.config = {
@@ -36,8 +39,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@900&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
-<!-- Enlace al manifiesto de la PWA (ruta relativa) -->
 <link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="STATUS/icon.svg">
 <style>
     body {
       font-family: 'Inter', sans-serif;
@@ -221,18 +224,17 @@
           applyTheme(newTheme);
         });
 
-        // --- REGISTRO DEL SERVICE WORKER (DESACTIVADO TEMPORALMENTE PARA PRUEBAS) ---
-        // if ('serviceWorker' in navigator) {
-        //     window.addEventListener('load', () => {
-        //         navigator.serviceWorker.register('sw.js')
-        //             .then(registration => {
-        //                 console.log('ServiceWorker registrado con éxito:', registration.scope);
-        //             })
-        //             .catch(error => {
-        //                 console.log('Fallo en el registro de ServiceWorker:', error);
-        //             });
-        //     });
-        // }
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registrado con éxito:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('Fallo en el registro de ServiceWorker:', error);
+                    });
+            });
+        }
     });
 </script>
 </body></html>

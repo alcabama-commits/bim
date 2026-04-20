@@ -4,6 +4,9 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Trevoly | Portal BIM Alcabama</title>
+  <meta name="theme-color" content="#D8005E"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
   <script>
     tailwind.config = {
@@ -36,6 +39,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@700;900&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="STATUS/icon.svg">
   <style>
     body {
       font-family: 'Inter', sans-serif;
@@ -94,7 +99,8 @@
             </p>
             <div class="mt-10 flex flex-wrap items-center justify-center gap-4 lg:justify-start">
               <a href="VSR_IFCA/" class="border border-[#252a20] px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#252a20] transition hover:bg-[#252a20] hover:text-white">Abrir visor IFC</a>
-              <a href="#mapa" class="border border-[rgba(37,42,32,0.12)] bg-white px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#252a20] transition hover:bg-[#f7f7f5]">Ver mapa</a>
+              <a href="STATUS/" class="border border-[rgba(37,42,32,0.12)] bg-white px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#252a20] transition hover:bg-[#f7f7f5]">Estado del proyecto</a>
+              <a href="CANTIDADES/" class="border border-[rgba(37,42,32,0.12)] bg-white px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#252a20] transition hover:bg-[#f7f7f5]">Cantidades y compras</a>
             </div>
           </div>
 
@@ -261,6 +267,18 @@
       window.addEventListener('keydown', (e) => setMapInteraction(e.ctrlKey));
       window.addEventListener('keyup', (e) => setMapInteraction(e.ctrlKey));
       window.addEventListener('blur', () => setMapInteraction(false));
+
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('sw.js')
+            .then(registration => {
+              console.log('ServiceWorker registrado con éxito:', registration.scope);
+            })
+            .catch(error => {
+              console.log('Fallo en el registro de ServiceWorker:', error);
+            });
+        });
+      }
     });
   </script>
 </body>
