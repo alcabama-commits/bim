@@ -80,6 +80,12 @@
       <section id="intro" class="container mx-auto px-6 py-24 md:px-10">
         <div class="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
           <div class="text-center lg:text-left">
+            <img
+              src="https://i.postimg.cc/P5rsf8Yb/trevoly.png"
+              alt="Logo Trevoly"
+              class="mx-auto mb-6 h-16 w-auto lg:mx-0"
+              loading="lazy"
+            />
             <p class="text-[11px] uppercase tracking-[0.34em] text-[#8a8a84]">Trevoly / Artis / BIM</p>
             <h1 class="mt-6 font-display text-5xl font-black tracking-[0.08em] text-[#252a20] md:text-7xl">TREVOLY</h1>
             <p class="mx-auto mt-8 max-w-xl text-base leading-8 text-[#6f6f69] lg:mx-0">
@@ -118,14 +124,18 @@
             </p>
           </div>
           <div class="border-y border-[rgba(37,42,32,0.1)] bg-white">
-            <div class="h-[560px] w-full overflow-hidden bg-[#ececea] md:h-[680px]">
+            <div id="map-wrapper" class="relative h-[560px] w-full overflow-hidden bg-[#ececea] md:h-[680px]">
               <iframe
                 title="Mapa de Bogota - Trevoly"
-                class="h-full w-full grayscale"
+                id="trevoly-map-iframe"
+                class="h-full w-full grayscale pointer-events-none"
                 loading="lazy"
                 referrerpolicy="no-referrer-when-downgrade"
                 src="https://www.openstreetmap.org/export/embed.html?bbox=-74.1687%2C4.5936%2C-74.1592%2C4.6009&layer=mapnik&marker=4.597251%2C-74.164429">
               </iframe>
+              <div id="map-ctrl-hint" class="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-md border border-[rgba(37,42,32,0.2)] bg-white/95 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#252a20] shadow-sm">
+                Mantén CTRL para navegar el mapa
+              </div>
             </div>
           </div>
         </div>
@@ -239,6 +249,18 @@
         localStorage.setItem('theme', newTheme);
         applyTheme(newTheme);
       });
+
+      const mapIframe = document.getElementById('trevoly-map-iframe');
+      const mapHint = document.getElementById('map-ctrl-hint');
+      const setMapInteraction = (enabled) => {
+        if (!mapIframe) return;
+        mapIframe.classList.toggle('pointer-events-none', !enabled);
+        if (mapHint) mapHint.style.display = enabled ? 'none' : 'block';
+      };
+      setMapInteraction(false);
+      window.addEventListener('keydown', (e) => setMapInteraction(e.ctrlKey));
+      window.addEventListener('keyup', (e) => setMapInteraction(e.ctrlKey));
+      window.addEventListener('blur', () => setMapInteraction(false));
     });
   </script>
 </body>

@@ -1139,6 +1139,19 @@ function getSpecialtyFromIfcPath(path: string): string {
 // Track loaded models
 // Key: path, Value: FragmentsGroup (the model)
 const loadedModels = new Map<string, any>();
+const projectLinksBar = document.getElementById('project-links-bar') as HTMLElement | null;
+
+function updateProjectLinksBarVisibility() {
+    if (!projectLinksBar) return;
+    let hasVisible = false;
+    for (const model of loadedModels.values()) {
+        if (model?.object?.visible !== false) {
+            hasVisible = true;
+            break;
+        }
+    }
+    projectLinksBar.style.display = hasVisible ? 'flex' : 'none';
+}
 
 let propertiesTableElement: HTMLElement | null = null;
 
@@ -1517,6 +1530,7 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
         */
         
         loadedModels.set(path, model);
+        updateProjectLinksBarVisibility();
         
         // Generar bordes para snapping
         ensureModelEdges(model);
@@ -2733,6 +2747,7 @@ async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement: HTMLE
             liElement.classList.remove('visible');
             toggleIcon?.classList.replace('fa-eye', 'fa-eye-slash');
         }
+        updateProjectLinksBarVisibility();
         
         logToScreen(`Toggled model visibility: ${path} -> ${newVisible}`);
         return;
@@ -2760,6 +2775,7 @@ async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement: HTMLE
         // Update UI to loaded/visible state
         liElement.classList.add('visible');
         toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
+        updateProjectLinksBarVisibility();
         
     } catch (error) {
         const msg = (error instanceof Error) ? error.message : String(error);
@@ -5627,6 +5643,7 @@ function setupViewpoints() {
                      console.log(`[Viewpoints] Sync visibility for ${uuid}: ${shouldBeVisible}`);
                  }
              }
+             updateProjectLinksBarVisibility();
              
              // Load missing models
              for (const m of savedModels) {
@@ -5682,6 +5699,7 @@ function setupViewpoints() {
                      console.log(`[Viewpoints] Model ${m.uuid} already loaded. Skipping.`);
                  }
              }
+             updateProjectLinksBarVisibility();
         }
     };
 

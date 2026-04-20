@@ -635,6 +635,44 @@ body {
     opacity: 1;
 }
 
+.project-links-bar {
+    position: fixed;
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    z-index: 1200;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+    border-radius: 10px;
+    padding: 8px;
+}
+
+.project-link-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    background: var(--primary-color);
+    color: #fff;
+    border-radius: 8px;
+    border: 1px solid var(--primary-color);
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+}
+
+.project-link-btn:hover {
+    background: #003e52;
+    border-color: #003e52;
+}
+
 /* --- BIM Table Overrides for Flat Aesthetic (SOLO ESTÉTICO) --- */
 
 /* Use !important and high specificity to override component styles */
