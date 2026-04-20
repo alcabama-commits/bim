@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Trevoly | Portal BIM Alcabama</title>
   <meta name="theme-color" content="#2b2b2b"/>
+  <meta name="x-app-version" data-app="trevoly" content="20260420-01"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
@@ -52,6 +53,12 @@
 </head>
 <body class="bg-background-light text-text-light dark:bg-background-dark dark:text-text-dark">
   <div class="min-h-screen bg-trevoly-bg dark:bg-[#40403d]">
+    <div id="update-banner" class="fixed top-0 left-0 right-0 z-50 hidden">
+      <div class="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-3 text-sm font-semibold text-white bg-[#111827] shadow">
+        <div>Hay una nueva versión disponible.</div>
+        <button id="update-reload" class="rounded-md bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-[#111827]">Actualizar</button>
+      </div>
+    </div>
     <header class="absolute top-0 left-0 w-full z-10 px-6 py-4 md:px-8">
       <div class="container mx-auto flex items-center justify-between">
         <div class="flex items-center gap-3">
@@ -59,7 +66,8 @@
             <span class="material-symbols-outlined">arrow_back</span>
           </button>
           <a href="home.html" class="flex items-center" title="Ir al Home">
-            <img alt="Artis Urbano" class="h-10 w-auto object-contain" src="https://i.postimg.cc/RVp8pZwc/artis-urbano.png"/>
+            <img alt="BIM" class="h-10 w-auto object-contain dark:hidden" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png"/>
+            <img alt="BIM" class="h-10 w-auto object-contain hidden dark:block" src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png"/>
           </a>
         </div>
         <div class="flex items-center space-x-4">
@@ -78,7 +86,7 @@
         <div class="container mx-auto flex flex-col items-center gap-6 px-6 py-6 text-center md:px-10">
           <nav class="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[11px] uppercase tracking-[0.34em] text-[#6d7366]">
             <a href="#intro" class="hover:text-[#252a20]">Proyecto</a>
-            <a href="#mapa" class="hover:text-[#252a20]">Bogota</a>
+            <a href="#mapa" class="hover:text-[#252a20]">Bogotá</a>
             <a href="#modulos" class="hover:text-[#252a20]">Modulos</a>
             <a href="#accesos" class="hover:text-[#252a20]">Accesos</a>
             <a href="home.html" class="hover:text-[#252a20]">Portal</a>
@@ -92,13 +100,13 @@
             <img
               src="https://i.postimg.cc/P5rsf8Yb/trevoly.png"
               alt="Logo Trevoly"
-              class="mx-auto mb-6 h-16 w-auto lg:mx-0"
+              class="mx-auto mb-6 h-20 w-auto lg:mx-0"
               loading="lazy"
             />
             <p class="text-[11px] uppercase tracking-[0.34em] text-[#8a8a84]">Trevoly / Artis / BIM</p>
             <h1 class="mt-6 font-display text-5xl font-black tracking-[0.08em] text-[#252a20] md:text-7xl">TREVOLY</h1>
             <p class="mx-auto mt-8 max-w-xl text-base leading-8 text-[#6f6f69] lg:mx-0">
-              Una portada editorial para el proyecto en Bogota: informacion clara, ubicacion, accesos BIM y una
+              Una portada editorial para el proyecto en Bogotá: informacion clara, ubicacion, accesos BIM y una
               narrativa visual mas sobria, inspirada en el estilo minimalista de tu referencia.
             </p>
             <div class="mt-10 flex flex-wrap items-center justify-center gap-4 lg:justify-start">
@@ -127,7 +135,7 @@
         <div class="px-0 py-20">
           <div class="container mx-auto px-6 pb-10 text-center md:px-10">
             <p class="text-[11px] uppercase tracking-[0.34em] text-[#8a8a84]">City Guide</p>
-            <h2 class="mt-5 font-display text-4xl font-black tracking-[0.08em] text-[#252a20] md:text-5xl">BOGOTA</h2>
+            <h2 class="mt-5 font-display text-4xl font-black tracking-[0.08em] text-[#252a20] md:text-5xl">BOGOTÁ</h2>
             <p class="mx-auto mt-6 max-w-2xl text-sm leading-8 text-[#6f6f69]">
               El proyecto se ubica exactamente en el poligono que marcaste, en el sector de la Autopista Sur con Calle 57H Sur y Carrera 72.
               El mapa ahora domina toda la seccion para que la localizacion sea protagonista.
@@ -136,7 +144,7 @@
           <div class="border-y border-[rgba(37,42,32,0.1)] bg-white">
             <div id="map-wrapper" class="relative h-[560px] w-full overflow-hidden bg-[#ececea] md:h-[680px]">
               <iframe
-                title="Mapa de Bogota - Trevoly"
+                title="Mapa de Bogotá - Trevoly"
                 id="trevoly-map-iframe"
                 class="h-full w-full grayscale pointer-events-none"
                 loading="lazy"
@@ -288,6 +296,38 @@
       backBtn?.addEventListener('click', () => {
         if (window.history.length > 1) window.history.back();
         else window.location.href = 'home.html';
+      });
+
+      const metaVersion = document.querySelector('meta[name="x-app-version"]');
+      const appId = metaVersion?.getAttribute('data-app') || 'trevoly';
+      const currentVersion = metaVersion?.getAttribute('content') || '';
+      const versionKey = `${appId}:appVersion`;
+      const storedVersion = localStorage.getItem(versionKey) || '';
+      const banner = document.getElementById('update-banner');
+      const reloadBtn = document.getElementById('update-reload');
+      const showBanner = () => {
+        if (!banner) return;
+        banner.classList.remove('hidden');
+      };
+      if (currentVersion) {
+        if (!storedVersion) {
+          localStorage.setItem(versionKey, currentVersion);
+        } else if (storedVersion !== currentVersion) {
+          showBanner();
+        }
+      }
+      reloadBtn?.addEventListener('click', async () => {
+        try {
+          localStorage.setItem(versionKey, currentVersion);
+          if ('serviceWorker' in navigator) {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg) await reg.unregister();
+          }
+        } catch {
+        }
+        const u = new URL(window.location.href);
+        if (currentVersion) u.searchParams.set('v', currentVersion);
+        window.location.replace(u.toString());
       });
     });
   </script>

@@ -4,6 +4,7 @@
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Portal BIM Alcabama</title>
 <meta name="theme-color" content="#2b2b2b"/>
+<meta name="x-app-version" data-app="portal" content="20260420-01"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
@@ -52,6 +53,12 @@
 </head>
 <body class="bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
 <div class="relative min-h-screen bg-background-light dark:bg-background-dark">
+<div id="update-banner" class="fixed top-0 left-0 right-0 z-50 hidden">
+<div class="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-3 text-sm font-semibold text-white bg-[#111827] shadow">
+<div>Hay una nueva versión disponible.</div>
+<button id="update-reload" class="rounded-md bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-[#111827]">Actualizar</button>
+</div>
+</div>
 <header class="absolute top-0 left-0 w-full z-10 px-8 py-4">
     <div class="container mx-auto flex items-center justify-between">
         <div class="flex items-center gap-3">
@@ -59,7 +66,8 @@
                 <span class="material-symbols-outlined">arrow_back</span>
             </button>
             <a href="home.html" class="flex items-center" title="Ir al Home">
-                <img alt="Artis Urbano" class="h-10 w-auto object-contain" src="https://i.postimg.cc/RVp8pZwc/artis-urbano.png"/>
+                <img alt="BIM" class="h-10 w-auto object-contain dark:hidden" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png"/>
+                <img alt="BIM" class="h-10 w-auto object-contain hidden dark:block" src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png"/>
             </a>
         </div>
         <div class="flex items-center space-x-4">
@@ -242,6 +250,38 @@
         backBtn?.addEventListener('click', () => {
             if (window.history.length > 1) window.history.back();
             else window.location.href = 'home.html';
+        });
+
+        const metaVersion = document.querySelector('meta[name="x-app-version"]');
+        const appId = metaVersion?.getAttribute('data-app') || 'portal';
+        const currentVersion = metaVersion?.getAttribute('content') || '';
+        const versionKey = `${appId}:appVersion`;
+        const storedVersion = localStorage.getItem(versionKey) || '';
+        const banner = document.getElementById('update-banner');
+        const reloadBtn = document.getElementById('update-reload');
+        const showBanner = () => {
+            if (!banner) return;
+            banner.classList.remove('hidden');
+        };
+        if (currentVersion) {
+            if (!storedVersion) {
+                localStorage.setItem(versionKey, currentVersion);
+            } else if (storedVersion !== currentVersion) {
+                showBanner();
+            }
+        }
+        reloadBtn?.addEventListener('click', async () => {
+            try {
+                localStorage.setItem(versionKey, currentVersion);
+                if ('serviceWorker' in navigator) {
+                    const reg = await navigator.serviceWorker.getRegistration();
+                    if (reg) await reg.unregister();
+                }
+            } catch {
+            }
+            const u = new URL(window.location.href);
+            if (currentVersion) u.searchParams.set('v', currentVersion);
+            window.location.replace(u.toString());
         });
     });
 </script>

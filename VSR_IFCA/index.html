@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="version" content="v27-EventSnap" />
+    <meta name="x-app-version" data-app="vsr_ifca" content="20260420-01" />
     <!--
     <script>
       // COI Service Worker Registration for SharedArrayBuffer support
@@ -26,9 +27,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VSR IFCA | Artis Urbano</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+      #update-banner{position:fixed;top:0;left:0;right:0;z-index:2005;display:none}
+      #update-banner .inner{margin:0 auto;max-width:980px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 14px;background:#111827;color:#fff;font:600 14px/1.2 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+      #update-banner button{cursor:pointer;border:0;border-radius:8px;background:#fff;color:#111827;font-weight:900;letter-spacing:.12em;text-transform:uppercase;font-size:11px;padding:10px 12px}
+    </style>
     <script type="module" src="/src/main.ts"></script>
   </head>
   <body>
+    <div id="update-banner"><div class="inner"><div>Hay una nueva versión disponible.</div><button id="update-reload" type="button">Actualizar</button></div></div>
     <div id="app">
       <!-- Sidebar (Left - Models) -->
       <div id="sidebar" class="sidebar">
@@ -271,5 +278,30 @@
       </div>
 
     </div>
+    <script>
+      (function () {
+        try {
+          var meta = document.querySelector('meta[name="x-app-version"]');
+          var appId = meta && meta.getAttribute('data-app') || 'vsr_ifca';
+          var version = meta && meta.getAttribute('content') || '';
+          var key = appId + ':appVersion';
+          var stored = localStorage.getItem(key) || '';
+          var banner = document.getElementById('update-banner');
+          var btn = document.getElementById('update-reload');
+          if (version) {
+            if (!stored) localStorage.setItem(key, version);
+            else if (stored !== version && banner) banner.style.display = 'block';
+          }
+          if (btn) {
+            btn.addEventListener('click', function () {
+              try { localStorage.setItem(key, version); } catch (e) {}
+              var u = new URL(location.href);
+              if (version) u.searchParams.set('v', version);
+              location.replace(u.toString());
+            });
+          }
+        } catch (e) {}
+      })();
+    </script>
   </body>
 </html>
