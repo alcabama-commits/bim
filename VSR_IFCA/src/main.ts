@@ -3895,6 +3895,9 @@ async function classifyModel(model: any) {
     const elementType = new Map<number, string>();
     const elementLevel = new Map<number, string>();
     const levelPriority = new Map<number, number>(); // 0: None, 1: Restricción, 2: Referencia, 3: Nivel
+    const integratedLevelById = new Map<number, string>();
+    const integratedClassById = new Map<number, string>();
+    const integratedMaterialById = new Map<number, string>();
 
     // Initialize with default
     for (const id of idsWithGeometry) {
@@ -3921,6 +3924,7 @@ async function classifyModel(model: any) {
                      if (!prop) continue;
                      const nameObj = prop.Name || prop.name;
                      const name = nameObj?.value ?? nameObj;
+                     const normName = normalizePropKey(name);
                      
                      // Check for "Familia" or "Family" -> Type
                      if (name === 'Familia' || name === 'Family') {
@@ -3962,6 +3966,45 @@ async function classifyModel(model: any) {
                              }
                          }
                      }
+
+                     if (normName === 'nivelintegrado' || normName === 'nivelintegrada') {
+                         const valObj = prop.NominalValue || prop.nominalValue;
+                         const value = valObj?.value ?? valObj;
+                         if (value !== undefined && value !== null) {
+                             const v = String(value).trim();
+                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
+                             for (const relIdObj of relatedList) {
+                                 const relId = relIdObj.value || relIdObj;
+                                 if (idsSet.has(relId)) integratedLevelById.set(relId, v);
+                             }
+                         }
+                     }
+
+                     if (normName === 'clasificacion') {
+                         const valObj = prop.NominalValue || prop.nominalValue;
+                         const value = valObj?.value ?? valObj;
+                         if (value !== undefined && value !== null) {
+                             const v = String(value).trim();
+                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
+                             for (const relIdObj of relatedList) {
+                                 const relId = relIdObj.value || relIdObj;
+                                 if (idsSet.has(relId)) integratedClassById.set(relId, v);
+                             }
+                         }
+                     }
+
+                     if (normName === 'materialintegrado' || normName === 'materialintegrada') {
+                         const valObj = prop.NominalValue || prop.nominalValue;
+                         const value = valObj?.value ?? valObj;
+                         if (value !== undefined && value !== null) {
+                             const v = String(value).trim();
+                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
+                             for (const relIdObj of relatedList) {
+                                 const relId = relIdObj.value || relIdObj;
+                                 if (idsSet.has(relId)) integratedMaterialById.set(relId, v);
+                             }
+                         }
+                     }
                  }
              }
         }
@@ -3984,10 +4027,9 @@ async function classifyModel(model: any) {
     }
     
     for (const id of idsWithGeometry) {
-        const entity = model.properties[id];
-        const nivel = normalizeValue(entityValue(entity, 'NIVEL INTEGRADO') ?? elementLevel.get(id));
-        const clasificacion = normalizeValue(entityValue(entity, 'CLASIFICACIÓN') ?? elementType.get(id));
-        const material = normalizeValue(entityValue(entity, 'MATERIAL INTEGRADO'));
+        const nivel = normalizeValue(integratedLevelById.get(id) ?? elementLevel.get(id));
+        const clasificacion = normalizeValue(integratedClassById.get(id) ?? elementType.get(id));
+        const material = normalizeValue(integratedMaterialById.get(id));
 
         addToIndex('NIVEL INTEGRADO', modelUUID, nivel, id);
         addToIndex('CLASIFICACIÓN', modelUUID, clasificacion, id);
