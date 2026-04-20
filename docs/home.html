@@ -3,7 +3,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Portal BIM Alcabama</title>
-<meta name="theme-color" content="#D8005E"/>
+<meta name="theme-color" content="#2b2b2b"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
@@ -52,10 +52,10 @@
 </head>
 <body class="bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
 <div class="relative min-h-screen bg-background-light dark:bg-background-dark">
-<header class="fixed top-0 left-0 w-full z-10 px-4 sm:px-8 py-3 bg-[#2b2b2b] text-white">
+<header class="absolute top-0 left-0 w-full z-10 px-8 py-4">
     <div class="container mx-auto flex items-center justify-between">
         <div class="flex items-center gap-3">
-            <button id="back-btn" aria-label="Volver" class="rounded-lg border border-white/15 bg-white/10 px-3 py-2 hover:bg-white/15 transition-colors">
+            <button id="back-btn" aria-label="Volver" class="rounded-lg border border-border-light bg-white/80 px-3 py-2 hover:bg-white transition-colors">
                 <span class="material-symbols-outlined">arrow_back</span>
             </button>
             <a href="home.html" class="flex items-center" title="Ir al Home">
@@ -63,8 +63,8 @@
             </a>
         </div>
         <div class="flex items-center space-x-4">
-            <button id="theme-toggle" aria-label="Cambiar tema" class="text-white hover:opacity-80"><span class="material-symbols-outlined">dark_mode</span></button>
-            <div id="auth-container" class="flex items-center space-x-4"><a href="https://alcabama-commits.github.io/bim/inse.html" class="text-white hover:opacity-80 text-sm font-medium">Iniciar sesión</a></div>
+            <button id="theme-toggle" aria-label="Cambiar tema" class="text-text-light dark:text-white hover:text-primary"><span class="material-symbols-outlined">dark_mode</span></button>
+            <div id="auth-container" class="flex items-center space-x-4"><a href="https://alcabama-commits.github.io/bim/inse.html" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Iniciar sesión</a></div>
         </div>
     </div>
 </header>

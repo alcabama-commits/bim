@@ -2434,13 +2434,13 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen w-screen bg-white overflow-hidden font-sans">
       {/* Header */}
-      <header className="min-h-16 flex flex-col sm:flex-row sm:items-center sm:justify-between px-3 sm:px-8 py-2 sm:py-0 gap-2 border-b border-black/20 bg-[#2b2b2b] text-white">
+      <header className="min-h-16 flex flex-col sm:flex-row sm:items-center sm:justify-between px-3 sm:px-8 py-2 sm:py-0 gap-2 border-b border-slate-200 bg-white">
         <div className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-4">
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onBack}
-              className="p-2 rounded-lg border border-white/15 bg-white/10 hover:bg-white/15 transition-colors"
+              className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-slate-700"
               title="Volver"
             >
               <ChevronLeft className="w-5 h-5" />
@@ -2457,7 +2457,7 @@ export default function App() {
                   onError={() => setArtisLogoOk(false)}
                 />
               ) : (
-                <div className="text-[11px] font-black tracking-widest text-white">ARTIS</div>
+                <div className="text-[11px] font-black tracking-widest text-slate-700">ARTIS</div>
               )}
             </a>
           </div>
@@ -2472,12 +2472,12 @@ export default function App() {
               onError={() => setTrevolyLogoOk(false)}
             />
           ) : (
-            <div className="text-[11px] font-black tracking-widest text-white sm:hidden">TREVOLY</div>
+            <div className="text-[11px] font-black tracking-widest text-slate-700 sm:hidden">TREVOLY</div>
           )}
         </div>
         
         <div className="w-full sm:flex-1 sm:max-w-3xl sm:mx-8">
-          <div className="bg-[#3a3a3a] text-white py-1.5 px-4 sm:px-6 rounded-sm text-center font-bold uppercase tracking-widest text-xs sm:text-sm shadow-inner truncate border border-white/10">
+          <div className="bg-[#003E52] text-white py-1.5 px-4 sm:px-6 rounded-sm text-center font-bold uppercase tracking-widest text-xs sm:text-sm shadow-inner truncate">
             {selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'CANTIDADES'}
           </div>
         </div>
@@ -2494,7 +2494,7 @@ export default function App() {
               onError={() => setTrevolyLogoOk(false)}
             />
           ) : (
-            <div className="text-xs font-black tracking-widest text-white">TREVOLY</div>
+            <div className="text-xs font-black tracking-widest text-slate-700">TREVOLY</div>
           )}
         </div>
       </header>

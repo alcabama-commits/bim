@@ -1580,12 +1580,12 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen w-screen bg-white overflow-hidden font-sans">
       {/* Header */}
-      <header className="h-20 flex items-center justify-between px-3 sm:px-8 border-b border-black/20 bg-[#2b2b2b] text-white">
+      <header className="h-20 flex items-center justify-between px-3 sm:px-8 border-b border-slate-200 bg-white">
         <div className="flex items-center gap-4">
           <button
             type="button"
             onClick={onBack}
-            className="p-2 rounded-lg border border-white/15 bg-white/10 hover:bg-white/15 transition-colors"
+            className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-slate-700"
             title="Volver"
           >
             <ChevronLeft className="w-5 h-5" />
@@ -1603,7 +1603,7 @@ export default function App() {
         </div>
         
         <div className="flex-1 max-w-3xl mx-8">
-          <div className="bg-[#3a3a3a] text-white py-1.5 px-6 rounded-sm text-center font-bold uppercase tracking-widest text-sm shadow-inner border border-white/10">
+          <div className="bg-[#003E52] text-white py-1.5 px-6 rounded-sm text-center font-bold uppercase tracking-widest text-sm shadow-inner">
             {selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'CANTIDADES'}
           </div>
         </div>
