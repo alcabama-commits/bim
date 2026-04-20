@@ -4,7 +4,7 @@ import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
 import BIMViewer from './components/BIMViewer';
 import { BIMElement, CategorySummary } from './types';
-import { Folder, File, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Eye, Loader2, Maximize2, Minimize2, Palette, Grid3X3 } from 'lucide-react';
+import { Folder, File, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Eye, EyeOff, Loader2, Maximize2, Minimize2, Palette, Grid3X3, SlidersHorizontal } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import DataTable from './components/DataTable';
 
@@ -1568,13 +1568,29 @@ export default function App() {
     ESTRUCTURA: true,
     GENERAL: true
   });
+  const onBack = useCallback(() => {
+    try {
+      if (window.history.length > 1) window.history.back();
+      else window.location.href = '../home.html';
+    } catch {
+      window.location.href = '../home.html';
+    }
+  }, []);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-white overflow-hidden font-sans">
       {/* Header */}
-      <header className="h-20 flex items-center justify-between px-8 border-b border-slate-200 bg-white">
+      <header className="h-20 flex items-center justify-between px-3 sm:px-8 border-b border-black/20 bg-[#2b2b2b] text-white">
         <div className="flex items-center gap-4">
-          <div className="h-12 flex items-center">
+          <button
+            type="button"
+            onClick={onBack}
+            className="p-2 rounded-lg border border-white/15 bg-white/10 hover:bg-white/15 transition-colors"
+            title="Volver"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <a href="../home.html" className="h-12 flex items-center" title="Ir al Home">
             <img
               src="https://i.postimg.cc/RVp8pZwc/artis_urbano.png"
               alt="Artis Urbano"
@@ -1583,11 +1599,11 @@ export default function App() {
               decoding="async"
               referrerPolicy="no-referrer"
             />
-          </div>
+          </a>
         </div>
         
         <div className="flex-1 max-w-3xl mx-8">
-          <div className="bg-[#003E52] text-white py-1.5 px-6 rounded-sm text-center font-bold uppercase tracking-widest text-sm shadow-inner">
+          <div className="bg-[#3a3a3a] text-white py-1.5 px-6 rounded-sm text-center font-bold uppercase tracking-widest text-sm shadow-inner border border-white/10">
             {selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'CANTIDADES'}
           </div>
         </div>

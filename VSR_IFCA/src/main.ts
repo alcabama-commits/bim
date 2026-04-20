@@ -1934,6 +1934,121 @@ function initSidebarTabs() {
 // Global tracking for hidden items (Fragments/Items hidden via Hider)
 const hiddenItems: Record<string, Set<number>> = {};
 
+type IntegratedClassificationField = 'NIVEL INTEGRADO' | 'CLASIFICACIÓN' | 'MATERIAL INTEGRADO';
+type IntegratedClassificationMode = 'filtrar' | 'ordenar';
+type IntegratedClassificationOrder = 'cantidad' | 'az';
+
+let integratedClassificationField: IntegratedClassificationField = 'CLASIFICACIÓN';
+let integratedClassificationMode: IntegratedClassificationMode = 'filtrar';
+let integratedClassificationOrder: IntegratedClassificationOrder = 'cantidad';
+const activeIntegratedFilters = new Set<string>();
+
+const integratedIndex: Record<IntegratedClassificationField, Map<string, Record<string, Set<number>>>> = {
+    'NIVEL INTEGRADO': new Map(),
+    'CLASIFICACIÓN': new Map(),
+    'MATERIAL INTEGRADO': new Map()
+};
+
+const normalizeKey = (v: unknown) => String(v ?? '').trim();
+const normalizeValue = (v: unknown) => {
+    const s = String(v ?? '').trim();
+    return s ? s : '(En blanco)';
+};
+const entityValue = (entity: any, key: string) => {
+    if (!entity) return undefined;
+    const raw = entity[key] ?? entity[key.toLowerCase()] ?? entity[key.toUpperCase()];
+    if (raw && typeof raw === 'object' && 'value' in raw) return (raw as any).value;
+    return raw;
+};
+const clearModelFromIndex = (modelUUID: string) => {
+    for (const field of Object.keys(integratedIndex) as IntegratedClassificationField[]) {
+        const map = integratedIndex[field];
+        for (const [val, perModel] of map) {
+            if (perModel[modelUUID]) {
+                delete perModel[modelUUID];
+            }
+            if (Object.keys(perModel).length === 0) map.delete(val);
+        }
+    }
+};
+const addToIndex = (field: IntegratedClassificationField, modelUUID: string, value: string, id: number) => {
+    const map = integratedIndex[field];
+    if (!map.has(value)) map.set(value, {});
+    const perModel = map.get(value)!;
+    if (!perModel[modelUUID]) perModel[modelUUID] = new Set();
+    perModel[modelUUID].add(id);
+};
+
+const buildClassifierMap = (field: IntegratedClassificationField, order: IntegratedClassificationOrder) => {
+    const raw = integratedIndex[field];
+    const entries = Array.from(raw.entries()).map(([k, v]) => {
+        let count = 0;
+        for (const id in v) {
+            const s = v[id];
+            if (s instanceof Set) count += s.size;
+        }
+        return { key: k, map: v, count };
+    });
+    if (order === 'az') {
+        entries.sort((a, b) => a.key.localeCompare(b.key, 'es'));
+    } else {
+        entries.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key, 'es'));
+    }
+    const out = new Map<string, Record<string, Set<number>>>();
+    for (const e of entries) out.set(e.key, e.map);
+    return out;
+};
+
+async function applyIntegratedFilterFromClassification(classification: Map<string, any>) {
+    if (activeIntegratedFilters.size === 0) {
+        await hider.set(true);
+        for (const k of Object.keys(hiddenItems)) hiddenItems[k].clear();
+        return;
+    }
+
+    const unionMap: Record<string, Set<number>> = {};
+    const allByModel: Record<string, Set<number>> = {};
+
+    for (const [value, groupData] of classification) {
+        if (!activeIntegratedFilters.has(value)) continue;
+        const fragmentIdMap = (groupData as any).map || groupData;
+        if (!fragmentIdMap) continue;
+        for (const modelUUID in fragmentIdMap) {
+            const items = fragmentIdMap[modelUUID];
+            const iterable = items instanceof Set ? items : (Array.isArray(items) ? items : []);
+            if (!unionMap[modelUUID]) unionMap[modelUUID] = new Set();
+            if (!allByModel[modelUUID]) allByModel[modelUUID] = new Set();
+            for (const id of iterable) {
+                unionMap[modelUUID].add(id);
+                allByModel[modelUUID].add(id);
+            }
+        }
+    }
+
+    for (const [value, groupData] of classification) {
+        const fragmentIdMap = (groupData as any).map || groupData;
+        if (!fragmentIdMap) continue;
+        for (const modelUUID in fragmentIdMap) {
+            const items = fragmentIdMap[modelUUID];
+            const iterable = items instanceof Set ? items : (Array.isArray(items) ? items : []);
+            if (!allByModel[modelUUID]) allByModel[modelUUID] = new Set();
+            for (const id of iterable) allByModel[modelUUID].add(id);
+        }
+    }
+
+    await hider.isolate(unionMap);
+
+    for (const modelUUID of Object.keys(allByModel)) {
+        const all = allByModel[modelUUID];
+        const visible = unionMap[modelUUID] || new Set<number>();
+        const hidden = new Set<number>();
+        for (const id of all) {
+            if (!visible.has(id)) hidden.add(id);
+        }
+        hiddenItems[modelUUID] = hidden;
+    }
+}
+
 function updateHiddenItems(map: Record<string, any>, visible: boolean) {
     for (const id in map) {
         // Resolve Model UUID (id could be FragmentID or ModelUUID)
@@ -2022,6 +2137,7 @@ async function updateClassificationUI() {
             li.className = 'model-item';
             li.style.display = 'flex';
             li.style.justifyContent = 'space-between';
+            (li as any).dataset.group = String(type);
             
             let count = 0;
             if (fragmentIdMap) {
@@ -2061,6 +2177,29 @@ async function updateClassificationUI() {
             nameDiv?.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 console.log(`[DEBUG] Selecting category: ${type} (Count: ${count})`);
+
+                if (integratedClassificationMode === 'filtrar') {
+                    const allowMulti = e.ctrlKey || e.metaKey;
+                    if (!allowMulti) {
+                        if (activeIntegratedFilters.size === 1 && activeIntegratedFilters.has(type)) {
+                            activeIntegratedFilters.clear();
+                        } else {
+                            activeIntegratedFilters.clear();
+                            activeIntegratedFilters.add(type);
+                        }
+                    } else {
+                        if (activeIntegratedFilters.has(type)) activeIntegratedFilters.delete(type);
+                        else activeIntegratedFilters.add(type);
+                    }
+
+                    list.querySelectorAll('li.model-item').forEach((el) => {
+                        const key = (el as any).dataset.group || '';
+                        el.classList.toggle('filter-active', activeIntegratedFilters.has(key));
+                    });
+
+                    await applyIntegratedFilterFromClassification(classification);
+                    return;
+                }
                 
                 // Debug the map content
                 console.log(`[DEBUG] FragmentIdMap for ${type}:`, fragmentIdMap);
@@ -2134,6 +2273,8 @@ async function updateClassificationUI() {
             // VISIBILITY Handler (Clicking eye)
             toggleDiv?.addEventListener('click', (e) => {
                 e.stopPropagation();
+                activeIntegratedFilters.clear();
+                list.querySelectorAll('li.model-item').forEach((el) => el.classList.remove('filter-active'));
                 isVisible = !isVisible;
                 console.log(`[DEBUG] Toggling visibility for ${type}: ${isVisible}`);
                 
@@ -2161,6 +2302,66 @@ async function updateClassificationUI() {
         }
         container.appendChild(list);
     }
+}
+
+function initNavigationControls() {
+    const backBtn = document.getElementById('back-btn');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            if (window.history.length > 1) window.history.back();
+            else window.location.href = '../home.html';
+        });
+    }
+}
+
+function initClassificationControls() {
+    const fieldSel = document.getElementById('classification-field') as HTMLSelectElement | null;
+    const modeSel = document.getElementById('classification-mode') as HTMLSelectElement | null;
+    const orderSel = document.getElementById('classification-order') as HTMLSelectElement | null;
+    const clearBtn = document.getElementById('classification-clear') as HTMLButtonElement | null;
+
+    const sync = () => {
+        if (fieldSel && fieldSel.value) integratedClassificationField = fieldSel.value as IntegratedClassificationField;
+        if (modeSel && modeSel.value) integratedClassificationMode = modeSel.value as IntegratedClassificationMode;
+        if (orderSel && orderSel.value) integratedClassificationOrder = orderSel.value as IntegratedClassificationOrder;
+        if (orderSel) orderSel.style.display = integratedClassificationMode === 'ordenar' ? 'block' : 'none';
+        if (clearBtn) clearBtn.style.display = integratedClassificationMode === 'filtrar' ? 'block' : 'none';
+    };
+
+    const rebuild = async () => {
+        if (!classifier || !classifier.list) return;
+        classifier.list.clear();
+        const built = buildClassifierMap(integratedClassificationField, integratedClassificationOrder);
+        classifier.list.set(integratedClassificationField, built);
+        await updateClassificationUI();
+    };
+
+    fieldSel?.addEventListener('change', async () => {
+        sync();
+        activeIntegratedFilters.clear();
+        await hider.set(true);
+        for (const k of Object.keys(hiddenItems)) hiddenItems[k].clear();
+        await rebuild();
+    });
+    modeSel?.addEventListener('change', async () => {
+        sync();
+        activeIntegratedFilters.clear();
+        await hider.set(true);
+        for (const k of Object.keys(hiddenItems)) hiddenItems[k].clear();
+        await rebuild();
+    });
+    orderSel?.addEventListener('change', async () => {
+        sync();
+        await rebuild();
+    });
+    clearBtn?.addEventListener('click', async () => {
+        activeIntegratedFilters.clear();
+        await hider.set(true);
+        for (const k of Object.keys(hiddenItems)) hiddenItems[k].clear();
+        await rebuild();
+    });
+
+    sync();
 }
 
 function initSidebar() {
@@ -2789,6 +2990,8 @@ async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement: HTMLE
 logToScreen('Initializing That Open Engine...');
 initSidebar();
 initSidebarTabs();
+initNavigationControls();
+initClassificationControls();
 initTheme();
 initProjectionToggle();
 initGridToggle();
@@ -3667,6 +3870,8 @@ async function classifyModel(model: any) {
     
     const idsWithGeometry = await model.getItemsIdsWithGeometry();
     const idsSet = new Set(idsWithGeometry);
+
+    clearModelFromIndex(modelUUID);
     
     const elementType = new Map<number, string>();
     const elementLevel = new Map<number, string>();
@@ -3759,10 +3964,20 @@ async function classifyModel(model: any) {
         group[modelUUID].add(id);
     }
     
+    for (const id of idsWithGeometry) {
+        const entity = model.properties[id];
+        const nivel = normalizeValue(entityValue(entity, 'NIVEL INTEGRADO') ?? elementLevel.get(id));
+        const clasificacion = normalizeValue(entityValue(entity, 'CLASIFICACIÓN') ?? elementType.get(id));
+        const material = normalizeValue(entityValue(entity, 'MATERIAL INTEGRADO'));
+
+        addToIndex('NIVEL INTEGRADO', modelUUID, nivel, id);
+        addToIndex('CLASIFICACIÓN', modelUUID, clasificacion, id);
+        addToIndex('MATERIAL INTEGRADO', modelUUID, material, id);
+    }
+
     classifier.list.clear();
-    classifier.list.set('Clasificación por tipo', typeMap);
-    classifier.list.set('Clasificación por nivel', levelMap);
-    logToScreen(`Clasificado en ${typeMap.size} tipos y ${levelMap.size} niveles.`);
+    classifier.list.set(integratedClassificationField, buildClassifierMap(integratedClassificationField, integratedClassificationOrder));
+    logToScreen(`Clasificado: ${idsWithGeometry.length} elementos indexados.`);
 }
 
 function setupVisibilityToolbar() {

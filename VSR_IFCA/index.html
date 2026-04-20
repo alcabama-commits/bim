@@ -60,6 +60,26 @@
                 <h3><i class="fa-solid fa-tags"></i> Clasificación</h3>
             </div>
             
+            <div class="sidebar-content" id="classification-controls">
+                <div class="classification-controls">
+                    <select id="classification-field" class="classification-select" title="Parámetro de clasificación">
+                        <option value="CLASIFICACIÓN">CLASIFICACIÓN</option>
+                        <option value="NIVEL INTEGRADO">NIVEL INTEGRADO</option>
+                        <option value="MATERIAL INTEGRADO">MATERIAL INTEGRADO</option>
+                    </select>
+                    <select id="classification-mode" class="classification-select" title="Modo">
+                        <option value="filtrar">Filtrar</option>
+                        <option value="ordenar">Ordenar</option>
+                    </select>
+                    <select id="classification-order" class="classification-select" title="Orden">
+                        <option value="cantidad">Cantidad</option>
+                        <option value="az">A-Z</option>
+                    </select>
+                    <button id="classification-clear" class="classification-clear-btn" type="button" title="Limpiar filtro">
+                        Limpiar
+                    </button>
+                </div>
+            </div>
             <div class="sidebar-content" id="classification-list">
                 <div style="padding: 20px; text-align: center; color: #888;">
                     Carga un modelo para ver la clasificación
@@ -112,10 +132,15 @@
       <!-- Top Bar -->
       <header class="top-bar">
           <div class="logo-container">
+              <button id="back-btn" class="sidebar-toggle-btn" title="Volver">
+                  <i class="fa-solid fa-arrow-left"></i>
+              </button>
               <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar modelos">
                   <i class="fa-solid fa-bars"></i>
               </button>
-              <img id="logo-img" src="https://i.postimg.cc/vmKVZndP/artis-urbano2.png" alt="Artis Urbano" class="logo-img" style="height: 40px;">
+              <a href="../home.html" title="Volver al Home">
+                  <img id="logo-img" src="https://i.postimg.cc/vmKVZndP/artis-urbano2.png" alt="Artis Urbano" class="logo-img" style="height: 40px;">
+              </a>
           </div>
 
           <div class="top-controls" style="display: flex; align-items: center; gap: 15px;">
