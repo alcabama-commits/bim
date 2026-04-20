@@ -5,6 +5,7 @@ import * as OBF from '@thatopen/components-front';
 import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import { ViewpointsManager, ViewpointStateProvider } from './viewpoints-manager';
+import { DRIVE_MODELS_API_URL, DRIVE_MODELS_FOLDER_ID } from './config';
 import './style.css';
 
 
@@ -1215,9 +1216,179 @@ async function loadFromIndexedDB(key: string): Promise<ArrayBuffer | undefined> 
 }
 
 
+type RemoteModelItem = {
+    name: string;
+    path: string;
+    url?: string;
+    driveFragId?: string;
+    driveJsonId?: string | null;
+};
+
+const base64ToBytes = (b64: string): Uint8Array => {
+    const normalized = String(b64 || '').replace(/[\r\n\s]/g, '').replace(/-/g, '+').replace(/_/g, '/');
+    const bin = atob(normalized);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+};
+
+const concatBytes = (parts: Uint8Array[], totalLen: number) => {
+    const out = new Uint8Array(totalLen);
+    let off = 0;
+    for (const p of parts) {
+        out.set(p, off);
+        off += p.byteLength;
+    }
+    return out;
+};
+
+const jsonpRequest = async <T,>(url: URL, timeoutMs = 30000): Promise<T> => {
+    return await new Promise<T>((resolve, reject) => {
+        const cb = `__jsonp_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
+        url.searchParams.set('callback', cb);
+        const script = document.createElement('script');
+        let done = false;
+
+        const cleanup = () => {
+            if (done) return;
+            done = true;
+            try {
+                delete (window as any)[cb];
+            } catch {
+                (window as any)[cb] = undefined;
+            }
+            if (script.parentNode) script.parentNode.removeChild(script);
+        };
+
+        const timer = window.setTimeout(() => {
+            cleanup();
+            reject(new Error('Tiempo de espera agotado (JSONP)'));
+        }, timeoutMs);
+
+        (window as any)[cb] = (data: T) => {
+            window.clearTimeout(timer);
+            cleanup();
+            resolve(data);
+        };
+
+        script.onerror = () => {
+            window.clearTimeout(timer);
+            cleanup();
+            reject(new Error('No se pudo cargar el script JSONP'));
+        };
+
+        script.src = url.toString();
+        document.head.appendChild(script);
+    });
+};
+
+const shouldUseDriveModels = () => {
+    const url = String(DRIVE_MODELS_API_URL || '').trim();
+    return !!url && url.startsWith('https://') && url.includes('script.google.com');
+};
+
+const driveApiUrl = () => new URL(String(DRIVE_MODELS_API_URL || '').trim());
+
+const listDriveModels = async (): Promise<Array<{ name: string; fragId: string; jsonId?: string | null }>> => {
+    const url = driveApiUrl();
+    url.searchParams.set('action', 'list');
+    url.searchParams.set('folderId', DRIVE_MODELS_FOLDER_ID);
+    const data = await jsonpRequest<{ models?: Array<{ name: string; fragId: string; jsonId?: string | null }> }>(url, 45000);
+    const models = Array.isArray(data?.models) ? data.models : [];
+    return models.filter((m) => m && m.name && m.fragId);
+};
+
+const fetchDriveBytes = async (id: string): Promise<Uint8Array> => {
+    let limit = 2 * 1024 * 1024;
+    let offset = 0;
+    let total: number | null = null;
+    const parts: Uint8Array[] = [];
+
+    for (;;) {
+        const url = driveApiUrl();
+        url.searchParams.set('action', 'chunk');
+        url.searchParams.set('id', id);
+        url.searchParams.set('offset', String(offset));
+        url.searchParams.set('limit', String(limit));
+
+        let payload: { data?: string; total?: number; nextOffset?: number; done?: boolean } | null = null;
+        let lastErr: unknown = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                payload = await jsonpRequest(url, 45000);
+                lastErr = null;
+                break;
+            } catch (e) {
+                lastErr = e;
+                const msg = String((e as any)?.message ?? '');
+                const isTimeout = msg.includes('Tiempo de espera agotado (JSONP)');
+                if (isTimeout && limit > 256 * 1024) {
+                    limit = Math.max(256 * 1024, Math.floor(limit / 2));
+                }
+                await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+            }
+        }
+        if (!payload) throw (lastErr instanceof Error ? lastErr : new Error('No se pudo descargar chunk (JSONP).'));
+
+        const chunk = payload.data ? base64ToBytes(String(payload.data)) : new Uint8Array(0);
+        parts.push(chunk);
+        if (typeof payload.total === 'number' && Number.isFinite(payload.total)) total = payload.total;
+        offset = typeof payload.nextOffset === 'number' && Number.isFinite(payload.nextOffset) ? payload.nextOffset : offset + chunk.byteLength;
+        if (payload.done) break;
+        if (chunk.byteLength === 0) break;
+        if (total !== null && offset >= total) break;
+    }
+
+    const finalTotal = total ?? parts.reduce((a, b) => a + b.byteLength, 0);
+    return concatBytes(parts, finalTotal);
+};
+
+const fetchDriveText = async (id: string): Promise<string> => {
+    const url = driveApiUrl();
+    url.searchParams.set('action', 'text');
+    url.searchParams.set('id', id);
+    const data = await jsonpRequest<{ text?: string }>(url, 45000);
+    return String(data?.text ?? '');
+};
+
+const loadDriveFragBuffer = async (fragId: string): Promise<ArrayBuffer> => {
+    const dbKey = `drive:frag:${fragId}`;
+    const cached = await loadFromIndexedDB(dbKey);
+    if (cached && cached.byteLength > 0) return cached;
+    const bytes = await fetchDriveBytes(fragId);
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    await saveToIndexedDB(dbKey, buffer);
+    return buffer;
+};
+
+const loadDriveJsonProps = async (jsonId: string): Promise<any | null> => {
+    const dbKey = `drive:json:${jsonId}`;
+    const cached = await loadFromIndexedDB(dbKey);
+    if (cached && cached.byteLength > 0) {
+        try {
+            const text = new TextDecoder().decode(new Uint8Array(cached));
+            return JSON.parse(text);
+        } catch {
+            return null;
+        }
+    }
+    const text = await fetchDriveText(jsonId);
+    if (!text) return null;
+    try {
+        const json = JSON.parse(text);
+        const encoded = new TextEncoder().encode(text);
+        const buffer = encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength);
+        await saveToIndexedDB(dbKey, buffer);
+        return json;
+    } catch {
+        return null;
+    }
+};
+
+
 // --- Model Loading Logic ---
 
-async function loadModel(url: string, path: string) {
+async function loadModel(url: string, path: string, options?: { propertiesUrl?: string; propertiesJson?: any | null; sourceUrl?: string }) {
     try {
         logToScreen(`Fetching Fragment: ${url}`);
         const file = await fetch(url);
@@ -1275,8 +1446,8 @@ async function loadModel(url: string, path: string) {
         (model as any).name = path.split('/').pop() || 'Model';
         // Store URL for state persistence
         if (!model.userData) model.userData = {};
-        model.userData.url = url;
-        console.log(`[Viewpoints] Registered model URL for persistence: ${model.uuid} -> ${url}`);
+        model.userData.url = (options && options.sourceUrl) ? options.sourceUrl : url;
+        console.log(`[Viewpoints] Registered model URL for persistence: ${model.uuid} -> ${model.userData.url}`);
 
         // FORCE UUID to match the path (which is the key in fragments.list)
         // This ensures the highlighter and classifier can find the model
@@ -1364,24 +1535,35 @@ async function loadModel(url: string, path: string) {
         logToScreen(`Model loaded. Properties: ${hasProps}, Data: ${hasData}`);
         console.log('[DEBUG] Model Keys:', Object.keys(modelAny));
         
-        // Always try to load external properties JSON if available, as it overrides/supplements embedded properties
-        const jsonPath = url.replace(/\.frag$/i, '.json');
-        try {
-             logToScreen(`Checking for external properties at ${jsonPath}...`);
-             const response = await fetch(jsonPath);
-             if (response.ok) {
-                 const jsonProps = await response.json();
-                 if (jsonProps && Object.keys(jsonProps).length > 0) {
-                     modelAny.properties = jsonProps;
-                     hasProps = true;
-                     logToScreen(`Loaded external properties from JSON (${Object.keys(jsonProps).length} items). Overriding embedded properties.`);
-                 }
-             } else {
-                 if (!hasProps) logToScreen(`Properties file not found at ${jsonPath} (Status: ${response.status}).`);
-             }
-        } catch (err) {
-             console.error('Error fetching properties JSON:', err);
-             if (!hasProps) logToScreen(`Error loading external properties.`, true);
+        if (options && options.propertiesJson && typeof options.propertiesJson === 'object') {
+            try {
+                const keys = Object.keys(options.propertiesJson);
+                if (keys.length > 0) {
+                    modelAny.properties = options.propertiesJson;
+                    hasProps = true;
+                    logToScreen(`Loaded external properties from JSON (${keys.length} items).`);
+                }
+            } catch {
+            }
+        } else {
+            const jsonPath = (options && options.propertiesUrl) ? options.propertiesUrl : url.replace(/\.frag$/i, '.json');
+            try {
+                logToScreen(`Checking for external properties at ${jsonPath}...`);
+                const response = await fetch(jsonPath);
+                if (response.ok) {
+                    const jsonProps = await response.json();
+                    if (jsonProps && Object.keys(jsonProps).length > 0) {
+                        modelAny.properties = jsonProps;
+                        hasProps = true;
+                        logToScreen(`Loaded external properties from JSON (${Object.keys(jsonProps).length} items). Overriding embedded properties.`);
+                    }
+                } else {
+                    if (!hasProps) logToScreen(`Properties file not found at ${jsonPath} (Status: ${response.status}).`);
+                }
+            } catch (err) {
+                console.error('Error fetching properties JSON:', err);
+                if (!hasProps) logToScreen(`Error loading external properties.`, true);
+            }
         }
 
         // Ensure model.types is populated from properties if missing
@@ -2341,24 +2523,39 @@ async function loadModelList() {
     }
 
     try {
-        const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFCA/models';
-        logToScreen('Scanning GitHub for models...');
-        
-        const response = await fetch(GITHUB_API_URL);
-        if (!response.ok) throw new Error(`GitHub API Error: ${response.status}`);
-        
-        const data = await response.json();
-        if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
+        let models: RemoteModelItem[] = [];
+        if (shouldUseDriveModels()) {
+            logToScreen('Loading models from Google Drive (Apps Script)...');
+            const driveModels = await listDriveModels();
+            models = driveModels
+                .filter((m) => String(m.name || '').toLowerCase().endsWith('.frag'))
+                .map((m) => ({
+                    name: m.name,
+                    path: `models/${m.name}`,
+                    driveFragId: m.fragId,
+                    driveJsonId: m.jsonId ?? null
+                }));
+            logToScreen(`Drive Scan: ${models.length} .frag models found`);
+        } else {
+            const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFCA/models';
+            logToScreen('Scanning GitHub for models...');
 
-        const models = data
-            .filter((item: any) => item.name.toLowerCase().endsWith('.frag'))
-            .map((item: any) => ({
-                name: item.name,
-                path: `models/${item.name}`,
-                url: item.download_url
-            }));
+            const response = await fetch(GITHUB_API_URL);
+            if (!response.ok) throw new Error(`GitHub API Error: ${response.status}`);
 
-        logToScreen(`GitHub Scan: ${models.length} .frag models found`);
+            const data = await response.json();
+            if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
+
+            models = data
+                .filter((item: any) => item.name.toLowerCase().endsWith('.frag'))
+                .map((item: any) => ({
+                    name: item.name,
+                    path: `models/${item.name}`,
+                    url: item.download_url
+                }));
+
+            logToScreen(`GitHub Scan: ${models.length} .frag models found`);
+        }
 
         // Group models by specialty
         const groups: Record<string, any[]> = {};
@@ -2417,8 +2614,7 @@ async function loadModelList() {
                 li.className = 'model-item';
                 li.dataset.path = m.path;
 
-                // Check if already loaded (support both path and url keys)
-                if (loadedModels.has(m.path) || (m.url && loadedModels.has(m.url))) {
+                if (loadedModels.has(m.path)) {
                     li.classList.add('visible');
                 }
 
@@ -2436,15 +2632,12 @@ async function loadModelList() {
                     e.stopPropagation();
                     
                     const target = e.target as HTMLElement;
-                    // Prefer URL for loading if available
-                    const loadKey = m.url || m.path;
-
                     // If clicked explicitly on the visibility toggle icon/div
                     if (target.closest('.visibility-toggle')) {
-                        await toggleModel(loadKey, baseUrl, li);
+                        await toggleModel(m, baseUrl, li);
                     } else {
                         // Clicked on the name/body -> Select the model
-                        await selectModel(loadKey);
+                        await selectModel(m.path);
                     }
                 });
 
@@ -2492,8 +2685,27 @@ async function selectModel(path: string) {
     }
 }
 
-async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement) {
+async function loadDriveModel(m: RemoteModelItem) {
+    if (!m.driveFragId) throw new Error('Modelo Drive sin driveFragId');
+    const buffer = await loadDriveFragBuffer(m.driveFragId);
+    const blobUrl = URL.createObjectURL(new Blob([buffer], { type: 'application/octet-stream' }));
+
+    let props: any | null = null;
+    if (m.driveJsonId) {
+        try {
+            props = await loadDriveJsonProps(String(m.driveJsonId));
+        } catch {
+            props = null;
+        }
+    }
+
+    const sourceUrl = `drive://${encodeURIComponent(m.driveFragId)}${m.driveJsonId ? `?jsonId=${encodeURIComponent(String(m.driveJsonId))}` : ''}`;
+    await loadModel(blobUrl, m.path, { propertiesJson: props, sourceUrl });
+}
+
+async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement: HTMLElement) {
     const toggleIcon = liElement.querySelector('.visibility-toggle i');
+    const path = m.path;
     
     // Check if already loaded
     if (loadedModels.has(path)) {
@@ -2531,14 +2743,19 @@ async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement
     if (overlay) overlay.style.display = 'flex';
     
     try {
-        let fullPath = path;
-        // Only prepend base URL if it's not absolute
-        if (!path.startsWith('http')) {
-             const encodedPath = path.split('/').map(part => encodeURIComponent(part)).join('/');
-             fullPath = `${baseUrl}${encodedPath}`;
+        if (m.driveFragId) {
+            await loadDriveModel(m);
+        } else {
+            let fullPath = path;
+            if (m.url) {
+                fullPath = m.url;
+            } else if (!path.startsWith('http')) {
+                const encodedPath = path.split('/').map(part => encodeURIComponent(part)).join('/');
+                fullPath = `${baseUrl}${encodedPath}`;
+            }
+            const propertiesUrl = fullPath.replace(/\.frag(\?.*)?$/i, '.json$1');
+            await loadModel(fullPath, path, { propertiesUrl, sourceUrl: fullPath });
         }
-        
-        await loadModel(fullPath, path);
         
         // Update UI to loaded/visible state
         liElement.classList.add('visible');
