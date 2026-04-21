@@ -17,6 +17,8 @@ import { API_CONFIG } from './config';
 type Status = 'owner_delivered' | 'post_construction_delivered' | 'notarized' | 'weekly_goal' | 'in_process' | 'special' | 'under_construction';
 type Tab = 'towers' | 'charts';
 
+const SCRIPT_URL_STORAGE_KEY = 'entrega_propi_mag:scriptUrl';
+
 const getLocalISODate = (d: Date = new Date()): string => {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -510,6 +512,82 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   const skipNextCacheWriteRef = React.useRef(false);
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>(() => readTimelineEvents());
+  const [showConnectionModal, setShowConnectionModal] = useState(false);
+  const [scriptUrlInput, setScriptUrlInput] = useState('');
+  const [connectionTestResult, setConnectionTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+
+  const readScriptUrl = () => {
+    try {
+      const v = localStorage.getItem(SCRIPT_URL_STORAGE_KEY);
+      const s = String(v ?? '').trim();
+      return s || API_CONFIG.scriptUrl;
+    } catch {
+      return API_CONFIG.scriptUrl;
+    }
+  };
+
+  const writeScriptUrl = (v: string) => {
+    try {
+      localStorage.setItem(SCRIPT_URL_STORAGE_KEY, v);
+    } catch {
+    }
+  };
+
+  const testScriptUrl = React.useCallback(async (rawUrl: string) => {
+    const base = String(rawUrl ?? '').trim();
+    if (!base) throw new Error('URL vacía.');
+    const url = new URL(base);
+    url.searchParams.set('_ts', String(Date.now()));
+    url.searchParams.set('_', `${Date.now()}_${Math.random().toString(16).slice(2)}`);
+
+    const callbackName = `__gas_test_cb_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    url.searchParams.set('callback', callbackName);
+
+    const w = window as unknown as Record<string, unknown>;
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = url.toString();
+
+    await new Promise<void>((resolve, reject) => {
+      let done = false;
+      const cleanup = () => {
+        try {
+          delete w[callbackName];
+        } catch {
+          w[callbackName] = undefined;
+        }
+        if (script.parentNode) script.parentNode.removeChild(script);
+      };
+
+      const timer = window.setTimeout(() => {
+        if (done) return;
+        done = true;
+        cleanup();
+        reject(new Error(`Timeout: ${script.src}`));
+      }, 20000);
+
+      w[callbackName] = (data: any) => {
+        if (done) return;
+        done = true;
+        window.clearTimeout(timer);
+        cleanup();
+        const hasError = data && typeof data === 'object' && typeof data.error === 'string' && String(data.error).trim();
+        if (hasError) reject(new Error(String(data.error)));
+        else resolve();
+      };
+
+      script.onerror = () => {
+        if (done) return;
+        done = true;
+        window.clearTimeout(timer);
+        cleanup();
+        reject(new Error(`Load error: ${script.src}`));
+      };
+
+      document.head.appendChild(script);
+    });
+  }, []);
 
   const clearAllFilters = () => {
     setStatusFilter(null);
@@ -563,6 +641,12 @@ export default function App() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
+  }, []);
+
+  const openConnectionModal = React.useCallback(() => {
+    setConnectionTestResult(null);
+    setScriptUrlInput(readScriptUrl());
+    setShowConnectionModal(true);
   }, []);
 
   const syncEscrituras = React.useCallback(async () => {
@@ -1119,6 +1203,16 @@ export default function App() {
                 >
                   {isSyncing ? <Loader2 size={16} className="animate-spin text-alcabama-grey" /> : <RefreshCw size={16} className="text-alcabama-grey" />}
                   Sincronizar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={openConnectionModal}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold bg-white border border-alcabama-light-grey hover:bg-alcabama-light-grey/10 transition-all"
+                  title="Configurar conexión a Google Sheets"
+                >
+                  <Info size={16} className="text-alcabama-grey" />
+                  Conexión
                 </button>
               </div>
 
@@ -1677,6 +1771,117 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      <AnimatePresence>
+        {showConnectionModal && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowConnectionModal(false)}
+              className="absolute inset-0 bg-alcabama-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden"
+            >
+              <div className="bg-alcabama-black px-6 py-5 text-white flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm font-black uppercase tracking-widest">Conexión</div>
+                  <div className="text-xs text-white/60 mt-1">Configura el Apps Script que entrega los datos del Sheet.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowConnectionModal(false)}
+                  className="px-3 py-2 rounded-lg border border-white/15 bg-white/10 text-xs font-black uppercase tracking-widest hover:bg-white/15"
+                >
+                  Cerrar
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="text-xs text-alcabama-grey leading-relaxed">
+                  La hoja y la carpeta de Drive son privadas. Para que esto funcione sin iniciar sesión, el Web App de Apps Script debe estar desplegado como: ejecutar como “yo” y acceso “cualquiera”.
+                </div>
+
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-alcabama-grey mb-2">URL Web App (Apps Script)</div>
+                  <input
+                    value={scriptUrlInput}
+                    onChange={(e) => setScriptUrlInput(e.target.value)}
+                    className="w-full rounded-xl border border-alcabama-light-grey px-4 py-3 text-sm font-medium text-alcabama-dark-grey focus:outline-none focus:ring-1 focus:ring-alcabama-pink"
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                  />
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    type="button"
+                    disabled={isTestingConnection}
+                    onClick={async () => {
+                      setIsTestingConnection(true);
+                      setConnectionTestResult(null);
+                      try {
+                        await testScriptUrl(scriptUrlInput);
+                        setConnectionTestResult({ ok: true, message: 'Conexión OK. El endpoint respondió JSONP.' });
+                      } catch (e) {
+                        const msg = e instanceof Error ? e.message : String(e);
+                        setConnectionTestResult({ ok: false, message: msg });
+                      } finally {
+                        setIsTestingConnection(false);
+                      }
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest bg-white border border-alcabama-light-grey hover:bg-alcabama-light-grey/10 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {isTestingConnection ? <Loader2 size={14} className="animate-spin text-alcabama-grey" /> : <Info size={14} className="text-alcabama-grey" />}
+                    Probar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const next = String(scriptUrlInput ?? '').trim();
+                      if (!next) return;
+                      writeScriptUrl(next);
+                      setConnectionTestResult({ ok: true, message: 'Guardado. Actualizando…' });
+                      await refreshData();
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest bg-alcabama-pink text-white hover:bg-alcabama-pink/90"
+                  >
+                    Guardar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = String(scriptUrlInput ?? '').trim();
+                      if (!next) return;
+                      const u = new URL(next);
+                      u.searchParams.set('callback', 'cb_test');
+                      u.searchParams.set('_ts', String(Date.now()));
+                      window.open(u.toString(), '_blank', 'noopener,noreferrer');
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest bg-white border border-alcabama-light-grey hover:bg-alcabama-light-grey/10"
+                  >
+                    Abrir
+                  </button>
+                </div>
+
+                {connectionTestResult && (
+                  <div className={`rounded-xl border p-4 text-xs break-words ${
+                    connectionTestResult.ok ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-700'
+                  }`}>
+                    {connectionTestResult.message}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Edit Modal */}
       <AnimatePresence>

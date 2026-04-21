@@ -71,7 +71,7 @@ const jsonpRequest = async <T>(url: URL, options?: JsonpOptions): Promise<T> => 
       if (settled) return;
       settled = true;
       cleanup();
-      reject(new Error('JSONP timeout'));
+      reject(new Error(`JSONP timeout: ${script.src || url.toString()}`));
     }, timeoutMs);
 
     w[callbackName] = (data: unknown) => {
@@ -90,7 +90,7 @@ const jsonpRequest = async <T>(url: URL, options?: JsonpOptions): Promise<T> => 
       settled = true;
       window.clearTimeout(timer);
       cleanup();
-      reject(new Error('JSONP load error'));
+      reject(new Error(`JSONP load error: ${script.src || url.toString()}`));
     };
 
     document.head.appendChild(script);
