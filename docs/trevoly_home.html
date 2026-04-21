@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Trevoly | Portal BIM Alcabama</title>
   <meta name="theme-color" content="#2b2b2b"/>
-  <meta name="x-app-version" data-app="trevoly" content="20260421-02"/>
+  <meta name="x-app-version" data-app="trevoly" content="20260421-03"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
@@ -40,6 +40,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@700;900&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="https://i.postimg.cc/RqxVh1wB/FAVICON-BIM-ALCABAMA-ARTIS.png" type="image/png">
   <link rel="apple-touch-icon" href="https://i.postimg.cc/RqxVh1wB/FAVICON-BIM-ALCABAMA-ARTIS.png">
@@ -55,6 +56,13 @@
       border: 1px solid rgba(17, 24, 39, 0.08);
       backdrop-filter: blur(14px);
       -webkit-backdrop-filter: blur(14px);
+    }
+    #trevoly-map {
+      height: 100%;
+      width: 100%;
+    }
+    .leaflet-tile {
+      filter: grayscale(1) contrast(1.1);
     }
   </style>
 </head>
@@ -227,14 +235,7 @@
           </div>
           <div class="border-y border-[rgba(37,42,32,0.1)] bg-white">
             <div id="map-wrapper" class="relative h-[560px] w-full overflow-hidden bg-[#ececea] md:h-[680px]">
-              <iframe
-                title="Mapa de Bogotá - Trevoly"
-                id="trevoly-map-iframe"
-                class="h-full w-full grayscale pointer-events-none"
-                loading="lazy"
-                referrerpolicy="no-referrer-when-downgrade"
-                src="https://www.openstreetmap.org/export/embed.html?bbox=-74.1687%2C4.5936%2C-74.1592%2C4.6009&layer=mapnik&marker=4.597251%2C-74.164429">
-              </iframe>
+              <div id="trevoly-map" class="h-full w-full"></div>
               <div id="map-ctrl-hint" class="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-md border border-[rgba(37,42,32,0.2)] bg-white/95 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#252a20] shadow-sm">
                 Mantén CTRL para navegar el mapa
               </div>
@@ -334,6 +335,7 @@
     </div>
   </div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const authContainer = document.getElementById('auth-container');
@@ -372,17 +374,67 @@
         applyTheme(newTheme);
       });
 
-      const mapIframe = document.getElementById('trevoly-map-iframe');
+      const mapEl = document.getElementById('trevoly-map');
       const mapHint = document.getElementById('map-ctrl-hint');
+      let trevolyMap = null;
       const setMapInteraction = (enabled) => {
-        if (!mapIframe) return;
-        mapIframe.classList.toggle('pointer-events-none', !enabled);
+        if (!trevolyMap) return;
+        if (enabled) {
+          trevolyMap.dragging.enable();
+          trevolyMap.scrollWheelZoom.enable();
+          trevolyMap.touchZoom.enable();
+          trevolyMap.doubleClickZoom.enable();
+        } else {
+          trevolyMap.dragging.disable();
+          trevolyMap.scrollWheelZoom.disable();
+          trevolyMap.touchZoom.disable();
+          trevolyMap.doubleClickZoom.disable();
+        }
         if (mapHint) mapHint.style.display = enabled ? 'none' : 'block';
       };
-      setMapInteraction(false);
-      window.addEventListener('keydown', (e) => setMapInteraction(e.ctrlKey));
-      window.addEventListener('keyup', (e) => setMapInteraction(e.ctrlKey));
-      window.addEventListener('blur', () => setMapInteraction(false));
+      if (mapEl && window.L) {
+        trevolyMap = window.L.map(mapEl, {
+          zoomControl: false,
+          attributionControl: true,
+          dragging: false,
+          scrollWheelZoom: false,
+          touchZoom: false,
+          doubleClickZoom: false,
+          boxZoom: false,
+          keyboard: false,
+        });
+
+        window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 20,
+          attribution: '&copy; OpenStreetMap contributors',
+        }).addTo(trevolyMap);
+
+        const lotPolygon = [
+          [4.59925, -74.16395],
+          [4.59925, -74.16235],
+          [4.59655, -74.16235],
+          [4.59645, -74.16355],
+          [4.59715, -74.16410],
+        ];
+
+        const polygon = window.L.polygon(lotPolygon, {
+          color: '#f5b700',
+          weight: 4,
+          opacity: 1,
+          fill: false,
+        }).addTo(trevolyMap);
+
+        const center = polygon.getBounds().getCenter();
+        window.L.marker(center).addTo(trevolyMap);
+        trevolyMap.fitBounds(polygon.getBounds(), {padding: [30, 30]});
+
+        setMapInteraction(false);
+        window.addEventListener('keydown', (e) => setMapInteraction(Boolean(e.ctrlKey)));
+        window.addEventListener('keyup', (e) => setMapInteraction(Boolean(e.ctrlKey)));
+        window.addEventListener('blur', () => setMapInteraction(false));
+      } else {
+        if (mapHint) mapHint.style.display = 'none';
+      }
 
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
