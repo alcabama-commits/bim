@@ -7,13 +7,20 @@ self.addEventListener('activate', (event) => {
     (async () => {
       const keep = new Set([CACHE_NAME]);
       const keys = await caches.keys();
-      await Promise.all(keys.map((k) => (keep.has(k) ? Promise.resolve() : caches.delete(k))));
+      await Promise.all(
+        keys.map((k) => {
+          if (!k.startsWith(CACHE_PREFIX)) return Promise.resolve(false);
+          if (keep.has(k)) return Promise.resolve(false);
+          return caches.delete(k);
+        }),
+      );
       await self.clients.claim();
     })(),
   );
 });
 
-const CACHE_NAME = 'entregas-assets-v3';
+const CACHE_PREFIX = 'entregas-assets-';
+const CACHE_NAME = 'entregas-assets-v4';
 
 const shouldHandle = (request) => {
   if (request.method !== 'GET') return false;
@@ -55,12 +62,16 @@ self.addEventListener('fetch', (event) => {
   if (isAsset) {
     event.respondWith(
       (async () => {
-        const cached = await caches.match(request);
-        if (cached) return cached;
-        const network = await fetch(request);
-        const cache = await caches.open(CACHE_NAME);
-        cache.put(request, network.clone());
-        return network;
+        try {
+          const network = await fetch(request);
+          const cache = await caches.open(CACHE_NAME);
+          cache.put(request, network.clone());
+          return network;
+        } catch {
+          const cached = await caches.match(request);
+          if (cached) return cached;
+          throw new Error('offline');
+        }
       })(),
     );
   }

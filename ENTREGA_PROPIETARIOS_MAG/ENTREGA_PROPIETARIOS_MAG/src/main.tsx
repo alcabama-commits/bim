@@ -7,6 +7,21 @@ const setupServiceWorker = async () => {
   if (!('serviceWorker' in navigator)) return;
 
   try {
+    let reloaded = false;
+    const key = 'entrega_sw:reloaded';
+    if (sessionStorage.getItem(key) === '1') reloaded = true;
+
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloaded) return;
+      reloaded = true;
+      try {
+        sessionStorage.setItem(key, '1');
+      } catch {}
+      window.location.reload();
+    });
+  } catch {}
+
+  try {
     const registrations = await navigator.serviceWorker.getRegistrations();
     await Promise.all(
       registrations.map((registration) => {
@@ -24,7 +39,8 @@ const setupServiceWorker = async () => {
   } catch {}
 
   try {
-    await navigator.serviceWorker.register('./entrega-sw.js', {scope: './'});
+    const registration = await navigator.serviceWorker.register('./entrega-sw.js', {scope: './'});
+    await registration.update();
   } catch {}
 };
 
