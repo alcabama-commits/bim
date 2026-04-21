@@ -13,6 +13,7 @@ type JsonpOptions = {
 
 const SCRIPT_URL_STORAGE_KEY = 'entrega_propi_mag:scriptUrl';
 const FALLBACK_SCRIPT_URLS = [
+  'https://script.google.com/macros/s/AKfycbxVxH6HzAKwU9VNz1UqV7ntql3P70GukAoMfErYLGTetf4hRPF64LMFihxw_7tDhHE/exec',
   'https://script.google.com/macros/s/AKfycbxDXc7XldGCnbVMlR0FfQg7HrHBI3Ux2t2_wC1AdGitFy5d82Lca6YFd309nLKj7tI/exec',
 ];
 
