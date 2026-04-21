@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Trevoly | Portal BIM Alcabama</title>
   <meta name="theme-color" content="#2b2b2b"/>
-  <meta name="x-app-version" data-app="trevoly" content="20260421-02"/>
+  <meta name="x-app-version" data-app="trevoly" content="20260421-01"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
@@ -215,32 +215,28 @@
             </section>
           </div>
 
-      <section id="mapa" class="mt-10">
-        <div class="px-0 pb-20 pt-10 md:pt-14">
-          <div class="mx-auto w-full max-w-7xl px-4 md:px-8">
-            <div class="trevoly-glass rounded-3xl px-6 py-10 text-center md:px-10">
+      <section id="mapa" class="border-y border-[rgba(37,42,32,0.1)] bg-[#f7f7f5]">
+        <div class="px-0 py-20">
+          <div class="container mx-auto px-6 pb-10 text-center md:px-10">
             <p class="text-[11px] uppercase tracking-[0.34em] text-[#8a8a84]">City Guide</p>
             <h2 class="mt-5 font-display text-4xl font-black tracking-[0.08em] text-[#252a20] md:text-5xl">BOGOTÁ</h2>
             <p class="mx-auto mt-6 max-w-2xl text-sm leading-8 text-[#6f6f69]">
               El proyecto se ubica exactamente en el poligono que marcaste, en el sector de la Autopista Sur con Calle 57H Sur y Carrera 72.
               El mapa ahora domina toda la seccion para que la localizacion sea protagonista.
             </p>
-            </div>
           </div>
-          <div class="mx-auto mt-6 w-full max-w-7xl px-4 md:px-8">
-            <div class="trevoly-glass overflow-hidden rounded-3xl">
-              <div id="map-wrapper" class="relative h-[560px] w-full overflow-hidden bg-[#ececea] md:h-[680px]">
-                <iframe
-                  title="Mapa de Bogotá - Trevoly"
-                  id="trevoly-map-iframe"
-                  class="h-full w-full grayscale pointer-events-none"
-                  loading="lazy"
-                  referrerpolicy="no-referrer-when-downgrade"
-                  src="https://www.openstreetmap.org/export/embed.html?bbox=-74.1687%2C4.5936%2C-74.1592%2C4.6009&layer=mapnik&marker=4.597251%2C-74.164429">
-                </iframe>
-                <div id="map-ctrl-hint" class="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-md border border-[rgba(37,42,32,0.2)] bg-white/95 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#252a20] shadow-sm">
-                  Mantén CTRL para navegar el mapa
-                </div>
+          <div class="border-y border-[rgba(37,42,32,0.1)] bg-white">
+            <div id="map-wrapper" class="relative h-[560px] w-full overflow-hidden bg-[#ececea] md:h-[680px]">
+              <iframe
+                title="Mapa de Bogotá - Trevoly"
+                id="trevoly-map-iframe"
+                class="h-full w-full grayscale pointer-events-none"
+                loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade"
+                src="https://www.openstreetmap.org/export/embed.html?bbox=-74.1687%2C4.5936%2C-74.1592%2C4.6009&layer=mapnik&marker=4.597251%2C-74.164429">
+              </iframe>
+              <div id="map-ctrl-hint" class="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-md border border-[rgba(37,42,32,0.2)] bg-white/95 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#252a20] shadow-sm">
+                Mantén CTRL para navegar el mapa
               </div>
             </div>
           </div>
