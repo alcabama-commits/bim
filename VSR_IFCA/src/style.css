@@ -528,6 +528,84 @@ body {
     color: var(--primary-color);
 }
 
+@media (max-width: 768px) {
+    .top-bar {
+        height: 56px;
+        padding: 0 10px;
+        gap: 10px;
+    }
+
+    .sidebar {
+        top: 56px;
+        height: calc(100vh - 56px);
+        width: min(86vw, 360px);
+        box-shadow: 10px 0 30px rgba(0,0,0,0.18);
+    }
+
+    .properties-panel {
+        top: 56px;
+        height: calc(100vh - 56px);
+        width: min(86vw, 360px);
+        box-shadow: -10px 0 30px rgba(0,0,0,0.18);
+    }
+
+    .top-controls {
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        gap: 10px !important;
+        max-width: 100%;
+    }
+
+    .top-controls::-webkit-scrollbar {
+        display: none;
+    }
+
+    .toolbar-group.visibility-group,
+    .toolbar-group.measure-group,
+    #clipper-controls,
+    #user-profile-container {
+        display: none !important;
+    }
+
+    .projection-toggle-btn span {
+        display: none;
+    }
+
+    .view-dropdown-btn span {
+        display: none;
+    }
+
+    .view-dropdown-btn {
+        padding: 8px 10px;
+        min-width: auto;
+        gap: 8px;
+    }
+
+    .logo-img {
+        height: 32px !important;
+    }
+
+    .classification-controls {
+        flex-wrap: wrap;
+    }
+
+    .project-links-bar {
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        bottom: 10px;
+        padding: 6px;
+        gap: 8px;
+        max-width: calc(100vw - 16px);
+    }
+
+    .project-link-btn {
+        padding: 8px 10px;
+        font-size: 10px;
+    }
+}
+
 .logo-text {
     font-size: 24px;
     font-weight: bold;

@@ -2425,6 +2425,11 @@ function initSidebar() {
             }
         });
     }
+
+    if (sidebar && window.innerWidth < 768) {
+        sidebar.classList.add('closed');
+        document.body.classList.add('sidebar-closed');
+    }
     
     // Setup file upload
     const fileInput = document.getElementById('file-input') as HTMLInputElement;
@@ -3874,6 +3879,10 @@ function initPropertiesPanel() {
                 document.body.style.cursor = 'default';
             }
         });
+    }
+
+    if (panel && window.innerWidth < 768) {
+        panel.classList.add('closed');
     }
 
     renderPropertiesTable({} as any);
