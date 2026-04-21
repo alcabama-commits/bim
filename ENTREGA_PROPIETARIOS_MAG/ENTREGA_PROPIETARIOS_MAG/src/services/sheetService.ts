@@ -35,7 +35,7 @@ const writeStoredScriptUrl = (url: string) => {
 };
 
 const getCandidateScriptUrls = (): string[] => {
-  const raw: Array<string | null | undefined> = [readStoredScriptUrl(), API_CONFIG.scriptUrl, ...FALLBACK_SCRIPT_URLS];
+  const raw: Array<string | null | undefined> = [API_CONFIG.scriptUrl, readStoredScriptUrl(), ...FALLBACK_SCRIPT_URLS];
   const out: string[] = [];
   const seen = new Set<string>();
   for (const u of raw) {
@@ -122,7 +122,9 @@ const requestFromAnyScriptUrl = async <T>(
     try {
       const url = buildUrl(base);
       const data = await jsonpRequestWithRetry<T>(url, options);
-      if (base !== API_CONFIG.scriptUrl) writeStoredScriptUrl(base);
+      const stored = readStoredScriptUrl();
+      const storedIsFallback = stored ? FALLBACK_SCRIPT_URLS.includes(stored) : false;
+      if (!stored || storedIsFallback) writeStoredScriptUrl(base);
       return { data, scriptUrl: base };
     } catch (e) {
       lastErr = e;
@@ -175,7 +177,9 @@ export const triggerSync = async (): Promise<boolean> => {
 };
 
 export const updateSheetStatus = async (towerId: number, aptNumber: string, status: string, weeklyGoalDate?: string | null): Promise<boolean> => {
-  const base = readStoredScriptUrl() || API_CONFIG.scriptUrl;
+  const stored = readStoredScriptUrl();
+  const storedIsFallback = stored ? FALLBACK_SCRIPT_URLS.includes(stored) : false;
+  const base = stored && !storedIsFallback ? stored : (API_CONFIG.scriptUrl || stored);
   if (!base) {
     console.warn('Google Apps Script URL not configured. Change not saved to sheet.');
     return true; // Simulate success so UI updates even without backend

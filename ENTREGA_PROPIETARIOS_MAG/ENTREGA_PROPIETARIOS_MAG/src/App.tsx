@@ -19,6 +19,9 @@ type Tab = 'towers' | 'charts';
 
 const SCRIPT_URL_STORAGE_KEY = 'entrega_propi_mag:scriptUrl';
 const CURRENT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxVxH6HzAKwU9VNz1UqV7ntql3P70GukAoMfErYLGTetf4hRPF64LMFihxw_7tDhHE/exec';
+const DEPRECATED_SCRIPT_URLS = [
+  'https://script.google.com/macros/s/AKfycbxDXc7XldGCnbVMlR0FfQg7HrHBI3Ux2t2_wC1AdGitFy5d82Lca6YFd309nLKj7tI/exec',
+];
 
 const getLocalISODate = (d: Date = new Date()): string => {
   const yyyy = d.getFullYear();
@@ -538,8 +541,8 @@ export default function App() {
   React.useEffect(() => {
     try {
       const stored = String(localStorage.getItem(SCRIPT_URL_STORAGE_KEY) ?? '').trim();
-      if (stored && stored !== CURRENT_SCRIPT_URL) return;
-      localStorage.setItem(SCRIPT_URL_STORAGE_KEY, CURRENT_SCRIPT_URL);
+      const shouldMigrate = !stored || stored === CURRENT_SCRIPT_URL || DEPRECATED_SCRIPT_URLS.includes(stored);
+      if (shouldMigrate) localStorage.setItem(SCRIPT_URL_STORAGE_KEY, CURRENT_SCRIPT_URL);
     } catch {
     }
   }, []);
