@@ -539,6 +539,7 @@ export default function App() {
 
   const refreshData = React.useCallback(async () => {
     setIsRefreshing(true);
+    setSyncError(null);
     try {
       const data = await fetchSheetData();
       if (!data || data.length === 0) throw new Error('No data received');
@@ -554,6 +555,9 @@ export default function App() {
         setAllTowers(cached.towers);
         setIsUsingCachedData(true);
         setLastUpdatedAt(cached.savedAt);
+        setSyncError('No se pudo actualizar desde Google Sheets. Mostrando última información guardada.');
+      } else {
+        setSyncError('No se pudo cargar la información desde Google Sheets. Intenta de nuevo.');
       }
     } finally {
       setIsLoading(false);

@@ -7,35 +7,51 @@ export interface SheetData {
   weeklyGoalDate?: string | null;
 }
 
-const jsonpRequest = async <T>(url: string, timeoutMs: number = 20000): Promise<T> => {
+type JsonpOptions = {
+  timeoutMs?: number;
+};
+
+const jsonpRequest = async <T>(url: URL, options?: JsonpOptions): Promise<T> => {
+  const timeoutMs = typeof options?.timeoutMs === 'number' && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : 45000;
   const callbackName = `__gas_jsonp_cb_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  const src = url.includes('?') ? `${url}&callback=${callbackName}` : `${url}?callback=${callbackName}`;
+  url.searchParams.set('callback', callbackName);
+  url.searchParams.set('_', `${Date.now()}_${Math.random().toString(16).slice(2)}`);
 
   return new Promise<T>((resolve, reject) => {
     const w = window as unknown as Record<string, unknown>;
     const script = document.createElement('script');
 
+    let settled = false;
     const cleanup = () => {
       try {
         delete w[callbackName];
-      } catch {}
-      script.remove();
+      } catch {
+        w[callbackName] = undefined;
+      }
+      if (script.parentNode) script.parentNode.removeChild(script);
     };
 
     const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
       cleanup();
       reject(new Error('JSONP timeout'));
     }, timeoutMs);
 
     w[callbackName] = (data: unknown) => {
+      if (settled) return;
+      settled = true;
       window.clearTimeout(timer);
       cleanup();
       resolve(data as T);
     };
 
     script.async = true;
-    script.src = src;
+    try { (script as any).referrerPolicy = 'no-referrer'; } catch {}
+    script.src = url.toString();
     script.onerror = () => {
+      if (settled) return;
+      settled = true;
       window.clearTimeout(timer);
       cleanup();
       reject(new Error('JSONP load error'));
@@ -45,18 +61,30 @@ const jsonpRequest = async <T>(url: string, timeoutMs: number = 20000): Promise<
   });
 };
 
+const jsonpRequestWithRetry = async <T>(url: URL, options?: JsonpOptions & { retries?: number }): Promise<T> => {
+  const retries = typeof options?.retries === 'number' && Number.isFinite(options.retries) ? Math.max(1, Math.floor(options.retries)) : 3;
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await jsonpRequest<T>(new URL(url.toString()), options);
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+    }
+  }
+  throw (lastErr instanceof Error ? lastErr : new Error('JSONP load error'));
+};
+
 export const fetchSheetData = async (): Promise<SheetData[] | null> => {
   if (!API_CONFIG.scriptUrl) {
     console.warn('Google Apps Script URL not configured. Using local data.');
     return null;
   }
 
-  const cacheBustedUrl = API_CONFIG.scriptUrl.includes('?')
-    ? `${API_CONFIG.scriptUrl}&_ts=${Date.now()}`
-    : `${API_CONFIG.scriptUrl}?_ts=${Date.now()}`;
-
   try {
-    const data = await jsonpRequest<{ towers?: SheetData[]; error?: string }>(cacheBustedUrl);
+    const url = new URL(API_CONFIG.scriptUrl);
+    url.searchParams.set('_ts', String(Date.now()));
+    const data = await jsonpRequestWithRetry<{ towers?: SheetData[]; error?: string }>(url, { timeoutMs: 45000, retries: 3 });
     if (data && typeof data === 'object' && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
       throw new Error(String((data as any).error));
     }
@@ -70,12 +98,11 @@ export const fetchSheetData = async (): Promise<SheetData[] | null> => {
 export const triggerSync = async (): Promise<boolean> => {
   if (!API_CONFIG.scriptUrl) return false;
 
-  const url = API_CONFIG.scriptUrl.includes('?')
-    ? `${API_CONFIG.scriptUrl}&action=sync&_ts=${Date.now()}`
-    : `${API_CONFIG.scriptUrl}?action=sync&_ts=${Date.now()}`;
-
   try {
-    const data = await jsonpRequest<{ ok?: boolean; error?: string }>(url);
+    const u = new URL(API_CONFIG.scriptUrl);
+    u.searchParams.set('action', 'sync');
+    u.searchParams.set('_ts', String(Date.now()));
+    const data = await jsonpRequestWithRetry<{ ok?: boolean; error?: string }>(u, { timeoutMs: 45000, retries: 3 });
     if (data && typeof data === 'object' && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
       return false;
     }
