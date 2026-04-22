@@ -109,8 +109,7 @@
                 <span class="material-symbols-outlined">arrow_back</span>
               </button>
               <a href="home.html" class="hidden items-center sm:flex" title="Ir al Home">
-                <img alt="BIM" class="h-9 w-auto object-contain dark:hidden" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png"/>
-                <img alt="BIM" class="hidden h-9 w-auto object-contain dark:block" src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png"/>
+                <img alt="Trevoly" class="h-9 w-auto object-contain" src="https://i.postimg.cc/P5rsf8Yb/trevoly.png"/>
               </a>
               <div class="min-w-0">
                 <div class="truncate text-xs font-semibold uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Portal BIM</div>
@@ -145,7 +144,8 @@
                     Accesos rápidos, seguimiento y contexto del proyecto.
                   </p>
                 </div>
-                <img alt="Trevoly" class="hidden h-12 w-auto object-contain md:block" src="https://i.postimg.cc/P5rsf8Yb/trevoly.png"/>
+                <img alt="BIM" class="hidden h-12 w-auto object-contain md:block dark:hidden" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png"/>
+                <img alt="BIM" class="hidden h-12 w-auto object-contain md:block dark:block" src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png"/>
               </div>
 
               <div class="mt-10 grid gap-8 md:grid-cols-2">
@@ -261,8 +261,8 @@
             <p class="text-[11px] uppercase tracking-[0.34em] text-[#8a8a84]">City Guide</p>
             <h2 class="mt-5 font-display text-4xl font-black tracking-[0.08em] text-[#252a20] md:text-5xl">BOGOTÁ</h2>
             <p class="mx-auto mt-6 max-w-2xl text-sm leading-8 text-[#6f6f69]">
-              El proyecto se ubica exactamente en el poligono que marcaste, en el sector de la Autopista Sur con Calle 57H Sur y Carrera 72.
-              El mapa ahora domina toda la seccion para que la localizacion sea protagonista.
+              Portal de acceso al CDE del proyecto: centraliza modelos, planos y entregables, y facilita el seguimiento y la coordinación entre equipos con información vigente.
+              Dirección: Calle 57H Sur con Carrera 72 (Autopista Sur).
             </p>
           </div>
           <div class="border-y border-[rgba(37,42,32,0.1)] bg-white">
@@ -422,7 +422,7 @@
 
         const center = polygon.getBounds().getCenter();
         window.L.marker(center).addTo(trevolyMap);
-        trevolyMap.setView(center, 16, {animate: false});
+        trevolyMap.setView(center, 17, {animate: false});
 
         setMapInteraction(false);
         window.addEventListener('keydown', (e) => setMapInteraction(Boolean(e.ctrlKey)));
