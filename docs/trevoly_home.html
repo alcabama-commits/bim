@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Trevoly | Portal BIM Alcabama</title>
   <meta name="theme-color" content="#2b2b2b"/>
-  <meta name="x-app-version" data-app="trevoly" content="20260421-05"/>
+  <meta name="x-app-version" data-app="trevoly" content="20260421-07"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
@@ -177,6 +177,49 @@
                   </div>
                 </a>
               </div>
+
+              <div class="mt-10 grid gap-8 md:grid-cols-2">
+                <div id="modulos">
+                  <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Modelos</div>
+                  <div class="mt-2 text-lg font-semibold text-[#111827] dark:text-white">MODELOS</div>
+                  <div class="mt-4 grid gap-3">
+                    <a href="VSR_IFCA/" class="rounded-2xl bg-white/70 p-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                      <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#111827] dark:text-white">view_in_ar</span>
+                        <div class="min-w-0">
+                          <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Visor IFC</div>
+                          <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Modelos</div>
+                        </div>
+                      </div>
+                    </a>
+                  </div>
+                </div>
+
+                <div id="planimetria">
+                  <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Planimetría</div>
+                  <div class="mt-2 text-lg font-semibold text-[#111827] dark:text-white">PLANIMETRÍA</div>
+                  <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                    <a href="VSR_PDFA/" class="rounded-2xl bg-white/70 p-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                      <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#111827] dark:text-white">picture_as_pdf</span>
+                        <div class="min-w-0">
+                          <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Visor PDF</div>
+                          <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Planos</div>
+                        </div>
+                      </div>
+                    </a>
+                    <a href="VSR_DWGA/" class="rounded-2xl bg-white/70 p-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                      <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#111827] dark:text-white">architecture</span>
+                        <div class="min-w-0">
+                          <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Visor DWG</div>
+                          <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Planimetría</div>
+                        </div>
+                      </div>
+                    </a>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="trevoly-glass rounded-3xl p-6 md:p-8">
@@ -248,51 +291,6 @@
       </section>
 
           <div class="mx-auto w-full max-w-7xl px-4 md:px-8">
-            <section id="modulos" class="mt-10">
-            <div class="trevoly-glass rounded-3xl p-6 md:p-8">
-              <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Modelos</div>
-              <h2 class="mt-3 text-2xl font-semibold text-[#111827] dark:text-white">MODELOS</h2>
-              <div class="mt-8 grid gap-4 md:grid-cols-3">
-                <a href="VSR_IFCA/" class="rounded-2xl bg-white/70 p-5 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
-                  <div class="flex items-center gap-3">
-                    <span class="material-symbols-outlined text-[#111827] dark:text-white">view_in_ar</span>
-                    <div>
-                      <div class="text-sm font-semibold text-[#111827] dark:text-white">Visor IFC</div>
-                      <div class="mt-1 text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Revisiones</div>
-                    </div>
-                  </div>
-                </a>
-              </div>
-            </div>
-            </section>
-
-            <section id="planimetria" class="mt-6">
-            <div class="trevoly-glass rounded-3xl p-6 md:p-8">
-              <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Planimetría</div>
-              <h2 class="mt-3 text-2xl font-semibold text-[#111827] dark:text-white">PLANIMETRÍA</h2>
-              <div class="mt-8 grid gap-4 md:grid-cols-3">
-                <a href="VSR_PDFA/" class="rounded-2xl bg-white/70 p-5 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
-                  <div class="flex items-center gap-3">
-                    <span class="material-symbols-outlined text-[#111827] dark:text-white">picture_as_pdf</span>
-                    <div>
-                      <div class="text-sm font-semibold text-[#111827] dark:text-white">Visor PDF</div>
-                      <div class="mt-1 text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Planos</div>
-                    </div>
-                  </div>
-                </a>
-                <a href="VSR_DWGA/" class="rounded-2xl bg-white/70 p-5 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
-                  <div class="flex items-center gap-3">
-                    <span class="material-symbols-outlined text-[#111827] dark:text-white">architecture</span>
-                    <div>
-                      <div class="text-sm font-semibold text-[#111827] dark:text-white">Visor DWG</div>
-                      <div class="mt-1 text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Planimetría</div>
-                    </div>
-                  </div>
-                </a>
-              </div>
-            </div>
-            </section>
-
             <section id="accesos" class="mt-6">
             <div class="trevoly-glass rounded-3xl p-6 md:p-8">
               <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Atajos</div>
