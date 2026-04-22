@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Trevoly | Portal BIM Alcabama</title>
   <meta name="theme-color" content="#2b2b2b"/>
-  <meta name="x-app-version" data-app="trevoly" content="20260421-07"/>
+  <meta name="x-app-version" data-app="trevoly" content="20260421-08"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
@@ -148,40 +148,9 @@
                 <img alt="Trevoly" class="hidden h-12 w-auto object-contain md:block" src="https://i.postimg.cc/P5rsf8Yb/trevoly.png"/>
               </div>
 
-              <div class="mt-8 grid gap-4 md:grid-cols-3">
-                <a href="VSR_IFCA/" class="group rounded-2xl bg-white/70 p-5 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
-                  <div class="flex items-center gap-3">
-                    <span class="material-symbols-outlined text-[#111827] dark:text-white">view_in_ar</span>
-                    <div class="min-w-0">
-                      <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Visor IFC</div>
-                      <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Coordinación</div>
-                    </div>
-                  </div>
-                </a>
-                <a href="STATUS/" class="group rounded-2xl bg-white/70 p-5 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
-                  <div class="flex items-center gap-3">
-                    <span class="material-symbols-outlined text-[#111827] dark:text-white">query_stats</span>
-                    <div class="min-w-0">
-                      <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Estado</div>
-                      <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Seguimiento</div>
-                    </div>
-                  </div>
-                </a>
-                <a href="CANTIDADES/" class="group rounded-2xl bg-white/70 p-5 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
-                  <div class="flex items-center gap-3">
-                    <span class="material-symbols-outlined text-[#111827] dark:text-white">inventory_2</span>
-                    <div class="min-w-0">
-                      <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Cantidades</div>
-                      <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Compras</div>
-                    </div>
-                  </div>
-                </a>
-              </div>
-
               <div class="mt-10 grid gap-8 md:grid-cols-2">
                 <div id="modulos">
                   <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Modelos</div>
-                  <div class="mt-2 text-lg font-semibold text-[#111827] dark:text-white">MODELOS</div>
                   <div class="mt-4 grid gap-3">
                     <a href="VSR_IFCA/" class="rounded-2xl bg-white/70 p-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
                       <div class="flex items-center gap-3">
@@ -192,12 +161,29 @@
                         </div>
                       </div>
                     </a>
+                    <a href="STATUS/" class="rounded-2xl bg-white/70 p-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                      <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#111827] dark:text-white">query_stats</span>
+                        <div class="min-w-0">
+                          <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Estado</div>
+                          <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Seguimiento</div>
+                        </div>
+                      </div>
+                    </a>
+                    <a href="CANTIDADES/" class="rounded-2xl bg-white/70 p-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                      <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#111827] dark:text-white">inventory_2</span>
+                        <div class="min-w-0">
+                          <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Cantidades</div>
+                          <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Compras</div>
+                        </div>
+                      </div>
+                    </a>
                   </div>
                 </div>
 
                 <div id="planimetria">
                   <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Planimetría</div>
-                  <div class="mt-2 text-lg font-semibold text-[#111827] dark:text-white">PLANIMETRÍA</div>
                   <div class="mt-4 grid gap-3 sm:grid-cols-2">
                     <a href="VSR_PDFA/" class="rounded-2xl bg-white/70 p-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
                       <div class="flex items-center gap-3">
