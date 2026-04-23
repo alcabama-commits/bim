@@ -419,12 +419,15 @@
           color: '#f5b700',
           weight: 4,
           opacity: 1,
-          fill: false,
+          fill: true,
+          fillColor: '#ffffff',
+          fillOpacity: 0.9
         }).addTo(trevolyMap);
 
         const center = polygon.getBounds().getCenter();
-        const trevolyIcon = window.L.icon({
-          iconUrl: 'https://i.postimg.cc/P5rsf8Yb/trevoly.png',
+        const trevolyIcon = window.L.divIcon({
+          html: '<img src="https://i.postimg.cc/P5rsf8Yb/trevoly.png" class="w-12 h-12 object-contain drop-shadow-lg pointer-events-none" />',
+          className: 'flex items-center justify-center bg-transparent border-none',
           iconSize: [48, 48],
           iconAnchor: [24, 24]
         });
