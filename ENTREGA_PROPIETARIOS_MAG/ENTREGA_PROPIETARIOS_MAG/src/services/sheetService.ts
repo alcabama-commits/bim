@@ -7,42 +7,130 @@ export interface SheetData {
   weeklyGoalDate?: string | null;
 }
 
-const jsonpRequest = async <T>(url: string, timeoutMs: number = 20000): Promise<T> => {
+type JsonpOptions = {
+  timeoutMs?: number;
+};
+
+const SCRIPT_URL_STORAGE_KEY = 'entrega_propi_mag:scriptUrl';
+const FALLBACK_SCRIPT_URLS = [
+  'https://script.google.com/macros/s/AKfycbxVxH6HzAKwU9VNz1UqV7ntql3P70GukAoMfErYLGTetf4hRPF64LMFihxw_7tDhHE/exec',
+  'https://script.google.com/macros/s/AKfycbxDXc7XldGCnbVMlR0FfQg7HrHBI3Ux2t2_wC1AdGitFy5d82Lca6YFd309nLKj7tI/exec',
+];
+
+const readStoredScriptUrl = (): string | null => {
+  try {
+    const v = localStorage.getItem(SCRIPT_URL_STORAGE_KEY);
+    const s = String(v ?? '').trim();
+    return s ? s : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredScriptUrl = (url: string) => {
+  try {
+    localStorage.setItem(SCRIPT_URL_STORAGE_KEY, url);
+  } catch {
+  }
+};
+
+const getCandidateScriptUrls = (): string[] => {
+  const raw: Array<string | null | undefined> = [API_CONFIG.scriptUrl, readStoredScriptUrl(), ...FALLBACK_SCRIPT_URLS];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const u of raw) {
+    const s = String(u ?? '').trim();
+    if (!s) continue;
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+};
+
+const jsonpRequest = async <T>(url: URL, options?: JsonpOptions): Promise<T> => {
+  const timeoutMs = typeof options?.timeoutMs === 'number' && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : 45000;
   const callbackName = `__gas_jsonp_cb_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-  const src = url.includes('?') ? `${url}&callback=${callbackName}` : `${url}?callback=${callbackName}`;
+  url.searchParams.set('callback', callbackName);
+  url.searchParams.set('_', `${Date.now()}_${Math.random().toString(16).slice(2)}`);
 
   return new Promise<T>((resolve, reject) => {
     const w = window as unknown as Record<string, unknown>;
     const script = document.createElement('script');
 
+    let settled = false;
     const cleanup = () => {
       try {
         delete w[callbackName];
-      } catch {}
-      script.remove();
+      } catch {
+        w[callbackName] = undefined;
+      }
+      if (script.parentNode) script.parentNode.removeChild(script);
     };
 
     const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
       cleanup();
-      reject(new Error('JSONP timeout'));
+      reject(new Error(`JSONP timeout: ${script.src || url.toString()}`));
     }, timeoutMs);
 
     w[callbackName] = (data: unknown) => {
+      if (settled) return;
+      settled = true;
       window.clearTimeout(timer);
       cleanup();
       resolve(data as T);
     };
 
     script.async = true;
-    script.src = src;
+    try { (script as any).referrerPolicy = 'no-referrer'; } catch {}
+    script.src = url.toString();
     script.onerror = () => {
+      if (settled) return;
+      settled = true;
       window.clearTimeout(timer);
       cleanup();
-      reject(new Error('JSONP load error'));
+      reject(new Error(`JSONP load error: ${script.src || url.toString()}`));
     };
 
     document.head.appendChild(script);
   });
+};
+
+const jsonpRequestWithRetry = async <T>(url: URL, options?: JsonpOptions & { retries?: number }): Promise<T> => {
+  const retries = typeof options?.retries === 'number' && Number.isFinite(options.retries) ? Math.max(1, Math.floor(options.retries)) : 3;
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await jsonpRequest<T>(new URL(url.toString()), options);
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+    }
+  }
+  throw (lastErr instanceof Error ? lastErr : new Error('JSONP load error'));
+};
+
+const requestFromAnyScriptUrl = async <T>(
+  buildUrl: (base: string) => URL,
+  options?: JsonpOptions & { retries?: number },
+): Promise<{ data: T; scriptUrl: string }> => {
+  const candidates = getCandidateScriptUrls();
+  let lastErr: unknown = null;
+  for (const base of candidates) {
+    try {
+      const url = buildUrl(base);
+      const data = await jsonpRequestWithRetry<T>(url, options);
+      const stored = readStoredScriptUrl();
+      const storedIsFallback = stored ? FALLBACK_SCRIPT_URLS.includes(stored) : false;
+      if (!stored || storedIsFallback) writeStoredScriptUrl(base);
+      return { data, scriptUrl: base };
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw (lastErr instanceof Error ? lastErr : new Error('JSONP load error'));
 };
 
 export const fetchSheetData = async (): Promise<SheetData[] | null> => {
@@ -51,12 +139,12 @@ export const fetchSheetData = async (): Promise<SheetData[] | null> => {
     return null;
   }
 
-  const cacheBustedUrl = API_CONFIG.scriptUrl.includes('?')
-    ? `${API_CONFIG.scriptUrl}&_ts=${Date.now()}`
-    : `${API_CONFIG.scriptUrl}?_ts=${Date.now()}`;
-
   try {
-    const data = await jsonpRequest<{ towers?: SheetData[]; error?: string }>(cacheBustedUrl);
+    const { data } = await requestFromAnyScriptUrl<{ towers?: SheetData[]; error?: string }>((base) => {
+      const url = new URL(base);
+      url.searchParams.set('_ts', String(Date.now()));
+      return url;
+    }, { timeoutMs: 45000, retries: 3 });
     if (data && typeof data === 'object' && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
       throw new Error(String((data as any).error));
     }
@@ -70,12 +158,13 @@ export const fetchSheetData = async (): Promise<SheetData[] | null> => {
 export const triggerSync = async (): Promise<boolean> => {
   if (!API_CONFIG.scriptUrl) return false;
 
-  const url = API_CONFIG.scriptUrl.includes('?')
-    ? `${API_CONFIG.scriptUrl}&action=sync&_ts=${Date.now()}`
-    : `${API_CONFIG.scriptUrl}?action=sync&_ts=${Date.now()}`;
-
   try {
-    const data = await jsonpRequest<{ ok?: boolean; error?: string }>(url);
+    const { data } = await requestFromAnyScriptUrl<{ ok?: boolean; error?: string }>((base) => {
+      const u = new URL(base);
+      u.searchParams.set('action', 'sync');
+      u.searchParams.set('_ts', String(Date.now()));
+      return u;
+    }, { timeoutMs: 45000, retries: 3 });
     if (data && typeof data === 'object' && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
       return false;
     }
@@ -88,7 +177,10 @@ export const triggerSync = async (): Promise<boolean> => {
 };
 
 export const updateSheetStatus = async (towerId: number, aptNumber: string, status: string, weeklyGoalDate?: string | null): Promise<boolean> => {
-  if (!API_CONFIG.scriptUrl) {
+  const stored = readStoredScriptUrl();
+  const storedIsFallback = stored ? FALLBACK_SCRIPT_URLS.includes(stored) : false;
+  const base = stored && !storedIsFallback ? stored : (API_CONFIG.scriptUrl || stored);
+  if (!base) {
     console.warn('Google Apps Script URL not configured. Change not saved to sheet.');
     return true; // Simulate success so UI updates even without backend
   }
@@ -98,7 +190,7 @@ export const updateSheetStatus = async (towerId: number, aptNumber: string, stat
   }
 
   try {
-    const response = await fetch(API_CONFIG.scriptUrl, {
+    const response = await fetch(base, {
       method: 'POST',
       mode: 'no-cors',
       headers: {

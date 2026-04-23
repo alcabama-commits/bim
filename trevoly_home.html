@@ -4,6 +4,10 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Trevoly | Portal BIM Alcabama</title>
+  <meta name="theme-color" content="#2b2b2b"/>
+  <meta name="x-app-version" data-app="trevoly" content="20260421-09"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
   <script>
     tailwind.config = {
@@ -36,6 +40,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@700;900&display=swap" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="https://i.postimg.cc/RqxVh1wB/FAVICON-BIM-ALCABAMA-ARTIS.png" type="image/png">
+  <link rel="apple-touch-icon" href="https://i.postimg.cc/RqxVh1wB/FAVICON-BIM-ALCABAMA-ARTIS.png">
   <style>
     body {
       font-family: 'Inter', sans-serif;
@@ -43,165 +51,289 @@
     .material-symbols-outlined {
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
     }
+    .trevoly-glass {
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(17, 24, 39, 0.08);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+    #trevoly-map {
+      height: 100%;
+      width: 100%;
+    }
+    .leaflet-tile {
+      filter: grayscale(1) contrast(1.1);
+    }
   </style>
 </head>
 <body class="bg-background-light text-text-light dark:bg-background-dark dark:text-text-dark">
-  <div class="min-h-screen bg-trevoly-bg dark:bg-[#40403d]">
-    <header class="absolute top-0 left-0 w-full z-10 px-6 py-4 md:px-8">
-      <div class="container mx-auto flex items-center justify-between">
-        <a href="home.html" class="flex items-center">
-          <img alt="Portal BIM Alcabama Logo" class="h-11 dark:hidden" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png"/>
-          <img alt="Portal BIM Alcabama Logo" class="h-11 hidden dark:block" src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png"/>
-        </a>
-        <div class="flex items-center space-x-4">
-          <button id="theme-toggle" aria-label="Cambiar tema" class="text-text-light dark:text-white hover:text-primary">
-            <span class="material-symbols-outlined">dark_mode</span>
-          </button>
-          <div id="auth-container" class="flex items-center space-x-4">
-            <a href="https://alcabama-commits.github.io/bim/inse.html" class="text-sm font-medium text-text-light dark:text-white hover:text-primary">Iniciar sesión</a>
-          </div>
-        </div>
+  <div class="min-h-screen bg-[radial-gradient(circle_at_20%_0%,rgba(216,0,94,0.12),transparent_42%),radial-gradient(circle_at_80%_20%,rgba(37,42,32,0.10),transparent_48%),linear-gradient(180deg,#eef3f6,#f6f8fa)] dark:bg-[radial-gradient(circle_at_20%_0%,rgba(216,0,94,0.20),transparent_42%),radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.08),transparent_48%),linear-gradient(180deg,#0b1220,#0b1220)]">
+    <div id="update-banner" class="fixed top-0 left-0 right-0 z-50 hidden">
+      <div class="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-3 text-sm font-semibold text-white bg-[#111827] shadow">
+        <div>Hay una nueva versión disponible.</div>
+        <button id="update-reload" class="rounded-md bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-[#111827]">Actualizar</button>
       </div>
-    </header>
-
-    <main class="pb-16 pt-24">
-      <div class="border-y border-[rgba(37,42,32,0.1)] bg-[rgba(255,255,255,0.72)]">
-        <div class="container mx-auto flex flex-col items-center gap-6 px-6 py-6 text-center md:px-10">
-          <nav class="flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-[11px] uppercase tracking-[0.34em] text-[#6d7366]">
-            <a href="#intro" class="hover:text-[#252a20]">Proyecto</a>
-            <a href="#mapa" class="hover:text-[#252a20]">Bogota</a>
-            <a href="#modulos" class="hover:text-[#252a20]">Modulos</a>
-            <a href="#accesos" class="hover:text-[#252a20]">Accesos</a>
-            <a href="home.html" class="hover:text-[#252a20]">Portal</a>
-          </nav>
+    </div>
+    <div class="flex min-h-screen">
+      <aside class="sticky top-0 hidden h-screen w-[86px] flex-col items-center gap-4 px-3 py-6 md:flex">
+        <div class="trevoly-glass flex w-full items-center justify-center rounded-2xl px-2 py-3">
+          <img alt="Trevoly" class="h-8 w-8 object-contain" src="https://i.postimg.cc/P5rsf8Yb/trevoly.png"/>
         </div>
-      </div>
+        <nav class="trevoly-glass flex w-full flex-1 flex-col items-center gap-2 rounded-2xl p-2">
+          <a href="#intro" class="flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Dashboard">
+            <span class="material-symbols-outlined">dashboard</span>
+          </a>
+          <a href="#mapa" class="flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Mapa">
+            <span class="material-symbols-outlined">map</span>
+          </a>
+          <a href="#modulos" class="flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Modelos">
+            <span class="material-symbols-outlined">grid_view</span>
+          </a>
+          <a href="#planimetria" class="flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Planimetría">
+            <span class="material-symbols-outlined">description</span>
+          </a>
+          <a href="#accesos" class="flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Accesos">
+            <span class="material-symbols-outlined">bolt</span>
+          </a>
+          <a href="home.html" class="mt-auto flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Portal BIM">
+            <span class="material-symbols-outlined">home</span>
+          </a>
+        </nav>
+      </aside>
 
-      <section id="intro" class="container mx-auto px-6 py-24 md:px-10">
-        <div class="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
-          <div class="text-center lg:text-left">
-            <p class="text-[11px] uppercase tracking-[0.34em] text-[#8a8a84]">Trevoly / Artis / BIM</p>
-            <h1 class="mt-6 font-display text-5xl font-black tracking-[0.08em] text-[#252a20] md:text-7xl">TREVOLY</h1>
-            <p class="mx-auto mt-8 max-w-xl text-base leading-8 text-[#6f6f69] lg:mx-0">
-              Una portada editorial para el proyecto en Bogota: informacion clara, ubicacion, accesos BIM y una
-              narrativa visual mas sobria, inspirada en el estilo minimalista de tu referencia.
-            </p>
-            <div class="mt-10 flex flex-wrap items-center justify-center gap-4 lg:justify-start">
-              <a href="VSR_IFC/index.html" class="border border-[#252a20] px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#252a20] transition hover:bg-[#252a20] hover:text-white">Abrir visor IFC</a>
-              <a href="#mapa" class="border border-[rgba(37,42,32,0.12)] bg-white px-8 py-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-[#252a20] transition hover:bg-[#f7f7f5]">Ver mapa</a>
+      <div class="flex min-w-0 flex-1 flex-col">
+        <header class="sticky top-0 z-20 px-4 pt-4 md:px-8">
+          <div class="trevoly-glass mx-auto flex max-w-7xl items-center justify-between gap-3 rounded-2xl px-4 py-3">
+            <div class="flex min-w-0 items-center gap-3">
+              <button id="back-btn" aria-label="Volver" class="flex h-11 w-11 items-center justify-center rounded-xl bg-white/70 text-[#111827] transition hover:bg-white dark:bg-white/10 dark:text-white dark:hover:bg-white/15">
+                <span class="material-symbols-outlined">arrow_back</span>
+              </button>
+              <a href="home.html" class="hidden items-center sm:flex" title="Ir al Home">
+                <img alt="Trevoly" class="h-9 w-auto object-contain" src="https://i.postimg.cc/P5rsf8Yb/trevoly.png"/>
+              </a>
+              <div class="min-w-0">
+                <div class="truncate text-xs font-semibold uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Portal BIM</div>
+                <div class="truncate text-lg font-semibold text-[#111827] dark:text-white">Trevoly</div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <div class="hidden rounded-2xl bg-white/60 px-4 py-3 text-right dark:bg-white/10 md:block">
+                <div class="text-xs font-semibold uppercase tracking-[0.24em] text-[#6f6f69] dark:text-white/60">Hoy</div>
+                <div class="mt-1 text-2xl font-semibold text-[#111827] dark:text-white" id="trevoly-now">—</div>
+              </div>
+              <button id="theme-toggle" aria-label="Cambiar tema" class="flex h-11 w-11 items-center justify-center rounded-xl bg-white/70 text-[#111827] transition hover:bg-white dark:bg-white/10 dark:text-white dark:hover:bg-white/15">
+                <span class="material-symbols-outlined">dark_mode</span>
+              </button>
+              <div id="auth-container" class="hidden items-center gap-4 sm:flex">
+                <a href="https://alcabama-commits.github.io/bim/inse.html" class="text-sm font-semibold text-[#111827] hover:text-primary dark:text-white">Iniciar sesión</a>
+              </div>
             </div>
           </div>
+        </header>
 
-          <div class="grid gap-6 md:grid-cols-2">
-            <article class="border border-[rgba(37,42,32,0.1)] bg-[rgba(255,255,255,0.82)] p-6">
-              <p class="text-[11px] uppercase tracking-[0.3em] text-[#8a8a84]">Estado</p>
-              <h2 class="mt-5 text-3xl font-semibold text-[#252a20]">Coordinacion activa</h2>
-              <p class="mt-4 text-sm leading-7 text-[#6f6f69]">Seguimiento integrado para vistas, publicaciones y control de equipo del proyecto.</p>
-            </article>
-            <article class="border border-[rgba(37,42,32,0.1)] bg-[rgba(255,255,255,0.82)] p-6">
-              <p class="text-[11px] uppercase tracking-[0.3em] text-[#8a8a84]">Sprint</p>
-              <h2 class="mt-5 text-3xl font-semibold text-[#252a20]">Semana 16</h2>
-              <p class="mt-4 text-sm leading-7 text-[#6f6f69]">Revision de modelos, coordinacion interdisciplinaria y gestion de entregables.</p>
-            </article>
+        <main class="w-full flex-1 pb-16 pt-6 md:pt-8">
+          <div class="mx-auto w-full max-w-7xl px-4 md:px-8">
+            <section id="intro" class="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+            <div class="trevoly-glass rounded-3xl p-6 md:p-8">
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                  <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Dashboard</div>
+                  <h1 class="mt-3 truncate font-display text-4xl font-black tracking-[0.06em] text-[#111827] dark:text-white md:text-5xl">TREVOLY</h1>
+                  <p class="mt-4 max-w-xl text-sm leading-7 text-[#5b5f56] dark:text-white/70">
+                    Accesos rápidos, seguimiento y contexto del proyecto.
+                  </p>
+                </div>
+                <div class="hidden md:block">
+                  <img alt="BIM" class="h-12 w-auto object-contain dark:hidden" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png"/>
+                  <img alt="BIM" class="hidden h-12 w-auto object-contain dark:block" src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png"/>
+                </div>
+              </div>
+
+              <div class="mt-10 grid gap-8 md:grid-cols-2">
+                <div id="modulos">
+                  <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Modelos</div>
+                  <div class="mt-4 grid gap-3">
+                    <a href="VSR_IFCA/" class="rounded-2xl bg-white/70 p-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                      <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#111827] dark:text-white">view_in_ar</span>
+                        <div class="min-w-0">
+                          <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Visor IFC</div>
+                          <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Modelos</div>
+                        </div>
+                      </div>
+                    </a>
+                    <a href="STATUS/" class="rounded-2xl bg-white/70 p-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                      <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#111827] dark:text-white">query_stats</span>
+                        <div class="min-w-0">
+                          <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Estado</div>
+                          <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Seguimiento</div>
+                        </div>
+                      </div>
+                    </a>
+                    <a href="CANTIDADES/" class="rounded-2xl bg-white/70 p-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                      <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#111827] dark:text-white">inventory_2</span>
+                        <div class="min-w-0">
+                          <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Cantidades</div>
+                          <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Compras</div>
+                        </div>
+                      </div>
+                    </a>
+                  </div>
+                </div>
+
+                <div id="planimetria">
+                  <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Planimetría</div>
+                  <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                    <a href="VSR_PDFA/" class="rounded-2xl bg-white/70 p-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                      <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#111827] dark:text-white">picture_as_pdf</span>
+                        <div class="min-w-0">
+                          <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Visor PDF</div>
+                          <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Planos</div>
+                        </div>
+                      </div>
+                    </a>
+                    <a href="VSR_DWGA/" class="rounded-2xl bg-white/70 p-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                      <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-[#111827] dark:text-white">architecture</span>
+                        <div class="min-w-0">
+                          <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Visor DWG</div>
+                          <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Planimetría</div>
+                        </div>
+                      </div>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="trevoly-glass rounded-3xl p-6 md:p-8">
+              <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Panel</div>
+              <h2 class="mt-3 text-2xl font-semibold text-[#111827] dark:text-white">Acciones</h2>
+              <p class="mt-3 text-sm leading-7 text-[#5b5f56] dark:text-white/70">Atajos para publicaciones, solicitudes y equipo.</p>
+
+              <div class="mt-8 grid gap-4">
+                <a href="Publicaciones.html" class="rounded-2xl bg-white/70 px-5 py-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                  <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                      <span class="material-symbols-outlined text-[#111827] dark:text-white">campaign</span>
+                      <div class="min-w-0">
+                        <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Publicaciones</div>
+                        <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Entregables</div>
+                      </div>
+                    </div>
+                    <span class="material-symbols-outlined text-[#6f6f69] dark:text-white/60">chevron_right</span>
+                  </div>
+                </a>
+                <a href="index.html" class="rounded-2xl bg-white/70 px-5 py-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                  <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                      <span class="material-symbols-outlined text-[#111827] dark:text-white">task_alt</span>
+                      <div class="min-w-0">
+                        <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Solicitudes</div>
+                        <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Accesos</div>
+                      </div>
+                    </div>
+                    <span class="material-symbols-outlined text-[#6f6f69] dark:text-white/60">chevron_right</span>
+                  </div>
+                </a>
+                <a href="lista_usuarios.html" class="rounded-2xl bg-white/70 px-5 py-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                  <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                      <span class="material-symbols-outlined text-[#111827] dark:text-white">group</span>
+                      <div class="min-w-0">
+                        <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">Equipo</div>
+                        <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Usuarios</div>
+                      </div>
+                    </div>
+                    <span class="material-symbols-outlined text-[#6f6f69] dark:text-white/60">chevron_right</span>
+                  </div>
+                </a>
+              </div>
+            </div>
+            </section>
           </div>
-        </div>
-      </section>
 
-      <section id="mapa" class="border-y border-[rgba(37,42,32,0.1)] bg-[#f7f7f5]">
+      <section id="mapa" class="mt-10 border-y border-[rgba(37,42,32,0.1)] bg-[#f7f7f5] md:mt-14">
         <div class="px-0 py-20">
           <div class="container mx-auto px-6 pb-10 text-center md:px-10">
             <p class="text-[11px] uppercase tracking-[0.34em] text-[#8a8a84]">City Guide</p>
-            <h2 class="mt-5 font-display text-4xl font-black tracking-[0.08em] text-[#252a20] md:text-5xl">BOGOTA</h2>
+            <h2 class="mt-5 font-display text-4xl font-black tracking-[0.08em] text-[#252a20] md:text-5xl">BOGOTÁ</h2>
             <p class="mx-auto mt-6 max-w-2xl text-sm leading-8 text-[#6f6f69]">
-              El proyecto se ubica exactamente en el poligono que marcaste, en el sector de la Autopista Sur con Calle 57H Sur y Carrera 72.
-              El mapa ahora domina toda la seccion para que la localizacion sea protagonista.
+              Portal de acceso al CDE del proyecto: centraliza modelos, planos y entregables, y facilita el seguimiento y la coordinación entre equipos con información vigente.
+              Dirección: Calle 57H Sur con Carrera 72 (Autopista Sur).
             </p>
           </div>
           <div class="border-y border-[rgba(37,42,32,0.1)] bg-white">
-            <div class="h-[560px] w-full overflow-hidden bg-[#ececea] md:h-[680px]">
-              <iframe
-                title="Mapa de Bogota - Trevoly"
-                class="h-full w-full grayscale"
-                loading="lazy"
-                referrerpolicy="no-referrer-when-downgrade"
-                src="https://www.openstreetmap.org/export/embed.html?bbox=-74.1687%2C4.5936%2C-74.1592%2C4.6009&layer=mapnik&marker=4.597251%2C-74.164429">
-              </iframe>
+            <div id="map-wrapper" class="relative h-[560px] w-full overflow-hidden bg-[#ececea] md:h-[680px]">
+              <div id="trevoly-map" class="h-full w-full"></div>
+              <div id="map-ctrl-hint" class="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-md border border-[rgba(37,42,32,0.2)] bg-white/95 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#252a20] shadow-sm">
+                Mantén CTRL para navegar el mapa
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section id="modulos" class="container mx-auto px-6 py-20 md:px-10">
-        <div class="text-center">
-          <p class="text-[11px] uppercase tracking-[0.34em] text-[#8a8a84]">From The Project</p>
-          <h2 class="mt-5 text-3xl font-semibold tracking-[0.12em] text-[#252a20]">MODULOS PRINCIPALES</h2>
-        </div>
-        <div class="mt-14 grid gap-8 md:grid-cols-3">
-          <article class="border border-[rgba(37,42,32,0.1)] bg-[rgba(255,255,255,0.9)]">
-            <div class="aspect-[4/3] bg-[linear-gradient(135deg,#f8f8f6,#eeeeeb)]"></div>
-            <div class="px-6 py-6 text-center">
-              <h3 class="text-sm font-semibold uppercase tracking-[0.3em] text-[#252a20]">Visor IFC</h3>
-              <p class="mt-3 text-xs uppercase tracking-[0.2em] text-[#8a8a84]">Coordinacion y revisiones</p>
+          <div class="mx-auto w-full max-w-7xl px-4 md:px-8">
+            <section id="accesos" class="mt-6">
+            <div class="trevoly-glass rounded-3xl p-6 md:p-8">
+              <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Atajos</div>
+              <h2 class="mt-3 text-2xl font-semibold text-[#111827] dark:text-white">Accesos del proyecto</h2>
+              <div class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <a href="VSR_IFCA/" class="rounded-2xl bg-white/70 px-5 py-5 text-center transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                  <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-white/70 text-[#111827] dark:bg-white/10 dark:text-white">
+                    <span class="material-symbols-outlined">view_in_ar</span>
+                  </div>
+                  <div class="mt-4 text-sm font-semibold text-[#111827] dark:text-white">Visor IFC</div>
+                  <div class="mt-1 text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Abrir</div>
+                </a>
+                <a href="STATUS/" class="rounded-2xl bg-white/70 px-5 py-5 text-center transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                  <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-white/70 text-[#111827] dark:bg-white/10 dark:text-white">
+                    <span class="material-symbols-outlined">query_stats</span>
+                  </div>
+                  <div class="mt-4 text-sm font-semibold text-[#111827] dark:text-white">Estado</div>
+                  <div class="mt-1 text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Revisar</div>
+                </a>
+                <a href="CANTIDADES/" class="rounded-2xl bg-white/70 px-5 py-5 text-center transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                  <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-white/70 text-[#111827] dark:bg-white/10 dark:text-white">
+                    <span class="material-symbols-outlined">inventory_2</span>
+                  </div>
+                  <div class="mt-4 text-sm font-semibold text-[#111827] dark:text-white">Cantidades</div>
+                  <div class="mt-1 text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Abrir</div>
+                </a>
+                <a href="lista_usuarios.html" class="rounded-2xl bg-white/70 px-5 py-5 text-center transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+                  <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-white/70 text-[#111827] dark:bg-white/10 dark:text-white">
+                    <span class="material-symbols-outlined">group</span>
+                  </div>
+                  <div class="mt-4 text-sm font-semibold text-[#111827] dark:text-white">Equipo</div>
+                  <div class="mt-1 text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Usuarios</div>
+                </a>
+              </div>
             </div>
-          </article>
-          <article class="border border-[rgba(37,42,32,0.1)] bg-[rgba(255,255,255,0.9)]">
-            <div class="aspect-[4/3] bg-[linear-gradient(135deg,#fafaf8,#f0efeb)]"></div>
-            <div class="px-6 py-6 text-center">
-              <h3 class="text-sm font-semibold uppercase tracking-[0.3em] text-[#252a20]">Publicaciones</h3>
-              <p class="mt-3 text-xs uppercase tracking-[0.2em] text-[#8a8a84]">Novedades y entregables</p>
-            </div>
-          </article>
-          <article class="border border-[rgba(37,42,32,0.1)] bg-[rgba(255,255,255,0.9)]">
-            <div class="aspect-[4/3] bg-[linear-gradient(135deg,#fafaf8,#ecece8)]"></div>
-            <div class="px-6 py-6 text-center">
-              <h3 class="text-sm font-semibold uppercase tracking-[0.3em] text-[#252a20]">Solicitudes</h3>
-              <p class="mt-3 text-xs uppercase tracking-[0.2em] text-[#8a8a84]">Accesos y flujos del equipo</p>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section id="accesos" class="border-y border-[rgba(37,42,32,0.1)] bg-[rgba(255,255,255,0.56)]">
-        <div class="container mx-auto px-6 py-20 md:px-10">
-          <div class="text-center">
-            <p class="text-[11px] uppercase tracking-[0.34em] text-[#8a8a84]">Featured Access</p>
-            <h2 class="mt-5 text-3xl font-semibold tracking-[0.12em] text-[#252a20]">ACCESOS DEL PROYECTO</h2>
+            </section>
           </div>
-          <div class="mt-14 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-            <a href="VSR_IFC/index.html" class="border border-[rgba(37,42,32,0.1)] bg-white px-6 py-10 text-center transition hover:-translate-y-1 hover:shadow-[0_14px_30px_rgba(37,42,32,0.06)]">
-              <h3 class="text-sm font-semibold uppercase tracking-[0.3em] text-[#252a20]">Visor IFC</h3>
-              <p class="mt-4 text-xs uppercase tracking-[0.2em] text-[#8a8a84]">Abrir coordinacion</p>
-            </a>
-            <a href="Publicaciones.html" class="border border-[rgba(37,42,32,0.1)] bg-white px-6 py-10 text-center transition hover:-translate-y-1 hover:shadow-[0_14px_30px_rgba(37,42,32,0.06)]">
-              <h3 class="text-sm font-semibold uppercase tracking-[0.3em] text-[#252a20]">Publicaciones</h3>
-              <p class="mt-4 text-xs uppercase tracking-[0.2em] text-[#8a8a84]">Ver novedades</p>
-            </a>
-            <a href="index.html" class="border border-[rgba(37,42,32,0.1)] bg-white px-6 py-10 text-center transition hover:-translate-y-1 hover:shadow-[0_14px_30px_rgba(37,42,32,0.06)]">
-              <h3 class="text-sm font-semibold uppercase tracking-[0.3em] text-[#252a20]">Solicitudes</h3>
-              <p class="mt-4 text-xs uppercase tracking-[0.2em] text-[#8a8a84]">Gestionar accesos</p>
-            </a>
-            <a href="lista_usuarios.html" class="border border-[rgba(37,42,32,0.1)] bg-white px-6 py-10 text-center transition hover:-translate-y-1 hover:shadow-[0_14px_30px_rgba(37,42,32,0.06)]">
-              <h3 class="text-sm font-semibold uppercase tracking-[0.3em] text-[#252a20]">Equipo</h3>
-              <p class="mt-4 text-xs uppercase tracking-[0.2em] text-[#8a8a84]">Consultar usuarios</p>
-            </a>
-          </div>
-        </div>
-      </section>
-    </main>
+        </main>
 
-    <footer class="px-8 py-8">
-      <div class="container mx-auto text-center text-gray-600 dark:text-gray-300">
-        <div class="mb-4 flex items-center justify-center gap-4">
-          <img alt="Artis Urbano logo" class="h-8" src="https://i.postimg.cc/RVp8pZwc/artis-urbano.png"/>
-          <div class="h-8 w-px bg-black dark:bg-white"></div>
-          <img alt="Portal BIM logo" class="h-8 dark:hidden" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png"/>
-          <img alt="Portal BIM logo" class="hidden h-8 dark:block" src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png"/>
-        </div>
-        <p class="text-sm">© 2026 Portal BIM Alcabama - Todos los derechos reservados.</p>
+        <footer class="px-4 pb-10 pt-6 md:px-8">
+          <div class="mx-auto max-w-7xl text-center text-gray-600 dark:text-gray-300">
+            <div class="mb-4 flex items-center justify-center gap-4">
+              <img alt="Artis Urbano logo" class="h-8" src="https://i.postimg.cc/RVp8pZwc/artis-urbano.png"/>
+              <div class="h-8 w-px bg-black/50 dark:bg-white/40"></div>
+              <img alt="Portal BIM logo" class="h-8 dark:hidden" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png"/>
+              <img alt="Portal BIM logo" class="hidden h-8 dark:block" src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png"/>
+            </div>
+            <p class="text-sm">© 2026 Portal BIM Alcabama - Todos los derechos reservados.</p>
+          </div>
+        </footer>
       </div>
-    </footer>
+    </div>
   </div>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const authContainer = document.getElementById('auth-container');
@@ -238,6 +370,130 @@
         const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
         localStorage.setItem('theme', newTheme);
         applyTheme(newTheme);
+      });
+
+      const mapEl = document.getElementById('trevoly-map');
+      const mapHint = document.getElementById('map-ctrl-hint');
+      let trevolyMap = null;
+      const setMapInteraction = (enabled) => {
+        if (!trevolyMap) return;
+        if (enabled) {
+          trevolyMap.dragging.enable();
+          trevolyMap.scrollWheelZoom.enable();
+          trevolyMap.touchZoom.enable();
+          trevolyMap.doubleClickZoom.enable();
+        } else {
+          trevolyMap.dragging.disable();
+          trevolyMap.scrollWheelZoom.disable();
+          trevolyMap.touchZoom.disable();
+          trevolyMap.doubleClickZoom.disable();
+        }
+        if (mapHint) mapHint.style.display = enabled ? 'none' : 'block';
+      };
+      if (mapEl && window.L) {
+        trevolyMap = window.L.map(mapEl, {
+          zoomControl: false,
+          attributionControl: true,
+          dragging: false,
+          scrollWheelZoom: false,
+          touchZoom: false,
+          doubleClickZoom: false,
+          boxZoom: false,
+          keyboard: false,
+        });
+
+        window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 20,
+          attribution: '&copy; OpenStreetMap contributors',
+        }).addTo(trevolyMap);
+
+        const lotPolygon = [
+          [4.597848, -74.165648],
+          [4.597917, -74.164457],
+          [4.596928, -74.164484],
+          [4.596912, -74.165251],
+          [4.597089, -74.165654],
+        ];
+
+        const polygon = window.L.polygon(lotPolygon, {
+          color: '#f5b700',
+          weight: 4,
+          opacity: 1,
+          fill: false,
+        }).addTo(trevolyMap);
+
+        const center = polygon.getBounds().getCenter();
+        window.L.marker(center).addTo(trevolyMap);
+        trevolyMap.setView(center, 17, {animate: false});
+
+        setMapInteraction(false);
+        window.addEventListener('keydown', (e) => setMapInteraction(Boolean(e.ctrlKey)));
+        window.addEventListener('keyup', (e) => setMapInteraction(Boolean(e.ctrlKey)));
+        window.addEventListener('blur', () => setMapInteraction(false));
+      } else {
+        if (mapHint) mapHint.style.display = 'none';
+      }
+
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('sw.js')
+            .then(registration => {
+              console.log('ServiceWorker registrado con éxito:', registration.scope);
+            })
+            .catch(error => {
+              console.log('Fallo en el registro de ServiceWorker:', error);
+            });
+        });
+      }
+
+      const backBtn = document.getElementById('back-btn');
+      backBtn?.addEventListener('click', () => {
+        if (window.history.length > 1) window.history.back();
+        else window.location.href = 'home.html';
+      });
+
+      const nowEl = document.getElementById('trevoly-now');
+      if (nowEl) {
+        const updateNow = () => {
+          const d = new Date();
+          const hh = String(d.getHours()).padStart(2, '0');
+          const mm = String(d.getMinutes()).padStart(2, '0');
+          nowEl.textContent = `${hh}:${mm}`;
+        };
+        updateNow();
+        window.setInterval(updateNow, 15000);
+      }
+
+      const metaVersion = document.querySelector('meta[name="x-app-version"]');
+      const appId = metaVersion?.getAttribute('data-app') || 'trevoly';
+      const currentVersion = metaVersion?.getAttribute('content') || '';
+      const versionKey = `${appId}:appVersion`;
+      const storedVersion = localStorage.getItem(versionKey) || '';
+      const banner = document.getElementById('update-banner');
+      const reloadBtn = document.getElementById('update-reload');
+      const showBanner = () => {
+        if (!banner) return;
+        banner.classList.remove('hidden');
+      };
+      if (currentVersion) {
+        if (!storedVersion) {
+          localStorage.setItem(versionKey, currentVersion);
+        } else if (storedVersion !== currentVersion) {
+          showBanner();
+        }
+      }
+      reloadBtn?.addEventListener('click', async () => {
+        try {
+          localStorage.setItem(versionKey, currentVersion);
+          if ('serviceWorker' in navigator) {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg) await reg.unregister();
+          }
+        } catch {
+        }
+        const u = new URL(window.location.href);
+        if (currentVersion) u.searchParams.set('v', currentVersion);
+        window.location.replace(u.toString());
       });
     });
   </script>
