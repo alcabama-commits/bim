@@ -4,7 +4,7 @@ import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
 import BIMViewer from './components/BIMViewer';
 import { BIMElement, CategorySummary } from './types';
-import { Folder, File, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Eye, Loader2, Maximize2, Minimize2, Palette, Grid3X3 } from 'lucide-react';
+import { Folder, File, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Eye, EyeOff, Loader2, Maximize2, Minimize2, Palette, Grid3X3, SlidersHorizontal } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import DataTable from './components/DataTable';
 
@@ -47,14 +47,12 @@ const jsonpRequest = <T,>(url: URL, signalOrOptions?: AbortSignal | JsonpOptions
   if (hasAbort && (signal as any).aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
   return new Promise<T>((resolve, reject) => {
     const cbName = `__jsonp_${Math.random().toString(36).slice(2)}`;
+    url.searchParams.set('_', `${Date.now()}_${Math.random().toString(16).slice(2)}`);
     url.searchParams.set('callback', cbName);
 
     const script = document.createElement('script');
     script.async = true;
-    try {
-      (script as any).referrerPolicy = 'no-referrer';
-    } catch {
-    }
+    try { (script as any).referrerPolicy = 'no-referrer'; } catch {}
     script.src = url.toString();
 
     let settled = false;
@@ -103,6 +101,41 @@ const jsonpRequest = <T,>(url: URL, signalOrOptions?: AbortSignal | JsonpOptions
 
     document.head.appendChild(script);
   });
+};
+
+const jsonpRequestWithRetry = async <T,>(url: URL, options?: AbortSignal | JsonpOptions & { retries?: number }): Promise<T> => {
+  const retries = typeof (options as any)?.retries === 'number' ? Math.max(1, (options as any).retries) : 3;
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await jsonpRequest<T>(new URL(url.toString()), options as any);
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+    }
+  }
+  throw (lastErr instanceof Error ? lastErr : new Error('Error cargando JSONP'));
+};
+
+const clearCantidadesClientData = async () => {
+  try {
+    for (const k of Object.keys(localStorage)) {
+      if (k.startsWith('cantidades:')) localStorage.removeItem(k);
+    }
+  } catch {
+  }
+  try {
+    indexedDB.deleteDatabase('cantidades-model-cache-v1');
+    indexedDB.deleteDatabase('cantidades-model-cache-v2');
+  } catch {
+  }
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((k) => k.startsWith('cantidades-')).map((k) => caches.delete(k)));
+    }
+  } catch {
+  }
 };
 
 type RemoteModel = {
@@ -197,12 +230,12 @@ export default function App() {
     url.searchParams.set('action', 'status_get');
     url.searchParams.set('sheetId', CANTIDADES_SHEET_ID);
     url.searchParams.set('model', getModelKey(modelName));
-    const data = await jsonpRequest<{
+    const data = await jsonpRequestWithRetry<{
       ok?: boolean;
       error?: string;
       statuses?: Record<string, unknown>;
       history?: Record<string, Array<{ status: unknown; at: unknown }>>;
-    }>(url, { signal, timeoutMs: 30000 });
+    }>(url, { signal, timeoutMs: 30000, retries: 3 });
 
     if (!data || typeof data !== 'object') return;
     if (typeof (data as any).error === 'string' && String((data as any).error).trim()) {
@@ -293,8 +326,16 @@ export default function App() {
     const stored = Number(localStorage.getItem('cantidades:rightPanelWidth'));
     return Number.isFinite(stored) && stored > 0 ? stored : 320;
   });
-  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(() => localStorage.getItem('cantidades:leftPanelCollapsed') === 'true');
-  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(() => localStorage.getItem('cantidades:rightPanelCollapsed') === 'true');
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(() => {
+    const stored = localStorage.getItem('cantidades:leftPanelCollapsed');
+    if (stored === null) return window.innerWidth < 768;
+    return stored === 'true';
+  });
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(() => {
+    const stored = localStorage.getItem('cantidades:rightPanelCollapsed');
+    if (stored === null) return window.innerWidth < 768;
+    return stored === 'true';
+  });
   const [tablePanelHeight, setTablePanelHeight] = useState(() => {
     const stored = Number(localStorage.getItem('cantidades:tablePanelHeight'));
     return Number.isFinite(stored) && stored > 0 ? stored : 320;
@@ -553,10 +594,17 @@ export default function App() {
         if (driveFolderId) url.searchParams.set('folderId', driveFolderId);
         url.searchParams.set('t', String(Date.now()));
 
-        const data = await jsonpRequest<{
+        let data: {
           models?: Array<{ name: string; fragId: string; jsonId?: string | null }>;
           error?: string;
-        }>(url, { timeoutMs: 30000 });
+        };
+        try {
+          data = await jsonpRequestWithRetry(url, { timeoutMs: 45000, retries: 3 });
+        } catch (e) {
+          await clearCantidadesClientData();
+          url.searchParams.set('t', String(Date.now()));
+          data = await jsonpRequestWithRetry(url, { timeoutMs: 45000, retries: 2 });
+        }
         if (data && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
           throw new Error(String((data as any).error));
         }
@@ -1406,7 +1454,7 @@ export default function App() {
       url.searchParams.set('limit', String(chunkLimit));
       url.searchParams.set('t', String(Date.now()));
 
-      const data = await jsonpRequest<{ total: number; nextOffset: number; done: boolean; data: string; error?: string }>(url, { signal, timeoutMs: 30000 });
+      const data = await jsonpRequestWithRetry<{ total: number; nextOffset: number; done: boolean; data: string; error?: string }>(url, { signal, timeoutMs: 30000, retries: 3 });
       if (data && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
         throw new Error(String((data as any).error));
       }
@@ -1452,7 +1500,7 @@ export default function App() {
     url.searchParams.set('id', id);
     url.searchParams.set('t', String(Date.now()));
 
-    const data = await jsonpRequest<{ text?: string; error?: string }>(url, { signal, timeoutMs: 30000 });
+    const data = await jsonpRequestWithRetry<{ text?: string; error?: string }>(url, { signal, timeoutMs: 30000, retries: 3 });
     if (data && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
       throw new Error(String((data as any).error));
     }
@@ -1568,31 +1616,74 @@ export default function App() {
     ESTRUCTURA: true,
     GENERAL: true
   });
+  const onBack = useCallback(() => {
+    try {
+      if (window.history.length > 1) window.history.back();
+      else window.location.href = '../home.html';
+    } catch {
+      window.location.href = '../home.html';
+    }
+  }, []);
+
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="x-app-version"]') as HTMLMetaElement | null;
+    const appId = meta?.dataset?.app || meta?.getAttribute('data-app') || 'cantidades';
+    const version = meta?.content || meta?.getAttribute('content') || '';
+    const key = `${appId}:appVersion`;
+    let stored = '';
+    try { stored = localStorage.getItem(key) || ''; } catch {}
+
+    if (version && stored && stored !== version) {
+      clearCantidadesClientData().finally(() => {
+        try { localStorage.setItem(key, version); } catch {}
+      });
+    } else if (version && !stored) {
+      try { localStorage.setItem(key, version); } catch {}
+    }
+  }, []);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-white overflow-hidden font-sans">
       {/* Header */}
-      <header className="h-20 flex items-center justify-between px-8 border-b border-slate-200 bg-white">
-        <div className="flex items-center gap-4">
-          <div className="h-12 flex items-center">
-            <img
-              src="https://i.postimg.cc/RVp8pZwc/artis_urbano.png"
-              alt="Artis Urbano"
-              className="h-10 w-auto object-contain"
-              loading="eager"
-              decoding="async"
-              referrerPolicy="no-referrer"
-            />
+      <header className="min-h-16 flex flex-col sm:flex-row sm:items-center sm:justify-between px-3 sm:px-8 py-2 sm:py-0 gap-2 border-b border-slate-200 bg-white">
+        <div className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-4">
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={onBack}
+              className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-slate-700"
+              title="Volver"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <a href="../home.html" className="h-12 flex items-center" title="Ir al Home">
+              <img
+                src="https://i.postimg.cc/RVp8pZwc/artis_urbano.png"
+                alt="Artis Urbano"
+                className="h-7 sm:h-10 w-auto object-contain"
+                loading="eager"
+                decoding="async"
+                referrerPolicy="no-referrer"
+              />
+            </a>
           </div>
+          <img
+            src="https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg"
+            alt="Arboré"
+            className="h-7 sm:hidden w-auto object-contain"
+            loading="eager"
+            decoding="async"
+            referrerPolicy="no-referrer"
+          />
         </div>
-        
-        <div className="flex-1 max-w-3xl mx-8">
-          <div className="bg-[#003E52] text-white py-1.5 px-6 rounded-sm text-center font-bold uppercase tracking-widest text-sm shadow-inner">
+
+        <div className="w-full sm:flex-1 sm:max-w-3xl sm:mx-8">
+          <div className="bg-[#003E52] text-white py-1.5 px-4 sm:px-6 rounded-sm text-center font-bold uppercase tracking-widest text-xs sm:text-sm shadow-inner truncate">
             {selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'CANTIDADES'}
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="hidden sm:flex items-center gap-4">
           <img
             src="https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg"
             alt="Arboré"
@@ -1640,7 +1731,28 @@ export default function App() {
               <div className="flex-1 overflow-y-auto p-2">
                 {modelsError && (
                   <div className="p-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
-                    {modelsError}
+                    <div className="font-bold">Error cargando modelos</div>
+                    <div className="mt-1 break-words">{modelsError}</div>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={fetchAvailableModels}
+                        className="px-3 py-2 rounded-md bg-white border border-red-200 text-red-700 font-black uppercase tracking-widest text-[10px] hover:bg-red-50"
+                      >
+                        Reintentar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setModelsError(null);
+                          await clearCantidadesClientData();
+                          await fetchAvailableModels();
+                        }}
+                        className="px-3 py-2 rounded-md bg-red-600 border border-red-600 text-white font-black uppercase tracking-widest text-[10px] hover:bg-red-700"
+                      >
+                        Limpiar y reintentar
+                      </button>
+                    </div>
                   </div>
                 )}
 

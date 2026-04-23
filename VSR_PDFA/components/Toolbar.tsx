@@ -37,13 +37,22 @@ const Toolbar: React.FC<ToolbarProps> = ({
   return (
     <header className="h-12 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between z-30 shadow-md">
       <div className="flex items-center gap-2">
+        <button 
+          onClick={() => window.history.back()}
+          className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800 text-slate-400 hover:text-white transition"
+          title="Volver"
+        >
+          <i className="fa-solid fa-arrow-left"></i>
+        </button>
         <div className="flex items-center gap-2">
-          <img 
-            src={theme === 'dark' ? 'https://i.postimg.cc/3xdLSg9g/artis_urbano2_(1).png' : 'https://i.postimg.cc/vmKVZndP/artis_urbano2.png'} 
-            alt="Artis Urbano" 
-            className="h-5 select-none"
-            draggable={false}
-          />
+          <a href="../home.html" title="Volver al Home" className="flex items-center">
+            <img 
+              src={theme === 'dark' ? 'https://i.postimg.cc/3xdLSg9g/artis_urbano2_(1).png' : 'https://i.postimg.cc/vmKVZndP/artis_urbano2.png'} 
+              alt="Artis Urbano" 
+              className="h-5 select-none"
+              draggable={false}
+            />
+          </a>
         </div>
         {file && <div className="h-4 w-px bg-slate-700 mx-2"></div>}
         {file && <span className="text-[10px] text-slate-400 font-mono truncate max-w-[120px]">{file.name}</span>}
