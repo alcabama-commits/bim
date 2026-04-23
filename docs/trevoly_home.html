@@ -102,7 +102,7 @@
       </aside>
 
       <div class="flex min-w-0 flex-1 flex-col">
-        <header class="sticky top-0 z-20 px-4 pt-4 md:px-8">
+        <header class="sticky top-0 z-40 px-4 pt-4 md:px-8">
           <div class="trevoly-glass mx-auto flex max-w-7xl items-center justify-between gap-3 rounded-2xl px-4 py-3">
             <div class="flex min-w-0 items-center gap-3">
               <button id="back-btn" aria-label="Volver" class="flex h-11 w-11 items-center justify-center rounded-xl bg-white/70 text-[#111827] transition hover:bg-white dark:bg-white/10 dark:text-white dark:hover:bg-white/15">
@@ -268,7 +268,7 @@
             </p>
           </div>
           <div class="border-y border-[rgba(37,42,32,0.1)] bg-white">
-            <div id="map-wrapper" class="relative h-[560px] w-full overflow-hidden bg-[#ececea] md:h-[680px]">
+            <div id="map-wrapper" class="relative z-0 h-[560px] w-full overflow-hidden bg-[#ececea] md:h-[680px]">
               <div id="trevoly-map" class="h-full w-full"></div>
               <div id="map-ctrl-hint" class="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-md border border-[rgba(37,42,32,0.2)] bg-white/95 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#252a20] shadow-sm">
                 Mantén CTRL para navegar el mapa
@@ -423,7 +423,12 @@
         }).addTo(trevolyMap);
 
         const center = polygon.getBounds().getCenter();
-        window.L.marker(center).addTo(trevolyMap);
+        const trevolyIcon = window.L.icon({
+          iconUrl: 'https://i.postimg.cc/P5rsf8Yb/trevoly.png',
+          iconSize: [48, 48],
+          iconAnchor: [24, 24]
+        });
+        window.L.marker(center, { icon: trevolyIcon }).addTo(trevolyMap);
         trevolyMap.setView(center, 17, {animate: false});
 
         setMapInteraction(false);
