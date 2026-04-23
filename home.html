@@ -3,10 +3,6 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Portal BIM Alcabama</title>
-<meta name="theme-color" content="#2b2b2b"/>
-<meta name="x-app-version" data-app="portal" content="20260420-01"/>
-<meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
 <script>
     tailwind.config = {
@@ -40,9 +36,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@900&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<!-- Enlace al manifiesto de la PWA (ruta relativa) -->
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="https://i.postimg.cc/RqxVh1wB/FAVICON-BIM-ALCABAMA-ARTIS.png" type="image/png">
-<link rel="apple-touch-icon" href="https://i.postimg.cc/RqxVh1wB/FAVICON-BIM-ALCABAMA-ARTIS.png">
 <style>
     body {
       font-family: 'Inter', sans-serif;
@@ -54,22 +49,13 @@
 </head>
 <body class="bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
 <div class="relative min-h-screen bg-background-light dark:bg-background-dark">
-<div id="update-banner" class="fixed top-0 left-0 right-0 z-50 hidden">
-<div class="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-3 text-sm font-semibold text-white bg-[#111827] shadow">
-<div>Hay una nueva versión disponible.</div>
-<button id="update-reload" class="rounded-md bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-[#111827]">Actualizar</button>
-</div>
-</div>
 <header class="absolute top-0 left-0 w-full z-10 px-8 py-4">
     <div class="container mx-auto flex items-center justify-between">
-        <div class="flex items-center gap-3">
-            <button id="back-btn" aria-label="Volver" class="rounded-lg border border-border-light bg-white/80 px-3 py-2 hover:bg-white transition-colors">
-                <span class="material-symbols-outlined">arrow_back</span>
-            </button>
-            <a href="home.html" class="flex items-center" title="Ir al Home">
-                <img alt="BIM" class="h-10 w-auto object-contain dark:hidden" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png"/>
-                <img alt="BIM" class="h-10 w-auto object-contain hidden dark:block" src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png"/>
-            </a>
+        <div class="flex items-center">
+            <!-- Logo para modo claro -->
+            <img alt="Portal BIM Alcabama Logo" class="h-12 dark:hidden" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png"/>
+            <!-- Logo para modo oscuro -->
+            <img alt="Portal BIM Alcabama Logo" class="h-12 hidden dark:block" src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png"/>
         </div>
         <div class="flex items-center space-x-4">
             <button id="theme-toggle" aria-label="Cambiar tema" class="text-text-light dark:text-white hover:text-primary"><span class="material-symbols-outlined">dark_mode</span></button>
@@ -235,55 +221,18 @@
           applyTheme(newTheme);
         });
 
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                    .then(registration => {
-                        console.log('ServiceWorker registrado con éxito:', registration.scope);
-                    })
-                    .catch(error => {
-                        console.log('Fallo en el registro de ServiceWorker:', error);
-                    });
-            });
-        }
-
-        const backBtn = document.getElementById('back-btn');
-        backBtn?.addEventListener('click', () => {
-            if (window.history.length > 1) window.history.back();
-            else window.location.href = 'home.html';
-        });
-
-        const metaVersion = document.querySelector('meta[name="x-app-version"]');
-        const appId = metaVersion?.getAttribute('data-app') || 'portal';
-        const currentVersion = metaVersion?.getAttribute('content') || '';
-        const versionKey = `${appId}:appVersion`;
-        const storedVersion = localStorage.getItem(versionKey) || '';
-        const banner = document.getElementById('update-banner');
-        const reloadBtn = document.getElementById('update-reload');
-        const showBanner = () => {
-            if (!banner) return;
-            banner.classList.remove('hidden');
-        };
-        if (currentVersion) {
-            if (!storedVersion) {
-                localStorage.setItem(versionKey, currentVersion);
-            } else if (storedVersion !== currentVersion) {
-                showBanner();
-            }
-        }
-        reloadBtn?.addEventListener('click', async () => {
-            try {
-                localStorage.setItem(versionKey, currentVersion);
-                if ('serviceWorker' in navigator) {
-                    const reg = await navigator.serviceWorker.getRegistration();
-                    if (reg) await reg.unregister();
-                }
-            } catch {
-            }
-            const u = new URL(window.location.href);
-            if (currentVersion) u.searchParams.set('v', currentVersion);
-            window.location.replace(u.toString());
-        });
+        // --- REGISTRO DEL SERVICE WORKER (DESACTIVADO TEMPORALMENTE PARA PRUEBAS) ---
+        // if ('serviceWorker' in navigator) {
+        //     window.addEventListener('load', () => {
+        //         navigator.serviceWorker.register('sw.js')
+        //             .then(registration => {
+        //                 console.log('ServiceWorker registrado con éxito:', registration.scope);
+        //             })
+        //             .catch(error => {
+        //                 console.log('Fallo en el registro de ServiceWorker:', error);
+        //             });
+        //     });
+        // }
     });
 </script>
 </body></html>

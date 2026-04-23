@@ -5,7 +5,6 @@ import * as OBF from '@thatopen/components-front';
 import * as BUI from '@thatopen/ui';
 import * as CUI from '@thatopen/ui-obc';
 import { ViewpointsManager, ViewpointStateProvider } from './viewpoints-manager';
-import { DRIVE_MODELS_API_URL, DRIVE_MODELS_FOLDER_ID } from './config';
 import './style.css';
 
 
@@ -1139,19 +1138,6 @@ function getSpecialtyFromIfcPath(path: string): string {
 // Track loaded models
 // Key: path, Value: FragmentsGroup (the model)
 const loadedModels = new Map<string, any>();
-const projectLinksBar = document.getElementById('project-links-bar') as HTMLElement | null;
-
-function updateProjectLinksBarVisibility() {
-    if (!projectLinksBar) return;
-    let hasVisible = false;
-    for (const model of loadedModels.values()) {
-        if (model?.object?.visible !== false) {
-            hasVisible = true;
-            break;
-        }
-    }
-    projectLinksBar.style.display = hasVisible ? 'flex' : 'none';
-}
 
 let propertiesTableElement: HTMLElement | null = null;
 
@@ -1229,179 +1215,9 @@ async function loadFromIndexedDB(key: string): Promise<ArrayBuffer | undefined> 
 }
 
 
-type RemoteModelItem = {
-    name: string;
-    path: string;
-    url?: string;
-    driveFragId?: string;
-    driveJsonId?: string | null;
-};
-
-const base64ToBytes = (b64: string): Uint8Array => {
-    const normalized = String(b64 || '').replace(/[\r\n\s]/g, '').replace(/-/g, '+').replace(/_/g, '/');
-    const bin = atob(normalized);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-};
-
-const concatBytes = (parts: Uint8Array[], totalLen: number) => {
-    const out = new Uint8Array(totalLen);
-    let off = 0;
-    for (const p of parts) {
-        out.set(p, off);
-        off += p.byteLength;
-    }
-    return out;
-};
-
-const jsonpRequest = async <T,>(url: URL, timeoutMs = 30000): Promise<T> => {
-    return await new Promise<T>((resolve, reject) => {
-        const cb = `__jsonp_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
-        url.searchParams.set('callback', cb);
-        const script = document.createElement('script');
-        let done = false;
-
-        const cleanup = () => {
-            if (done) return;
-            done = true;
-            try {
-                delete (window as any)[cb];
-            } catch {
-                (window as any)[cb] = undefined;
-            }
-            if (script.parentNode) script.parentNode.removeChild(script);
-        };
-
-        const timer = window.setTimeout(() => {
-            cleanup();
-            reject(new Error('Tiempo de espera agotado (JSONP)'));
-        }, timeoutMs);
-
-        (window as any)[cb] = (data: T) => {
-            window.clearTimeout(timer);
-            cleanup();
-            resolve(data);
-        };
-
-        script.onerror = () => {
-            window.clearTimeout(timer);
-            cleanup();
-            reject(new Error('No se pudo cargar el script JSONP'));
-        };
-
-        script.src = url.toString();
-        document.head.appendChild(script);
-    });
-};
-
-const shouldUseDriveModels = () => {
-    const url = String(DRIVE_MODELS_API_URL || '').trim();
-    return !!url && url.startsWith('https://') && url.includes('script.google.com');
-};
-
-const driveApiUrl = () => new URL(String(DRIVE_MODELS_API_URL || '').trim());
-
-const listDriveModels = async (): Promise<Array<{ name: string; fragId: string; jsonId?: string | null }>> => {
-    const url = driveApiUrl();
-    url.searchParams.set('action', 'list');
-    url.searchParams.set('folderId', DRIVE_MODELS_FOLDER_ID);
-    const data = await jsonpRequest<{ models?: Array<{ name: string; fragId: string; jsonId?: string | null }> }>(url, 45000);
-    const models = Array.isArray(data?.models) ? data.models : [];
-    return models.filter((m) => m && m.name && m.fragId);
-};
-
-const fetchDriveBytes = async (id: string): Promise<Uint8Array> => {
-    let limit = 2 * 1024 * 1024;
-    let offset = 0;
-    let total: number | null = null;
-    const parts: Uint8Array[] = [];
-
-    for (;;) {
-        const url = driveApiUrl();
-        url.searchParams.set('action', 'chunk');
-        url.searchParams.set('id', id);
-        url.searchParams.set('offset', String(offset));
-        url.searchParams.set('limit', String(limit));
-
-        let payload: { data?: string; total?: number; nextOffset?: number; done?: boolean } | null = null;
-        let lastErr: unknown = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-                payload = await jsonpRequest(url, 45000);
-                lastErr = null;
-                break;
-            } catch (e) {
-                lastErr = e;
-                const msg = String((e as any)?.message ?? '');
-                const isTimeout = msg.includes('Tiempo de espera agotado (JSONP)');
-                if (isTimeout && limit > 256 * 1024) {
-                    limit = Math.max(256 * 1024, Math.floor(limit / 2));
-                }
-                await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
-            }
-        }
-        if (!payload) throw (lastErr instanceof Error ? lastErr : new Error('No se pudo descargar chunk (JSONP).'));
-
-        const chunk = payload.data ? base64ToBytes(String(payload.data)) : new Uint8Array(0);
-        parts.push(chunk);
-        if (typeof payload.total === 'number' && Number.isFinite(payload.total)) total = payload.total;
-        offset = typeof payload.nextOffset === 'number' && Number.isFinite(payload.nextOffset) ? payload.nextOffset : offset + chunk.byteLength;
-        if (payload.done) break;
-        if (chunk.byteLength === 0) break;
-        if (total !== null && offset >= total) break;
-    }
-
-    const finalTotal = total ?? parts.reduce((a, b) => a + b.byteLength, 0);
-    return concatBytes(parts, finalTotal);
-};
-
-const fetchDriveText = async (id: string): Promise<string> => {
-    const url = driveApiUrl();
-    url.searchParams.set('action', 'text');
-    url.searchParams.set('id', id);
-    const data = await jsonpRequest<{ text?: string }>(url, 45000);
-    return String(data?.text ?? '');
-};
-
-const loadDriveFragBuffer = async (fragId: string): Promise<ArrayBuffer> => {
-    const dbKey = `drive:frag:${fragId}`;
-    const cached = await loadFromIndexedDB(dbKey);
-    if (cached && cached.byteLength > 0) return cached;
-    const bytes = await fetchDriveBytes(fragId);
-    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    await saveToIndexedDB(dbKey, buffer);
-    return buffer;
-};
-
-const loadDriveJsonProps = async (jsonId: string): Promise<any | null> => {
-    const dbKey = `drive:json:${jsonId}`;
-    const cached = await loadFromIndexedDB(dbKey);
-    if (cached && cached.byteLength > 0) {
-        try {
-            const text = new TextDecoder().decode(new Uint8Array(cached));
-            return JSON.parse(text);
-        } catch {
-            return null;
-        }
-    }
-    const text = await fetchDriveText(jsonId);
-    if (!text) return null;
-    try {
-        const json = JSON.parse(text);
-        const encoded = new TextEncoder().encode(text);
-        const buffer = encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength);
-        await saveToIndexedDB(dbKey, buffer);
-        return json;
-    } catch {
-        return null;
-    }
-};
-
-
 // --- Model Loading Logic ---
 
-async function loadModel(url: string, path: string, options?: { propertiesUrl?: string; propertiesJson?: any | null; sourceUrl?: string }) {
+async function loadModel(url: string, path: string) {
     try {
         logToScreen(`Fetching Fragment: ${url}`);
         const file = await fetch(url);
@@ -1459,8 +1275,8 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
         (model as any).name = path.split('/').pop() || 'Model';
         // Store URL for state persistence
         if (!model.userData) model.userData = {};
-        model.userData.url = (options && options.sourceUrl) ? options.sourceUrl : url;
-        console.log(`[Viewpoints] Registered model URL for persistence: ${model.uuid} -> ${model.userData.url}`);
+        model.userData.url = url;
+        console.log(`[Viewpoints] Registered model URL for persistence: ${model.uuid} -> ${url}`);
 
         // FORCE UUID to match the path (which is the key in fragments.list)
         // This ensures the highlighter and classifier can find the model
@@ -1530,7 +1346,6 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
         */
         
         loadedModels.set(path, model);
-        updateProjectLinksBarVisibility();
         
         // Generar bordes para snapping
         ensureModelEdges(model);
@@ -1549,35 +1364,24 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
         logToScreen(`Model loaded. Properties: ${hasProps}, Data: ${hasData}`);
         console.log('[DEBUG] Model Keys:', Object.keys(modelAny));
         
-        if (options && options.propertiesJson && typeof options.propertiesJson === 'object') {
-            try {
-                const keys = Object.keys(options.propertiesJson);
-                if (keys.length > 0) {
-                    modelAny.properties = options.propertiesJson;
-                    hasProps = true;
-                    logToScreen(`Loaded external properties from JSON (${keys.length} items).`);
-                }
-            } catch {
-            }
-        } else {
-            const jsonPath = (options && options.propertiesUrl) ? options.propertiesUrl : url.replace(/\.frag$/i, '.json');
-            try {
-                logToScreen(`Checking for external properties at ${jsonPath}...`);
-                const response = await fetch(jsonPath);
-                if (response.ok) {
-                    const jsonProps = await response.json();
-                    if (jsonProps && Object.keys(jsonProps).length > 0) {
-                        modelAny.properties = jsonProps;
-                        hasProps = true;
-                        logToScreen(`Loaded external properties from JSON (${Object.keys(jsonProps).length} items). Overriding embedded properties.`);
-                    }
-                } else {
-                    if (!hasProps) logToScreen(`Properties file not found at ${jsonPath} (Status: ${response.status}).`);
-                }
-            } catch (err) {
-                console.error('Error fetching properties JSON:', err);
-                if (!hasProps) logToScreen(`Error loading external properties.`, true);
-            }
+        // Always try to load external properties JSON if available, as it overrides/supplements embedded properties
+        const jsonPath = url.replace(/\.frag$/i, '.json');
+        try {
+             logToScreen(`Checking for external properties at ${jsonPath}...`);
+             const response = await fetch(jsonPath);
+             if (response.ok) {
+                 const jsonProps = await response.json();
+                 if (jsonProps && Object.keys(jsonProps).length > 0) {
+                     modelAny.properties = jsonProps;
+                     hasProps = true;
+                     logToScreen(`Loaded external properties from JSON (${Object.keys(jsonProps).length} items). Overriding embedded properties.`);
+                 }
+             } else {
+                 if (!hasProps) logToScreen(`Properties file not found at ${jsonPath} (Status: ${response.status}).`);
+             }
+        } catch (err) {
+             console.error('Error fetching properties JSON:', err);
+             if (!hasProps) logToScreen(`Error loading external properties.`, true);
         }
 
         // Ensure model.types is populated from properties if missing
@@ -1934,140 +1738,6 @@ function initSidebarTabs() {
 // Global tracking for hidden items (Fragments/Items hidden via Hider)
 const hiddenItems: Record<string, Set<number>> = {};
 
-type IntegratedClassificationField = 'NIVEL INTEGRADO' | 'CLASIFICACIÓN' | 'MATERIAL INTEGRADO';
-type IntegratedClassificationMode = 'filtrar' | 'ordenar';
-type IntegratedClassificationOrder = 'cantidad' | 'az';
-
-let integratedClassificationField: IntegratedClassificationField = 'CLASIFICACIÓN';
-let integratedClassificationMode: IntegratedClassificationMode = 'filtrar';
-let integratedClassificationOrder: IntegratedClassificationOrder = 'cantidad';
-const activeIntegratedFilters = new Set<string>();
-
-const integratedIndex: Record<IntegratedClassificationField, Map<string, Record<string, Set<number>>>> = {
-    'NIVEL INTEGRADO': new Map(),
-    'CLASIFICACIÓN': new Map(),
-    'MATERIAL INTEGRADO': new Map()
-};
-
-const normalizeKey = (v: unknown) => String(v ?? '').trim();
-const normalizeValue = (v: unknown) => {
-    const s = String(v ?? '').trim();
-    return s ? s : '(En blanco)';
-};
-const normalizePropKey = (v: unknown) => {
-    const s = String(v ?? '');
-    return s
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '');
-};
-const entityValue = (entity: any, key: string) => {
-    if (!entity) return undefined;
-    const raw = entity[key] ?? entity[key.toLowerCase()] ?? entity[key.toUpperCase()];
-    if (raw && typeof raw === 'object' && 'value' in raw) return (raw as any).value;
-    if (raw !== undefined) return raw;
-
-    const target = normalizePropKey(key);
-    if (!target) return undefined;
-    for (const k of Object.keys(entity)) {
-        if (normalizePropKey(k) === target) {
-            const v = entity[k];
-            if (v && typeof v === 'object' && 'value' in v) return (v as any).value;
-            return v;
-        }
-    }
-    return undefined;
-};
-const clearModelFromIndex = (modelUUID: string) => {
-    for (const field of Object.keys(integratedIndex) as IntegratedClassificationField[]) {
-        const map = integratedIndex[field];
-        for (const [val, perModel] of map) {
-            if (perModel[modelUUID]) {
-                delete perModel[modelUUID];
-            }
-            if (Object.keys(perModel).length === 0) map.delete(val);
-        }
-    }
-};
-const addToIndex = (field: IntegratedClassificationField, modelUUID: string, value: string, id: number) => {
-    const map = integratedIndex[field];
-    if (!map.has(value)) map.set(value, {});
-    const perModel = map.get(value)!;
-    if (!perModel[modelUUID]) perModel[modelUUID] = new Set();
-    perModel[modelUUID].add(id);
-};
-
-const buildClassifierMap = (field: IntegratedClassificationField, order: IntegratedClassificationOrder) => {
-    const raw = integratedIndex[field];
-    const entries = Array.from(raw.entries()).map(([k, v]) => {
-        let count = 0;
-        for (const id in v) {
-            const s = v[id];
-            if (s instanceof Set) count += s.size;
-        }
-        return { key: k, map: v, count };
-    });
-    if (order === 'az') {
-        entries.sort((a, b) => a.key.localeCompare(b.key, 'es'));
-    } else {
-        entries.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key, 'es'));
-    }
-    const out = new Map<string, Record<string, Set<number>>>();
-    for (const e of entries) out.set(e.key, e.map);
-    return out;
-};
-
-async function applyIntegratedFilterFromClassification(classification: Map<string, any>) {
-    if (activeIntegratedFilters.size === 0) {
-        await hider.set(true);
-        for (const k of Object.keys(hiddenItems)) hiddenItems[k].clear();
-        return;
-    }
-
-    const unionMap: Record<string, Set<number>> = {};
-    const allByModel: Record<string, Set<number>> = {};
-
-    for (const [value, groupData] of classification) {
-        if (!activeIntegratedFilters.has(value)) continue;
-        const fragmentIdMap = (groupData as any).map || groupData;
-        if (!fragmentIdMap) continue;
-        for (const modelUUID in fragmentIdMap) {
-            const items = fragmentIdMap[modelUUID];
-            const iterable = items instanceof Set ? items : (Array.isArray(items) ? items : []);
-            if (!unionMap[modelUUID]) unionMap[modelUUID] = new Set();
-            if (!allByModel[modelUUID]) allByModel[modelUUID] = new Set();
-            for (const id of iterable) {
-                unionMap[modelUUID].add(id);
-                allByModel[modelUUID].add(id);
-            }
-        }
-    }
-
-    for (const [value, groupData] of classification) {
-        const fragmentIdMap = (groupData as any).map || groupData;
-        if (!fragmentIdMap) continue;
-        for (const modelUUID in fragmentIdMap) {
-            const items = fragmentIdMap[modelUUID];
-            const iterable = items instanceof Set ? items : (Array.isArray(items) ? items : []);
-            if (!allByModel[modelUUID]) allByModel[modelUUID] = new Set();
-            for (const id of iterable) allByModel[modelUUID].add(id);
-        }
-    }
-
-    await hider.isolate(unionMap);
-
-    for (const modelUUID of Object.keys(allByModel)) {
-        const all = allByModel[modelUUID];
-        const visible = unionMap[modelUUID] || new Set<number>();
-        const hidden = new Set<number>();
-        for (const id of all) {
-            if (!visible.has(id)) hidden.add(id);
-        }
-        hiddenItems[modelUUID] = hidden;
-    }
-}
-
 function updateHiddenItems(map: Record<string, any>, visible: boolean) {
     for (const id in map) {
         // Resolve Model UUID (id could be FragmentID or ModelUUID)
@@ -2156,7 +1826,6 @@ async function updateClassificationUI() {
             li.className = 'model-item';
             li.style.display = 'flex';
             li.style.justifyContent = 'space-between';
-            (li as any).dataset.group = String(type);
             
             let count = 0;
             if (fragmentIdMap) {
@@ -2196,29 +1865,6 @@ async function updateClassificationUI() {
             nameDiv?.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 console.log(`[DEBUG] Selecting category: ${type} (Count: ${count})`);
-
-                if (integratedClassificationMode === 'filtrar') {
-                    const allowMulti = e.ctrlKey || e.metaKey;
-                    if (!allowMulti) {
-                        if (activeIntegratedFilters.size === 1 && activeIntegratedFilters.has(type)) {
-                            activeIntegratedFilters.clear();
-                        } else {
-                            activeIntegratedFilters.clear();
-                            activeIntegratedFilters.add(type);
-                        }
-                    } else {
-                        if (activeIntegratedFilters.has(type)) activeIntegratedFilters.delete(type);
-                        else activeIntegratedFilters.add(type);
-                    }
-
-                    list.querySelectorAll('li.model-item').forEach((el) => {
-                        const key = (el as any).dataset.group || '';
-                        el.classList.toggle('filter-active', activeIntegratedFilters.has(key));
-                    });
-
-                    await applyIntegratedFilterFromClassification(classification);
-                    return;
-                }
                 
                 // Debug the map content
                 console.log(`[DEBUG] FragmentIdMap for ${type}:`, fragmentIdMap);
@@ -2292,8 +1938,6 @@ async function updateClassificationUI() {
             // VISIBILITY Handler (Clicking eye)
             toggleDiv?.addEventListener('click', (e) => {
                 e.stopPropagation();
-                activeIntegratedFilters.clear();
-                list.querySelectorAll('li.model-item').forEach((el) => el.classList.remove('filter-active'));
                 isVisible = !isVisible;
                 console.log(`[DEBUG] Toggling visibility for ${type}: ${isVisible}`);
                 
@@ -2321,66 +1965,6 @@ async function updateClassificationUI() {
         }
         container.appendChild(list);
     }
-}
-
-function initNavigationControls() {
-    const backBtn = document.getElementById('back-btn');
-    if (backBtn) {
-        backBtn.addEventListener('click', () => {
-            if (window.history.length > 1) window.history.back();
-            else window.location.href = '../home.html';
-        });
-    }
-}
-
-function initClassificationControls() {
-    const fieldSel = document.getElementById('classification-field') as HTMLSelectElement | null;
-    const modeSel = document.getElementById('classification-mode') as HTMLSelectElement | null;
-    const orderSel = document.getElementById('classification-order') as HTMLSelectElement | null;
-    const clearBtn = document.getElementById('classification-clear') as HTMLButtonElement | null;
-
-    const sync = () => {
-        if (fieldSel && fieldSel.value) integratedClassificationField = fieldSel.value as IntegratedClassificationField;
-        if (modeSel && modeSel.value) integratedClassificationMode = modeSel.value as IntegratedClassificationMode;
-        if (orderSel && orderSel.value) integratedClassificationOrder = orderSel.value as IntegratedClassificationOrder;
-        if (orderSel) orderSel.style.display = integratedClassificationMode === 'ordenar' ? 'block' : 'none';
-        if (clearBtn) clearBtn.style.display = integratedClassificationMode === 'filtrar' ? 'block' : 'none';
-    };
-
-    const rebuild = async () => {
-        if (!classifier || !classifier.list) return;
-        classifier.list.clear();
-        const built = buildClassifierMap(integratedClassificationField, integratedClassificationOrder);
-        classifier.list.set(integratedClassificationField, built);
-        await updateClassificationUI();
-    };
-
-    fieldSel?.addEventListener('change', async () => {
-        sync();
-        activeIntegratedFilters.clear();
-        await hider.set(true);
-        for (const k of Object.keys(hiddenItems)) hiddenItems[k].clear();
-        await rebuild();
-    });
-    modeSel?.addEventListener('change', async () => {
-        sync();
-        activeIntegratedFilters.clear();
-        await hider.set(true);
-        for (const k of Object.keys(hiddenItems)) hiddenItems[k].clear();
-        await rebuild();
-    });
-    orderSel?.addEventListener('change', async () => {
-        sync();
-        await rebuild();
-    });
-    clearBtn?.addEventListener('click', async () => {
-        activeIntegratedFilters.clear();
-        await hider.set(true);
-        for (const k of Object.keys(hiddenItems)) hiddenItems[k].clear();
-        await rebuild();
-    });
-
-    sync();
 }
 
 function initSidebar() {
@@ -2424,11 +2008,6 @@ function initSidebar() {
                 document.body.style.cursor = 'default';
             }
         });
-    }
-
-    if (sidebar && window.innerWidth < 768) {
-        sidebar.classList.add('closed');
-        document.body.classList.add('sidebar-closed');
     }
     
     // Setup file upload
@@ -2762,39 +2341,24 @@ async function loadModelList() {
     }
 
     try {
-        let models: RemoteModelItem[] = [];
-        if (shouldUseDriveModels()) {
-            logToScreen('Loading models from Google Drive (Apps Script)...');
-            const driveModels = await listDriveModels();
-            models = driveModels
-                .filter((m) => String(m.name || '').toLowerCase().endsWith('.frag'))
-                .map((m) => ({
-                    name: m.name,
-                    path: `models/${m.name}`,
-                    driveFragId: m.fragId,
-                    driveJsonId: m.jsonId ?? null
-                }));
-            logToScreen(`Drive Scan: ${models.length} .frag models found`);
-        } else {
-            const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFCA/models';
-            logToScreen('Scanning GitHub for models...');
+        const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFCA/models';
+        logToScreen('Scanning GitHub for models...');
+        
+        const response = await fetch(GITHUB_API_URL);
+        if (!response.ok) throw new Error(`GitHub API Error: ${response.status}`);
+        
+        const data = await response.json();
+        if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
 
-            const response = await fetch(GITHUB_API_URL);
-            if (!response.ok) throw new Error(`GitHub API Error: ${response.status}`);
+        const models = data
+            .filter((item: any) => item.name.toLowerCase().endsWith('.frag'))
+            .map((item: any) => ({
+                name: item.name,
+                path: `models/${item.name}`,
+                url: item.download_url
+            }));
 
-            const data = await response.json();
-            if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
-
-            models = data
-                .filter((item: any) => item.name.toLowerCase().endsWith('.frag'))
-                .map((item: any) => ({
-                    name: item.name,
-                    path: `models/${item.name}`,
-                    url: item.download_url
-                }));
-
-            logToScreen(`GitHub Scan: ${models.length} .frag models found`);
-        }
+        logToScreen(`GitHub Scan: ${models.length} .frag models found`);
 
         // Group models by specialty
         const groups: Record<string, any[]> = {};
@@ -2853,7 +2417,8 @@ async function loadModelList() {
                 li.className = 'model-item';
                 li.dataset.path = m.path;
 
-                if (loadedModels.has(m.path)) {
+                // Check if already loaded (support both path and url keys)
+                if (loadedModels.has(m.path) || (m.url && loadedModels.has(m.url))) {
                     li.classList.add('visible');
                 }
 
@@ -2871,12 +2436,15 @@ async function loadModelList() {
                     e.stopPropagation();
                     
                     const target = e.target as HTMLElement;
+                    // Prefer URL for loading if available
+                    const loadKey = m.url || m.path;
+
                     // If clicked explicitly on the visibility toggle icon/div
                     if (target.closest('.visibility-toggle')) {
-                        await toggleModel(m, baseUrl, li);
+                        await toggleModel(loadKey, baseUrl, li);
                     } else {
                         // Clicked on the name/body -> Select the model
-                        await selectModel(m.path);
+                        await selectModel(loadKey);
                     }
                 });
 
@@ -2924,27 +2492,8 @@ async function selectModel(path: string) {
     }
 }
 
-async function loadDriveModel(m: RemoteModelItem) {
-    if (!m.driveFragId) throw new Error('Modelo Drive sin driveFragId');
-    const buffer = await loadDriveFragBuffer(m.driveFragId);
-    const blobUrl = URL.createObjectURL(new Blob([buffer], { type: 'application/octet-stream' }));
-
-    let props: any | null = null;
-    if (m.driveJsonId) {
-        try {
-            props = await loadDriveJsonProps(String(m.driveJsonId));
-        } catch {
-            props = null;
-        }
-    }
-
-    const sourceUrl = `drive://${encodeURIComponent(m.driveFragId)}${m.driveJsonId ? `?jsonId=${encodeURIComponent(String(m.driveJsonId))}` : ''}`;
-    await loadModel(blobUrl, m.path, { propertiesJson: props, sourceUrl });
-}
-
-async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement: HTMLElement) {
+async function toggleModel(path: string, baseUrl: string, liElement: HTMLElement) {
     const toggleIcon = liElement.querySelector('.visibility-toggle i');
-    const path = m.path;
     
     // Check if already loaded
     if (loadedModels.has(path)) {
@@ -2972,7 +2521,6 @@ async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement: HTMLE
             liElement.classList.remove('visible');
             toggleIcon?.classList.replace('fa-eye', 'fa-eye-slash');
         }
-        updateProjectLinksBarVisibility();
         
         logToScreen(`Toggled model visibility: ${path} -> ${newVisible}`);
         return;
@@ -2983,24 +2531,18 @@ async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement: HTMLE
     if (overlay) overlay.style.display = 'flex';
     
     try {
-        if (m.driveFragId) {
-            await loadDriveModel(m);
-        } else {
-            let fullPath = path;
-            if (m.url) {
-                fullPath = m.url;
-            } else if (!path.startsWith('http')) {
-                const encodedPath = path.split('/').map(part => encodeURIComponent(part)).join('/');
-                fullPath = `${baseUrl}${encodedPath}`;
-            }
-            const propertiesUrl = fullPath.replace(/\.frag(\?.*)?$/i, '.json$1');
-            await loadModel(fullPath, path, { propertiesUrl, sourceUrl: fullPath });
+        let fullPath = path;
+        // Only prepend base URL if it's not absolute
+        if (!path.startsWith('http')) {
+             const encodedPath = path.split('/').map(part => encodeURIComponent(part)).join('/');
+             fullPath = `${baseUrl}${encodedPath}`;
         }
+        
+        await loadModel(fullPath, path);
         
         // Update UI to loaded/visible state
         liElement.classList.add('visible');
         toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
-        updateProjectLinksBarVisibility();
         
     } catch (error) {
         const msg = (error instanceof Error) ? error.message : String(error);
@@ -3014,8 +2556,6 @@ async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement: HTMLE
 logToScreen('Initializing That Open Engine...');
 initSidebar();
 initSidebarTabs();
-initNavigationControls();
-initClassificationControls();
 initTheme();
 initProjectionToggle();
 initGridToggle();
@@ -3881,10 +3421,6 @@ function initPropertiesPanel() {
         });
     }
 
-    if (panel && window.innerWidth < 768) {
-        panel.classList.add('closed');
-    }
-
     renderPropertiesTable({} as any);
 }
 
@@ -3898,15 +3434,10 @@ async function classifyModel(model: any) {
     
     const idsWithGeometry = await model.getItemsIdsWithGeometry();
     const idsSet = new Set(idsWithGeometry);
-
-    clearModelFromIndex(modelUUID);
     
     const elementType = new Map<number, string>();
     const elementLevel = new Map<number, string>();
     const levelPriority = new Map<number, number>(); // 0: None, 1: Restricción, 2: Referencia, 3: Nivel
-    const integratedLevelById = new Map<number, string>();
-    const integratedClassById = new Map<number, string>();
-    const integratedMaterialById = new Map<number, string>();
 
     // Initialize with default
     for (const id of idsWithGeometry) {
@@ -3933,7 +3464,6 @@ async function classifyModel(model: any) {
                      if (!prop) continue;
                      const nameObj = prop.Name || prop.name;
                      const name = nameObj?.value ?? nameObj;
-                     const normName = normalizePropKey(name);
                      
                      // Check for "Familia" or "Family" -> Type
                      if (name === 'Familia' || name === 'Family') {
@@ -3975,45 +3505,6 @@ async function classifyModel(model: any) {
                              }
                          }
                      }
-
-                     if (normName === 'nivelintegrado' || normName === 'nivelintegrada') {
-                         const valObj = prop.NominalValue || prop.nominalValue;
-                         const value = valObj?.value ?? valObj;
-                         if (value !== undefined && value !== null) {
-                             const v = String(value).trim();
-                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
-                             for (const relIdObj of relatedList) {
-                                 const relId = relIdObj.value || relIdObj;
-                                 if (idsSet.has(relId)) integratedLevelById.set(relId, v);
-                             }
-                         }
-                     }
-
-                     if (normName === 'clasificacion') {
-                         const valObj = prop.NominalValue || prop.nominalValue;
-                         const value = valObj?.value ?? valObj;
-                         if (value !== undefined && value !== null) {
-                             const v = String(value).trim();
-                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
-                             for (const relIdObj of relatedList) {
-                                 const relId = relIdObj.value || relIdObj;
-                                 if (idsSet.has(relId)) integratedClassById.set(relId, v);
-                             }
-                         }
-                     }
-
-                     if (normName === 'materialintegrado' || normName === 'materialintegrada') {
-                         const valObj = prop.NominalValue || prop.nominalValue;
-                         const value = valObj?.value ?? valObj;
-                         if (value !== undefined && value !== null) {
-                             const v = String(value).trim();
-                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
-                             for (const relIdObj of relatedList) {
-                                 const relId = relIdObj.value || relIdObj;
-                                 if (idsSet.has(relId)) integratedMaterialById.set(relId, v);
-                             }
-                         }
-                     }
                  }
              }
         }
@@ -4035,19 +3526,10 @@ async function classifyModel(model: any) {
         group[modelUUID].add(id);
     }
     
-    for (const id of idsWithGeometry) {
-        const nivel = normalizeValue(integratedLevelById.get(id) ?? elementLevel.get(id));
-        const clasificacion = normalizeValue(integratedClassById.get(id) ?? elementType.get(id));
-        const material = normalizeValue(integratedMaterialById.get(id));
-
-        addToIndex('NIVEL INTEGRADO', modelUUID, nivel, id);
-        addToIndex('CLASIFICACIÓN', modelUUID, clasificacion, id);
-        addToIndex('MATERIAL INTEGRADO', modelUUID, material, id);
-    }
-
     classifier.list.clear();
-    classifier.list.set(integratedClassificationField, buildClassifierMap(integratedClassificationField, integratedClassificationOrder));
-    logToScreen(`Clasificado: ${idsWithGeometry.length} elementos indexados.`);
+    classifier.list.set('Clasificación por tipo', typeMap);
+    classifier.list.set('Clasificación por nivel', levelMap);
+    logToScreen(`Clasificado en ${typeMap.size} tipos y ${levelMap.size} niveles.`);
 }
 
 function setupVisibilityToolbar() {
@@ -5928,7 +5410,6 @@ function setupViewpoints() {
                      console.log(`[Viewpoints] Sync visibility for ${uuid}: ${shouldBeVisible}`);
                  }
              }
-             updateProjectLinksBarVisibility();
              
              // Load missing models
              for (const m of savedModels) {
@@ -5984,7 +5465,6 @@ function setupViewpoints() {
                      console.log(`[Viewpoints] Model ${m.uuid} already loaded. Skipping.`);
                  }
              }
-             updateProjectLinksBarVisibility();
         }
     };
 

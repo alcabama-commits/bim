@@ -2422,44 +2422,26 @@ export default function App() {
   const onFocusFiltered = useCallback(() => {
     focusFilteredRef.current?.();
   }, []);
-  const onBack = useCallback(() => {
-    try {
-      if (window.history.length > 1) window.history.back();
-      else window.location.href = '../home.html';
-    } catch {
-      window.location.href = '../home.html';
-    }
-  }, []);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-white overflow-hidden font-sans">
       {/* Header */}
       <header className="min-h-16 flex flex-col sm:flex-row sm:items-center sm:justify-between px-3 sm:px-8 py-2 sm:py-0 gap-2 border-b border-slate-200 bg-white">
         <div className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-4">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onBack}
-              className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-slate-700"
-              title="Volver"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <a href="../home.html" className="flex items-center" title="Ir al Home">
-              {artisLogoOk ? (
-                <img
-                  src="https://i.postimg.cc/RVp8pZwc/artis_urbano.png"
-                  alt="Artis Urbano"
-                  className="h-7 sm:h-10 w-auto object-contain"
-                  loading="eager"
-                  decoding="async"
-                  referrerPolicy="no-referrer"
-                  onError={() => setArtisLogoOk(false)}
-                />
-              ) : (
-                <div className="text-[11px] font-black tracking-widest text-slate-700">ARTIS</div>
-              )}
-            </a>
+          <div className="flex items-center">
+            {artisLogoOk ? (
+              <img
+                src="https://i.postimg.cc/RVp8pZwc/artis_urbano.png"
+                alt="Artis Urbano"
+                className="h-7 sm:h-10 w-auto object-contain"
+                loading="eager"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                onError={() => setArtisLogoOk(false)}
+              />
+            ) : (
+              <div className="text-[11px] font-black tracking-widest text-slate-700">ARTIS</div>
+            )}
           </div>
           {trevolyLogoOk ? (
             <img

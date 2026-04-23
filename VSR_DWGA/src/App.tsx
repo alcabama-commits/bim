@@ -276,28 +276,19 @@ const App: React.FC = () => {
               </button>
             )}
             <div className="flex items-center gap-3">
-              <button 
-                onClick={() => window.history.back()}
-                className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition"
-                title="Volver"
-              >
-                <i className="fa-solid fa-arrow-left"></i>
-              </button>
-              <a href="../home.html" title="Volver al Home" className="flex items-center">
-                {isDarkMode ? (
-                  <img 
-                    src="https://i.postimg.cc/3xdLSg9g/artis-urbano2-1.png" 
-                    alt="Artis Urbano" 
-                    className="h-7 object-contain"
-                  />
-                ) : (
-                  <img 
-                    src="https://i.postimg.cc/vmKVZndP/artis-urbano2.png" 
-                    alt="Artis Urbano" 
-                    className="h-7 object-contain"
-                  />
-                )}
-              </a>
+              {isDarkMode ? (
+                <img 
+                  src="https://i.postimg.cc/3xdLSg9g/artis-urbano2-1.png" 
+                  alt="Artis Urbano" 
+                  className="h-7 object-contain"
+                />
+              ) : (
+                <img 
+                  src="https://i.postimg.cc/vmKVZndP/artis-urbano2.png" 
+                  alt="Artis Urbano" 
+                  className="h-7 object-contain"
+                />
+              )}
             </div>
             {file && <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mx-2"></div>}
             {file && <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate max-w-[160px]">{file.name}</span>}

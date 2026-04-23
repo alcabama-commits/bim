@@ -12,35 +12,23 @@ const PROP_ESCRITURAS_FINGERPRINT = 'ESCRITURAS_FINGERPRINT_V1';
 function doGet(e) {
   const action = e && e.parameter ? String(e.parameter.action || '').trim() : '';
   const callback = e && e.parameter ? e.parameter.callback : null;
-  try {
-    if (action === 'sync') {
-      const result = syncAll_();
-      return responseJSON({ ok: true, action, result }, callback);
-    }
-    if (action === 'health') {
-      return responseJSON({ ok: true, action: 'health' }, callback);
-    }
-    return handleRequest(e);
-  } catch (error) {
-    return responseJSON({ error: String(error && error.stack ? error.stack : error) }, callback);
+  if (action === 'sync') {
+    const result = syncAll_();
+    return responseJSON({ ok: true, action, result }, callback);
   }
+  return handleRequest(e);
 }
 
 function doPost(e) {
-  const callback = e && e.parameter ? e.parameter.callback : null;
-  try {
-    return handleRequest(e);
-  } catch (error) {
-    return responseJSON({ error: String(error && error.stack ? error.stack : error) }, callback);
-  }
+  return handleRequest(e);
 }
 
 function handleRequest(e) {
   const lock = LockService.getScriptLock();
   lock.tryLock(30000);
-  const callback = e && e.parameter ? e.parameter.callback : null;
 
   try {
+    const callback = e && e.parameter ? e.parameter.callback : null;
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const sheet = getDataSheet(ss);
     ensureSheetSchema(sheet);
@@ -66,7 +54,7 @@ function handleRequest(e) {
     const data = getAllData(sheet);
     return responseJSON({ towers: data }, callback);
   } catch (error) {
-    return responseJSON({ error: String(error && error.stack ? error.stack : error) }, callback);
+    return responseJSON({ error: String(error && error.stack ? error.stack : error) }, null);
   } finally {
     lock.releaseLock();
   }

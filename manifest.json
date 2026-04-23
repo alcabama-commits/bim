@@ -3,19 +3,18 @@
   "short_name": "Portal BIM",
   "description": "Portal para la centralización de procesos BIM en Alcabama.",
   "start_url": "home.html",
-  "scope": "./",
   "display": "standalone",
   "background_color": "#FFFFFF",
-  "theme_color": "#2b2b2b",
+  "theme_color": "#D8005E",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "https://i.postimg.cc/RqxVh1wB/FAVICON-BIM-ALCABAMA-ARTIS.png",
+      "src": "https://i.postimg.cc/yN3gwWn5/logo-bim-ajustado.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "https://i.postimg.cc/RqxVh1wB/FAVICON-BIM-ALCABAMA-ARTIS.png",
+      "src": "https://i.postimg.cc/yN3gwWn5/logo-bim-ajustado.png",
       "sizes": "512x512",
       "type": "image/png"
     }
