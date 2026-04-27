@@ -188,14 +188,15 @@ const RECENT_MODELS_STORAGE_KEY = 'cantidades:recentModels:v1';
 const REMOTE_QUEUE_STORAGE_KEY = 'cantidades:remoteQueue:v1';
 const LAST_SERVER_SYNC_STORAGE_KEY = 'cantidades:lastServerSyncAt';
 const driveDirectDownloadUrl = (id: string) =>
-  `https://drive.google.com/uc?export=download&id=${encodeURIComponent(id)}`;
+  `https://drive.usercontent.google.com/download?id=${encodeURIComponent(id)}&export=download&confirm=t`;
 
 const normalizeRemoteModel = <T extends RemoteModel>(model: T): T => {
   if (!model?.drive?.fragId) return model;
   return {
     ...model,
-    fragUrl: model.fragUrl || driveDirectDownloadUrl(model.drive.fragId),
-    jsonUrl: model.jsonUrl || (model.drive.jsonId ? driveDirectDownloadUrl(model.drive.jsonId) : undefined)
+    // Always regenerate public Drive URLs so stale cached entries do not keep using the old blocked endpoint.
+    fragUrl: driveDirectDownloadUrl(model.drive.fragId),
+    jsonUrl: model.drive.jsonId ? driveDirectDownloadUrl(model.drive.jsonId) : undefined
   };
 };
 
