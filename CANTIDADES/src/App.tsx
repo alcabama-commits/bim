@@ -151,6 +151,15 @@ type RemoteModel = {
   group: string;
 };
 
+type CachedModelCatalog = {
+  ts: number;
+  models: RemoteModel[];
+};
+
+type RecentRemoteModel = RemoteModel & {
+  lastOpenedAt: number;
+};
+
 type PurchaseStatus = 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'ALMACEN' | 'INSTALADO';
 type HistoryEntry = { status: PurchaseStatus; at: string };
 
@@ -168,6 +177,65 @@ const CANTIDADES_SHEET_ID = String(((import.meta as any).env?.VITE_CANTIDADES_SH
 const CANTIDADES_SHEET_SCRIPT_URL = String(
   ((import.meta as any).env?.VITE_CANTIDADES_SHEET_SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycbzMhiaepsPfrTdYOHLK7mDTnODjlecNqz8G6TODOGy_lqusQ9lRSEUcXUpsfCWinw/exec'),
 ).trim();
+const MODEL_CATALOG_STORAGE_KEY = 'cantidades:modelCatalog:v1';
+const RECENT_MODELS_STORAGE_KEY = 'cantidades:recentModels:v1';
+const REMOTE_QUEUE_STORAGE_KEY = 'cantidades:remoteQueue:v1';
+const LAST_SERVER_SYNC_STORAGE_KEY = 'cantidades:lastServerSyncAt';
+
+const readStorageJson = <T,>(key: string, fallback: T): T => {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeStorageJson = (key: string, value: unknown) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+  }
+};
+
+const readCachedModelCatalog = (): CachedModelCatalog | null => {
+  const parsed = readStorageJson<CachedModelCatalog | null>(MODEL_CATALOG_STORAGE_KEY, null);
+  if (!parsed || !Array.isArray(parsed.models)) return null;
+  return {
+    ts: Number(parsed.ts || 0),
+    models: parsed.models.filter((item) => item && typeof item.name === 'string')
+  };
+};
+
+const writeCachedModelCatalog = (models: RemoteModel[]) => {
+  writeStorageJson(MODEL_CATALOG_STORAGE_KEY, { ts: Date.now(), models });
+};
+
+const readRecentModels = (): RecentRemoteModel[] => {
+  const parsed = readStorageJson<RecentRemoteModel[]>(RECENT_MODELS_STORAGE_KEY, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter((item) => item && typeof item.name === 'string')
+    .sort((a, b) => Number(b.lastOpenedAt || 0) - Number(a.lastOpenedAt || 0));
+};
+
+const writeRecentModels = (models: RecentRemoteModel[]) => {
+  writeStorageJson(RECENT_MODELS_STORAGE_KEY, models.slice(0, 6));
+};
+
+const mergeRemoteModels = (...lists: RemoteModel[][]): RemoteModel[] => {
+  const merged = new Map<string, RemoteModel>();
+  for (const list of lists) {
+    for (const model of list) {
+      if (!model?.name) continue;
+      if (!merged.has(model.name)) merged.set(model.name, model);
+    }
+  }
+  return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+};
 
 const normalizeClassification = (v: string) =>
   v
@@ -200,6 +268,18 @@ export default function App() {
     jsonTextByUrl: new Map()
   });
   const loadAbortRef = useRef<AbortController | null>(null);
+  const [networkStatus, setNetworkStatus] = useState<'online' | 'unstable' | 'offline'>(() => (
+    typeof navigator !== 'undefined' && navigator.onLine ? 'unstable' : 'offline'
+  ));
+  const [modelsNotice, setModelsNotice] = useState<string | null>(null);
+  const [lastServerSyncAt, setLastServerSyncAt] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const raw = Number(window.localStorage.getItem(LAST_SERVER_SYNC_STORAGE_KEY));
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+  });
+  const [offlineRecentModelNames, setOfflineRecentModelNames] = useState<string[]>(() =>
+    readRecentModels().map((item) => item.name)
+  );
 
   const [availableModels, setAvailableModels] = useState<RemoteModel[]>([]);
   const [modelsError, setModelsError] = useState<string | null>(null);
@@ -211,6 +291,50 @@ export default function App() {
     const base = (modelName ?? '').replace(/\.frag$/i, '').trim();
     return base || 'local';
   }, []);
+  const updateLastServerSync = useCallback((ts: number) => {
+    setLastServerSyncAt(ts);
+    try {
+      window.localStorage.setItem(LAST_SERVER_SYNC_STORAGE_KEY, String(ts));
+    } catch {
+    }
+  }, []);
+
+  const rememberRecentModel = useCallback((model: RemoteModel) => {
+    const next = [
+      { ...model, lastOpenedAt: Date.now() },
+      ...readRecentModels().filter((item) => item.name !== model.name)
+    ].slice(0, 6);
+    writeRecentModels(next);
+    setOfflineRecentModelNames(next.map((item) => item.name));
+  }, []);
+
+  const verifyStableConnection = useCallback(async () => {
+    if (typeof window === 'undefined') return false;
+    if (!navigator.onLine) {
+      setNetworkStatus('offline');
+      return false;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 6000);
+    try {
+      const probeUrl = new URL('./manifest.webmanifest', window.location.href);
+      probeUrl.searchParams.set('_', String(Date.now()));
+      const res = await fetch(probeUrl.toString(), {
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      const stable = res.ok;
+      setNetworkStatus(stable ? 'online' : 'unstable');
+      if (stable) updateLastServerSync(Date.now());
+      return stable;
+    } catch {
+      setNetworkStatus('unstable');
+      return false;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }, [updateLastServerSync]);
 
   const currentModelKey = useMemo(() => getModelKey(selectedRemoteModelName), [getModelKey, selectedRemoteModelName]);
 
@@ -269,16 +393,24 @@ export default function App() {
       }
       setElementHistory(nextHistory);
     }
-  }, [getModelKey, normalizePurchaseStatus]);
+    updateLastServerSync(Date.now());
+  }, [getModelKey, normalizePurchaseStatus, updateLastServerSync]);
 
-  const remoteQueueRef = useRef<Array<{ modelKey: string; id: string; status: PurchaseStatus; at: string }>>([]);
+  const remoteQueueRef = useRef<Array<{ modelKey: string; id: string; status: PurchaseStatus; at: string }>>(
+    readStorageJson<Array<{ modelKey: string; id: string; status: PurchaseStatus; at: string }>>(REMOTE_QUEUE_STORAGE_KEY, [])
+  );
   const remoteFlushTimerRef = useRef<number | null>(null);
   const remoteAbortRef = useRef<AbortController | null>(null);
+  const persistRemoteQueue = useCallback(() => {
+    writeStorageJson(REMOTE_QUEUE_STORAGE_KEY, remoteQueueRef.current);
+  }, []);
 
   const flushRemoteQueue = useCallback(async () => {
     if (!CANTIDADES_SHEET_SCRIPT_URL) return;
+    if (networkStatus !== 'online') return;
     if (remoteQueueRef.current.length === 0) return;
     const batch = remoteQueueRef.current.splice(0, 25);
+    persistRemoteQueue();
     const controller = new AbortController();
     remoteAbortRef.current = controller;
     try {
@@ -292,8 +424,10 @@ export default function App() {
         url.searchParams.set('at', it.at);
         await jsonpRequest(url, { signal: controller.signal, timeoutMs: 30000 });
       }
+      updateLastServerSync(Date.now());
     } catch {
       remoteQueueRef.current.unshift(...batch);
+      persistRemoteQueue();
     } finally {
       if (remoteQueueRef.current.length > 0) {
         remoteFlushTimerRef.current = window.setTimeout(() => void flushRemoteQueue(), 900);
@@ -301,22 +435,56 @@ export default function App() {
         remoteFlushTimerRef.current = null;
       }
     }
-  }, [currentModelKey]);
+  }, [networkStatus, persistRemoteQueue, updateLastServerSync]);
 
   const enqueueRemoteChange = useCallback((id: string, status: PurchaseStatus, at: string) => {
     if (!CANTIDADES_SHEET_SCRIPT_URL) return;
     remoteQueueRef.current.push({ modelKey: currentModelKey, id, status, at });
+    persistRemoteQueue();
+    if (networkStatus !== 'online') return;
     if (remoteFlushTimerRef.current !== null) return;
     remoteFlushTimerRef.current = window.setTimeout(() => void flushRemoteQueue(), 900);
-  }, [currentModelKey, flushRemoteQueue]);
+  }, [currentModelKey, flushRemoteQueue, networkStatus, persistRemoteQueue]);
 
   useEffect(() => {
     if (!CANTIDADES_SHEET_SCRIPT_URL) return;
     if (!selectedRemoteModelName) return;
+    if (networkStatus !== 'online') return;
     const controller = new AbortController();
     void fetchRemoteStatuses(selectedRemoteModelName, controller.signal);
     return () => controller.abort();
-  }, [fetchRemoteStatuses, selectedRemoteModelName]);
+  }, [fetchRemoteStatuses, networkStatus, selectedRemoteModelName]);
+
+  useEffect(() => {
+    void verifyStableConnection();
+
+    const handleOnline = () => {
+      setNetworkStatus('unstable');
+      void verifyStableConnection();
+    };
+    const handleOffline = () => setNetworkStatus('offline');
+    const handleFocus = () => void verifyStableConnection();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') void verifyStableConnection();
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void verifyStableConnection();
+    }, 45000);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.clearInterval(intervalId);
+    };
+  }, [verifyStableConnection]);
 
   const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
     const stored = Number(localStorage.getItem('cantidades:leftPanelWidth'));
@@ -572,9 +740,28 @@ export default function App() {
     return undefined;
   }, [getProp]);
 
-  const fetchAvailableModels = useCallback(async () => {
-    setIsModelsLoading(true);
+  const fetchAvailableModels = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+    const cachedCatalog = readCachedModelCatalog();
+    const recentModels = readRecentModels().map(({ lastOpenedAt: _lastOpenedAt, ...model }) => model);
+    const fallbackModels = mergeRemoteModels(cachedCatalog?.models ?? [], recentModels);
+
+    if (!silent) setIsModelsLoading(true);
     setModelsError(null);
+    setModelsNotice(null);
+
+    if (networkStatus !== 'online') {
+      if (fallbackModels.length > 0) {
+        setAvailableModels(fallbackModels);
+        setModelsNotice('Sin conexión estable. Mostrando modelos recientes guardados localmente.');
+      } else {
+        setAvailableModels([]);
+        setModelsError('Sin conexión estable y no hay modelos guardados localmente todavía.');
+      }
+      if (!silent) setIsModelsLoading(false);
+      return;
+    }
+
     try {
       const env = ((import.meta as any).env || {}) as Record<string, string | undefined>;
       const driveScriptUrl = (env.VITE_DRIVE_SCRIPT_URL?.trim() || CANTIDADES_SHEET_SCRIPT_URL).trim();
@@ -600,8 +787,7 @@ export default function App() {
         };
         try {
           data = await jsonpRequestWithRetry(url, { timeoutMs: 45000, retries: 3 });
-        } catch (e) {
-          await clearCantidadesClientData();
+        } catch {
           url.searchParams.set('t', String(Date.now()));
           data = await jsonpRequestWithRetry(url, { timeoutMs: 45000, retries: 2 });
         }
@@ -628,6 +814,8 @@ export default function App() {
           .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
         setAvailableModels(nextModels);
+        writeCachedModelCatalog(nextModels);
+        updateLastServerSync(Date.now());
         return;
       }
 
@@ -704,6 +892,8 @@ export default function App() {
           .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
         setAvailableModels(nextModels);
+        writeCachedModelCatalog(nextModels);
+        updateLastServerSync(Date.now());
         return;
       }
 
@@ -740,17 +930,30 @@ export default function App() {
         .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
       setAvailableModels(nextModels);
+      writeCachedModelCatalog(nextModels);
+      updateLastServerSync(Date.now());
     } catch (e) {
-      setModelsError(e instanceof Error ? e.message : 'Error cargando modelos');
-      setAvailableModels([]);
+      if (fallbackModels.length > 0) {
+        setAvailableModels(fallbackModels);
+        setModelsNotice('No se pudo actualizar desde el servidor. Se mantiene la ultima copia local.');
+      } else {
+        setModelsError(e instanceof Error ? e.message : 'Error cargando modelos');
+        setAvailableModels([]);
+      }
     } finally {
-      setIsModelsLoading(false);
+      if (!silent) setIsModelsLoading(false);
     }
-  }, []);
+  }, [networkStatus, updateLastServerSync]);
 
   useEffect(() => {
     fetchAvailableModels();
   }, [fetchAvailableModels]);
+
+  useEffect(() => {
+    if (networkStatus !== 'online') return;
+    void fetchAvailableModels({ silent: true });
+    if (remoteQueueRef.current.length > 0) void flushRemoteQueue();
+  }, [fetchAvailableModels, flushRemoteQueue, networkStatus]);
 
   const baseElements = useMemo(() => {
     return elements.filter((el) => {
@@ -1334,6 +1537,31 @@ export default function App() {
   };
 
   const fetchArrayBufferCached = useCallback(async (url: string, signal?: AbortSignal) => {
+    let networkError: unknown = null;
+
+    if (networkStatus === 'online') {
+      try {
+        const res = await fetch(url, { signal, cache: 'no-store' });
+        if (!res.ok) throw new Error(`No se pudo descargar ${url} (${res.status})`);
+        if ('caches' in window) {
+          try {
+            const cache = await caches.open('cantidades-models-v1');
+            await cache.put(url, res.clone());
+          } catch {
+          }
+        }
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 2);
+        const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        void idbPut('frag', { url, ts: Date.now(), data: buffer }, 6);
+        updateLastServerSync(Date.now());
+        return bytes;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') throw e;
+        networkError = e;
+      }
+    }
+
     const mem = remoteCacheRef.current.fragBytesByUrl.get(url);
     if (mem) return mem;
 
@@ -1360,23 +1588,38 @@ export default function App() {
       }
     }
 
-    const res = await fetch(url, { signal });
-    if (!res.ok) throw new Error(`No se pudo descargar ${url} (${res.status})`);
-    if ('caches' in window) {
-      try {
-        const cache = await caches.open('cantidades-models-v1');
-        await cache.put(url, res.clone());
-      } catch {
-      }
+    if (networkError) {
+      throw networkError instanceof Error ? networkError : new Error(`No se pudo descargar ${url}`);
     }
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 2);
-    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    void idbPut('frag', { url, ts: Date.now(), data: buffer }, 6);
-    return bytes;
-  }, []);
+
+    throw new Error(`Sin conexion estable y no hay copia local de ${url}`);
+  }, [networkStatus, updateLastServerSync]);
 
   const fetchTextCached = useCallback(async (url: string, signal?: AbortSignal) => {
+    let networkError: unknown = null;
+
+    if (networkStatus === 'online') {
+      try {
+        const res = await fetch(url, { signal, cache: 'no-store' });
+        if (!res.ok) throw new Error(`No se pudo descargar ${url} (${res.status})`);
+        if ('caches' in window) {
+          try {
+            const cache = await caches.open('cantidades-models-v1');
+            await cache.put(url, res.clone());
+          } catch {
+          }
+        }
+        const text = await res.text();
+        putLru(remoteCacheRef.current.jsonTextByUrl, url, text, 2);
+        void idbPut('json', { url, ts: Date.now(), data: text }, 6);
+        updateLastServerSync(Date.now());
+        return text;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') throw e;
+        networkError = e;
+      }
+    }
+
     const mem = remoteCacheRef.current.jsonTextByUrl.get(url);
     if (mem) return mem;
 
@@ -1401,23 +1644,77 @@ export default function App() {
       }
     }
 
-    const res = await fetch(url, { signal });
-    if (!res.ok) throw new Error(`No se pudo descargar ${url} (${res.status})`);
-    if ('caches' in window) {
-      try {
-        const cache = await caches.open('cantidades-models-v1');
-        await cache.put(url, res.clone());
-      } catch {
-      }
+    if (networkError) {
+      throw networkError instanceof Error ? networkError : new Error(`No se pudo descargar ${url}`);
     }
-    const text = await res.text();
-    putLru(remoteCacheRef.current.jsonTextByUrl, url, text, 2);
-    void idbPut('json', { url, ts: Date.now(), data: text }, 6);
-    return text;
-  }, []);
+
+    throw new Error(`Sin conexion estable y no hay copia local de ${url}`);
+  }, [networkStatus, updateLastServerSync]);
 
   const fetchDriveScriptFragBytes = useCallback(async (scriptUrl: string, id: string, signal?: AbortSignal) => {
     const cacheKey = `drive-script:frag:${id}`;
+    const base64ToBytes = (b64: string) => {
+      const binary = atob(b64);
+      const out = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+      return out;
+    };
+
+    let networkError: unknown = null;
+
+    if (networkStatus === 'online') {
+      try {
+        const chunkLimit = 512 * 1024;
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        let offset = 0;
+        let safety = 0;
+
+        while (true) {
+          if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+          safety++;
+          if (safety > 20000) throw new Error('Demasiados fragmentos descargados. Revisa el archivo.');
+
+          const url = new URL(scriptUrl);
+          url.searchParams.set('action', 'chunk');
+          url.searchParams.set('id', id);
+          url.searchParams.set('offset', String(offset));
+          url.searchParams.set('limit', String(chunkLimit));
+          url.searchParams.set('t', String(Date.now()));
+
+          const data = await jsonpRequestWithRetry<{ total: number; nextOffset: number; done: boolean; data: string; error?: string }>(url, { signal, timeoutMs: 30000, retries: 3 });
+          if (data && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
+            throw new Error(String((data as any).error));
+          }
+          if (!Number.isFinite(data.total) || !Number.isFinite(data.nextOffset) || typeof data.done !== 'boolean') {
+            throw new Error('Respuesta inválida del servidor de Drive (chunk).');
+          }
+
+          total = data.total;
+          const bytes = base64ToBytes(String(data.data || ''));
+          chunks.push(bytes);
+          offset = data.nextOffset;
+          if (data.done) break;
+        }
+
+        const merged = new Uint8Array(total);
+        let pos = 0;
+        for (const c of chunks) {
+          merged.set(c, pos);
+          pos += c.length;
+        }
+
+        putLru(remoteCacheRef.current.fragBytesByUrl, cacheKey, merged, 2);
+        const buffer = merged.buffer.slice(merged.byteOffset, merged.byteOffset + merged.byteLength);
+        void idbPut('frag', { url: cacheKey, ts: Date.now(), data: buffer }, 6);
+        updateLastServerSync(Date.now());
+        return merged;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') throw e;
+        networkError = e;
+      }
+    }
+
     const mem = remoteCacheRef.current.fragBytesByUrl.get(cacheKey);
     if (mem) return mem;
 
@@ -1429,62 +1726,39 @@ export default function App() {
       return bytes;
     }
 
-    const base64ToBytes = (b64: string) => {
-      const binary = atob(b64);
-      const out = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-      return out;
-    };
-
-    const chunkLimit = 512 * 1024;
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    let offset = 0;
-    let safety = 0;
-
-    while (true) {
-      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-      safety++;
-      if (safety > 20000) throw new Error('Demasiados fragmentos descargados. Revisa el archivo.');
-
-      const url = new URL(scriptUrl);
-      url.searchParams.set('action', 'chunk');
-      url.searchParams.set('id', id);
-      url.searchParams.set('offset', String(offset));
-      url.searchParams.set('limit', String(chunkLimit));
-      url.searchParams.set('t', String(Date.now()));
-
-      const data = await jsonpRequestWithRetry<{ total: number; nextOffset: number; done: boolean; data: string; error?: string }>(url, { signal, timeoutMs: 30000, retries: 3 });
-      if (data && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
-        throw new Error(String((data as any).error));
-      }
-
-      if (!Number.isFinite(data.total) || !Number.isFinite(data.nextOffset) || typeof data.done !== 'boolean') {
-        throw new Error('Respuesta inválida del servidor de Drive (chunk).');
-      }
-
-      total = data.total;
-      const bytes = base64ToBytes(String(data.data || ''));
-      chunks.push(bytes);
-      offset = data.nextOffset;
-      if (data.done) break;
+    if (networkError) {
+      throw networkError instanceof Error ? networkError : new Error('No se pudo descargar el modelo desde Drive.');
     }
 
-    const merged = new Uint8Array(total);
-    let pos = 0;
-    for (const c of chunks) {
-      merged.set(c, pos);
-      pos += c.length;
-    }
-
-    putLru(remoteCacheRef.current.fragBytesByUrl, cacheKey, merged, 2);
-    const buffer = merged.buffer.slice(merged.byteOffset, merged.byteOffset + merged.byteLength);
-    void idbPut('frag', { url: cacheKey, ts: Date.now(), data: buffer }, 6);
-    return merged;
-  }, []);
+    throw new Error('Sin conexion estable y no hay copia local del modelo.');
+  }, [networkStatus, updateLastServerSync]);
 
   const fetchDriveScriptJsonText = useCallback(async (scriptUrl: string, id: string, signal?: AbortSignal) => {
     const cacheKey = `drive-script:json:${id}`;
+    let networkError: unknown = null;
+
+    if (networkStatus === 'online') {
+      try {
+        const url = new URL(scriptUrl);
+        url.searchParams.set('action', 'text');
+        url.searchParams.set('id', id);
+        url.searchParams.set('t', String(Date.now()));
+
+        const data = await jsonpRequestWithRetry<{ text?: string; error?: string }>(url, { signal, timeoutMs: 30000, retries: 3 });
+        if (data && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
+          throw new Error(String((data as any).error));
+        }
+        const text = typeof data.text === 'string' ? data.text : '';
+        putLru(remoteCacheRef.current.jsonTextByUrl, cacheKey, text, 2);
+        void idbPut('json', { url: cacheKey, ts: Date.now(), data: text }, 6);
+        updateLastServerSync(Date.now());
+        return text;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') throw e;
+        networkError = e;
+      }
+    }
+
     const mem = remoteCacheRef.current.jsonTextByUrl.get(cacheKey);
     if (mem) return mem;
 
@@ -1495,21 +1769,12 @@ export default function App() {
       return disk.data;
     }
 
-    const url = new URL(scriptUrl);
-    url.searchParams.set('action', 'text');
-    url.searchParams.set('id', id);
-    url.searchParams.set('t', String(Date.now()));
-
-    const data = await jsonpRequestWithRetry<{ text?: string; error?: string }>(url, { signal, timeoutMs: 30000, retries: 3 });
-    if (data && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
-      throw new Error(String((data as any).error));
+    if (networkError) {
+      throw networkError instanceof Error ? networkError : new Error('No se pudo descargar el JSON desde Drive.');
     }
-    const text = typeof data.text === 'string' ? data.text : '';
 
-    putLru(remoteCacheRef.current.jsonTextByUrl, cacheKey, text, 2);
-    void idbPut('json', { url: cacheKey, ts: Date.now(), data: text }, 6);
-    return text;
-  }, []);
+    throw new Error('Sin conexion estable y no hay copia local del JSON.');
+  }, [networkStatus, updateLastServerSync]);
 
   const loadRemoteModel = useCallback(async (remote: RemoteModel) => {
     if (!componentsRef.current) return;
@@ -1534,6 +1799,7 @@ export default function App() {
 
         if (controller.signal.aborted) return;
         if (jsonText) await applyJsonText(jsonText);
+        rememberRecentModel(remote);
         return;
       }
 
@@ -1549,6 +1815,7 @@ export default function App() {
       if (jsonText) {
         await applyJsonText(jsonText);
       }
+      rememberRecentModel(remote);
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return;
       console.error('Error cargando modelo remoto:', e);
@@ -1556,7 +1823,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [applyJsonText, fetchArrayBufferCached, fetchDriveScriptFragBytes, fetchDriveScriptJsonText, fetchTextCached, loadFragBytes]);
+  }, [applyJsonText, fetchArrayBufferCached, fetchDriveScriptFragBytes, fetchDriveScriptJsonText, fetchTextCached, loadFragBytes, rememberRecentModel]);
 
   const resetFilters = () => {
     setSelectedClassifications([]);
@@ -1634,13 +1901,31 @@ export default function App() {
     try { stored = localStorage.getItem(key) || ''; } catch {}
 
     if (version && stored && stored !== version) {
-      clearCantidadesClientData().finally(() => {
-        try { localStorage.setItem(key, version); } catch {}
-      });
+      try { localStorage.setItem(key, version); } catch {}
+      if (networkStatus === 'online') void fetchAvailableModels({ silent: true });
     } else if (version && !stored) {
       try { localStorage.setItem(key, version); } catch {}
     }
-  }, []);
+  }, [fetchAvailableModels, networkStatus]);
+
+  const networkBadge = useMemo(() => {
+    if (networkStatus === 'online') {
+      return {
+        label: 'En linea',
+        className: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      };
+    }
+    if (networkStatus === 'unstable') {
+      return {
+        label: 'Red inestable',
+        className: 'bg-amber-50 text-amber-700 border-amber-200'
+      };
+    }
+    return {
+      label: 'Sin conexion',
+      className: 'bg-slate-100 text-slate-600 border-slate-200'
+    };
+  }, [networkStatus]);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-white overflow-hidden font-sans">
@@ -1680,6 +1965,16 @@ export default function App() {
         <div className="w-full sm:flex-1 sm:max-w-3xl sm:mx-8">
           <div className="bg-[#003E52] text-white py-1.5 px-4 sm:px-6 rounded-sm text-center font-bold uppercase tracking-widest text-xs sm:text-sm shadow-inner truncate">
             {selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'CANTIDADES'}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-[10px] uppercase tracking-widest">
+            <span className={`inline-flex items-center rounded-full border px-2 py-1 font-black ${networkBadge.className}`}>
+              {networkBadge.label}
+            </span>
+            {lastServerSyncAt && (
+              <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-1 font-bold text-slate-500">
+                Ultima sync {new Date(lastServerSyncAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
           </div>
         </div>
 
@@ -1729,6 +2024,11 @@ export default function App() {
 
             {!leftPanelCollapsed && (
               <div className="flex-1 overflow-y-auto p-2">
+                {modelsNotice && (
+                  <div className="mb-2 p-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
+                    {modelsNotice}
+                  </div>
+                )}
                 {modelsError && (
                   <div className="p-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
                     <div className="font-bold">Error cargando modelos</div>
@@ -1783,6 +2083,7 @@ export default function App() {
                           {items.map((m) => {
                             const isSelected = selectedRemoteModelName === m.name;
                             const isRowLoading = isLoading && isSelected;
+                            const isOfflineReady = offlineRecentModelNames.includes(m.name);
                             return (
                               <button
                                 key={m.name}
@@ -1797,6 +2098,11 @@ export default function App() {
                                 <span className="flex-1 text-[11px] text-slate-700 truncate">
                                   {m.name.replace(/\.frag$/i, '')}
                                 </span>
+                                {isOfflineReady && (
+                                  <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                                    Offline
+                                  </span>
+                                )}
                                 {isRowLoading ? (
                                   <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
                                 ) : isSelected ? (

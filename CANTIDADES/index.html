@@ -37,7 +37,10 @@
               try {
                 if ('serviceWorker' in navigator) {
                   navigator.serviceWorker.getRegistration().then(function (reg) {
-                    if (reg) reg.unregister().finally(function () {
+                    if (reg && reg.waiting) {
+                      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                    if (reg) reg.update().finally(function () {
                       var u = new URL(location.href);
                       if (version) u.searchParams.set('v', version);
                       location.replace(u.toString());

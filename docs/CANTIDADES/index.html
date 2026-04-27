@@ -13,8 +13,8 @@
       #update-banner button{cursor:pointer;border:0;border-radius:8px;background:#fff;color:#111827;font-weight:900;letter-spacing:.12em;text-transform:uppercase;font-size:11px;padding:10px 12px}
     </style>
     <title>My Google AI Studio App</title>
-    <script type="module" crossorigin src="./assets/index-DsgEr8IL.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-JGNVrMXO.css">
+    <script type="module" crossorigin src="./assets/index-CctvFCO8.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Cn4ukua9.css">
   </head>
   <body>
     <div id="update-banner"><div class="inner"><div>Hay una nueva versión disponible.</div><button id="update-reload" type="button">Actualizar</button></div></div>
@@ -39,7 +39,10 @@
               try {
                 if ('serviceWorker' in navigator) {
                   navigator.serviceWorker.getRegistration().then(function (reg) {
-                    if (reg) reg.unregister().finally(function () {
+                    if (reg && reg.waiting) {
+                      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                    if (reg) reg.update().finally(function () {
                       var u = new URL(location.href);
                       if (version) u.searchParams.set('v', version);
                       location.replace(u.toString());
