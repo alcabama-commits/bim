@@ -162,6 +162,11 @@ type RecentRemoteModel = RemoteModel & {
 
 type PurchaseStatus = 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'ALMACEN' | 'INSTALADO';
 type HistoryEntry = { status: PurchaseStatus; at: string };
+type DriveModelsManifest = {
+  folderId: string;
+  generatedAt: string;
+  models: Array<{ name: string; fragId: string; jsonId?: string }>;
+};
 
 const GITHUB_REPO = {
   owner: 'alcabama-commits',
@@ -177,10 +182,22 @@ const CANTIDADES_SHEET_ID = String(((import.meta as any).env?.VITE_CANTIDADES_SH
 const CANTIDADES_SHEET_SCRIPT_URL = String(
   ((import.meta as any).env?.VITE_CANTIDADES_SHEET_SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycbz2Lqn_w3JFpcMjW1v7EwG5k7v9gpuQIxh5tdf4S-FXJjA-MZHFrdMeAGMVTQMZ9XQ/exec'),
 ).trim();
+const DRIVE_MODELS_MANIFEST_URL = './drive-models-manifest.json';
 const MODEL_CATALOG_STORAGE_KEY = 'cantidades:modelCatalog:v1';
 const RECENT_MODELS_STORAGE_KEY = 'cantidades:recentModels:v1';
 const REMOTE_QUEUE_STORAGE_KEY = 'cantidades:remoteQueue:v1';
 const LAST_SERVER_SYNC_STORAGE_KEY = 'cantidades:lastServerSyncAt';
+const driveDirectDownloadUrl = (id: string) =>
+  `https://drive.google.com/uc?export=download&id=${encodeURIComponent(id)}`;
+
+const normalizeRemoteModel = <T extends RemoteModel>(model: T): T => {
+  if (!model?.drive?.fragId) return model;
+  return {
+    ...model,
+    fragUrl: model.fragUrl || driveDirectDownloadUrl(model.drive.fragId),
+    jsonUrl: model.jsonUrl || (model.drive.jsonId ? driveDirectDownloadUrl(model.drive.jsonId) : undefined)
+  };
+};
 
 const readStorageJson = <T,>(key: string, fallback: T): T => {
   if (typeof window === 'undefined') return fallback;
@@ -206,7 +223,9 @@ const readCachedModelCatalog = (): CachedModelCatalog | null => {
   if (!parsed || !Array.isArray(parsed.models)) return null;
   return {
     ts: Number(parsed.ts || 0),
-    models: parsed.models.filter((item) => item && typeof item.name === 'string')
+    models: parsed.models
+      .filter((item) => item && typeof item.name === 'string')
+      .map((item) => normalizeRemoteModel(item))
   };
 };
 
@@ -219,6 +238,7 @@ const readRecentModels = (): RecentRemoteModel[] => {
   if (!Array.isArray(parsed)) return [];
   return parsed
     .filter((item) => item && typeof item.name === 'string')
+    .map((item) => normalizeRemoteModel(item))
     .sort((a, b) => Number(b.lastOpenedAt || 0) - Number(a.lastOpenedAt || 0));
 };
 
@@ -764,140 +784,38 @@ export default function App() {
 
     try {
       const env = ((import.meta as any).env || {}) as Record<string, string | undefined>;
-      const driveScriptUrl = (env.VITE_DRIVE_SCRIPT_URL?.trim() || CANTIDADES_SHEET_SCRIPT_URL).trim();
       const driveFolderId = (env.VITE_DRIVE_FOLDER_ID?.trim() || '18gr5TvX3pYY5S3ZRfjmWagkTLhhG3B0W').trim();
-      const driveApiKey = env.VITE_DRIVE_API_KEY?.trim();
 
-      const normalizeBase = (name: string) =>
-        name
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .trim()
-          .toLowerCase();
-
-      if (driveScriptUrl) {
-        const url = new URL(driveScriptUrl);
-        url.searchParams.set('action', 'list');
-        if (driveFolderId) url.searchParams.set('folderId', driveFolderId);
-        url.searchParams.set('t', String(Date.now()));
-
-        let data: {
-          models?: Array<{ name: string; fragId: string; jsonId?: string | null }>;
-          error?: string;
-        };
-        try {
-          data = await jsonpRequestWithRetry(url, { timeoutMs: 45000, retries: 3 });
-        } catch {
-          url.searchParams.set('t', String(Date.now()));
-          data = await jsonpRequestWithRetry(url, { timeoutMs: 45000, retries: 2 });
-        }
-        if (data && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
-          throw new Error(String((data as any).error));
-        }
-        const models = Array.isArray(data.models) ? data.models : [];
-
-        const nextModels: RemoteModel[] = models
-          .filter((m) => m && m.name && m.fragId)
-          .map((m) => {
-            const group = /estructura/i.test(m.name) ? 'ESTRUCTURA' : 'GENERAL';
-            return {
-              name: m.name,
-              group,
-              drive: {
-                scriptUrl: driveScriptUrl,
-                folderId: driveFolderId,
-                fragId: m.fragId,
-                jsonId: m.jsonId ? String(m.jsonId) : undefined
-              }
-            };
-          })
-          .sort((a, b) => a.name.localeCompare(b.name, 'es'));
-
-        setAvailableModels(nextModels);
-        writeCachedModelCatalog(nextModels);
-        updateLastServerSync(Date.now());
-        return;
+      const manifestRes = await fetch(`${DRIVE_MODELS_MANIFEST_URL}?t=${Date.now()}`, {
+        cache: 'no-store'
+      });
+      if (!manifestRes.ok) {
+        throw new Error(`No se pudo leer el manifiesto de modelos (${manifestRes.status}). Ejecuta npm run build y publica docs/CANTIDADES.`);
       }
+      const manifest = (await manifestRes.json()) as DriveModelsManifest;
+      const models = Array.isArray(manifest?.models) ? manifest.models : [];
 
-      if (driveFolderId && driveApiKey) {
-        type DriveFile = { id: string; name: string; mimeType?: string };
-
-        const listDriveFiles = async (): Promise<DriveFile[]> => {
-          const folderMime = 'application/vnd.google-apps.folder';
-          const results: DriveFile[] = [];
-          const visited = new Set<string>();
-          const queue: string[] = [driveFolderId];
-
-          while (queue.length > 0) {
-            const folderId = queue.shift()!;
-            if (visited.has(folderId)) continue;
-            visited.add(folderId);
-
-            let pageToken: string | undefined;
-            do {
-              const params = new URLSearchParams();
-              params.set('q', `'${folderId}' in parents and trashed=false`);
-              params.set('fields', 'nextPageToken,files(id,name,mimeType)');
-              params.set('pageSize', '1000');
-              params.set('key', driveApiKey);
-              params.set('supportsAllDrives', 'true');
-              params.set('includeItemsFromAllDrives', 'true');
-              if (pageToken) params.set('pageToken', pageToken);
-
-              const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
-                cache: 'no-store'
-              });
-              if (!res.ok) throw new Error(`No se pudo listar modelos en Drive (${res.status})`);
-              const data = (await res.json()) as { nextPageToken?: string; files?: DriveFile[] };
-              const files = Array.isArray(data.files) ? data.files.filter((f) => f && f.id && f.name) : [];
-              for (const f of files) {
-                if (f.mimeType === folderMime) {
-                  queue.push(f.id);
-                } else {
-                  results.push(f);
-                }
-              }
-              pageToken = data.nextPageToken;
-            } while (pageToken);
-          }
-
-          return results;
-        };
-
-        const files = await listDriveFiles();
-        const fragFiles = files.filter((f) => f.name.toLowerCase().endsWith('.frag'));
-        const jsonByBase = new Map<string, string>();
-        files
-          .filter((f) => f.name.toLowerCase().endsWith('.json'))
-          .forEach((f) => {
-            const base = normalizeBase(f.name.slice(0, -'.json'.length));
-            jsonByBase.set(base, f.id);
+      const nextModels: RemoteModel[] = models
+        .filter((m) => m && m.name && m.fragId)
+        .map((m) => {
+          const group = /estructura/i.test(m.name) ? 'ESTRUCTURA' : 'GENERAL';
+          return normalizeRemoteModel({
+            name: m.name,
+            group,
+            drive: {
+              scriptUrl: CANTIDADES_SHEET_SCRIPT_URL,
+              folderId: manifest?.folderId || driveFolderId,
+              fragId: m.fragId,
+              jsonId: m.jsonId ? String(m.jsonId) : undefined
+            }
           });
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
-        const driveDownloadUrl = (id: string) =>
-          `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&acknowledgeAbuse=true&key=${encodeURIComponent(driveApiKey)}`;
-
-        const nextModels: RemoteModel[] = fragFiles
-          .map((f) => {
-            const base = normalizeBase(f.name.slice(0, -'.frag'.length));
-            const jsonId = jsonByBase.get(base);
-            const group = /estructura/i.test(f.name) ? 'ESTRUCTURA' : 'GENERAL';
-            return {
-              name: f.name,
-              fragUrl: driveDownloadUrl(f.id),
-              jsonUrl: jsonId ? driveDownloadUrl(jsonId) : undefined,
-              group
-            };
-          })
-          .sort((a, b) => a.name.localeCompare(b.name, 'es'));
-
-        setAvailableModels(nextModels);
-        writeCachedModelCatalog(nextModels);
-        updateLastServerSync(Date.now());
-        return;
-      }
-
-      throw new Error(`No se pudo acceder al folder de Drive ${driveFolderId}. Configura Apps Script o Drive API para listar los modelos.`);
+      setAvailableModels(nextModels);
+      writeCachedModelCatalog(nextModels);
+      updateLastServerSync(Date.now());
+      return;
     } catch (e) {
       if (fallbackModels.length > 0) {
         setAvailableModels(fallbackModels);
@@ -1753,35 +1671,43 @@ export default function App() {
     setShowWelcome(false);
     setSelectedRemoteModelName(remote.name);
     try {
-      if (remote.drive) {
-        const fragPromise = fetchDriveScriptFragBytes(remote.drive.scriptUrl, remote.drive.fragId, controller.signal);
-        const jsonPromise = remote.drive.jsonId
-          ? fetchDriveScriptJsonText(remote.drive.scriptUrl, remote.drive.jsonId, controller.signal)
+      const normalizedRemote = normalizeRemoteModel(remote);
+
+      if (normalizedRemote.fragUrl) {
+        const fragPromise = fetchArrayBufferCached(normalizedRemote.fragUrl, controller.signal);
+        const jsonPromise = normalizedRemote.jsonUrl
+          ? fetchTextCached(normalizedRemote.jsonUrl, controller.signal)
           : Promise.resolve<string | null>(null);
         const [fragBytes, jsonText] = await Promise.all([fragPromise, jsonPromise]);
 
         if (controller.signal.aborted) return;
-        await loadFragBytes(remote.name, fragBytes);
+        await loadFragBytes(normalizedRemote.name, fragBytes);
 
         if (controller.signal.aborted) return;
-        if (jsonText) await applyJsonText(jsonText);
-        rememberRecentModel(remote);
+        if (jsonText) {
+          await applyJsonText(jsonText);
+        }
+        rememberRecentModel(normalizedRemote);
         return;
       }
 
-      if (!remote.fragUrl) throw new Error('Modelo remoto sin URL de descarga.');
-      const fragPromise = fetchArrayBufferCached(remote.fragUrl, controller.signal);
-      const jsonPromise = remote.jsonUrl ? fetchTextCached(remote.jsonUrl, controller.signal) : Promise.resolve<string | null>(null);
-      const [fragBytes, jsonText] = await Promise.all([fragPromise, jsonPromise]);
+      if (normalizedRemote.drive) {
+        const fragPromise = fetchDriveScriptFragBytes(normalizedRemote.drive.scriptUrl, normalizedRemote.drive.fragId, controller.signal);
+        const jsonPromise = normalizedRemote.drive.jsonId
+          ? fetchDriveScriptJsonText(normalizedRemote.drive.scriptUrl, normalizedRemote.drive.jsonId, controller.signal)
+          : Promise.resolve<string | null>(null);
+        const [fragBytes, jsonText] = await Promise.all([fragPromise, jsonPromise]);
 
-      if (controller.signal.aborted) return;
-      await loadFragBytes(remote.name, fragBytes);
+        if (controller.signal.aborted) return;
+        await loadFragBytes(normalizedRemote.name, fragBytes);
 
-      if (controller.signal.aborted) return;
-      if (jsonText) {
-        await applyJsonText(jsonText);
+        if (controller.signal.aborted) return;
+        if (jsonText) await applyJsonText(jsonText);
+        rememberRecentModel(normalizedRemote);
+        return;
       }
-      rememberRecentModel(remote);
+
+      throw new Error('Modelo remoto sin URL de descarga.');
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return;
       console.error('Error cargando modelo remoto:', e);
