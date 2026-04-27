@@ -175,7 +175,7 @@ const rawUrlFor = (path: string) =>
 
 const CANTIDADES_SHEET_ID = String(((import.meta as any).env?.VITE_CANTIDADES_SHEET_ID ?? '19kpmTk5Ap2DaJEZH-BFejBt_ia8qALIKqaPyMdDVuEU')).trim();
 const CANTIDADES_SHEET_SCRIPT_URL = String(
-  ((import.meta as any).env?.VITE_CANTIDADES_SHEET_SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycby3d3vIF4lrZjgCt1Uh5yGnvuGOJvoyrVrt6CyQ3eg0rjdZ8oq43ZSdtYtxrNdkP7U/exec'),
+  ((import.meta as any).env?.VITE_CANTIDADES_SHEET_SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycbz2Lqn_w3JFpcMjW1v7EwG5k7v9gpuQIxh5tdf4S-FXJjA-MZHFrdMeAGMVTQMZ9XQ/exec'),
 ).trim();
 const MODEL_CATALOG_STORAGE_KEY = 'cantidades:modelCatalog:v1';
 const RECENT_MODELS_STORAGE_KEY = 'cantidades:recentModels:v1';
