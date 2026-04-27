@@ -764,7 +764,7 @@ export default function App() {
 
     try {
       const env = ((import.meta as any).env || {}) as Record<string, string | undefined>;
-      const driveScriptUrl = env.VITE_DRIVE_SCRIPT_URL?.trim() || '';
+      const driveScriptUrl = (env.VITE_DRIVE_SCRIPT_URL?.trim() || CANTIDADES_SHEET_SCRIPT_URL).trim();
       const driveFolderId = (env.VITE_DRIVE_FOLDER_ID?.trim() || '18gr5TvX3pYY5S3ZRfjmWagkTLhhG3B0W').trim();
       const driveApiKey = env.VITE_DRIVE_API_KEY?.trim();
 
@@ -897,41 +897,7 @@ export default function App() {
         return;
       }
 
-      const url = `https://api.github.com/repos/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/contents/${GITHUB_REPO.modelsPath}?ref=${GITHUB_REPO.branch}`;
-      const res = await fetch(url, {
-        headers: { Accept: 'application/vnd.github+json' },
-        cache: 'no-store'
-      });
-      if (!res.ok) throw new Error(`No se pudo listar modelos (${res.status})`);
-
-      const data = (await res.json()) as Array<{ type: string; name: string; path: string }>;
-      const files = data.filter((item) => item.type === 'file');
-      const fragFiles = files.filter((f) => f.name.toLowerCase().endsWith('.frag'));
-      const jsonByBase = new Map<string, string>();
-      files
-        .filter((f) => f.name.toLowerCase().endsWith('.json'))
-        .forEach((f) => {
-          const base = normalizeBase(f.name.slice(0, -'.json'.length));
-          jsonByBase.set(base, f.path);
-        });
-
-      const nextModels: RemoteModel[] = fragFiles
-        .map((f) => {
-          const base = normalizeBase(f.name.slice(0, -'.frag'.length));
-          const jsonPath = jsonByBase.get(base);
-          const group = /estructura/i.test(f.name) ? 'ESTRUCTURA' : 'GENERAL';
-          return {
-            name: f.name,
-            fragUrl: rawUrlFor(f.path),
-            jsonUrl: jsonPath ? rawUrlFor(jsonPath) : undefined,
-            group
-          };
-        })
-        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
-
-      setAvailableModels(nextModels);
-      writeCachedModelCatalog(nextModels);
-      updateLastServerSync(Date.now());
+      throw new Error(`No se pudo acceder al folder de Drive ${driveFolderId}. Configura Apps Script o Drive API para listar los modelos.`);
     } catch (e) {
       if (fallbackModels.length > 0) {
         setAvailableModels(fallbackModels);
