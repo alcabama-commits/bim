@@ -165,7 +165,7 @@ type HistoryEntry = { status: PurchaseStatus; at: string };
 type DriveModelsManifest = {
   folderId: string;
   generatedAt: string;
-  models: Array<{ name: string; fragId: string; jsonId?: string }>;
+  models: Array<{ name: string; fragId: string; jsonId?: string; fragUrl?: string; jsonUrl?: string }>;
 };
 
 const GITHUB_REPO = {
@@ -183,20 +183,16 @@ const CANTIDADES_SHEET_SCRIPT_URL = String(
   ((import.meta as any).env?.VITE_CANTIDADES_SHEET_SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycbz2Lqn_w3JFpcMjW1v7EwG5k7v9gpuQIxh5tdf4S-FXJjA-MZHFrdMeAGMVTQMZ9XQ/exec'),
 ).trim();
 const DRIVE_MODELS_MANIFEST_URL = './drive-models-manifest.json';
-const MODEL_CATALOG_STORAGE_KEY = 'cantidades:modelCatalog:v1';
-const RECENT_MODELS_STORAGE_KEY = 'cantidades:recentModels:v1';
+const MODEL_CATALOG_STORAGE_KEY = 'cantidades:modelCatalog:v2';
+const RECENT_MODELS_STORAGE_KEY = 'cantidades:recentModels:v2';
 const REMOTE_QUEUE_STORAGE_KEY = 'cantidades:remoteQueue:v1';
 const LAST_SERVER_SYNC_STORAGE_KEY = 'cantidades:lastServerSyncAt';
-const driveDirectDownloadUrl = (id: string) =>
-  `https://drive.usercontent.google.com/download?id=${encodeURIComponent(id)}&export=download&confirm=t`;
-
 const normalizeRemoteModel = <T extends RemoteModel>(model: T): T => {
   if (!model?.drive?.fragId) return model;
   return {
     ...model,
-    // Always regenerate public Drive URLs so stale cached entries do not keep using the old blocked endpoint.
-    fragUrl: driveDirectDownloadUrl(model.drive.fragId),
-    jsonUrl: model.drive.jsonId ? driveDirectDownloadUrl(model.drive.jsonId) : undefined
+    fragUrl: model.fragUrl,
+    jsonUrl: model.jsonUrl
   };
 };
 
@@ -802,6 +798,8 @@ export default function App() {
           const group = /estructura/i.test(m.name) ? 'ESTRUCTURA' : 'GENERAL';
           return normalizeRemoteModel({
             name: m.name,
+            fragUrl: m.fragUrl ? String(m.fragUrl) : undefined,
+            jsonUrl: m.jsonUrl ? String(m.jsonUrl) : undefined,
             group,
             drive: {
               scriptUrl: CANTIDADES_SHEET_SCRIPT_URL,
