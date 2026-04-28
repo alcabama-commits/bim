@@ -25,6 +25,7 @@ const ASSET_EXTENSIONS = new Set([
   'woff2',
   'ttf',
   'wasm',
+  'frag',
   'json',
   'webmanifest',
 ]);

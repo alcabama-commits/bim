@@ -3,11 +3,68 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f3c4c" />
+    <meta name="x-app-version" data-app="publicaciones" content="20260427-01" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <title>Solicitud de publicación</title>
   </head>
   <body>
+    <div id="update-banner" style="position:fixed;top:0;left:0;right:0;z-index:9999;display:none">
+      <div style="margin:0 auto;max-width:980px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 14px;background:#111827;color:#fff;font:600 14px/1.2 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.18)">
+        <div>Hay una nueva versión disponible.</div>
+        <button id="update-reload" type="button" style="cursor:pointer;border:0;border-radius:8px;background:#fff;color:#111827;font-weight:900;letter-spacing:.12em;text-transform:uppercase;font-size:11px;padding:10px 12px">Actualizar</button>
+      </div>
+    </div>
     <div id="root"></div>
+    <script>
+      (function () {
+        try {
+          var meta = document.querySelector('meta[name="x-app-version"]');
+          var appId = meta && meta.getAttribute('data-app') || 'publicaciones';
+          var version = meta && meta.getAttribute('content') || '';
+          var key = appId + ':appVersion';
+          var stored = localStorage.getItem(key) || '';
+          var banner = document.getElementById('update-banner');
+          var btn = document.getElementById('update-reload');
+          if (version) {
+            if (!stored) localStorage.setItem(key, version);
+            else if (stored !== version && banner) banner.style.display = 'block';
+          }
+          if (btn) {
+            btn.addEventListener('click', function () {
+              try { localStorage.setItem(key, version); } catch (e) {}
+              try {
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistration().then(function (reg) {
+                    if (reg && reg.waiting) {
+                      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                    if (reg) {
+                      reg.update().finally(function () {
+                        var u = new URL(location.href);
+                        if (version) u.searchParams.set('v', version);
+                        location.replace(u.toString());
+                      });
+                    } else {
+                      var u2 = new URL(location.href);
+                      if (version) u2.searchParams.set('v', version);
+                      location.replace(u2.toString());
+                    }
+                  });
+                } else {
+                  var u3 = new URL(location.href);
+                  if (version) u3.searchParams.set('v', version);
+                  location.replace(u3.toString());
+                }
+              } catch (e) {
+                location.reload();
+              }
+            });
+          }
+        } catch (e) {}
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
