@@ -1266,11 +1266,32 @@ export default function App() {
       const integratedProps: Record<string, any> = {};
       let foundVolume: number | null = null;
       let foundName: string | null = null;
+      let derivedClassification: string | null = null;
+      let derivedCategory: string | null = null;
+      let derivedType: string | null = null;
+      let derivedDetail: string | null = null;
+      let derivedLevel: string | null = null;
+      let derivedMaterial: string | null = null;
 
       const stack: any[] = [root];
       const seen = new WeakSet<object>();
       let nodes = 0;
       const maxNodes = 8000;
+
+      const setIntegratedIfMissing = (key: string, value: unknown) => {
+        if (integratedProps[key] !== undefined) return;
+        if (value === undefined || value === null) return;
+        const stringValue = typeof value === 'string' ? value.trim() : value;
+        if (stringValue === '') return;
+        integratedProps[key] = stringValue;
+      };
+
+      const setDerivedIfEmpty = (current: string | null, value: unknown) => {
+        if (current) return current;
+        if (value === undefined || value === null) return current;
+        const normalized = String(value).trim();
+        return normalized ? normalized : current;
+      };
 
       while (stack.length > 0 && nodes < maxNodes) {
         const cur = stack.pop();
@@ -1298,14 +1319,38 @@ export default function App() {
             }
           }
 
+          const unwrapped = unwrap(rawVal);
+
+          if (kl === 'clasificacion' || kl === 'clasificación') {
+            derivedClassification = setDerivedIfEmpty(derivedClassification, unwrapped);
+          }
+          if (kl === 'subproyectos integrado' || kl === 'subproyecto' || kl === 'sistema') {
+            derivedClassification = setDerivedIfEmpty(derivedClassification, unwrapped);
+          }
+          if (kl === 'categoria' || kl === 'categoría') {
+            derivedCategory = setDerivedIfEmpty(derivedCategory, unwrapped);
+          }
+          if (kl === 'tipo') {
+            derivedType = setDerivedIfEmpty(derivedType, unwrapped);
+          }
+          if (kl === 'familia y tipo' || kl === 'familia') {
+            derivedDetail = setDerivedIfEmpty(derivedDetail, unwrapped);
+          }
+          if (kl === 'nivel' || kl === 'nivel integrado' || kl === 'nivel de tabla de planificacion' || kl === 'nivel de tabla de planificación') {
+            derivedLevel = setDerivedIfEmpty(derivedLevel, unwrapped);
+          }
+          if (kl === 'material' || kl === 'material integrado') {
+            derivedMaterial = setDerivedIfEmpty(derivedMaterial, unwrapped);
+          }
+
           if (foundVolume === null && (kl.includes('volumen') || kl.includes('volume'))) {
-            const v = unwrap(rawVal);
+            const v = unwrapped;
             const n = typeof v === 'number' ? v : Number(v);
             if (Number.isFinite(n) && n > 0) foundVolume = n;
           }
 
           if (foundName === null && kl.includes('nombre') && (kl.includes('integrado') || kl === 'nombre')) {
-            const v = unwrap(rawVal);
+            const v = unwrapped;
             if (v !== undefined && v !== null) foundName = String(v);
           }
 
@@ -1325,6 +1370,23 @@ export default function App() {
 
       const nameVal = integratedProps["NOMBRE INTEGRADO"];
       if (nameVal !== undefined && nameVal !== null) foundName = String(nameVal);
+
+      const finalClassification = integratedProps["CLASIFICACIÓN"] ?? integratedProps["CLASIFICACION"] ?? derivedClassification ?? derivedCategory ?? root?.ifcType ?? root?.type;
+      const finalCategory = integratedProps["CATEGORÍA"] ?? integratedProps["CATEGORIA"] ?? derivedCategory ?? root?.ifcType ?? root?.type;
+      const finalType = integratedProps["TIPO"] ?? derivedType ?? foundName ?? root?.ObjectType ?? root?.ifcType ?? root?.type;
+      const finalDetail = integratedProps["DETALLE"] ?? derivedDetail ?? root?.Name;
+      const finalLevel = integratedProps["NIVEL INTEGRADO"] ?? derivedLevel;
+      const finalMaterial = integratedProps["MATERIAL INTEGRADO"] ?? derivedMaterial;
+
+      setIntegratedIfMissing("CLASIFICACIÓN", finalClassification);
+      setIntegratedIfMissing("CLASIFICACION", finalClassification);
+      setIntegratedIfMissing("CATEGORÍA", finalCategory);
+      setIntegratedIfMissing("CATEGORIA", finalCategory);
+      setIntegratedIfMissing("TIPO", finalType);
+      setIntegratedIfMissing("DETALLE", finalDetail);
+      setIntegratedIfMissing("NIVEL INTEGRADO", finalLevel);
+      setIntegratedIfMissing("MATERIAL INTEGRADO", finalMaterial);
+      if (foundName === null && finalType) foundName = String(finalType);
 
       return { integratedProps, foundVolume, foundName };
     };
