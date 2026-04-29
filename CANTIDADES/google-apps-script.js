@@ -94,7 +94,7 @@ function openSheet_(sheetId) {
 }
 
 function normalizeModelKey_(name) {
-  const base = String(name || '').replace(/\.frag$/i, '').trim();
+  const base = String(name || '').replace(/\.(frag|ifc)$/i, '').trim();
   if (!base) return '';
   const normalized = base
     .normalize('NFD')
@@ -233,7 +233,7 @@ function listModels_(e, body) {
   if (!folderId) return { error: 'Falta folderId' };
   const root = DriveApp.getFolderById(folderId);
 
-  const frags = [];
+  const modelFiles = [];
   const jsonByBase = {};
 
   const normalizeBase_ = (name) => String(name || '').trim().toLowerCase();
@@ -246,7 +246,12 @@ function listModels_(e, body) {
       const lower = String(name).toLowerCase();
 
       if (lower.endsWith('.frag')) {
-        frags.push({ name: name, fragId: f.getId() });
+        modelFiles.push({ name: name, fileId: f.getId(), format: 'frag' });
+        continue;
+      }
+
+      if (lower.endsWith('.ifc')) {
+        modelFiles.push({ name: name, fileId: f.getId(), format: 'ifc' });
         continue;
       }
 
@@ -264,11 +269,19 @@ function listModels_(e, body) {
 
   walk_(root);
 
-  const models = frags
+  const models = modelFiles
     .map((m) => {
-      const base = normalizeBase_(m.name.slice(0, -5));
+      const extLen = m.format === 'ifc' ? 4 : 5;
+      const base = normalizeBase_(m.name.slice(0, -extLen));
       const jsonId = jsonByBase[base] || null;
-      return { name: m.name, fragId: m.fragId, jsonId: jsonId };
+      return {
+        name: m.name,
+        format: m.format,
+        fileId: m.fileId,
+        fragId: m.format === 'frag' ? m.fileId : null,
+        ifcId: m.format === 'ifc' ? m.fileId : null,
+        jsonId: jsonId
+      };
     })
     .sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
 

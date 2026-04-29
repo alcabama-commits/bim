@@ -75,7 +75,7 @@ const downloadDriveFile = async (id) => {
 
 const extractDriveFiles = (html) => {
   const byName = new Map();
-  const regex = /&quot;([^"&]+\.(?:frag|json))&quot;[\s\S]{0,2500}?\[\[null,&quot;([a-zA-Z0-9_-]{10,})&quot;\],0\]/gi;
+  const regex = /&quot;([^"&]+\.(?:frag|ifc|json))&quot;[\s\S]{0,2500}?\[\[null,&quot;([a-zA-Z0-9_-]{10,})&quot;\],0\]/gi;
 
   for (const match of html.matchAll(regex)) {
     const name = decodeHtml(match[1] || '').trim();
@@ -88,7 +88,10 @@ const extractDriveFiles = (html) => {
 };
 
 const buildManifest = async (files) => {
-  const fragFiles = files.filter((file) => file.name.toLowerCase().endsWith('.frag'));
+  const modelFiles = files.filter((file) => {
+    const lower = file.name.toLowerCase();
+    return lower.endsWith('.frag') || lower.endsWith('.ifc');
+  });
   const jsonByBase = new Map(
     files
       .filter((file) => file.name.toLowerCase().endsWith('.json'))
@@ -104,21 +107,25 @@ const buildManifest = async (files) => {
   );
 
   const models = [];
-  for (const file of fragFiles.sort((a, b) => a.name.localeCompare(b.name, 'es'))) {
-    const base = normalizeBase(file.name.slice(0, -'.frag'.length));
+  for (const file of modelFiles.sort((a, b) => a.name.localeCompare(b.name, 'es'))) {
+    const format = file.name.toLowerCase().endsWith('.ifc') ? 'ifc' : 'frag';
+    const extension = `.${format}`;
+    const base = normalizeBase(file.name.slice(0, -extension.length));
     const jsonId = jsonByBase.get(base);
-    const fragAssetName = `${sanitizeFileName(file.name.slice(0, -'.frag'.length)) || 'modelo'}__${file.id}.frag`;
-    const fragAssetPath = path.join(assetsDir, fragAssetName);
+    const assetName = `${sanitizeFileName(file.name.slice(0, -extension.length)) || 'modelo'}__${file.id}${extension}`;
+    const assetPath = path.join(assetsDir, assetName);
     const previous = existingByName.get(file.name);
 
-    let fragUrl;
+    let fileUrl;
     try {
-      const fragBytes = await downloadDriveFile(file.id);
-      await writeFile(fragAssetPath, fragBytes);
-      fragUrl = `./drive-models/${fragAssetName}`;
+      const fileBytes = await downloadDriveFile(file.id);
+      await writeFile(assetPath, fileBytes);
+      fileUrl = `./drive-models/${assetName}`;
     } catch (error) {
-      if (previous?.fragId === file.id && previous?.fragUrl) {
-        fragUrl = previous.fragUrl;
+      const previousUrl = format === 'ifc' ? previous?.ifcUrl : previous?.fragUrl;
+      const previousId = format === 'ifc' ? previous?.ifcId : previous?.fragId;
+      if (previousId === file.id && previousUrl) {
+        fileUrl = previousUrl;
       } else {
         console.warn(`No se pudo descargar ${file.name}: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -126,7 +133,7 @@ const buildManifest = async (files) => {
 
     let jsonUrl = undefined;
     if (jsonId) {
-      const jsonAssetName = `${sanitizeFileName(file.name.slice(0, -'.frag'.length)) || 'modelo'}__${jsonId}.json`;
+      const jsonAssetName = `${sanitizeFileName(file.name.slice(0, -extension.length)) || 'modelo'}__${jsonId}.json`;
       const jsonAssetPath = path.join(assetsDir, jsonAssetName);
       try {
         const jsonBytes = await downloadDriveFile(jsonId);
@@ -143,8 +150,10 @@ const buildManifest = async (files) => {
 
     models.push({
       name: file.name,
-      fragId: file.id,
-      ...(fragUrl ? { fragUrl } : {}),
+      ...(format === 'ifc' ? { ifcId: file.id } : { fragId: file.id }),
+      ...(format === 'ifc'
+        ? (fileUrl ? { ifcUrl: fileUrl } : {})
+        : (fileUrl ? { fragUrl: fileUrl } : {})),
       ...(jsonId ? { jsonId } : {}),
       ...(jsonUrl ? { jsonUrl } : {}),
     });
@@ -173,7 +182,7 @@ try {
   const models = await buildManifest(files);
 
   if (models.length === 0) {
-    throw new Error(`No se encontraron archivos .frag publicos en ${folderUrl}`);
+    throw new Error(`No se encontraron archivos .frag o .ifc publicos en ${folderUrl}`);
   }
 
   await mkdir(path.dirname(outputPath), { recursive: true });

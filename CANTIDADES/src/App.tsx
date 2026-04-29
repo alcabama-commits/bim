@@ -144,12 +144,16 @@ const clearCantidadesClientData = async () => {
 
 type RemoteModel = {
   name: string;
+  format: 'frag' | 'ifc';
   fragUrl?: string;
+  ifcUrl?: string;
   jsonUrl?: string;
   drive?: {
     scriptUrl: string;
     folderId?: string;
-    fragId: string;
+    fileId: string;
+    fragId?: string;
+    ifcId?: string;
     jsonId?: string;
   };
   group: string;
@@ -169,13 +173,13 @@ type HistoryEntry = { status: PurchaseStatus; at: string };
 type DriveModelsManifest = {
   folderId: string;
   generatedAt: string;
-  models: Array<{ name: string; fragId: string; jsonId?: string; fragUrl?: string; jsonUrl?: string }>;
+  models: Array<{ name: string; fragId?: string; ifcId?: string; jsonId?: string; fragUrl?: string; ifcUrl?: string; jsonUrl?: string }>;
 };
 
 type DriveListResponse = {
   ok?: boolean;
   error?: string;
-  models?: Array<{ name: string; fragId: string; jsonId?: string | null }>;
+  models?: Array<{ name: string; format?: 'frag' | 'ifc'; fileId?: string | null; fragId?: string | null; ifcId?: string | null; jsonId?: string | null }>;
 };
 
 const GITHUB_REPO = {
@@ -193,16 +197,21 @@ const CANTIDADES_SHEET_SCRIPT_URL = String(
   ((import.meta as any).env?.VITE_CANTIDADES_SHEET_SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycbz2Lqn_w3JFpcMjW1v7EwG5k7v9gpuQIxh5tdf4S-FXJjA-MZHFrdMeAGMVTQMZ9XQ/exec'),
 ).trim();
 const DRIVE_MODELS_MANIFEST_URL = './drive-models-manifest.json';
-const MODEL_CATALOG_STORAGE_KEY = 'cantidades:modelCatalog:v2';
-const RECENT_MODELS_STORAGE_KEY = 'cantidades:recentModels:v2';
+const MODEL_CATALOG_STORAGE_KEY = 'cantidades:modelCatalog:v3';
+const RECENT_MODELS_STORAGE_KEY = 'cantidades:recentModels:v3';
 const REMOTE_QUEUE_STORAGE_KEY = 'cantidades:remoteQueue:v1';
 const LAST_SERVER_SYNC_STORAGE_KEY = 'cantidades:lastServerSyncAt';
+const stripModelExtension = (name: string | null | undefined) => String(name ?? '').replace(/\.(frag|ifc)$/i, '').trim();
+const detectModelFormat = (name: string | null | undefined): 'frag' | 'ifc' =>
+  /\.ifc$/i.test(String(name ?? '')) ? 'ifc' : 'frag';
 const normalizeRemoteModel = <T extends RemoteModel>(model: T): T => {
-  if (!model?.drive?.fragId) return model;
+  if (!model) return model;
   return {
     ...model,
+    format: model.format || detectModelFormat(model.name),
     fragUrl: model.fragUrl,
-    jsonUrl: model.jsonUrl
+    ifcUrl: model.ifcUrl,
+    jsonUrl: model.jsonUrl,
   };
 };
 
@@ -312,10 +321,12 @@ export default function App() {
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [isModelsLoading, setIsModelsLoading] = useState(false);
   const [selectedRemoteModelName, setSelectedRemoteModelName] = useState<string | null>(null);
+  const availableModelsRef = useRef<RemoteModel[]>([]);
+  const loadRemoteModelRef = useRef<((remote: RemoteModel) => Promise<void>) | null>(null);
   const [elementStatuses, setElementStatuses] = useState<Record<string, PurchaseStatus>>({});
   const [elementHistory, setElementHistory] = useState<Record<string, HistoryEntry[]>>({});
   const getModelKey = useCallback((modelName: string | null) => {
-    const base = (modelName ?? '').replace(/\.frag$/i, '').trim();
+    const base = stripModelExtension(modelName);
     return base || 'local';
   }, []);
   const updateLastServerSync = useCallback((ts: number) => {
@@ -334,6 +345,10 @@ export default function App() {
     writeRecentModels(next);
     setOfflineRecentModelNames(next.map((item) => item.name));
   }, []);
+
+  useEffect(() => {
+    availableModelsRef.current = availableModels;
+  }, [availableModels]);
 
   const verifyStableConnection = useCallback(async () => {
     if (typeof window === 'undefined') return false;
@@ -588,13 +603,13 @@ export default function App() {
   });
 
   const statusStorageKey = useMemo(() => {
-    const base = selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'local';
+    const base = selectedRemoteModelName ? stripModelExtension(selectedRemoteModelName) : 'local';
     const safe = base.trim().toLowerCase();
     return `cantidades:statuses:${safe}`;
   }, [selectedRemoteModelName]);
 
   const historyStorageKey = useMemo(() => {
-    const base = selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'local';
+    const base = selectedRemoteModelName ? stripModelExtension(selectedRemoteModelName) : 'local';
     const safe = base.trim().toLowerCase();
     return `cantidades:history:${safe}`;
   }, [selectedRemoteModelName]);
@@ -814,6 +829,7 @@ export default function App() {
       }
 
       let nextModels: RemoteModel[] = [];
+      let manifestModels: RemoteModel[] = [];
       if (CANTIDADES_SHEET_SCRIPT_URL) {
         const liveUrl = new URL(CANTIDADES_SHEET_SCRIPT_URL);
         liveUrl.searchParams.set('action', 'list');
@@ -828,19 +844,25 @@ export default function App() {
         }
 
         nextModels = (Array.isArray(liveData?.models) ? liveData.models : [])
-          .filter((m) => m && m.name && m.fragId)
+          .filter((m) => m && m.name && (m.fileId || m.fragId || m.ifcId))
           .map((m) => {
             const manifestMatch = manifestByName.get(String(m.name));
             const group = /estructura/i.test(m.name) ? 'ESTRUCTURA' : 'GENERAL';
+            const format = m.format || detectModelFormat(String(m.name));
+            const fileId = m.fileId || (format === 'ifc' ? m.ifcId : m.fragId);
             return normalizeRemoteModel({
               name: String(m.name),
+              format,
               fragUrl: manifestMatch?.fragUrl ? String(manifestMatch.fragUrl) : undefined,
+              ifcUrl: manifestMatch?.ifcUrl ? String(manifestMatch.ifcUrl) : undefined,
               jsonUrl: manifestMatch?.jsonUrl ? String(manifestMatch.jsonUrl) : undefined,
               group,
               drive: {
                 scriptUrl: CANTIDADES_SHEET_SCRIPT_URL,
                 folderId: manifest?.folderId || driveFolderId,
-                fragId: String(m.fragId),
+                fileId: String(fileId),
+                fragId: m.fragId ? String(m.fragId) : undefined,
+                ifcId: m.ifcId ? String(m.ifcId) : undefined,
                 jsonId: m.jsonId ? String(m.jsonId) : undefined,
               },
             });
@@ -848,20 +870,26 @@ export default function App() {
           .sort((a, b) => a.name.localeCompare(b.name, 'es'));
       }
 
-      if (nextModels.length === 0 && manifest) {
-        nextModels = (Array.isArray(manifest.models) ? manifest.models : [])
-          .filter((m) => m && m.name && m.fragId)
+      if (manifest) {
+        manifestModels = (Array.isArray(manifest.models) ? manifest.models : [])
+          .filter((m) => m && m.name && (m.fragId || m.ifcId))
           .map((m) => {
             const group = /estructura/i.test(m.name) ? 'ESTRUCTURA' : 'GENERAL';
+            const format = m.ifcId || /\.ifc$/i.test(String(m.name)) ? 'ifc' : 'frag';
+            const fileId = format === 'ifc' ? m.ifcId : m.fragId;
             return normalizeRemoteModel({
               name: m.name,
+              format,
               fragUrl: m.fragUrl ? String(m.fragUrl) : undefined,
+              ifcUrl: m.ifcUrl ? String(m.ifcUrl) : undefined,
               jsonUrl: m.jsonUrl ? String(m.jsonUrl) : undefined,
               group,
               drive: {
                 scriptUrl: CANTIDADES_SHEET_SCRIPT_URL,
                 folderId: manifest?.folderId || driveFolderId,
-                fragId: m.fragId,
+                fileId: String(fileId),
+                fragId: m.fragId ? String(m.fragId) : undefined,
+                ifcId: m.ifcId ? String(m.ifcId) : undefined,
                 jsonId: m.jsonId ? String(m.jsonId) : undefined,
               },
             });
@@ -869,13 +897,31 @@ export default function App() {
           .sort((a, b) => a.name.localeCompare(b.name, 'es'));
       }
 
+      nextModels = mergeRemoteModels(nextModels, manifestModels);
+
       if (nextModels.length === 0) {
         throw new Error('No se encontraron modelos nuevos en Drive ni en la copia publicada. Si acabas de cargar archivos, verifica que el Apps Script publicado tenga el cambio `action=list` y que la carpeta use el ID correcto.');
       }
 
+      const previousByName = new Map(availableModelsRef.current.map((item) => [item.name, item]));
+      const selectedNext = selectedRemoteModelName ? nextModels.find((item) => item.name === selectedRemoteModelName) ?? null : null;
+      const selectedPrev = selectedRemoteModelName ? previousByName.get(selectedRemoteModelName) ?? null : null;
+      const selectedChanged =
+        !!selectedNext &&
+        !!selectedPrev &&
+        (
+          selectedPrev.format !== selectedNext.format ||
+          selectedPrev.drive?.fileId !== selectedNext.drive?.fileId ||
+          selectedPrev.drive?.jsonId !== selectedNext.drive?.jsonId
+        );
+
       setAvailableModels(nextModels);
       writeCachedModelCatalog(nextModels);
       updateLastServerSync(Date.now());
+      if (selectedChanged && loadRemoteModelRef.current && selectedNext) {
+        setModelsNotice('Se detectaron cambios en el modelo actual. Recargando la version mas reciente.');
+        void loadRemoteModelRef.current(selectedNext);
+      }
       return;
     } catch (e) {
       if (fallbackModels.length > 0) {
@@ -899,6 +945,26 @@ export default function App() {
     void fetchAvailableModels({ silent: true });
     if (remoteQueueRef.current.length > 0) void flushRemoteQueue();
   }, [fetchAvailableModels, flushRemoteQueue, networkStatus]);
+
+  useEffect(() => {
+    if (networkStatus !== 'online') return;
+
+    const refreshCatalog = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchAvailableModels({ silent: true });
+      }
+    };
+
+    const intervalId = window.setInterval(refreshCatalog, 60000);
+    window.addEventListener('focus', refreshCatalog);
+    document.addEventListener('visibilitychange', refreshCatalog);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshCatalog);
+      document.removeEventListener('visibilitychange', refreshCatalog);
+    };
+  }, [fetchAvailableModels, networkStatus]);
 
   const baseElements = useMemo(() => {
     return elements.filter((el) => {
@@ -1399,6 +1465,91 @@ export default function App() {
     return model;
   }, [processModel]);
 
+  const loadIfcBytes = useCallback(async (ifcName: string, bytes: Uint8Array) => {
+    if (!componentsRef.current) return null;
+    await clearScene();
+
+    const fragments = componentsRef.current.get(OBC.FragmentsManager);
+    if (!fragments.initialized) {
+      let attempts = 0;
+      while (!fragments.initialized && attempts < 10) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        attempts++;
+      }
+      if (!fragments.initialized) {
+        throw new Error('No se pudo inicializar FragmentsManager para cargar el archivo IFC.');
+      }
+    }
+
+    const ifcLoader = componentsRef.current.get(OBC.IfcLoader);
+    const model = await withTimeout<any>(
+      ifcLoader.load(bytes, true, stripModelExtension(ifcName) || ifcName),
+      120000,
+      'Tiempo de espera agotado cargando el archivo .ifc',
+    );
+
+    if (!model) return null;
+
+    const worlds = componentsRef.current.get(OBC.Worlds);
+    const world = worlds.list.values().next().value;
+    if (!world) return model;
+
+    const modelObject = model.object ?? model;
+
+    try {
+      if (model.uuid !== ifcName) model.uuid = ifcName;
+    } catch {
+    }
+
+    try {
+      if (typeof model.useCamera === 'function') model.useCamera(world.camera.three);
+    } catch {
+    }
+
+    try {
+      const list = (fragments as any).list;
+      if (list?.set && !list.has?.(model.uuid)) list.set(model.uuid, model);
+    } catch {
+    }
+
+    if (!world.scene.three.children.includes(modelObject)) {
+      world.scene.three.add(modelObject);
+    }
+
+    try {
+      (modelObject as any).traverse?.((child: any) => {
+        if (child?.isMesh) {
+          world.meshes?.add?.(child);
+          if (componentsRef.current?.meshes && Array.isArray((componentsRef.current as any).meshes)) {
+            (componentsRef.current as any).meshes.push(child);
+          }
+        }
+      });
+    } catch {
+    }
+
+    try {
+      await fragments.core.update(true);
+    } catch {
+    }
+
+    setTimeout(() => {
+      if (world.camera.hasCameraControls()) {
+        const bbox = new THREE.Box3().setFromObject(modelObject);
+        const sphere = new THREE.Sphere();
+        bbox.getBoundingSphere(sphere);
+        world.camera.controls.fitToSphere(sphere, true);
+      }
+      try {
+        fragments.core.update(true);
+      } catch {
+      }
+    }, 300);
+
+    await processModel(model);
+    return model;
+  }, [processModel]);
+
   const putLru = <T,>(map: Map<string, T>, key: string, value: T, maxEntries: number) => {
     if (map.has(key)) map.delete(key);
     map.set(key, value);
@@ -1596,8 +1747,8 @@ export default function App() {
     throw new Error(`Sin conexion estable y no hay copia local de ${url}`);
   }, [networkStatus, updateLastServerSync]);
 
-  const fetchDriveScriptFragBytes = useCallback(async (scriptUrl: string, id: string, signal?: AbortSignal) => {
-    const cacheKey = `drive-script:frag:${id}`;
+  const fetchDriveScriptBinaryBytes = useCallback(async (scriptUrl: string, id: string, format: 'frag' | 'ifc', signal?: AbortSignal) => {
+    const cacheKey = `drive-script:${format}:${id}`;
     const base64ToBytes = (b64: string) => {
       const binary = atob(b64);
       const out = new Uint8Array(binary.length);
@@ -1618,7 +1769,7 @@ export default function App() {
         while (true) {
           if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
           safety++;
-          if (safety > 20000) throw new Error('Demasiados fragmentos descargados. Revisa el archivo.');
+          if (safety > 20000) throw new Error('Demasiados bloques descargados. Revisa el archivo.');
 
           const url = new URL(scriptUrl);
           url.searchParams.set('action', 'chunk');
@@ -1672,7 +1823,7 @@ export default function App() {
     }
 
     if (networkError) {
-      throw networkError instanceof Error ? networkError : new Error('No se pudo descargar el modelo desde Drive.');
+      throw networkError instanceof Error ? networkError : new Error('No se pudo descargar el archivo del modelo desde Drive.');
     }
 
     throw new Error('Sin conexion estable y no hay copia local del modelo.');
@@ -1734,15 +1885,21 @@ export default function App() {
     try {
       const normalizedRemote = normalizeRemoteModel(remote);
 
-      if (normalizedRemote.fragUrl) {
-        const fragPromise = fetchArrayBufferCached(normalizedRemote.fragUrl, controller.signal);
+      const fileUrl = normalizedRemote.format === 'ifc' ? normalizedRemote.ifcUrl : normalizedRemote.fragUrl;
+
+      if (fileUrl) {
+        const filePromise = fetchArrayBufferCached(fileUrl, controller.signal);
         const jsonPromise = normalizedRemote.jsonUrl
           ? fetchTextCached(normalizedRemote.jsonUrl, controller.signal)
           : Promise.resolve<string | null>(null);
-        const [fragBytes, jsonText] = await Promise.all([fragPromise, jsonPromise]);
+        const [fileBytes, jsonText] = await Promise.all([filePromise, jsonPromise]);
 
         if (controller.signal.aborted) return;
-        await loadFragBytes(normalizedRemote.name, fragBytes);
+        if (normalizedRemote.format === 'ifc') {
+          await loadIfcBytes(normalizedRemote.name, fileBytes);
+        } else {
+          await loadFragBytes(normalizedRemote.name, fileBytes);
+        }
 
         if (controller.signal.aborted) return;
         if (jsonText) {
@@ -1752,15 +1909,24 @@ export default function App() {
         return;
       }
 
-      if (normalizedRemote.drive) {
-        const fragPromise = fetchDriveScriptFragBytes(normalizedRemote.drive.scriptUrl, normalizedRemote.drive.fragId, controller.signal);
+      if (normalizedRemote.drive?.fileId) {
+        const filePromise = fetchDriveScriptBinaryBytes(
+          normalizedRemote.drive.scriptUrl,
+          normalizedRemote.drive.fileId,
+          normalizedRemote.format,
+          controller.signal,
+        );
         const jsonPromise = normalizedRemote.drive.jsonId
           ? fetchDriveScriptJsonText(normalizedRemote.drive.scriptUrl, normalizedRemote.drive.jsonId, controller.signal)
           : Promise.resolve<string | null>(null);
-        const [fragBytes, jsonText] = await Promise.all([fragPromise, jsonPromise]);
+        const [fileBytes, jsonText] = await Promise.all([filePromise, jsonPromise]);
 
         if (controller.signal.aborted) return;
-        await loadFragBytes(normalizedRemote.name, fragBytes);
+        if (normalizedRemote.format === 'ifc') {
+          await loadIfcBytes(normalizedRemote.name, fileBytes);
+        } else {
+          await loadFragBytes(normalizedRemote.name, fileBytes);
+        }
 
         if (controller.signal.aborted) return;
         if (jsonText) await applyJsonText(jsonText);
@@ -1776,7 +1942,11 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [applyJsonText, fetchArrayBufferCached, fetchDriveScriptFragBytes, fetchDriveScriptJsonText, fetchTextCached, loadFragBytes, rememberRecentModel]);
+  }, [applyJsonText, fetchArrayBufferCached, fetchDriveScriptBinaryBytes, fetchDriveScriptJsonText, fetchTextCached, loadFragBytes, loadIfcBytes, rememberRecentModel]);
+
+  useEffect(() => {
+    loadRemoteModelRef.current = loadRemoteModel;
+  }, [loadRemoteModel]);
 
   const resetFilters = () => {
     setSelectedClassifications([]);
@@ -1917,7 +2087,7 @@ export default function App() {
 
         <div className="w-full sm:flex-1 sm:max-w-3xl sm:mx-8">
           <div className="bg-[#003E52] text-white py-1.5 px-4 sm:px-6 rounded-sm text-center font-bold uppercase tracking-widest text-xs sm:text-sm shadow-inner truncate">
-            {selectedRemoteModelName ? selectedRemoteModelName.replace(/\.frag$/i, '') : 'CANTIDADES'}
+            {selectedRemoteModelName ? stripModelExtension(selectedRemoteModelName) : 'CANTIDADES'}
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-[10px] uppercase tracking-widest">
             <span className={`inline-flex items-center rounded-full border px-2 py-1 font-black ${networkBadge.className}`}>
@@ -2049,7 +2219,7 @@ export default function App() {
                               >
                                 <File className="w-4 h-4 text-slate-500" />
                                 <span className="flex-1 text-[11px] text-slate-700 truncate">
-                                  {m.name.replace(/\.frag$/i, '')}
+                                  {stripModelExtension(m.name)}
                                 </span>
                                 {isOfflineReady && (
                                   <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-500">

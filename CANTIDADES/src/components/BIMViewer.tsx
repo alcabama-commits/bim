@@ -7,6 +7,7 @@ import { BIMElement } from '../types';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 const FRAGMENTS_WORKER_URL = 'https://thatopen.github.io/engine_fragment/resources/worker.mjs';
+const IFC_WASM_PATH = 'https://unpkg.com/web-ifc@0.0.76/';
 
 async function getFragmentsWorkerUrl() {
   const res = await fetch(FRAGMENTS_WORKER_URL);
@@ -241,6 +242,18 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
         const workerUrl = await getFragmentsWorkerUrl();
         workerUrlRef.current = workerUrl;
         await fragments.init(workerUrl);
+        const ifcLoader = components.get(OBC.IfcLoader);
+        await ifcLoader.setup({
+          autoSetWasm: false,
+          wasm: {
+            absolute: true,
+            path: IFC_WASM_PATH,
+          },
+          webIfc: {
+            COORDINATE_TO_ORIGIN: true,
+            USE_FAST_BOOLS: false,
+          },
+        });
         console.log("FragmentsManager inicializado.");
         setIsInitialized(true);
 
