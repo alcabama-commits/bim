@@ -204,6 +204,20 @@ const LAST_SERVER_SYNC_STORAGE_KEY = 'cantidades:lastServerSyncAt';
 const stripModelExtension = (name: string | null | undefined) => String(name ?? '').replace(/\.(frag|ifc)$/i, '').trim();
 const detectModelFormat = (name: string | null | undefined): 'frag' | 'ifc' =>
   /\.ifc$/i.test(String(name ?? '')) ? 'ifc' : 'frag';
+const normalizeModelSearchText = (value: string | null | undefined) =>
+  String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+const PIPE_MODEL_KEYWORDS = [
+  'hidraulico',
+  'sanitario',
+  'desagues',
+  'gas',
+  'electrico',
+  'rci',
+  'deteccion',
+];
 const normalizeRemoteModel = <T extends RemoteModel>(model: T): T => {
   if (!model) return model;
   return {
@@ -564,7 +578,10 @@ export default function App() {
   const [appliedLevels, setAppliedLevels] = useState<string[]>([]);
   const [appliedDiameter, setAppliedDiameter] = useState<string>('Todos');
   const [isIsolateMode, setIsIsolateMode] = useState(false);
-  const isSanitaryModel = useMemo(() => /sanitario/i.test(selectedRemoteModelName ?? ''), [selectedRemoteModelName]);
+  const isSanitaryModel = useMemo(() => {
+    const normalizedName = normalizeModelSearchText(selectedRemoteModelName);
+    return PIPE_MODEL_KEYWORDS.some((keyword) => normalizedName.includes(keyword));
+  }, [selectedRemoteModelName]);
   const [statusVisibility, setStatusVisibility] = useState<Record<PurchaseStatus, boolean>>(() => {
     try {
       const raw = localStorage.getItem('cantidades:statusVisibility');

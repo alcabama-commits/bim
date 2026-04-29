@@ -42,8 +42,28 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
   });
   const selectedSet = useMemo(() => new Set(selectedElementIds ?? []), [selectedElementIds]);
   const lastAnchorIndexRef = useRef<number | null>(null);
+  const PIPE_COMMERCIAL_LENGTH_STORAGE_KEY = 'cantidades:pipeCommercialLength:v1';
 
   const STATUS_ORDER: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'ALMACEN', 'INSTALADO'];
+
+  const normalizePipeCommercialLength = (value: unknown, fallback = 6) => {
+    const parsed = typeof value === 'number' ? value : Number(String(value ?? '').replace(',', '.'));
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return Math.min(9999, Math.max(0.1, parsed));
+  };
+
+  const [pipeCommercialLengthInput, setPipeCommercialLengthInput] = useState(() => {
+    try {
+      const stored = localStorage.getItem(PIPE_COMMERCIAL_LENGTH_STORAGE_KEY);
+      return String(normalizePipeCommercialLength(stored ?? 6));
+    } catch {
+      return '6';
+    }
+  });
+  const pipeCommercialLength = useMemo(
+    () => normalizePipeCommercialLength(pipeCommercialLengthInput),
+    [pipeCommercialLengthInput],
+  );
 
   useEffect(() => {
     const el = containerRef.current;
@@ -61,6 +81,19 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       ro.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PIPE_COMMERCIAL_LENGTH_STORAGE_KEY, String(pipeCommercialLength));
+    } catch {
+    }
+  }, [pipeCommercialLength]);
+
+  useEffect(() => {
+    if (!isSanitaryModel && (activeTab === 'TUBERIAS' || activeTab === 'UNIONES')) {
+      setActiveTab('DETALLE');
+    }
+  }, [activeTab, isSanitaryModel]);
 
   const getProp = (el: BIMElement, key: string) => {
     if (!el.properties) return '-';
@@ -218,24 +251,24 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     return { pendiente, pedido, comprado, almacen, instalado: installed };
   };
 
-  const normalizePipeStageMeters = (totalLength: number, totalUnits: number, st: PipeStageState | undefined) => {
+  const normalizePipeStageMeters = (totalLength: number, totalUnits: number, st: PipeStageState | undefined, commercialLength: number) => {
     const units = normalizePipeStages(totalUnits, st);
     let remaining = Math.max(0, totalLength);
-    const instalado = Math.min(remaining, units.instalado * 6);
+    const instalado = Math.min(remaining, units.instalado * commercialLength);
     remaining -= instalado;
-    const almacen = Math.min(remaining, units.almacen * 6);
+    const almacen = Math.min(remaining, units.almacen * commercialLength);
     remaining -= almacen;
-    const comprado = Math.min(remaining, units.comprado * 6);
+    const comprado = Math.min(remaining, units.comprado * commercialLength);
     remaining -= comprado;
-    const pedido = Math.min(remaining, units.pedido * 6);
+    const pedido = Math.min(remaining, units.pedido * commercialLength);
     remaining -= pedido;
     return { pendiente: remaining, pedido, comprado, almacen, instalado };
   };
 
-  const derivePipeStagesFromStatusLength = (totalUnits: number, statusLength: Record<PurchaseStatus, number>): PipeStageState => {
+  const derivePipeStagesFromStatusLength = (totalUnits: number, statusLength: Record<PurchaseStatus, number>, commercialLength: number): PipeStageState => {
     const unitsFromLength = (length: number) => {
       if (!(length > 0)) return 0;
-      return Math.min(totalUnits, Math.ceil((length - 1e-9) / 6));
+      return Math.min(totalUnits, Math.ceil((length - 1e-9) / commercialLength));
     };
     const instalado = unitsFromLength(statusLength.INSTALADO);
     const uptoAlmacen = unitsFromLength(statusLength.INSTALADO + statusLength.ALMACEN);
@@ -282,7 +315,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     return map;
   }, [elements]);
 
-  const applyPipeAssignmentsToModel = (groupKey: string, ids: string[], totalUnits: number, totalLength: number, st: PipeStageState) => {
+  const applyPipeAssignmentsToModel = (ids: string[], totalUnits: number, totalLength: number, commercialLength: number, st: PipeStageState) => {
     const items = ids
       .map((id) => {
         const el = elementsById.get(id);
@@ -292,7 +325,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       })
       .filter(Boolean) as Array<{ id: string; length: number }>;
 
-    const tgt = normalizePipeStageMeters(totalLength, totalUnits, st);
+    const tgt = normalizePipeStageMeters(totalLength, totalUnits, st, commercialLength);
     let needInst = tgt.instalado;
     let needAlm = tgt.almacen;
     let needComp = tgt.comprado;
@@ -378,8 +411,8 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       map.set(key, cur);
     }
     const arr = Array.from(map.values()).map((v) => {
-      const units = Math.ceil(v.totalLength / 6);
-      const waste = units * 6 - v.totalLength;
+      const units = Math.ceil(v.totalLength / pipeCommercialLength);
+      const waste = units * pipeCommercialLength - v.totalLength;
       const groupKey = `${v.tipo}||${v.diameter}||${v.level}`;
       return { ...v, units, waste, groupKey };
     });
@@ -395,7 +428,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       if (d !== 0) return d;
       return a.level.localeCompare(b.level, 'es');
     });
-  }, [elements, getFirstProp, getMetric, getProp, isSanitaryModel, statuses]);
+  }, [elements, getFirstProp, getMetric, getProp, isSanitaryModel, pipeCommercialLength, statuses]);
 
   const unionsPurchaseSummary = useMemo(() => {
     if (!isSanitaryModel) return [];
@@ -629,18 +662,18 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     }
     if (activeTab === 'TUBERIAS') {
       const rows: Array<Array<unknown>> = [[
-        'Tipo', 'Diámetro', 'Nivel', 'Unidades (6m)', 'Pendiente', 'Pedido', 'Comprado', 'Almacén', 'Instalado', 'Longitud total (m)', 'Restante (m)', 'Desperdicio (m)', 'Adicionales'
+        'Tipo', 'Diámetro', 'Nivel', `Unidades (${pipeCommercialLengthLabel})`, 'Pendiente', 'Pedido', 'Comprado', 'Almacén', 'Instalado', 'Longitud total (m)', 'Restante (m)', 'Desperdicio (m)', 'Adicionales'
       ]];
       for (const r of pipePurchaseSummary) {
-        const baseState = pipeStagesByGroup[r.groupKey] ?? derivePipeStagesFromStatusLength(r.units, r.statusLength);
+        const baseState = pipeStagesByGroup[r.groupKey] ?? derivePipeStagesFromStatusLength(r.units, r.statusLength, pipeCommercialLength);
         const display = normalizePipeStages(r.units, baseState);
-        const remaining = normalizePipeStageMeters(r.totalLength, r.units, baseState).pendiente;
+        const remaining = normalizePipeStageMeters(r.totalLength, r.units, baseState, pipeCommercialLength).pendiente;
         rows.push([
           r.tipo, r.diameter, r.level, r.units, display.pendiente, display.pedido, display.comprado, display.almacen, display.instalado,
           format2(r.totalLength), format2(remaining), format2(r.waste), pipeAdditionsByGroup[r.groupKey] ?? 0
         ]);
       }
-      downloadCsv(rows, `${safeModel}_tuberias`);
+      downloadCsv(rows, `${safeModel}_tuberias_${String(pipeCommercialLength).replace('.', '_')}m`);
       return;
     }
     if (activeTab === 'UNIONES') {
@@ -677,12 +710,17 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
   }, [elements, statuses]);
 
   const format2 = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatShortNumber = (n: number) => n.toLocaleString('es-CO', {
+    minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
+    maximumFractionDigits: 2
+  });
   const format2FromRaw = (raw: unknown, fallback?: number) => {
     const n = parseNumber(raw);
     if (n !== null) return format2(n);
     if (fallback !== undefined && Number.isFinite(fallback)) return format2(fallback);
     return '-';
   };
+  const pipeCommercialLengthLabel = `${formatShortNumber(pipeCommercialLength)} m`;
 
   const overscan = 20;
   const totalRows = elements.length;
@@ -892,6 +930,22 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
         </div>
 
         <div className="flex items-center gap-2">
+          {isSanitaryModel && (
+            <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">
+              <span>Longitud tubo</span>
+              <input
+                type="number"
+                min={0.1}
+                step={0.1}
+                value={pipeCommercialLengthInput}
+                onChange={(e) => setPipeCommercialLengthInput(e.target.value)}
+                onBlur={() => setPipeCommercialLengthInput(String(normalizePipeCommercialLength(pipeCommercialLengthInput)))}
+                className="w-20 bg-white border border-slate-200 rounded px-2 py-1 text-[10px] font-bold text-slate-700 normal-case tracking-normal"
+                title="Longitud comercial del tubo en metros"
+              />
+              <span className="text-[10px] text-slate-500 normal-case tracking-normal">m</span>
+            </label>
+          )}
           <select
             value={String(rowHeight)}
             onChange={(e) => setRowHeight(Number(e.target.value))}
@@ -1129,7 +1183,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Tipo</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Diámetro</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10">Nivel</th>
-                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Unidades (6m)</th>
+                <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">{`Unidades (${pipeCommercialLengthLabel})`}</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Pendiente</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Pedido</th>
                 <th className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-r border-white/10 text-right">Comprado</th>
@@ -1149,14 +1203,14 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                   <td className="px-4 py-2 text-xs text-slate-700">{r.level}</td>
                   <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{r.units.toLocaleString('es-CO')}</td>
                   {(() => {
-                    const baseState = pipeStagesByGroup[r.groupKey] ?? derivePipeStagesFromStatusLength(r.units, r.statusLength);
+                    const baseState = pipeStagesByGroup[r.groupKey] ?? derivePipeStagesFromStatusLength(r.units, r.statusLength, pipeCommercialLength);
                     const display = normalizePipeStages(r.units, baseState);
                     const onSet = (stage: 'pedido' | 'comprado' | 'almacen' | 'instalado') => (value: number) => {
                       setPipeStagesByGroup((prev) => {
-                        const current = prev[r.groupKey] ?? derivePipeStagesFromStatusLength(r.units, r.statusLength);
+                        const current = prev[r.groupKey] ?? derivePipeStagesFromStatusLength(r.units, r.statusLength, pipeCommercialLength);
                         const next = movePipeStage(r.units, current, stage, value);
                         const updated = { ...prev, [r.groupKey]: next };
-                        applyPipeAssignmentsToModel(r.groupKey, r.ids, r.units, r.totalLength, next);
+                        applyPipeAssignmentsToModel(r.ids, r.units, r.totalLength, pipeCommercialLength, next);
                         return updated;
                       });
                     };
@@ -1207,7 +1261,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
                     );
                   })()}
                   <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.totalLength)}</td>
-                  <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{format2(normalizePipeStageMeters(r.totalLength, r.units, pipeStagesByGroup[r.groupKey] ?? derivePipeStagesFromStatusLength(r.units, r.statusLength)).pendiente)}</td>
+                  <td className="px-4 py-2 text-xs text-right font-mono font-black text-slate-900">{format2(normalizePipeStageMeters(r.totalLength, r.units, pipeStagesByGroup[r.groupKey] ?? derivePipeStagesFromStatusLength(r.units, r.statusLength, pipeCommercialLength), pipeCommercialLength).pendiente)}</td>
                   <td className="px-4 py-2 text-xs text-right font-mono text-slate-700">{format2(r.waste)}</td>
                   <td className="px-4 py-2 text-right">
                     <input
