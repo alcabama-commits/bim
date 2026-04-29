@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#2b2b2b" />
-    <meta name="x-app-version" data-app="cantidades" content="20260427-05" />
+    <meta name="x-app-version" data-app="cantidades" content="20260428-01" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="https://i.postimg.cc/RqxVh1wB/FAVICON-BIM-ALCABAMA-ARTIS.png" type="image/png" />
     <style>
@@ -13,7 +13,7 @@
       #update-banner button{cursor:pointer;border:0;border-radius:8px;background:#fff;color:#111827;font-weight:900;letter-spacing:.12em;text-transform:uppercase;font-size:11px;padding:10px 12px}
     </style>
     <title>My Google AI Studio App</title>
-    <script type="module" crossorigin src="./assets/index-BHYFoBOD.js"></script>
+    <script type="module" crossorigin src="./assets/index-BvzvR4Xe.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-Cn4ukua9.css">
   </head>
   <body>
@@ -42,12 +42,13 @@
                     if (reg && reg.waiting) {
                       reg.waiting.postMessage({ type: 'SKIP_WAITING' });
                     }
-                    if (reg) reg.update().finally(function () {
-                      var u = new URL(location.href);
-                      if (version) u.searchParams.set('v', version);
-                      location.replace(u.toString());
-                    });
-                    else {
+                    if (reg) {
+                      reg.update().finally(function () {
+                        var u = new URL(location.href);
+                        if (version) u.searchParams.set('v', version);
+                        location.replace(u.toString());
+                      });
+                    } else {
                       var u2 = new URL(location.href);
                       if (version) u2.searchParams.set('v', version);
                       location.replace(u2.toString());

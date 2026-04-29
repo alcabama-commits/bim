@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const DEFAULT_FOLDER_ID = '18gr5TvX3pYY5S3ZRfjmWagkTLhhG3B0W';
@@ -10,6 +10,16 @@ const folderId =
 const outputPath = path.resolve(process.cwd(), 'public', 'drive-models-manifest.json');
 const assetsDir = path.resolve(process.cwd(), 'public', 'drive-models');
 const folderUrl = `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}`;
+
+const readExistingManifest = async () => {
+  try {
+    const raw = await readFile(outputPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+};
 
 const decodeHtml = (value) =>
   value
@@ -85,8 +95,13 @@ const buildManifest = async (files) => {
       .map((file) => [normalizeBase(file.name.slice(0, -'.json'.length)), file.id]),
   );
 
-  await rm(assetsDir, { recursive: true, force: true });
   await mkdir(assetsDir, { recursive: true });
+  const existingManifest = await readExistingManifest();
+  const existingByName = new Map(
+    Array.isArray(existingManifest?.models)
+      ? existingManifest.models.filter((item) => item?.name).map((item) => [item.name, item])
+      : [],
+  );
 
   const models = [];
   for (const file of fragFiles.sort((a, b) => a.name.localeCompare(b.name, 'es'))) {
@@ -94,22 +109,42 @@ const buildManifest = async (files) => {
     const jsonId = jsonByBase.get(base);
     const fragAssetName = `${sanitizeFileName(file.name.slice(0, -'.frag'.length)) || 'modelo'}__${file.id}.frag`;
     const fragAssetPath = path.join(assetsDir, fragAssetName);
-    const fragBytes = await downloadDriveFile(file.id);
-    await writeFile(fragAssetPath, fragBytes);
+    const previous = existingByName.get(file.name);
 
-    let jsonUrl;
+    let fragUrl;
+    try {
+      const fragBytes = await downloadDriveFile(file.id);
+      await writeFile(fragAssetPath, fragBytes);
+      fragUrl = `./drive-models/${fragAssetName}`;
+    } catch (error) {
+      if (previous?.fragId === file.id && previous?.fragUrl) {
+        fragUrl = previous.fragUrl;
+      } else {
+        console.warn(`No se pudo descargar ${file.name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    let jsonUrl = undefined;
     if (jsonId) {
       const jsonAssetName = `${sanitizeFileName(file.name.slice(0, -'.frag'.length)) || 'modelo'}__${jsonId}.json`;
       const jsonAssetPath = path.join(assetsDir, jsonAssetName);
-      const jsonBytes = await downloadDriveFile(jsonId);
-      await writeFile(jsonAssetPath, jsonBytes);
-      jsonUrl = `./drive-models/${jsonAssetName}`;
+      try {
+        const jsonBytes = await downloadDriveFile(jsonId);
+        await writeFile(jsonAssetPath, jsonBytes);
+        jsonUrl = `./drive-models/${jsonAssetName}`;
+      } catch (error) {
+        if (previous?.jsonId === jsonId && previous?.jsonUrl) {
+          jsonUrl = previous.jsonUrl;
+        } else {
+          console.warn(`No se pudo descargar JSON para ${file.name}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
     }
 
     models.push({
       name: file.name,
       fragId: file.id,
-      fragUrl: `./drive-models/${fragAssetName}`,
+      ...(fragUrl ? { fragUrl } : {}),
       ...(jsonId ? { jsonId } : {}),
       ...(jsonUrl ? { jsonUrl } : {}),
     });
@@ -118,39 +153,48 @@ const buildManifest = async (files) => {
   return models;
 };
 
-const res = await fetch(folderUrl, {
-  headers: {
-    'cache-control': 'no-cache',
-    pragma: 'no-cache',
-    'user-agent': 'cantidades-build/1.0',
-  },
-});
+const existingManifest = await readExistingManifest();
 
-if (!res.ok) {
-  throw new Error(`No se pudo leer el folder de Drive (${res.status})`);
-}
-
-const html = await res.text();
-const files = extractDriveFiles(html);
-const models = await buildManifest(files);
-
-if (models.length === 0) {
-  throw new Error(`No se encontraron archivos .frag publicos en ${folderUrl}`);
-}
-
-await mkdir(path.dirname(outputPath), { recursive: true });
-await writeFile(
-  outputPath,
-  JSON.stringify(
-    {
-      folderId,
-      generatedAt: new Date().toISOString(),
-      models,
+try {
+  const res = await fetch(folderUrl, {
+    headers: {
+      'cache-control': 'no-cache',
+      pragma: 'no-cache',
+      'user-agent': 'cantidades-build/1.0',
     },
-    null,
-    2,
-  ) + '\n',
-  'utf8',
-);
+  });
 
-console.log(`Manifest generado con ${models.length} modelos en ${outputPath}`);
+  if (!res.ok) {
+    throw new Error(`No se pudo leer el folder de Drive (${res.status})`);
+  }
+
+  const html = await res.text();
+  const files = extractDriveFiles(html);
+  const models = await buildManifest(files);
+
+  if (models.length === 0) {
+    throw new Error(`No se encontraron archivos .frag publicos en ${folderUrl}`);
+  }
+
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  await writeFile(
+    outputPath,
+    JSON.stringify(
+      {
+        folderId,
+        generatedAt: new Date().toISOString(),
+        models,
+      },
+      null,
+      2,
+    ) + '\n',
+    'utf8',
+  );
+
+  console.log(`Manifest generado con ${models.length} modelos en ${outputPath}`);
+} catch (error) {
+  if (!existingManifest) {
+    throw error;
+  }
+  console.warn(`No se pudo regenerar el manifest desde Drive. Se reutiliza la ultima copia local: ${error instanceof Error ? error.message : String(error)}`);
+}

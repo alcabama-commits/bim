@@ -132,7 +132,11 @@ const clearCantidadesClientData = async () => {
   try {
     if ('caches' in window) {
       const keys = await caches.keys();
-      await Promise.all(keys.filter((k) => k.startsWith('cantidades-')).map((k) => caches.delete(k)));
+      await Promise.all(
+        keys
+          .filter((k) => k.startsWith('cantidades-') || k.includes('-cantidades-'))
+          .map((k) => caches.delete(k)),
+      );
     }
   } catch {
   }
@@ -166,6 +170,12 @@ type DriveModelsManifest = {
   folderId: string;
   generatedAt: string;
   models: Array<{ name: string; fragId: string; jsonId?: string; fragUrl?: string; jsonUrl?: string }>;
+};
+
+type DriveListResponse = {
+  ok?: boolean;
+  error?: string;
+  models?: Array<{ name: string; fragId: string; jsonId?: string | null }>;
 };
 
 const GITHUB_REPO = {
@@ -343,7 +353,6 @@ export default function App() {
       });
       const stable = res.ok;
       setNetworkStatus(stable ? 'online' : 'unstable');
-      if (stable) updateLastServerSync(Date.now());
       return stable;
     } catch {
       setNetworkStatus('unstable');
@@ -351,7 +360,7 @@ export default function App() {
     } finally {
       window.clearTimeout(timeoutId);
     }
-  }, [updateLastServerSync]);
+  }, []);
 
   const currentModelKey = useMemo(() => getModelKey(selectedRemoteModelName), [getModelKey, selectedRemoteModelName]);
 
@@ -757,8 +766,9 @@ export default function App() {
     return undefined;
   }, [getProp]);
 
-  const fetchAvailableModels = useCallback(async (options?: { silent?: boolean }) => {
+  const fetchAvailableModels = useCallback(async (options?: { silent?: boolean; force?: boolean }) => {
     const silent = options?.silent === true;
+    const force = options?.force === true;
     const cachedCatalog = readCachedModelCatalog();
     const recentModels = readRecentModels().map(({ lastOpenedAt: _lastOpenedAt, ...model }) => model);
     const fallbackModels = mergeRemoteModels(cachedCatalog?.models ?? [], recentModels);
@@ -767,7 +777,12 @@ export default function App() {
     setModelsError(null);
     setModelsNotice(null);
 
-    if (networkStatus !== 'online') {
+    let canReachServer = networkStatus === 'online';
+    if (!canReachServer && force) {
+      canReachServer = await verifyStableConnection();
+    }
+
+    if (!canReachServer) {
       if (fallbackModels.length > 0) {
         setAvailableModels(fallbackModels);
         setModelsNotice('Sin conexión estable. Mostrando modelos recientes guardados localmente.');
@@ -783,33 +798,80 @@ export default function App() {
       const env = ((import.meta as any).env || {}) as Record<string, string | undefined>;
       const driveFolderId = (env.VITE_DRIVE_FOLDER_ID?.trim() || '18gr5TvX3pYY5S3ZRfjmWagkTLhhG3B0W').trim();
 
-      const manifestRes = await fetch(`${DRIVE_MODELS_MANIFEST_URL}?t=${Date.now()}`, {
-        cache: 'no-store'
-      });
-      if (!manifestRes.ok) {
-        throw new Error(`No se pudo leer el manifiesto de modelos (${manifestRes.status}). Ejecuta npm run build y publica docs/CANTIDADES.`);
+      let manifest: DriveModelsManifest | null = null;
+      const manifestByName = new Map<string, DriveModelsManifest['models'][number]>();
+      try {
+        const manifestRes = await fetch(`${DRIVE_MODELS_MANIFEST_URL}?t=${Date.now()}`, {
+          cache: 'no-store'
+        });
+        if (manifestRes.ok) {
+          manifest = (await manifestRes.json()) as DriveModelsManifest;
+          for (const item of Array.isArray(manifest?.models) ? manifest.models : []) {
+            if (item?.name) manifestByName.set(String(item.name), item);
+          }
+        }
+      } catch {
       }
-      const manifest = (await manifestRes.json()) as DriveModelsManifest;
-      const models = Array.isArray(manifest?.models) ? manifest.models : [];
 
-      const nextModels: RemoteModel[] = models
-        .filter((m) => m && m.name && m.fragId)
-        .map((m) => {
-          const group = /estructura/i.test(m.name) ? 'ESTRUCTURA' : 'GENERAL';
-          return normalizeRemoteModel({
-            name: m.name,
-            fragUrl: m.fragUrl ? String(m.fragUrl) : undefined,
-            jsonUrl: m.jsonUrl ? String(m.jsonUrl) : undefined,
-            group,
-            drive: {
-              scriptUrl: CANTIDADES_SHEET_SCRIPT_URL,
-              folderId: manifest?.folderId || driveFolderId,
-              fragId: m.fragId,
-              jsonId: m.jsonId ? String(m.jsonId) : undefined
-            }
-          });
-        })
-        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+      let nextModels: RemoteModel[] = [];
+      if (CANTIDADES_SHEET_SCRIPT_URL) {
+        const liveUrl = new URL(CANTIDADES_SHEET_SCRIPT_URL);
+        liveUrl.searchParams.set('action', 'list');
+        liveUrl.searchParams.set('folderId', manifest?.folderId || driveFolderId);
+
+        const liveData = await jsonpRequestWithRetry<DriveListResponse>(liveUrl, {
+          timeoutMs: 30000,
+          retries: 3,
+        });
+        if (typeof liveData?.error === 'string' && liveData.error.trim()) {
+          throw new Error(liveData.error);
+        }
+
+        nextModels = (Array.isArray(liveData?.models) ? liveData.models : [])
+          .filter((m) => m && m.name && m.fragId)
+          .map((m) => {
+            const manifestMatch = manifestByName.get(String(m.name));
+            const group = /estructura/i.test(m.name) ? 'ESTRUCTURA' : 'GENERAL';
+            return normalizeRemoteModel({
+              name: String(m.name),
+              fragUrl: manifestMatch?.fragUrl ? String(manifestMatch.fragUrl) : undefined,
+              jsonUrl: manifestMatch?.jsonUrl ? String(manifestMatch.jsonUrl) : undefined,
+              group,
+              drive: {
+                scriptUrl: CANTIDADES_SHEET_SCRIPT_URL,
+                folderId: manifest?.folderId || driveFolderId,
+                fragId: String(m.fragId),
+                jsonId: m.jsonId ? String(m.jsonId) : undefined,
+              },
+            });
+          })
+          .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+      }
+
+      if (nextModels.length === 0 && manifest) {
+        nextModels = (Array.isArray(manifest.models) ? manifest.models : [])
+          .filter((m) => m && m.name && m.fragId)
+          .map((m) => {
+            const group = /estructura/i.test(m.name) ? 'ESTRUCTURA' : 'GENERAL';
+            return normalizeRemoteModel({
+              name: m.name,
+              fragUrl: m.fragUrl ? String(m.fragUrl) : undefined,
+              jsonUrl: m.jsonUrl ? String(m.jsonUrl) : undefined,
+              group,
+              drive: {
+                scriptUrl: CANTIDADES_SHEET_SCRIPT_URL,
+                folderId: manifest?.folderId || driveFolderId,
+                fragId: m.fragId,
+                jsonId: m.jsonId ? String(m.jsonId) : undefined,
+              },
+            });
+          })
+          .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+      }
+
+      if (nextModels.length === 0) {
+        throw new Error('No se encontraron modelos nuevos en Drive ni en la copia publicada. Si acabas de cargar archivos, verifica que el Apps Script publicado tenga el cambio `action=list` y que la carpeta use el ID correcto.');
+      }
 
       setAvailableModels(nextModels);
       writeCachedModelCatalog(nextModels);
@@ -826,7 +888,7 @@ export default function App() {
     } finally {
       if (!silent) setIsModelsLoading(false);
     }
-  }, [networkStatus, updateLastServerSync]);
+  }, [networkStatus, updateLastServerSync, verifyStableConnection]);
 
   useEffect(() => {
     fetchAvailableModels();
@@ -1903,7 +1965,7 @@ export default function App() {
                 {!leftPanelCollapsed && (
                   <button
                     type="button"
-                    onClick={fetchAvailableModels}
+                    onClick={() => void fetchAvailableModels({ force: true })}
                     className="p-1 hover:bg-slate-200 rounded transition-colors"
                     title="Actualizar lista"
                   >
@@ -1927,7 +1989,7 @@ export default function App() {
                     <div className="mt-3 flex gap-2">
                       <button
                         type="button"
-                        onClick={fetchAvailableModels}
+                        onClick={() => void fetchAvailableModels({ force: true })}
                         className="px-3 py-2 rounded-md bg-white border border-red-200 text-red-700 font-black uppercase tracking-widest text-[10px] hover:bg-red-50"
                       >
                         Reintentar
@@ -1949,7 +2011,7 @@ export default function App() {
 
                 {!modelsError && availableModels.length === 0 && !isModelsLoading && (
                   <div className="p-3 text-xs text-slate-500">
-                    No se encontraron modelos en {GITHUB_REPO.modelsPath}.
+                    No se encontraron modelos disponibles en la carpeta de Drive configurada.
                   </div>
                 )}
 
