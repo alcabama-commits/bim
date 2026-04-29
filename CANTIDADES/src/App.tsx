@@ -809,27 +809,55 @@ export default function App() {
       return;
     }
 
+    const env = ((import.meta as any).env || {}) as Record<string, string | undefined>;
+    const driveFolderId = (env.VITE_DRIVE_FOLDER_ID?.trim() || '18gr5TvX3pYY5S3ZRfjmWagkTLhhG3B0W').trim();
+
+    let manifest: DriveModelsManifest | null = null;
+    const manifestByName = new Map<string, DriveModelsManifest['models'][number]>();
+    let manifestModels: RemoteModel[] = [];
+
     try {
-      const env = ((import.meta as any).env || {}) as Record<string, string | undefined>;
-      const driveFolderId = (env.VITE_DRIVE_FOLDER_ID?.trim() || '18gr5TvX3pYY5S3ZRfjmWagkTLhhG3B0W').trim();
-
-      let manifest: DriveModelsManifest | null = null;
-      const manifestByName = new Map<string, DriveModelsManifest['models'][number]>();
-      try {
-        const manifestRes = await fetch(`${DRIVE_MODELS_MANIFEST_URL}?t=${Date.now()}`, {
-          cache: 'no-store'
-        });
-        if (manifestRes.ok) {
-          manifest = (await manifestRes.json()) as DriveModelsManifest;
-          for (const item of Array.isArray(manifest?.models) ? manifest.models : []) {
-            if (item?.name) manifestByName.set(String(item.name), item);
-          }
+      const manifestRes = await fetch(`${DRIVE_MODELS_MANIFEST_URL}?t=${Date.now()}`, {
+        cache: 'no-store'
+      });
+      if (manifestRes.ok) {
+        manifest = (await manifestRes.json()) as DriveModelsManifest;
+        for (const item of Array.isArray(manifest?.models) ? manifest.models : []) {
+          if (item?.name) manifestByName.set(String(item.name), item);
         }
-      } catch {
       }
+    } catch {
+    }
 
+    if (manifest) {
+      manifestModels = (Array.isArray(manifest.models) ? manifest.models : [])
+        .filter((m) => m && m.name && (m.fragId || m.ifcId))
+        .map((m) => {
+          const group = /estructura/i.test(m.name) ? 'ESTRUCTURA' : 'GENERAL';
+          const format = m.ifcId || /\.ifc$/i.test(String(m.name)) ? 'ifc' : 'frag';
+          const fileId = format === 'ifc' ? m.ifcId : m.fragId;
+          return normalizeRemoteModel({
+            name: m.name,
+            format,
+            fragUrl: m.fragUrl ? String(m.fragUrl) : undefined,
+            ifcUrl: m.ifcUrl ? String(m.ifcUrl) : undefined,
+            jsonUrl: m.jsonUrl ? String(m.jsonUrl) : undefined,
+            group,
+            drive: {
+              scriptUrl: CANTIDADES_SHEET_SCRIPT_URL,
+              folderId: manifest?.folderId || driveFolderId,
+              fileId: String(fileId),
+              fragId: m.fragId ? String(m.fragId) : undefined,
+              ifcId: m.ifcId ? String(m.ifcId) : undefined,
+              jsonId: m.jsonId ? String(m.jsonId) : undefined,
+            },
+          });
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    }
+
+    try {
       let nextModels: RemoteModel[] = [];
-      let manifestModels: RemoteModel[] = [];
       if (CANTIDADES_SHEET_SCRIPT_URL) {
         const liveUrl = new URL(CANTIDADES_SHEET_SCRIPT_URL);
         liveUrl.searchParams.set('action', 'list');
@@ -856,33 +884,6 @@ export default function App() {
               fragUrl: manifestMatch?.fragUrl ? String(manifestMatch.fragUrl) : undefined,
               ifcUrl: manifestMatch?.ifcUrl ? String(manifestMatch.ifcUrl) : undefined,
               jsonUrl: manifestMatch?.jsonUrl ? String(manifestMatch.jsonUrl) : undefined,
-              group,
-              drive: {
-                scriptUrl: CANTIDADES_SHEET_SCRIPT_URL,
-                folderId: manifest?.folderId || driveFolderId,
-                fileId: String(fileId),
-                fragId: m.fragId ? String(m.fragId) : undefined,
-                ifcId: m.ifcId ? String(m.ifcId) : undefined,
-                jsonId: m.jsonId ? String(m.jsonId) : undefined,
-              },
-            });
-          })
-          .sort((a, b) => a.name.localeCompare(b.name, 'es'));
-      }
-
-      if (manifest) {
-        manifestModels = (Array.isArray(manifest.models) ? manifest.models : [])
-          .filter((m) => m && m.name && (m.fragId || m.ifcId))
-          .map((m) => {
-            const group = /estructura/i.test(m.name) ? 'ESTRUCTURA' : 'GENERAL';
-            const format = m.ifcId || /\.ifc$/i.test(String(m.name)) ? 'ifc' : 'frag';
-            const fileId = format === 'ifc' ? m.ifcId : m.fragId;
-            return normalizeRemoteModel({
-              name: m.name,
-              format,
-              fragUrl: m.fragUrl ? String(m.fragUrl) : undefined,
-              ifcUrl: m.ifcUrl ? String(m.ifcUrl) : undefined,
-              jsonUrl: m.jsonUrl ? String(m.jsonUrl) : undefined,
               group,
               drive: {
                 scriptUrl: CANTIDADES_SHEET_SCRIPT_URL,
@@ -924,9 +925,11 @@ export default function App() {
       }
       return;
     } catch (e) {
-      if (fallbackModels.length > 0) {
-        setAvailableModels(fallbackModels);
-        setModelsNotice('No se pudo actualizar desde el servidor. Se mantiene la ultima copia local.');
+      const resilientFallback = mergeRemoteModels(manifestModels, fallbackModels);
+      if (resilientFallback.length > 0) {
+        setAvailableModels(resilientFallback);
+        writeCachedModelCatalog(resilientFallback);
+        setModelsNotice('No se pudo consultar la lista en vivo. Se usa la ultima lista publicada y la copia local.');
       } else {
         setModelsError(e instanceof Error ? e.message : 'Error cargando modelos');
         setAvailableModels([]);

@@ -1,6 +1,6 @@
 {
   "folderId": "18gr5TvX3pYY5S3ZRfjmWagkTLhhG3B0W",
-  "generatedAt": "2026-04-29T16:51:20.260Z",
+  "generatedAt": "2026-04-29T18:56:27.631Z",
   "models": [
     {
       "name": "2442602.frag",
@@ -24,9 +24,9 @@
       "jsonUrl": "./drive-models/46_BO_ARB_Sanitario_Torre_A__1VD_7X5alHcrGFrbYrBqAlv_o36K8Ihzo.json"
     },
     {
-      "name": "54_BO_TRE_Deteccion Incendios_Torre 1.ifc",
-      "ifcId": "1iVTgzEN7DmmuER62XuHBMrUAlhLR1Kgq",
-      "ifcUrl": "./drive-models/54_BO_TRE_Deteccion_Incendios_Torre_1__1iVTgzEN7DmmuER62XuHBMrUAlhLR1Kgq.ifc",
+      "name": "54_BO_TRE_Deteccion Incendios_Torre 1.frag",
+      "fragId": "1nes3tGMaolNIWE7y7RmSngqY_wND1bG6",
+      "fragUrl": "./drive-models/54_BO_TRE_Deteccion_Incendios_Torre_1__1nes3tGMaolNIWE7y7RmSngqY_wND1bG6.frag",
       "jsonId": "1_mG5GDMi0c04b5bdLUEZur-OpjLYdFLS",
       "jsonUrl": "./drive-models/54_BO_TRE_Deteccion_Incendios_Torre_1__1_mG5GDMi0c04b5bdLUEZur-OpjLYdFLS.json"
     }
