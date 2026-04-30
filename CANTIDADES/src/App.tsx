@@ -230,6 +230,21 @@ const PIPE_MODEL_KEYWORDS = [
   'rci',
   'deteccion',
 ];
+const PIPE_LENGTH_WITH_UNIONS_KEYWORDS = [
+  'apantallamiento',
+  'comunicaciones',
+  'comunicacion',
+  'incendio',
+  'deteccion',
+  'deteccion de incendios',
+  'sdi',
+  'dim',
+  'spr',
+  'com',
+  'electricos',
+  'electrico',
+  'ele',
+];
 const normalizeRemoteModel = <T extends RemoteModel>(model: T): T => {
   if (!model) return model;
   return {
@@ -838,6 +853,10 @@ export default function App() {
       );
     });
   }, [elements, getFirstProp, getProp, selectedRemoteModelName]);
+  const shouldMergeUnionLengthsIntoPipes = useMemo(() => {
+    const normalizedName = normalizeModelSearchText(selectedRemoteModelName);
+    return PIPE_LENGTH_WITH_UNIONS_KEYWORDS.some((keyword) => normalizedName.includes(keyword));
+  }, [selectedRemoteModelName]);
 
   const fetchAvailableModels = useCallback(async (options?: { silent?: boolean; force?: boolean }) => {
     const silent = options?.silent === true;
@@ -2566,6 +2585,7 @@ export default function App() {
                       statuses={elementStatuses}
                       history={elementHistory}
                       isSanitaryModel={isSanitaryModel}
+                      mergeUnionLengthsIntoPipes={shouldMergeUnionLengthsIntoPipes}
                       onChangeStatus={handleChangeStatus}
                       onChangeStatusMany={handleChangeStatusMany}
                       onClearFilters={resetFilters}
@@ -2653,6 +2673,7 @@ export default function App() {
               statuses={elementStatuses}
               history={elementHistory}
               isSanitaryModel={isSanitaryModel}
+              mergeUnionLengthsIntoPipes={shouldMergeUnionLengthsIntoPipes}
               onChangeStatus={handleChangeStatus}
               onChangeStatusMany={handleChangeStatusMany}
               onClearFilters={resetFilters}

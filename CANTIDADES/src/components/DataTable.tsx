@@ -18,6 +18,7 @@ interface DataTableProps {
   statuses: Record<string, PurchaseStatus | undefined>;
   history?: Record<string, HistoryEntry[] | undefined>;
   isSanitaryModel?: boolean;
+  mergeUnionLengthsIntoPipes?: boolean;
   onChangeStatus: (id: string, status: PurchaseStatus) => void;
   onChangeStatusMany?: (ids: string[], status: PurchaseStatus) => void;
   onClearFilters?: () => void;
@@ -30,7 +31,7 @@ type PipeStageState = {
   instalado: number;
 };
 
-export default function DataTable({ elements, onSelectElement, selectedElementId, selectedElementIds, onSetSelectedElementIds, modelKey, statuses, history, isSanitaryModel, onChangeStatus, onChangeStatusMany, onClearFilters }: DataTableProps) {
+export default function DataTable({ elements, onSelectElement, selectedElementId, selectedElementIds, onSetSelectedElementIds, modelKey, statuses, history, isSanitaryModel, mergeUnionLengthsIntoPipes, onChangeStatus, onChangeStatusMany, onClearFilters }: DataTableProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(400);
@@ -459,7 +460,8 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       return n !== null ? n : null;
     };
     for (const el of elements) {
-      if (!isPipeElement(el)) continue;
+      const includeAsPipe = isPipeElement(el) || (mergeUnionLengthsIntoPipes && isUnionElement(el));
+      if (!includeAsPipe) continue;
       const len = getMetricByKeys(el, ['LONGITUD INTEGRADO', 'LONGITUD', 'LENGTH', 'Length'], 0);
       if (!(len > 0)) continue;
       const st: PurchaseStatus = statuses[el.id] ?? 'PENDIENTE';
@@ -505,7 +507,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       if (d !== 0) return d;
       return a.level.localeCompare(b.level, 'es');
     });
-  }, [elements, getFirstProp, getMetricByKeys, getProp, isSanitaryModel, pipeCommercialLength, statuses]);
+  }, [elements, getFirstProp, getMetricByKeys, getProp, isSanitaryModel, mergeUnionLengthsIntoPipes, pipeCommercialLength, statuses]);
 
   const unionsPurchaseSummary = useMemo(() => {
     if (!isSanitaryModel) return [];
