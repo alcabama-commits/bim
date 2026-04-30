@@ -143,6 +143,14 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     return fallback ?? 0;
   };
 
+  const getMetricByKeys = (el: BIMElement, keys: string[], fallback = 0) => {
+    for (const key of keys) {
+      const n = parseNumber(getProp(el, key));
+      if (n !== null) return n;
+    }
+    return fallback;
+  };
+
   const normalizeSearchText = (value: unknown) =>
     String(value ?? '')
       .normalize('NFD')
@@ -378,7 +386,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       .map((id) => {
         const el = elementsById.get(id);
         if (!el) return null;
-        const length = Math.max(0, getMetric(el, 'LONGITUD INTEGRADO', 0));
+        const length = Math.max(0, getMetricByKeys(el, ['LONGITUD INTEGRADO', 'LONGITUD', 'LENGTH', 'Length'], 0));
         return { id, length };
       })
       .filter(Boolean) as Array<{ id: string; length: number }>;
@@ -439,7 +447,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     };
     for (const el of elements) {
       if (!isPipeElement(el)) continue;
-      const len = getMetric(el, 'LONGITUD INTEGRADO', 0);
+      const len = getMetricByKeys(el, ['LONGITUD INTEGRADO', 'LONGITUD', 'LENGTH', 'Length'], 0);
       if (!(len > 0)) continue;
       const st: PurchaseStatus = statuses[el.id] ?? 'PENDIENTE';
       const tipoRaw = getProp(el, "NOMBRE INTEGRADO");
@@ -484,7 +492,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       if (d !== 0) return d;
       return a.level.localeCompare(b.level, 'es');
     });
-  }, [elements, getFirstProp, getMetric, getProp, isSanitaryModel, pipeCommercialLength, statuses]);
+  }, [elements, getFirstProp, getMetricByKeys, getProp, isSanitaryModel, pipeCommercialLength, statuses]);
 
   const unionsPurchaseSummary = useMemo(() => {
     if (!isSanitaryModel) return [];

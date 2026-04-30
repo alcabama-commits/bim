@@ -337,7 +337,7 @@ export default function App() {
   const [selectedRemoteModelName, setSelectedRemoteModelName] = useState<string | null>(null);
   const [refreshingModelName, setRefreshingModelName] = useState<string | null>(null);
   const availableModelsRef = useRef<RemoteModel[]>([]);
-  const loadRemoteModelRef = useRef<((remote: RemoteModel) => Promise<void>) | null>(null);
+  const loadRemoteModelRef = useRef<((remote: RemoteModel, options?: { forceRefresh?: boolean }) => Promise<void>) | null>(null);
   const [elementStatuses, setElementStatuses] = useState<Record<string, PurchaseStatus>>({});
   const [elementHistory, setElementHistory] = useState<Record<string, HistoryEntry[]>>({});
   const getModelKey = useCallback((modelName: string | null) => {
@@ -1715,12 +1715,22 @@ export default function App() {
     }
   };
 
-  const fetchArrayBufferCached = useCallback(async (url: string, signal?: AbortSignal) => {
+  const fetchArrayBufferCached = useCallback(async (
+    url: string,
+    signalOrOptions?: AbortSignal | { signal?: AbortSignal; forceRefresh?: boolean }
+  ) => {
+    const options = signalOrOptions && typeof signalOrOptions === 'object' && (('signal' in signalOrOptions) || ('forceRefresh' in signalOrOptions))
+      ? signalOrOptions as { signal?: AbortSignal; forceRefresh?: boolean }
+      : { signal: signalOrOptions as AbortSignal | undefined };
+    const signal = options.signal;
+    const forceRefresh = options.forceRefresh === true;
     let networkError: unknown = null;
 
     if (networkStatus === 'online') {
       try {
-        const res = await fetch(url, { signal, cache: 'no-store' });
+        const requestUrl = forceRefresh ? new URL(url, window.location.href) : null;
+        if (requestUrl) requestUrl.searchParams.set('_', String(Date.now()));
+        const res = await fetch(requestUrl ? requestUrl.toString() : url, { signal, cache: 'no-store' });
         if (!res.ok) throw new Error(`No se pudo descargar ${url} (${res.status})`);
         if ('caches' in window) {
           try {
@@ -1774,12 +1784,22 @@ export default function App() {
     throw new Error(`Sin conexion estable y no hay copia local de ${url}`);
   }, [networkStatus, updateLastServerSync]);
 
-  const fetchTextCached = useCallback(async (url: string, signal?: AbortSignal) => {
+  const fetchTextCached = useCallback(async (
+    url: string,
+    signalOrOptions?: AbortSignal | { signal?: AbortSignal; forceRefresh?: boolean }
+  ) => {
+    const options = signalOrOptions && typeof signalOrOptions === 'object' && (('signal' in signalOrOptions) || ('forceRefresh' in signalOrOptions))
+      ? signalOrOptions as { signal?: AbortSignal; forceRefresh?: boolean }
+      : { signal: signalOrOptions as AbortSignal | undefined };
+    const signal = options.signal;
+    const forceRefresh = options.forceRefresh === true;
     let networkError: unknown = null;
 
     if (networkStatus === 'online') {
       try {
-        const res = await fetch(url, { signal, cache: 'no-store' });
+        const requestUrl = forceRefresh ? new URL(url, window.location.href) : null;
+        if (requestUrl) requestUrl.searchParams.set('_', String(Date.now()));
+        const res = await fetch(requestUrl ? requestUrl.toString() : url, { signal, cache: 'no-store' });
         if (!res.ok) throw new Error(`No se pudo descargar ${url} (${res.status})`);
         if ('caches' in window) {
           try {
@@ -1975,14 +1995,13 @@ export default function App() {
       }
       const latestRemote = availableModelsRef.current.find((item) => item.name === remote.name) ?? remote;
       const normalizedRemote = normalizeRemoteModel(latestRemote);
-      const preferDriveFetch = forceRefresh && networkStatus === 'online' && Boolean(normalizedRemote.drive?.fileId);
 
       const fileUrl = normalizedRemote.format === 'ifc' ? normalizedRemote.ifcUrl : normalizedRemote.fragUrl;
 
-      if (fileUrl && !preferDriveFetch) {
-        const filePromise = fetchArrayBufferCached(fileUrl, controller.signal);
+      if (fileUrl) {
+        const filePromise = fetchArrayBufferCached(fileUrl, { signal: controller.signal, forceRefresh });
         const jsonPromise = normalizedRemote.jsonUrl
-          ? fetchTextCached(normalizedRemote.jsonUrl, controller.signal)
+          ? fetchTextCached(normalizedRemote.jsonUrl, { signal: controller.signal, forceRefresh })
           : Promise.resolve<string | null>(null);
         const [fileBytes, jsonText] = await Promise.all([filePromise, jsonPromise]);
 
@@ -2030,14 +2049,18 @@ export default function App() {
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return;
       console.error('Error cargando modelo remoto:', e);
-      alert(e instanceof Error ? e.message : 'Error cargando modelo remoto');
+      setModelsNotice(
+        forceRefresh
+          ? 'No se pudo actualizar este modelo en linea. Se mantiene la ultima copia disponible.'
+          : 'No se pudo cargar este modelo con la fuente remota actual. Revisa la conexion o intenta actualizar la lista.',
+      );
     } finally {
       if (forceRefresh) {
         setRefreshingModelName((prev) => (prev === remote.name ? null : prev));
       }
       setIsLoading(false);
     }
-  }, [applyJsonText, fetchArrayBufferCached, fetchAvailableModels, fetchDriveScriptBinaryBytes, fetchDriveScriptJsonText, fetchTextCached, loadFragBytes, loadIfcBytes, networkStatus, rememberRecentModel]);
+  }, [applyJsonText, fetchArrayBufferCached, fetchAvailableModels, fetchDriveScriptBinaryBytes, fetchDriveScriptJsonText, fetchTextCached, loadFragBytes, loadIfcBytes, rememberRecentModel]);
 
   useEffect(() => {
     loadRemoteModelRef.current = loadRemoteModel;
