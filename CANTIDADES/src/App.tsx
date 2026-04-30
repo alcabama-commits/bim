@@ -210,11 +210,23 @@ const normalizeModelSearchText = (value: string | null | undefined) =>
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
 const PIPE_MODEL_KEYWORDS = [
+  'apantallamiento',
+  'comunicaciones',
+  'comunicacion',
+  'incendio',
+  'deteccion de incendios',
   'hidraulico',
   'sanitario',
   'desagues',
   'gas',
+  'suministro',
+  'electricos',
   'electrico',
+  'ele',
+  'sdi',
+  'dim',
+  'spr',
+  'com',
   'rci',
   'deteccion',
 ];
