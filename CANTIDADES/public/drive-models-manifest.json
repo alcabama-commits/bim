@@ -1,7 +1,14 @@
 {
   "folderId": "18gr5TvX3pYY5S3ZRfjmWagkTLhhG3B0W",
-  "generatedAt": "2026-04-30T12:04:35.252Z",
+  "generatedAt": "2026-04-30T15:17:29.388Z",
   "models": [
+    {
+      "name": "001-DIM-ORI-SALON-SOCIAL_desenlazado.frag",
+      "fragId": "1IQ2qaBxvSAS7jcx0mi69eJPGbcGOx0Tj",
+      "fragUrl": "./drive-models/001-DIM-ORI-SALON-SOCIAL_desenlazado__1IQ2qaBxvSAS7jcx0mi69eJPGbcGOx0Tj.frag",
+      "jsonId": "1nHS5tWJnnZ7JoNikocAo2h4_m6Q9QJ36",
+      "jsonUrl": "./drive-models/001-DIM-ORI-SALON-SOCIAL_desenlazado__1nHS5tWJnnZ7JoNikocAo2h4_m6Q9QJ36.json"
+    },
     {
       "name": "2442602.frag",
       "fragId": "1SrefP2RRmv9YR4-qHWtJg_pS-wSiJHUw",

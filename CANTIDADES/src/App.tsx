@@ -591,10 +591,6 @@ export default function App() {
   const [appliedLevels, setAppliedLevels] = useState<string[]>([]);
   const [appliedDiameter, setAppliedDiameter] = useState<string>('Todos');
   const [isIsolateMode, setIsIsolateMode] = useState(false);
-  const isSanitaryModel = useMemo(() => {
-    const normalizedName = normalizeModelSearchText(selectedRemoteModelName);
-    return PIPE_MODEL_KEYWORDS.some((keyword) => normalizedName.includes(keyword));
-  }, [selectedRemoteModelName]);
   const [statusVisibility, setStatusVisibility] = useState<Record<PurchaseStatus, boolean>>(() => {
     try {
       const raw = localStorage.getItem('cantidades:statusVisibility');
@@ -810,6 +806,38 @@ export default function App() {
     }
     return undefined;
   }, [getProp]);
+
+  const isSanitaryModel = useMemo(() => {
+    const normalizedName = normalizeModelSearchText(selectedRemoteModelName);
+    if (PIPE_MODEL_KEYWORDS.some((keyword) => normalizedName.includes(keyword))) {
+      return true;
+    }
+
+    return elements.some((el) => {
+      const text = normalizeModelSearchText([
+        getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN", "SUBPROYECTOS INTEGRADO", "Subproyecto", "Sistema"]),
+        getFirstProp(el, ["CATEGORIA", "CATEGORÍA", "TIPO", "DETALLE"]),
+        getFirstProp(el, ["NOMBRE INTEGRADO"]),
+        getProp(el, 'ObjectType'),
+        getProp(el, 'ifcType'),
+        el.category,
+        el.name,
+      ].join(' '));
+
+      return (
+        text.includes('tuber') ||
+        text.includes('tubo') ||
+        text.includes('union de tuberia') ||
+        text.includes('uniones de tuberia') ||
+        text.includes('ifcpipesegment') ||
+        text.includes('ifcflowsegment') ||
+        text.includes('ifcpipefitting') ||
+        text.includes('ifcflowfitting') ||
+        text.includes('pipesegment') ||
+        text.includes('pipefitting')
+      );
+    });
+  }, [elements, getFirstProp, getProp, selectedRemoteModelName]);
 
   const fetchAvailableModels = useCallback(async (options?: { silent?: boolean; force?: boolean }) => {
     const silent = options?.silent === true;
