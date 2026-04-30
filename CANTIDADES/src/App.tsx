@@ -335,6 +335,7 @@ export default function App() {
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [isModelsLoading, setIsModelsLoading] = useState(false);
   const [selectedRemoteModelName, setSelectedRemoteModelName] = useState<string | null>(null);
+  const [refreshingModelName, setRefreshingModelName] = useState<string | null>(null);
   const availableModelsRef = useRef<RemoteModel[]>([]);
   const loadRemoteModelRef = useRef<((remote: RemoteModel) => Promise<void>) | null>(null);
   const [elementStatuses, setElementStatuses] = useState<Record<string, PurchaseStatus>>({});
@@ -1954,22 +1955,31 @@ export default function App() {
     throw new Error('Sin conexion estable y no hay copia local del JSON.');
   }, [networkStatus, updateLastServerSync]);
 
-  const loadRemoteModel = useCallback(async (remote: RemoteModel) => {
+  const loadRemoteModel = useCallback(async (remote: RemoteModel, options?: { forceRefresh?: boolean }) => {
     if (!componentsRef.current) return;
+    const forceRefresh = options?.forceRefresh === true;
     if (loadAbortRef.current) {
       loadAbortRef.current.abort();
     }
     const controller = new AbortController();
     loadAbortRef.current = controller;
+    if (forceRefresh) {
+      setRefreshingModelName(remote.name);
+    }
     setIsLoading(true);
     setShowWelcome(false);
     setSelectedRemoteModelName(remote.name);
     try {
-      const normalizedRemote = normalizeRemoteModel(remote);
+      if (forceRefresh) {
+        await fetchAvailableModels({ silent: true, force: true });
+      }
+      const latestRemote = availableModelsRef.current.find((item) => item.name === remote.name) ?? remote;
+      const normalizedRemote = normalizeRemoteModel(latestRemote);
+      const preferDriveFetch = forceRefresh && networkStatus === 'online' && Boolean(normalizedRemote.drive?.fileId);
 
       const fileUrl = normalizedRemote.format === 'ifc' ? normalizedRemote.ifcUrl : normalizedRemote.fragUrl;
 
-      if (fileUrl) {
+      if (fileUrl && !preferDriveFetch) {
         const filePromise = fetchArrayBufferCached(fileUrl, controller.signal);
         const jsonPromise = normalizedRemote.jsonUrl
           ? fetchTextCached(normalizedRemote.jsonUrl, controller.signal)
@@ -2022,9 +2032,12 @@ export default function App() {
       console.error('Error cargando modelo remoto:', e);
       alert(e instanceof Error ? e.message : 'Error cargando modelo remoto');
     } finally {
+      if (forceRefresh) {
+        setRefreshingModelName((prev) => (prev === remote.name ? null : prev));
+      }
       setIsLoading(false);
     }
-  }, [applyJsonText, fetchArrayBufferCached, fetchDriveScriptBinaryBytes, fetchDriveScriptJsonText, fetchTextCached, loadFragBytes, loadIfcBytes, rememberRecentModel]);
+  }, [applyJsonText, fetchArrayBufferCached, fetchAvailableModels, fetchDriveScriptBinaryBytes, fetchDriveScriptJsonText, fetchTextCached, loadFragBytes, loadIfcBytes, networkStatus, rememberRecentModel]);
 
   useEffect(() => {
     loadRemoteModelRef.current = loadRemoteModel;
@@ -2290,32 +2303,44 @@ export default function App() {
                             const isRowLoading = isLoading && isSelected;
                             const isOfflineReady = offlineRecentModelNames.includes(m.name);
                             return (
-                              <button
+                              <div
                                 key={m.name}
-                                type="button"
-                                onClick={() => loadRemoteModel(m)}
-                                className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg border text-left transition-colors ${
+                                className={`w-full flex items-center gap-1 rounded-lg border transition-colors ${
                                   isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-transparent hover:bg-slate-50'
                                 }`}
                                 title={m.name}
                               >
-                                <File className="w-4 h-4 text-slate-500" />
-                                <span className="flex-1 text-[11px] text-slate-700 truncate">
-                                  {stripModelExtension(m.name)}
-                                </span>
-                                {isOfflineReady && (
-                                  <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-500">
-                                    Offline
+                                <button
+                                  type="button"
+                                  onClick={() => loadRemoteModel(m)}
+                                  className="min-w-0 flex-1 flex items-center gap-2 px-2 py-2 text-left"
+                                >
+                                  <File className="w-4 h-4 shrink-0 text-slate-500" />
+                                  <span className="flex-1 text-[11px] text-slate-700 truncate">
+                                    {stripModelExtension(m.name)}
                                   </span>
-                                )}
-                                {isRowLoading ? (
-                                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                                ) : isSelected ? (
-                                  <Eye className="w-4 h-4 text-blue-600" />
-                                ) : (
-                                  <div className="w-4 h-4" />
-                                )}
-                              </button>
+                                  {isOfflineReady && (
+                                    <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                                      Offline
+                                    </span>
+                                  )}
+                                  {isRowLoading ? (
+                                    <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                                  ) : isSelected ? (
+                                    <Eye className="w-4 h-4 text-blue-600" />
+                                  ) : (
+                                    <div className="w-4 h-4" />
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void loadRemoteModel(m, { forceRefresh: true })}
+                                  className="mr-1 shrink-0 rounded-md p-1 text-slate-500 hover:bg-white hover:text-slate-700"
+                                  title="Actualizar este modelo"
+                                >
+                                  <RefreshCw className={`w-4 h-4 ${refreshingModelName === m.name ? 'animate-spin text-blue-600' : ''}`} />
+                                </button>
+                              </div>
                             );
                           })}
                         </div>

@@ -143,6 +143,64 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     return fallback ?? 0;
   };
 
+  const normalizeSearchText = (value: unknown) =>
+    String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const getElementSearchText = (el: BIMElement) => normalizeSearchText([
+    getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]),
+    getFirstProp(el, ["CATEGORIA", "CATEGORÍA"]),
+    getFirstProp(el, ["TIPO"]),
+    getFirstProp(el, ["DETALLE"]),
+    getProp(el, "NOMBRE INTEGRADO"),
+    getProp(el, "Sistema"),
+    el.name,
+    el.category,
+    getProp(el, "ifcType"),
+    getProp(el, "ObjectType")
+  ].join(' '));
+
+  const includesAny = (text: string, needles: string[]) => needles.some((needle) => text.includes(needle));
+
+  const isUnionElement = (el: BIMElement) => {
+    const text = getElementSearchText(el);
+    return includesAny(text, [
+      'union',
+      'fitting',
+      'pipe fitting',
+      'pipefitting',
+      'ifcpipefitting',
+      'accesorio',
+      'codo',
+      'tee',
+      'reduccion',
+      'reduction',
+      'adaptador',
+      'adapter',
+      'coupling',
+      'copla'
+    ]);
+  };
+
+  const isPipeElement = (el: BIMElement) => {
+    const text = getElementSearchText(el);
+    if (includesAny(text, ['ifcpipefitting', 'pipe fitting', 'pipefitting'])) return false;
+    if (isUnionElement(el)) return false;
+    return includesAny(text, [
+      'tuber',
+      'tubo',
+      'pipe segment',
+      'pipesegment',
+      'ifcpipesegment',
+      'pipe'
+    ]);
+  };
+
   const pipeStagesStorageKey = useMemo(() => `cantidades:pipeStages:${modelKey || 'local'}`, [modelKey]);
   const [pipeStagesByGroup, setPipeStagesByGroup] = useState<Record<string, PipeStageState>>({});
   const pipeAdditionsStorageKey = useMemo(() => `cantidades:pipeAdditions:${modelKey || 'local'}`, [modelKey]);
@@ -380,9 +438,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       return n !== null ? n : null;
     };
     for (const el of elements) {
-      const classif = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]);
-      const isPipe = /tuber/i.test(classif) && !/union/i.test(classif);
-      if (!isPipe) continue;
+      if (!isPipeElement(el)) continue;
       const len = getMetric(el, 'LONGITUD INTEGRADO', 0);
       if (!(len > 0)) continue;
       const st: PurchaseStatus = statuses[el.id] ?? 'PENDIENTE';
@@ -438,9 +494,7 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
       return n !== null ? n : null;
     };
     for (const el of elements) {
-      const classif = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]);
-      const isUnion = /union/i.test(classif);
-      if (!isUnion) continue;
+      if (!isUnionElement(el)) continue;
       const st: PurchaseStatus = statuses[el.id] ?? 'PENDIENTE';
       const tipoRaw = getProp(el, "NOMBRE INTEGRADO");
       const tipo = tipoRaw !== '-' && tipoRaw !== '' ? tipoRaw : el.name;
