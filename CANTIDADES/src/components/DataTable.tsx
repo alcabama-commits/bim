@@ -172,11 +172,21 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
     getProp(el, "ifcType"),
     getProp(el, "ObjectType")
   ].join(' '));
+  const getElementIfcType = (el: BIMElement) =>
+    normalizeSearchText([
+      getProp(el, 'ifcType'),
+      getProp(el, 'type'),
+      el.category
+    ].join(' '));
 
   const includesAny = (text: string, needles: string[]) => needles.some((needle) => text.includes(needle));
 
   const isUnionElement = (el: BIMElement) => {
     const text = getElementSearchText(el);
+    const ifcType = getElementIfcType(el);
+    if (includesAny(text, ['tubo sin uniones', 'tubo sin union', 'sin uniones', 'sin union'])) return false;
+    if (includesAny(ifcType, ['ifcflowsegment', 'ifcpipesegment', 'pipesegment', 'flowsegment'])) return false;
+    if (includesAny(ifcType, ['ifcflowfitting', 'ifcpipefitting', 'pipefitting', 'flowfitting'])) return true;
     return includesAny(text, [
       'union',
       'fitting',
@@ -197,6 +207,9 @@ export default function DataTable({ elements, onSelectElement, selectedElementId
 
   const isPipeElement = (el: BIMElement) => {
     const text = getElementSearchText(el);
+    const ifcType = getElementIfcType(el);
+    if (includesAny(ifcType, ['ifcflowsegment', 'ifcpipesegment', 'pipesegment', 'flowsegment'])) return true;
+    if (includesAny(ifcType, ['ifcflowfitting', 'ifcpipefitting', 'pipefitting', 'flowfitting'])) return false;
     if (includesAny(text, ['ifcpipefitting', 'pipe fitting', 'pipefitting'])) return false;
     if (isUnionElement(el)) return false;
     return includesAny(text, [
