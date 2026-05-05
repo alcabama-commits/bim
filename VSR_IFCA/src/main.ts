@@ -1963,7 +1963,7 @@ function initSidebarTabs() {
 // Global tracking for hidden items (Fragments/Items hidden via Hider)
 const hiddenItems: Record<string, Set<number>> = {};
 
-type IntegratedClassificationField = 'NIVEL INTEGRADO' | 'CLASIFICACIÓN' | 'MATERIAL INTEGRADO';
+type IntegratedClassificationField = 'NIVEL INTEGRADO' | 'CLASIFICACIÓN' | 'MATERIAL INTEGRADO' | 'NOMBRE INTEGRADO' | 'SUBPROYECTOS INTEGRADO';
 type IntegratedClassificationMode = 'filtrar' | 'ordenar';
 type IntegratedClassificationOrder = 'cantidad' | 'az';
 
@@ -1975,7 +1975,9 @@ const activeIntegratedFilters = new Set<string>();
 const integratedIndex: Record<IntegratedClassificationField, Map<string, Record<string, Set<number>>>> = {
     'NIVEL INTEGRADO': new Map(),
     'CLASIFICACIÓN': new Map(),
-    'MATERIAL INTEGRADO': new Map()
+    'MATERIAL INTEGRADO': new Map(),
+    'NOMBRE INTEGRADO': new Map(),
+    'SUBPROYECTOS INTEGRADO': new Map()
 };
 
 const normalizeKey = (v: unknown) => String(v ?? '').trim();
@@ -2209,7 +2211,13 @@ async function updateClassificationUI() {
             const opacity = count > 0 ? '1' : '0.5'; // Increased opacity for visibility
             const pointer = 'pointer'; // Always allow pointer events to debug
 
+            const isFilterMode = integratedClassificationMode === 'filtrar';
+            const isChecked = isFilterMode ? activeIntegratedFilters.has(String(type)) : false;
+
             li.innerHTML = `
+                <div style="display: flex; align-items: center; padding-right: 8px;">
+                    <input type="checkbox" class="category-checkbox" style="cursor: pointer;" ${isChecked ? 'checked' : ''}>
+                </div>
                 <div class="model-name" style="cursor: ${pointer}; flex-grow: 1; opacity: ${opacity};"><i class="fa-solid fa-layer-group"></i> ${type} <span style="font-size: 0.8em; color: #888;">(${count})</span></div>
                 <div class="visibility-toggle" style="cursor: ${pointer}; padding: 0 10px; opacity: ${opacity};" title="Toggle Visibility">
                     <i class="fa-regular fa-eye"></i>
@@ -2219,30 +2227,31 @@ async function updateClassificationUI() {
             const nameDiv = li.querySelector('.model-name');
             const toggleDiv = li.querySelector('.visibility-toggle');
             const toggleIcon = toggleDiv?.querySelector('i');
+            const checkbox = li.querySelector('.category-checkbox') as HTMLInputElement;
             let isVisible = true;
 
-            // SELECTION Handler (Clicking text)
-            nameDiv?.addEventListener('click', async (e) => {
-                e.stopPropagation();
+            const handleSelection = async (allowMulti: boolean) => {
                 console.log(`[DEBUG] Selecting category: ${type} (Count: ${count})`);
 
                 if (integratedClassificationMode === 'filtrar') {
-                    const allowMulti = e.ctrlKey || e.metaKey;
                     if (!allowMulti) {
-                        if (activeIntegratedFilters.size === 1 && activeIntegratedFilters.has(type)) {
+                        if (activeIntegratedFilters.size === 1 && activeIntegratedFilters.has(String(type))) {
                             activeIntegratedFilters.clear();
                         } else {
                             activeIntegratedFilters.clear();
-                            activeIntegratedFilters.add(type);
+                            activeIntegratedFilters.add(String(type));
                         }
                     } else {
-                        if (activeIntegratedFilters.has(type)) activeIntegratedFilters.delete(type);
-                        else activeIntegratedFilters.add(type);
+                        if (activeIntegratedFilters.has(String(type))) activeIntegratedFilters.delete(String(type));
+                        else activeIntegratedFilters.add(String(type));
                     }
 
                     list.querySelectorAll('li.model-item').forEach((el) => {
                         const key = (el as any).dataset.group || '';
-                        el.classList.toggle('filter-active', activeIntegratedFilters.has(key));
+                        const isActive = activeIntegratedFilters.has(key);
+                        el.classList.toggle('filter-active', isActive);
+                        const cb = el.querySelector('.category-checkbox') as HTMLInputElement;
+                        if (cb) cb.checked = isActive;
                     });
 
                     await applyIntegratedFilterFromClassification(classification);
@@ -2260,7 +2269,7 @@ async function updateClassificationUI() {
                      console.log(`[DEBUG] Map keys: ${mapKeys.join(', ')}`);
                      
                      try {
-                        const removePrevious = !e.ctrlKey && !e.metaKey;
+                        const removePrevious = !allowMulti;
                         
                         // FILTER HIDDEN ITEMS
                         const filteredMap: Record<string, Set<number>> = {};
@@ -2316,6 +2325,17 @@ async function updateClassificationUI() {
                      logToScreen(`Cannot select ${type}: No items found (Map is empty)`, true);
                      console.warn(`[DEBUG] Map is empty for ${type}. GroupData:`, groupData);
                 }
+            };
+
+            // SELECTION Handler (Clicking text)
+            nameDiv?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleSelection(e.ctrlKey || e.metaKey);
+            });
+            
+            checkbox?.addEventListener('change', (e) => {
+                e.stopPropagation();
+                handleSelection(true);
             });
 
             // VISIBILITY Handler (Clicking eye)
@@ -3956,6 +3976,8 @@ async function classifyModel(model: any) {
     const integratedLevelById = new Map<number, string>();
     const integratedClassById = new Map<number, string>();
     const integratedMaterialById = new Map<number, string>();
+    const integratedNameById = new Map<number, string>();
+    const integratedSubprojectsById = new Map<number, string>();
 
     // Initialize with default
     for (const id of idsWithGeometry) {
@@ -4063,6 +4085,32 @@ async function classifyModel(model: any) {
                              }
                          }
                      }
+
+                     if (normName === 'nombreintegrado' || normName === 'nombreintegrada') {
+                         const valObj = prop.NominalValue || prop.nominalValue;
+                         const value = valObj?.value ?? valObj;
+                         if (value !== undefined && value !== null) {
+                             const v = String(value).trim();
+                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
+                             for (const relIdObj of relatedList) {
+                                 const relId = relIdObj.value || relIdObj;
+                                 if (idsSet.has(relId)) integratedNameById.set(relId, v);
+                             }
+                         }
+                     }
+
+                     if (normName === 'subproyectosintegrado' || normName === 'subproyectointegrado' || normName === 'subproyectos' || normName === 'subproyectointegrada') {
+                         const valObj = prop.NominalValue || prop.nominalValue;
+                         const value = valObj?.value ?? valObj;
+                         if (value !== undefined && value !== null) {
+                             const v = String(value).trim();
+                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
+                             for (const relIdObj of relatedList) {
+                                 const relId = relIdObj.value || relIdObj;
+                                 if (idsSet.has(relId)) integratedSubprojectsById.set(relId, v);
+                             }
+                         }
+                     }
                  }
              }
         }
@@ -4088,10 +4136,14 @@ async function classifyModel(model: any) {
         const nivel = normalizeValue(integratedLevelById.get(id) ?? elementLevel.get(id));
         const clasificacion = normalizeValue(integratedClassById.get(id) ?? elementType.get(id));
         const material = normalizeValue(integratedMaterialById.get(id));
+        const nombre = normalizeValue(integratedNameById.get(id));
+        const subproyectos = normalizeValue(integratedSubprojectsById.get(id));
 
         addToIndex('NIVEL INTEGRADO', modelUUID, nivel, id);
         addToIndex('CLASIFICACIÓN', modelUUID, clasificacion, id);
         addToIndex('MATERIAL INTEGRADO', modelUUID, material, id);
+        addToIndex('NOMBRE INTEGRADO', modelUUID, nombre, id);
+        addToIndex('SUBPROYECTOS INTEGRADO', modelUUID, subproyectos, id);
     }
 
     classifier.list.clear();
