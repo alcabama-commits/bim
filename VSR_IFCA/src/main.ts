@@ -550,9 +550,21 @@ setTimeout(patchAcceleratedRaycast, 1000);
 // But for "Edges", we can try to find if there is an alternative.
 // Since we are fixing the build, we will remove the calls to missing components for now.
 
-// --- Global Error Handler (Added for debugging "Destruiste el visor") ---
+// --- Global Error Handler ---
 window.addEventListener('error', (event) => {
+    const message = String(event.message || '');
+    const filename = String(event.filename || '');
+
+    // Cross-origin JSONP/script errors are often opaque and should not look like a fatal viewer crash.
+    if (message === 'Script error.' || filename.includes('script.google.com')) {
+        console.warn('Non-fatal external script error:', message, filename);
+        return;
+    }
+
+    if (document.getElementById('global-error-box')) return;
+
     const box = document.createElement('div');
+    box.id = 'global-error-box';
     box.style.position = 'fixed';
     box.style.top = '10px';
     box.style.left = '10px';
@@ -564,7 +576,7 @@ window.addEventListener('error', (event) => {
     box.style.fontFamily = 'monospace';
     box.style.maxWidth = '80%';
     box.style.wordBreak = 'break-all';
-    box.innerHTML = `<strong>Error Critical:</strong><br>${event.message}<br><small>${event.filename}:${event.lineno}</small>`;
+    box.innerHTML = `<strong>Error Critico:</strong><br>${message}<br><small>${filename}:${event.lineno}</small>`;
     document.body.appendChild(box);
     console.error("Global Error Caught:", event.error);
 });
@@ -1235,6 +1247,23 @@ type RemoteModelItem = {
     url?: string;
     driveFragId?: string;
     driveJsonId?: string | null;
+};
+
+let loadModelListInFlight: Promise<void> | null = null;
+let modelListRefreshTimer: number | null = null;
+
+const loadPublishedModelList = async (): Promise<RemoteModelItem[]> => {
+    const response = await fetch(`${baseUrl}models.json`, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`models.json error: ${response.status}`);
+    const data = await response.json();
+    if (!Array.isArray(data)) throw new Error('Invalid models.json response');
+    return data
+        .filter((item: any) => item && String(item.path || '').toLowerCase().endsWith('.frag'))
+        .map((item: any) => ({
+            name: String(item.name || item.path || '').trim(),
+            path: String(item.path || '').trim(),
+            url: item.url ? String(item.url) : undefined,
+        }));
 };
 
 const base64ToBytes = (b64: string): Uint8Array => {
@@ -2756,6 +2785,11 @@ const folderStates: Record<string, boolean> = {};
 
 // Load models from JSON and populate sidebar
 async function loadModelList() {
+    if (loadModelListInFlight) {
+        return await loadModelListInFlight;
+    }
+
+    loadModelListInFlight = (async () => {
     const listContainer = document.getElementById('model-list');
     if (!listContainer) {
         return;
@@ -2765,16 +2799,22 @@ async function loadModelList() {
         let models: RemoteModelItem[] = [];
         if (shouldUseDriveModels()) {
             logToScreen('Loading models from Google Drive (Apps Script)...');
-            const driveModels = await listDriveModels();
-            models = driveModels
-                .filter((m) => String(m.name || '').toLowerCase().endsWith('.frag'))
-                .map((m) => ({
-                    name: m.name,
-                    path: `models/${m.name}`,
-                    driveFragId: m.fragId,
-                    driveJsonId: m.jsonId ?? null
-                }));
-            logToScreen(`Drive Scan: ${models.length} .frag models found`);
+            try {
+                const driveModels = await listDriveModels();
+                models = driveModels
+                    .filter((m) => String(m.name || '').toLowerCase().endsWith('.frag'))
+                    .map((m) => ({
+                        name: m.name,
+                        path: `models/${m.name}`,
+                        driveFragId: m.fragId,
+                        driveJsonId: m.jsonId ?? null
+                    }));
+                logToScreen(`Drive Scan: ${models.length} .frag models found`);
+            } catch (driveError) {
+                logToScreen(`Drive Scan failed, using published list: ${driveError}`, true);
+                models = await loadPublishedModelList();
+                logToScreen(`Published list: ${models.length} .frag models found`);
+            }
         } else {
             const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFCA/models';
             logToScreen('Scanning GitHub for models...');
@@ -2807,7 +2847,9 @@ async function loadModelList() {
         // Auto-update setup
         if (!(window as any)._autoUpdateStarted) {
             (window as any)._autoUpdateStarted = true;
-            setInterval(loadModelList, 60000);
+            modelListRefreshTimer = window.setInterval(() => {
+                void loadModelList();
+            }, 60000);
             logToScreen('Auto-update enabled (60s).');
         }
 
@@ -2890,6 +2932,13 @@ async function loadModelList() {
 
     } catch (err) {
         logToScreen(`Error loading model list: ${err}`, true);
+    }
+    })();
+
+    try {
+        await loadModelListInFlight;
+    } finally {
+        loadModelListInFlight = null;
     }
 }
 
