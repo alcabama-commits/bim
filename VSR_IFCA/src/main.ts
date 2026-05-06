@@ -3008,16 +3008,45 @@ async function selectModel(path: string) {
 
 async function loadDriveModel(m: RemoteModelItem) {
     if (!m.driveFragId) throw new Error('Modelo Drive sin driveFragId');
+
+    console.log(`[Drive] Cargando modelo: ${m.name}`);
+    console.log(`[Drive] driveFragId: ${m.driveFragId}`);
+    console.log(`[Drive] driveJsonId: ${m.driveJsonId ?? 'NULL — no hay JSON asociado'}`);
+    logToScreen(`[Drive] FRAG: ${m.name} | JSON ID: ${m.driveJsonId ?? 'NINGUNO'}`);
+
     const buffer = await loadDriveFragBuffer(m.driveFragId);
     const blobUrl = URL.createObjectURL(new Blob([buffer], { type: 'application/octet-stream' }));
 
     let props: any | null = null;
     if (m.driveJsonId) {
         try {
+            logToScreen(`[Drive] Descargando JSON (${m.driveJsonId})...`);
             props = await loadDriveJsonProps(String(m.driveJsonId));
-        } catch {
+            if (props) {
+                const jsonKeys = Object.keys(props);
+                const firstKey = jsonKeys[0];
+                const firstEntry = props[firstKey];
+                console.log(`[Drive JSON] Claves totales: ${jsonKeys.length}`);
+                console.log(`[Drive JSON] Primera clave: "${firstKey}" (tipo: ${typeof firstEntry})`);
+                if (firstEntry && typeof firstEntry === 'object') {
+                    const attrs = Object.keys(firstEntry);
+                    console.log(`[Drive JSON] Atributos del primer elemento:`, attrs);
+                    console.log(`[Drive JSON] Muestra:`, JSON.stringify(firstEntry).substring(0, 400));
+                    logToScreen(`[Drive JSON] ${jsonKeys.length} entradas. Clave1: "${firstKey}" → attrs: ${attrs.slice(0,6).join(' | ')}`);
+                } else {
+                    console.log(`[Drive JSON] Primer valor (no objeto):`, firstEntry);
+                    logToScreen(`[Drive JSON] Estructura plana. Clave1: "${firstKey}" = ${firstEntry}`);
+                }
+            } else {
+                logToScreen(`[Drive] JSON cargado pero vacío o nulo`, true);
+            }
+        } catch (e) {
+            console.error('[Drive] Error cargando JSON:', e);
+            logToScreen(`[Drive] Error JSON: ${e}`, true);
             props = null;
         }
+    } else {
+        logToScreen(`[Drive] ⚠️ Sin driveJsonId — la clasificación no tendrá datos`, true);
     }
 
     const sourceUrl = `drive://${encodeURIComponent(m.driveFragId)}${m.driveJsonId ? `?jsonId=${encodeURIComponent(String(m.driveJsonId))}` : ''}`;
