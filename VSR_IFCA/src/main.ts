@@ -3958,197 +3958,180 @@ function initPropertiesPanel() {
 }
 
 async function classifyModel(model: any) {
-    if (!model.properties) return;
-    
-    logToScreen('Clasificando modelo por Tipo y Nivel...');
-    const typeMap = new Map<string, Record<string, Set<number>>>();
-    const levelMap = new Map<string, Record<string, Set<number>>>();
+    logToScreen('Clasificando modelo...');
     const modelUUID = model.uuid;
-    
+
     const idsWithGeometry = await model.getItemsIdsWithGeometry();
-    const idsSet = new Set(idsWithGeometry);
+    if (!idsWithGeometry || idsWithGeometry.length === 0) {
+        logToScreen('No hay elementos con geometría para clasificar.', true);
+        return;
+    }
 
     clearModelFromIndex(modelUUID);
-    
-    const elementType = new Map<number, string>();
-    const elementLevel = new Map<number, string>();
-    const levelPriority = new Map<number, number>(); // 0: None, 1: Restricción, 2: Referencia, 3: Nivel
-    const integratedLevelById = new Map<number, string>();
-    const integratedClassById = new Map<number, string>();
-    const integratedMaterialById = new Map<number, string>();
-    const integratedNameById = new Map<number, string>();
-    const integratedSubprojectsById = new Map<number, string>();
 
-    // Initialize with default
+    // Per-element value maps
+    const integratedLevelById    = new Map<number, string>();
+    const integratedClassById    = new Map<number, string>();
+    const integratedMaterialById = new Map<number, string>();
+    const integratedNameById     = new Map<number, string>();
+    const integratedSubById      = new Map<number, string>();
+    const elementType            = new Map<number, string>();  // fallback
+    const elementLevel           = new Map<number, string>();  // fallback
+
+    // Defaults
     for (const id of idsWithGeometry) {
         elementType.set(id, 'Sin Tipo');
         elementLevel.set(id, 'Sin Nivel');
-        levelPriority.set(id, 0);
     }
-    
-    for (const id in model.properties) {
-        const entity = model.properties[id];
-        if (!entity) continue;
-        if (entity.RelatedObjects && entity.RelatingPropertyDefinition) {
-             const relatedIds = entity.RelatedObjects;
-             const psetRef = entity.RelatingPropertyDefinition;
-             if (!relatedIds || !psetRef) continue;
-             const psetId = psetRef.value || psetRef;
-             const pset = model.properties[psetId];
-             if (pset && (pset.HasProperties || pset.hasProperties)) {
-                 const propsRefs = pset.HasProperties || pset.hasProperties;
-                 if (!Array.isArray(propsRefs)) continue;
-                 for (const propRef of propsRefs) {
-                     const propId = propRef.value || propRef;
-                     const prop = model.properties[propId];
-                     if (!prop) continue;
-                     const nameObj = prop.Name || prop.name;
-                     const name = nameObj?.value ?? nameObj;
-                     const normName = normalizePropKey(name);
-                     
-                     // Check for "Familia" or "Family" -> Type
-                     if (name === 'Familia' || name === 'Family') {
-                         const valObj = prop.NominalValue || prop.nominalValue;
-                         const value = valObj?.value ?? valObj;
-                         if (value) {
-                             const typeName = String(value).trim();
-                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
-                             for (const relIdObj of relatedList) {
-                                 const relId = relIdObj.value || relIdObj;
-                                 if (idsSet.has(relId)) elementType.set(relId, typeName);
-                             }
-                         }
-                     }
 
-                     // Check for "Nivel" -> Level
-                     if (name === 'Nivel' || name === 'Nivel de referencia' || name === 'Restricción de base') {
-                         const valObj = prop.NominalValue || prop.nominalValue;
-                         const value = valObj?.value ?? valObj;
-                         if (value) {
-                             const levelName = String(value).trim();
-                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
-                             
-                             let priority = 0;
-                             if (name === 'Nivel') priority = 3;
-                             else if (name === 'Nivel de referencia') priority = 2;
-                             else if (name === 'Restricción de base') priority = 1;
+    // Helper: extract string value from an attribute (handles {type, value} wrappers)
+    const getAttr = (obj: any, ...keys: string[]): string | null => {
+        for (const k of keys) {
+            if (obj == null) continue;
+            const raw = obj[k];
+            if (raw === undefined || raw === null) continue;
+            const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+            if (v !== undefined && v !== null && v !== '') return String(v).trim();
+        }
+        return null;
+    };
 
-                             for (const relIdObj of relatedList) {
-                                 const relId = relIdObj.value || relIdObj;
-                                 if (idsSet.has(relId)) {
-                                     const currentPriority = levelPriority.get(relId) || 0;
-                                     // Overwrite only if new priority is higher
-                                     if (priority > currentPriority) {
-                                         elementLevel.set(relId, levelName);
-                                         levelPriority.set(relId, priority);
-                                     }
-                                 }
-                             }
-                         }
-                     }
+    // --- STRATEGY 1: fragments.getData() — same as properties panel ---
+    // FRAG files store CLASIFICACIÓN, NIVEL INTEGRADO, etc. as top-level attrs.
+    let strategy1Hits = 0;
+    try {
+        const CHUNK = 500;
+        const allIds = [...idsWithGeometry];
 
-                     if (normName === 'nivelintegrado' || normName === 'nivelintegrada') {
-                         const valObj = prop.NominalValue || prop.nominalValue;
-                         const value = valObj?.value ?? valObj;
-                         if (value !== undefined && value !== null) {
-                             const v = String(value).trim();
-                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
-                             for (const relIdObj of relatedList) {
-                                 const relId = relIdObj.value || relIdObj;
-                                 if (idsSet.has(relId)) integratedLevelById.set(relId, v);
-                             }
-                         }
-                     }
+        for (let i = 0; i < allIds.length; i += CHUNK) {
+            const chunk = allIds.slice(i, i + CHUNK);
+            let itemsData: any = {};
+            try {
+                itemsData = await fragments.getData({ [modelUUID]: chunk } as any, {
+                    attributesDefault: true
+                } as any);
+            } catch (e) {
+                console.warn('[Classify] getData chunk error:', e);
+                continue;
+            }
 
-                     if (normName === 'clasificacion') {
-                         const valObj = prop.NominalValue || prop.nominalValue;
-                         const value = valObj?.value ?? valObj;
-                         if (value !== undefined && value !== null) {
-                             const v = String(value).trim();
-                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
-                             for (const relIdObj of relatedList) {
-                                 const relId = relIdObj.value || relIdObj;
-                                 if (idsSet.has(relId)) integratedClassById.set(relId, v);
-                             }
-                         }
-                     }
+            const items: any[] = (itemsData as any)[modelUUID] || [];
 
-                     if (normName === 'materialintegrado' || normName === 'materialintegrada') {
-                         const valObj = prop.NominalValue || prop.nominalValue;
-                         const value = valObj?.value ?? valObj;
-                         if (value !== undefined && value !== null) {
-                             const v = String(value).trim();
-                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
-                             for (const relIdObj of relatedList) {
-                                 const relId = relIdObj.value || relIdObj;
-                                 if (idsSet.has(relId)) integratedMaterialById.set(relId, v);
-                             }
-                         }
-                     }
+            items.forEach((item: any, idx: number) => {
+                const localId: number = chunk[idx];
+                if (localId === undefined) return;
 
-                     if (normName === 'nombreintegrado' || normName === 'nombreintegrada') {
-                         const valObj = prop.NominalValue || prop.nominalValue;
-                         const value = valObj?.value ?? valObj;
-                         if (value !== undefined && value !== null) {
-                             const v = String(value).trim();
-                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
-                             for (const relIdObj of relatedList) {
-                                 const relId = relIdObj.value || relIdObj;
-                                 if (idsSet.has(relId)) integratedNameById.set(relId, v);
-                             }
-                         }
-                     }
+                const attrs: any = item?.data || item?.attributes || item || {};
 
-                     if (normName === 'subproyectosintegrado' || normName === 'subproyectointegrado' || normName === 'subproyectos' || normName === 'subproyectointegrada') {
-                         const valObj = prop.NominalValue || prop.nominalValue;
-                         const value = valObj?.value ?? valObj;
-                         if (value !== undefined && value !== null) {
-                             const v = String(value).trim();
-                             const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
-                             for (const relIdObj of relatedList) {
-                                 const relId = relIdObj.value || relIdObj;
-                                 if (idsSet.has(relId)) integratedSubprojectsById.set(relId, v);
-                             }
-                         }
-                     }
-                 }
-             }
+                const clasif = getAttr(attrs,
+                    'CLASIFICACIÓN', 'Clasificaci\u00f3n', 'CLASIFICACION', 'clasificacion');
+                if (clasif) { integratedClassById.set(localId, clasif); strategy1Hits++; }
+
+                const nivel = getAttr(attrs,
+                    'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado');
+                if (nivel) { integratedLevelById.set(localId, nivel); strategy1Hits++; }
+
+                const material = getAttr(attrs,
+                    'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado');
+                if (material) integratedMaterialById.set(localId, material);
+
+                const nombre = getAttr(attrs,
+                    'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado');
+                if (nombre) integratedNameById.set(localId, nombre);
+
+                const sub = getAttr(attrs,
+                    'SUBPROYECTOS INTEGRADO', 'Subproyectos Integrado',
+                    'SUBPROYECTO INTEGRADO', 'subproyectos integrado');
+                if (sub) integratedSubById.set(localId, sub);
+
+                // Fallback type
+                if (!integratedClassById.has(localId)) {
+                    const cat = item?.category || attrs?.Category || attrs?.category;
+                    const name = getAttr(attrs, 'Name', 'name', 'ObjectType', 'objectType');
+                    if (cat) elementType.set(localId, String(cat));
+                    else if (name) elementType.set(localId, name);
+                }
+            });
+        }
+
+        logToScreen(`[Classify] getData: ${idsWithGeometry.length} elementos, ${strategy1Hits} hits integrados.`);
+    } catch (err) {
+        logToScreen(`[Classify] Error getData: ${err}`, true);
+        console.error('[Classify]', err);
+    }
+
+    // --- STRATEGY 2: Fallback via model.properties (IFC Pset path) ---
+    if (strategy1Hits === 0 && model.properties) {
+        logToScreen('[Classify] Fallback: leyendo model.properties (IFC Psets)...');
+        const idsSet = new Set<number>(idsWithGeometry);
+        const levelPriority = new Map<number, number>();
+
+        for (const id in model.properties) {
+            const entity = model.properties[id];
+            if (!entity?.RelatedObjects || !entity?.RelatingPropertyDefinition) continue;
+
+            const relatedIds = entity.RelatedObjects;
+            const psetRef    = entity.RelatingPropertyDefinition;
+            const psetId     = psetRef.value ?? psetRef;
+            const pset       = model.properties[psetId];
+            if (!pset) continue;
+
+            const propsRefs = pset.HasProperties || pset.hasProperties;
+            if (!Array.isArray(propsRefs)) continue;
+
+            for (const propRef of propsRefs) {
+                const propId  = propRef.value ?? propRef;
+                const prop    = model.properties[propId];
+                if (!prop) continue;
+
+                const nameObj = prop.Name || prop.name;
+                const name    = nameObj?.value ?? nameObj;
+                const normName = normalizePropKey(name);
+                const valObj  = prop.NominalValue || prop.nominalValue;
+                const value   = valObj?.value ?? valObj;
+                if (value == null) continue;
+
+                const v           = String(value).trim();
+                const relatedList = Array.isArray(relatedIds) ? relatedIds : [relatedIds];
+
+                for (const relIdObj of relatedList) {
+                    const relId: number = relIdObj?.value ?? relIdObj;
+                    if (!idsSet.has(relId)) continue;
+
+                    if (normName === 'clasificacion') integratedClassById.set(relId, v);
+                    else if (normName === 'nivelintegrado' || normName === 'nivelintegrada') integratedLevelById.set(relId, v);
+                    else if (normName === 'materialintegrado' || normName === 'materialintegrada') integratedMaterialById.set(relId, v);
+                    else if (normName === 'nombreintegrado' || normName === 'nombreintegrada') integratedNameById.set(relId, v);
+                    else if (normName === 'subproyectosintegrado' || normName === 'subproyectointegrado') integratedSubById.set(relId, v);
+                    else if (name === 'Familia' || name === 'Family') elementType.set(relId, v);
+                    else if (name === 'Nivel' || name === 'Nivel de referencia' || name === 'Restricci\u00f3n de base') {
+                        let priority = name === 'Nivel' ? 3 : name === 'Nivel de referencia' ? 2 : 1;
+                        if (priority > (levelPriority.get(relId) ?? 0)) {
+                            elementLevel.set(relId, v);
+                            levelPriority.set(relId, priority);
+                        }
+                    }
+                }
+            }
         }
     }
-    
-    // Populate Type Map
-    for (const [id, type] of elementType.entries()) {
-        if (!typeMap.has(type)) typeMap.set(type, { [modelUUID]: new Set() });
-        const group = typeMap.get(type)!;
-        if (!group[modelUUID]) group[modelUUID] = new Set();
-        group[modelUUID].add(id);
-    }
 
-    // Populate Level Map
-    for (const [id, level] of elementLevel.entries()) {
-        if (!levelMap.has(level)) levelMap.set(level, { [modelUUID]: new Set() });
-        const group = levelMap.get(level)!;
-        if (!group[modelUUID]) group[modelUUID] = new Set();
-        group[modelUUID].add(id);
-    }
-    
+    // --- Build index from collected data ---
     for (const id of idsWithGeometry) {
-        const nivel = normalizeValue(integratedLevelById.get(id) ?? elementLevel.get(id));
-        const clasificacion = normalizeValue(integratedClassById.get(id) ?? elementType.get(id));
-        const material = normalizeValue(integratedMaterialById.get(id));
-        const nombre = normalizeValue(integratedNameById.get(id));
-        const subproyectos = normalizeValue(integratedSubprojectsById.get(id));
-
-        addToIndex('NIVEL INTEGRADO', modelUUID, nivel, id);
-        addToIndex('CLASIFICACIÓN', modelUUID, clasificacion, id);
-        addToIndex('MATERIAL INTEGRADO', modelUUID, material, id);
-        addToIndex('NOMBRE INTEGRADO', modelUUID, nombre, id);
-        addToIndex('SUBPROYECTOS INTEGRADO', modelUUID, subproyectos, id);
+        addToIndex('CLASIFICACIÓN',        modelUUID, normalizeValue(integratedClassById.get(id)    ?? elementType.get(id)), id);
+        addToIndex('NIVEL INTEGRADO',      modelUUID, normalizeValue(integratedLevelById.get(id)    ?? elementLevel.get(id)), id);
+        addToIndex('MATERIAL INTEGRADO',   modelUUID, normalizeValue(integratedMaterialById.get(id)), id);
+        addToIndex('NOMBRE INTEGRADO',     modelUUID, normalizeValue(integratedNameById.get(id)), id);
+        addToIndex('SUBPROYECTOS INTEGRADO', modelUUID, normalizeValue(integratedSubById.get(id)), id);
     }
 
     classifier.list.clear();
-    classifier.list.set(integratedClassificationField, buildClassifierMap(integratedClassificationField, integratedClassificationOrder));
-    logToScreen(`Clasificado: ${idsWithGeometry.length} elementos indexados.`);
+    classifier.list.set(
+        integratedClassificationField,
+        buildClassifierMap(integratedClassificationField, integratedClassificationOrder)
+    );
+
+    logToScreen(`Clasificado: ${idsWithGeometry.length} elem | CLASIF:${integratedClassById.size} NIVEL:${integratedLevelById.size} MAT:${integratedMaterialById.size} NOMBRE:${integratedNameById.size} SUB:${integratedSubById.size}`);
 }
 
 function setupVisibilityToolbar() {
