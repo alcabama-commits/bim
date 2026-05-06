@@ -1585,6 +1585,19 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
                     modelAny.properties = options.propertiesJson;
                     hasProps = true;
                     logToScreen(`Loaded external properties from JSON (${keys.length} items).`);
+                    // --- DIAGNOSTIC: log first entry structure ---
+                    const firstKey = keys[0];
+                    const firstEntry = options.propertiesJson[firstKey];
+                    console.log(`[JSON DIAG] First key: "${firstKey}", type: ${typeof firstEntry}`);
+                    if (firstEntry && typeof firstEntry === 'object') {
+                        const entryKeys = Object.keys(firstEntry);
+                        console.log(`[JSON DIAG] Keys of first entry:`, entryKeys);
+                        console.log(`[JSON DIAG] Sample:`, JSON.stringify(firstEntry).substring(0, 300));
+                        logToScreen(`[JSON] Key 1: "${firstKey}" → attrs: ${entryKeys.slice(0,5).join(', ')}`);
+                    } else {
+                        console.log(`[JSON DIAG] First entry value:`, firstEntry);
+                        logToScreen(`[JSON] Key 1: "${firstKey}" → value: ${firstEntry}`);
+                    }
                 }
             } catch {
             }
