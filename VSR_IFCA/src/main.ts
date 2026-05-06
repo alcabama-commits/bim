@@ -3969,6 +3969,23 @@ async function classifyModel(model: any) {
 
     clearModelFromIndex(modelUUID);
 
+    // --- DIAGNOSTIC: show exact keys of the first element to debug key names ---
+    if (model.properties && idsWithGeometry.length > 0) {
+        const firstId = idsWithGeometry[0];
+        const firstEntity = model.properties[firstId];
+        if (firstEntity) {
+            const keys = Object.keys(firstEntity);
+            console.log(`[Classify DIAG] model.properties[${firstId}] keys:`, keys);
+            console.log(`[Classify DIAG] sample entity:`, JSON.stringify(firstEntity).substring(0, 400));
+            logToScreen(`[Diag] Keys del primer elem: ${keys.slice(0,8).join(' | ')}`);
+        } else {
+            console.log(`[Classify DIAG] model.properties[${firstId}] = undefined/null`);
+            logToScreen(`[Diag] properties[${firstId}] vacío. Total props: ${Object.keys(model.properties).length}`);
+        }
+    } else if (!model.properties) {
+        logToScreen('[Diag] model.properties NO existe');
+    }
+
     // Per-element value maps
     const integratedLevelById    = new Map<number, string>();
     const integratedClassById    = new Map<number, string>();
@@ -3996,73 +4013,98 @@ async function classifyModel(model: any) {
         return null;
     };
 
-    // --- STRATEGY 1: fragments.getData() — same as properties panel ---
-    // FRAG files store CLASIFICACIÓN, NIVEL INTEGRADO, etc. as top-level attrs.
-    let strategy1Hits = 0;
-    try {
-        const CHUNK = 500;
-        const allIds = [...idsWithGeometry];
+    // --- STRATEGY 1 (PRIMARY): Read model.properties[id] directly ---
+    // The properties panel already proves this works: it reads entity["CLASIFICACIÓN"],
+    // entity["NIVEL INTEGRADO"], etc. as top-level keys on each element entity.
+    let primaryHits = 0;
+    if (model.properties) {
+        for (const id of idsWithGeometry) {
+            const entity: any = model.properties[id];
+            if (!entity) continue;
 
-        for (let i = 0; i < allIds.length; i += CHUNK) {
-            const chunk = allIds.slice(i, i + CHUNK);
-            let itemsData: any = {};
-            try {
-                itemsData = await fragments.getData({ [modelUUID]: chunk } as any, {
-                    attributesDefault: true
-                } as any);
-            } catch (e) {
-                console.warn('[Classify] getData chunk error:', e);
-                continue;
+            const clasif = getAttr(entity,
+                'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION', 'clasificacion');
+            if (clasif) { integratedClassById.set(id, clasif); primaryHits++; }
+
+            const nivel = getAttr(entity,
+                'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'NIVEL_INTEGRADO');
+            if (nivel) { integratedLevelById.set(id, nivel); primaryHits++; }
+
+            const material = getAttr(entity,
+                'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado', 'MATERIAL_INTEGRADO');
+            if (material) integratedMaterialById.set(id, material);
+
+            const nombre = getAttr(entity,
+                'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'NOMBRE_INTEGRADO');
+            if (nombre) integratedNameById.set(id, nombre);
+
+            const sub = getAttr(entity,
+                'SUBPROYECTOS INTEGRADO', 'Subproyectos Integrado', 'subproyectos integrado',
+                'SUBPROYECTO INTEGRADO', 'Workset', 'Workset1');
+            if (sub) integratedSubById.set(id, sub);
+
+            // Fallback from IFC entity type name
+            if (!integratedClassById.has(id)) {
+                const name = getAttr(entity, 'Name', 'name', 'ObjectType', 'objectType');
+                if (name) elementType.set(id, name);
             }
-
-            const items: any[] = (itemsData as any)[modelUUID] || [];
-
-            items.forEach((item: any, idx: number) => {
-                const localId: number = chunk[idx];
-                if (localId === undefined) return;
-
-                const attrs: any = item?.data || item?.attributes || item || {};
-
-                const clasif = getAttr(attrs,
-                    'CLASIFICACIÓN', 'Clasificaci\u00f3n', 'CLASIFICACION', 'clasificacion');
-                if (clasif) { integratedClassById.set(localId, clasif); strategy1Hits++; }
-
-                const nivel = getAttr(attrs,
-                    'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado');
-                if (nivel) { integratedLevelById.set(localId, nivel); strategy1Hits++; }
-
-                const material = getAttr(attrs,
-                    'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado');
-                if (material) integratedMaterialById.set(localId, material);
-
-                const nombre = getAttr(attrs,
-                    'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado');
-                if (nombre) integratedNameById.set(localId, nombre);
-
-                const sub = getAttr(attrs,
-                    'SUBPROYECTOS INTEGRADO', 'Subproyectos Integrado',
-                    'SUBPROYECTO INTEGRADO', 'subproyectos integrado');
-                if (sub) integratedSubById.set(localId, sub);
-
-                // Fallback type
-                if (!integratedClassById.has(localId)) {
-                    const cat = item?.category || attrs?.Category || attrs?.category;
-                    const name = getAttr(attrs, 'Name', 'name', 'ObjectType', 'objectType');
-                    if (cat) elementType.set(localId, String(cat));
-                    else if (name) elementType.set(localId, name);
-                }
-            });
         }
-
-        logToScreen(`[Classify] getData: ${idsWithGeometry.length} elementos, ${strategy1Hits} hits integrados.`);
-    } catch (err) {
-        logToScreen(`[Classify] Error getData: ${err}`, true);
-        console.error('[Classify]', err);
+        logToScreen(`[Classify] model.properties directo: ${primaryHits} hits integrados de ${idsWithGeometry.length} elementos.`);
     }
 
-    // --- STRATEGY 2: Fallback via model.properties (IFC Pset path) ---
-    if (strategy1Hits === 0 && model.properties) {
-        logToScreen('[Classify] Fallback: leyendo model.properties (IFC Psets)...');
+    // --- STRATEGY 2: fragments.getData() ---
+    // Try this as secondary in case model.properties doesn't have the integrated fields.
+    if (primaryHits === 0) {
+        logToScreen('[Classify] Intentando fragments.getData()...');
+        try {
+            const CHUNK = 500;
+            const allIds = [...idsWithGeometry];
+            let s2Hits = 0;
+
+            for (let i = 0; i < allIds.length; i += CHUNK) {
+                const chunk = allIds.slice(i, i + CHUNK);
+                let itemsData: any = {};
+                try {
+                    itemsData = await fragments.getData({ [modelUUID]: chunk } as any, {
+                        attributesDefault: true
+                    } as any);
+                } catch (e) {
+                    console.warn('[Classify] getData chunk error:', e);
+                    continue;
+                }
+
+                const items: any[] = (itemsData as any)[modelUUID] || [];
+                items.forEach((item: any, idx: number) => {
+                    const localId: number = chunk[idx];
+                    if (localId === undefined) return;
+                    const attrs: any = item?.data || item?.attributes || item || {};
+
+                    const clasif = getAttr(attrs, 'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION');
+                    if (clasif) { integratedClassById.set(localId, clasif); s2Hits++; }
+
+                    const nivel = getAttr(attrs, 'NIVEL INTEGRADO', 'Nivel Integrado');
+                    if (nivel) { integratedLevelById.set(localId, nivel); s2Hits++; }
+
+                    const material = getAttr(attrs, 'MATERIAL INTEGRADO', 'Material Integrado');
+                    if (material) integratedMaterialById.set(localId, material);
+
+                    const nombre = getAttr(attrs, 'NOMBRE INTEGRADO', 'Nombre Integrado');
+                    if (nombre) integratedNameById.set(localId, nombre);
+
+                    const sub = getAttr(attrs, 'SUBPROYECTOS INTEGRADO', 'Subproyectos Integrado');
+                    if (sub) integratedSubById.set(localId, sub);
+                });
+            }
+            logToScreen(`[Classify] getData: ${primaryHits + s2Hits} hits totales.`);
+        } catch (err) {
+            logToScreen(`[Classify] Error getData: ${err}`, true);
+        }
+    }
+
+    // --- STRATEGY 3: Fallback — IFC Pset traversal via IfcRelDefinesByProperties ---
+    const totalHits = integratedClassById.size + integratedLevelById.size;
+    if (totalHits === 0 && model.properties) {
+        logToScreen('[Classify] Fallback: recorriendo IfcRelDefinesByProperties...');
         const idsSet = new Set<number>(idsWithGeometry);
         const levelPriority = new Map<number, number>();
 
@@ -4071,8 +4113,7 @@ async function classifyModel(model: any) {
             if (!entity?.RelatedObjects || !entity?.RelatingPropertyDefinition) continue;
 
             const relatedIds = entity.RelatedObjects;
-            const psetRef    = entity.RelatingPropertyDefinition;
-            const psetId     = psetRef.value ?? psetRef;
+            const psetId     = (entity.RelatingPropertyDefinition?.value ?? entity.RelatingPropertyDefinition);
             const pset       = model.properties[psetId];
             if (!pset) continue;
 
@@ -4080,10 +4121,8 @@ async function classifyModel(model: any) {
             if (!Array.isArray(propsRefs)) continue;
 
             for (const propRef of propsRefs) {
-                const propId  = propRef.value ?? propRef;
-                const prop    = model.properties[propId];
+                const prop = model.properties[propRef?.value ?? propRef];
                 if (!prop) continue;
-
                 const nameObj = prop.Name || prop.name;
                 const name    = nameObj?.value ?? nameObj;
                 const normName = normalizePropKey(name);
@@ -4104,8 +4143,8 @@ async function classifyModel(model: any) {
                     else if (normName === 'nombreintegrado' || normName === 'nombreintegrada') integratedNameById.set(relId, v);
                     else if (normName === 'subproyectosintegrado' || normName === 'subproyectointegrado') integratedSubById.set(relId, v);
                     else if (name === 'Familia' || name === 'Family') elementType.set(relId, v);
-                    else if (name === 'Nivel' || name === 'Nivel de referencia' || name === 'Restricci\u00f3n de base') {
-                        let priority = name === 'Nivel' ? 3 : name === 'Nivel de referencia' ? 2 : 1;
+                    else if (name === 'Nivel' || name === 'Nivel de referencia' || name === 'Restricción de base') {
+                        const priority = name === 'Nivel' ? 3 : name === 'Nivel de referencia' ? 2 : 1;
                         if (priority > (levelPriority.get(relId) ?? 0)) {
                             elementLevel.set(relId, v);
                             levelPriority.set(relId, priority);
@@ -4118,10 +4157,10 @@ async function classifyModel(model: any) {
 
     // --- Build index from collected data ---
     for (const id of idsWithGeometry) {
-        addToIndex('CLASIFICACIÓN',        modelUUID, normalizeValue(integratedClassById.get(id)    ?? elementType.get(id)), id);
-        addToIndex('NIVEL INTEGRADO',      modelUUID, normalizeValue(integratedLevelById.get(id)    ?? elementLevel.get(id)), id);
-        addToIndex('MATERIAL INTEGRADO',   modelUUID, normalizeValue(integratedMaterialById.get(id)), id);
-        addToIndex('NOMBRE INTEGRADO',     modelUUID, normalizeValue(integratedNameById.get(id)), id);
+        addToIndex('CLASIFICACIÓN',          modelUUID, normalizeValue(integratedClassById.get(id)    ?? elementType.get(id)), id);
+        addToIndex('NIVEL INTEGRADO',        modelUUID, normalizeValue(integratedLevelById.get(id)    ?? elementLevel.get(id)), id);
+        addToIndex('MATERIAL INTEGRADO',     modelUUID, normalizeValue(integratedMaterialById.get(id)), id);
+        addToIndex('NOMBRE INTEGRADO',       modelUUID, normalizeValue(integratedNameById.get(id)), id);
         addToIndex('SUBPROYECTOS INTEGRADO', modelUUID, normalizeValue(integratedSubById.get(id)), id);
     }
 
@@ -4131,7 +4170,7 @@ async function classifyModel(model: any) {
         buildClassifierMap(integratedClassificationField, integratedClassificationOrder)
     );
 
-    logToScreen(`Clasificado: ${idsWithGeometry.length} elem | CLASIF:${integratedClassById.size} NIVEL:${integratedLevelById.size} MAT:${integratedMaterialById.size} NOMBRE:${integratedNameById.size} SUB:${integratedSubById.size}`);
+    logToScreen(`✓ Clasificado: ${idsWithGeometry.length} elem | CLASIF:${integratedClassById.size} NIVEL:${integratedLevelById.size} MAT:${integratedMaterialById.size} NOMBRE:${integratedNameById.size} SUB:${integratedSubById.size}`);
 }
 
 function setupVisibilityToolbar() {
