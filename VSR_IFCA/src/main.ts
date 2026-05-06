@@ -4000,89 +4000,111 @@ function initPropertiesPanel() {
 }
 
 async function classifyModel(model: any) {
-    logToScreen('Clasificando modelo desde JSON...');
+    logToScreen('Clasificando modelo...');
     const modelUUID = model.uuid;
-
-    if (!model.properties || Object.keys(model.properties).length === 0) {
-        logToScreen('Sin propiedades JSON para clasificar.', true);
-        return;
-    }
-
     clearModelFromIndex(modelUUID);
 
-    // Per-element value maps (key = expressID as number)
+    // Per-element value maps
     const integratedClassById    = new Map<number, string>();
     const integratedLevelById    = new Map<number, string>();
     const integratedMaterialById = new Map<number, string>();
     const integratedNameById     = new Map<number, string>();
     const integratedSubById      = new Map<number, string>();
-    const elementFallbackById    = new Map<number, string>(); // IFC Name fallback
+    const elementFallbackById    = new Map<number, string>();
 
-    // Helper: extract string value, handles {type, value} wrappers and plain strings
+    // Helper: unwrap {type, value} objects or return plain string
     const getVal = (obj: any, ...keys: string[]): string | null => {
         for (const k of keys) {
-            if (obj == null) continue;
+            if (!obj) continue;
             const raw = obj[k];
             if (raw === undefined || raw === null) continue;
             const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
-            if (v !== undefined && v !== null && String(v).trim() !== '') return String(v).trim();
+            if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
         }
         return null;
     };
 
-    // --- CORE: Iterate over JSON keys (expressIDs) directly ---
-    // model.properties is loaded from the .json file (same name as .frag).
-    // Keys are expressIDs as strings. We parse them to numbers for the index.
-    let hits = 0;
-    const jsonKeys = Object.keys(model.properties);
-    logToScreen(`[Classify] Leyendo JSON: ${jsonKeys.length} entradas...`);
+    // Helper: read integrated fields from an attribute object
+    const readFields = (attrs: any, expressID: number) => {
+        const clasif = getVal(attrs,
+            'CLASIFICACIÓN', 'Clasificaci\u00f3n', 'CLASIFICACION', 'clasificacion');
+        if (clasif) integratedClassById.set(expressID, clasif);
 
-    for (const keyStr of jsonKeys) {
-        const entity: any = model.properties[keyStr];
-        if (!entity || typeof entity !== 'object') continue;
-
-        const expressID = parseInt(keyStr, 10);
-        if (isNaN(expressID)) continue;
-
-        // Read the 5 integrated fields as direct top-level attributes
-        const clasif = getVal(entity,
-            'CLASIFICACIÓN', 'Clasificaci\u00f3n', 'CLASIFICACION', 'clasificacion',
-            'Clasificacion', 'classification', 'CLASSIFICATION');
-        if (clasif) { integratedClassById.set(expressID, clasif); hits++; }
-
-        const nivel = getVal(entity,
-            'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'NIVEL INTEGRADO',
-            'Nivel_Integrado', 'nivelintegrado');
+        const nivel = getVal(attrs,
+            'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado');
         if (nivel) integratedLevelById.set(expressID, nivel);
 
-        const material = getVal(entity,
-            'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado',
-            'Material_Integrado', 'materialintegrado');
+        const material = getVal(attrs,
+            'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado');
         if (material) integratedMaterialById.set(expressID, material);
 
-        const nombre = getVal(entity,
-            'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado',
-            'Nombre_Integrado', 'nombreintegrado');
+        const nombre = getVal(attrs,
+            'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado');
         if (nombre) integratedNameById.set(expressID, nombre);
 
-        const sub = getVal(entity,
+        const sub = getVal(attrs,
             'SUBPROYECTOS INTEGRADO', 'Subproyectos Integrado', 'subproyectos integrado',
-            'SUBPROYECTO INTEGRADO', 'Subproyecto Integrado', 'subproyectointegrado',
-            'Workset1', 'Workset', 'workset');
+            'SUBPROYECTO INTEGRADO', 'Workset1', 'Workset');
         if (sub) integratedSubById.set(expressID, sub);
 
-        // Fallback: use IFC Name / ObjectType if no CLASIFICACIÓN found
         if (!clasif) {
-            const name = getVal(entity, 'Name', 'name', 'ObjectType', 'objectType');
+            const name = getVal(attrs, 'Name', 'name', 'ObjectType', 'objectType');
             if (name) elementFallbackById.set(expressID, name);
         }
+
+        return !!clasif;
+    };
+
+    // --- STRATEGY 1: fragments.getData() — same data source as the properties panel ---
+    // The panel uses: const attrs = raw.data || raw.attributes || raw
+    let gdataHits = 0;
+    try {
+        const idsWithGeometry: number[] = await model.getItemsIdsWithGeometry();
+        if (idsWithGeometry && idsWithGeometry.length > 0) {
+            logToScreen(`[Classify] getData para ${idsWithGeometry.length} elementos...`);
+            const CHUNK = 1000;
+            for (let i = 0; i < idsWithGeometry.length; i += CHUNK) {
+                const chunk = idsWithGeometry.slice(i, i + CHUNK);
+                try {
+                    const result = await fragments.getData(
+                        { [modelUUID]: chunk } as any,
+                        { attributesDefault: true } as any
+                    );
+                    const items: any[] = (result as any)[modelUUID] || [];
+                    items.forEach((raw: any, idx: number) => {
+                        const expressID: number = chunk[idx];
+                        if (expressID === undefined) return;
+                        // EXACTLY like the properties panel:
+                        const attrs = raw?.data || raw?.attributes || raw || {};
+                        if (readFields(attrs, expressID)) gdataHits++;
+                    });
+                } catch (e) {
+                    console.warn('[Classify] getData chunk error:', e);
+                }
+            }
+            logToScreen(`[Classify] getData: ${gdataHits} hits CLASIFICACIÓN de ${idsWithGeometry.length} elem`);
+        }
+    } catch (e) {
+        console.warn('[Classify] getItemsIdsWithGeometry error:', e);
     }
 
-    logToScreen(`[Classify] Hits CLASIFICACIÓN: ${integratedClassById.size} | NIVEL: ${integratedLevelById.size} | MAT: ${integratedMaterialById.size} | NOMBRE: ${integratedNameById.size} | SUB: ${integratedSubById.size}`);
+    // --- STRATEGY 2: model.properties JSON (external .json file loaded from Drive or URL) ---
+    if (gdataHits === 0 && model.properties) {
+        const jsonKeys = Object.keys(model.properties);
+        logToScreen(`[Classify] Fallback JSON: ${jsonKeys.length} entradas...`);
+        let jsonHits = 0;
+        for (const keyStr of jsonKeys) {
+            const entity: any = model.properties[keyStr];
+            if (!entity || typeof entity !== 'object') continue;
+            const expressID = parseInt(keyStr, 10);
+            if (isNaN(expressID)) continue;
+            if (readFields(entity, expressID)) jsonHits++;
+        }
+        logToScreen(`[Classify] JSON hits: ${jsonHits}`);
+    }
 
-    // --- Build index: use all expressIDs found in the JSON ---
-    // The union of all IDs that appear in any of our maps
-    const allExpressIds = new Set<number>([
+    // --- Build index ---
+    const allIds = new Set<number>([
         ...integratedClassById.keys(),
         ...integratedLevelById.keys(),
         ...integratedMaterialById.keys(),
@@ -4091,26 +4113,20 @@ async function classifyModel(model: any) {
         ...elementFallbackById.keys(),
     ]);
 
-    // If no integrated data found at all, fall back to indexing all JSON entries
-    if (allExpressIds.size === 0) {
-        for (const keyStr of jsonKeys) {
-            const id = parseInt(keyStr, 10);
-            if (!isNaN(id)) allExpressIds.add(id);
+    // If still nothing, index all JSON keys as fallback
+    if (allIds.size === 0 && model.properties) {
+        for (const k of Object.keys(model.properties)) {
+            const id = parseInt(k, 10);
+            if (!isNaN(id)) allIds.add(id);
         }
     }
 
-    for (const id of allExpressIds) {
-        const clasif    = integratedClassById.get(id)    ?? elementFallbackById.get(id) ?? 'Sin Tipo';
-        const nivel     = integratedLevelById.get(id)    ?? 'Sin Nivel';
-        const material  = integratedMaterialById.get(id) ?? 'Sin Material';
-        const nombre    = integratedNameById.get(id)     ?? '';
-        const sub       = integratedSubById.get(id)      ?? '';
-
-        addToIndex('CLASIFICACIÓN',          modelUUID, normalizeValue(clasif), id);
-        addToIndex('NIVEL INTEGRADO',        modelUUID, normalizeValue(nivel), id);
-        addToIndex('MATERIAL INTEGRADO',     modelUUID, normalizeValue(material), id);
-        addToIndex('NOMBRE INTEGRADO',       modelUUID, normalizeValue(nombre), id);
-        addToIndex('SUBPROYECTOS INTEGRADO', modelUUID, normalizeValue(sub), id);
+    for (const id of allIds) {
+        addToIndex('CLASIFICACIÓN',          modelUUID, normalizeValue(integratedClassById.get(id)    ?? elementFallbackById.get(id) ?? 'Sin Tipo'), id);
+        addToIndex('NIVEL INTEGRADO',        modelUUID, normalizeValue(integratedLevelById.get(id)    ?? 'Sin Nivel'), id);
+        addToIndex('MATERIAL INTEGRADO',     modelUUID, normalizeValue(integratedMaterialById.get(id) ?? 'Sin Material'), id);
+        addToIndex('NOMBRE INTEGRADO',       modelUUID, normalizeValue(integratedNameById.get(id)     ?? ''), id);
+        addToIndex('SUBPROYECTOS INTEGRADO', modelUUID, normalizeValue(integratedSubById.get(id)      ?? ''), id);
     }
 
     classifier.list.clear();
@@ -4119,8 +4135,10 @@ async function classifyModel(model: any) {
         buildClassifierMap(integratedClassificationField, integratedClassificationOrder)
     );
 
-    logToScreen(`✓ Clasificado: ${allExpressIds.size} elem indexados. CLASIF:${integratedClassById.size} NIVEL:${integratedLevelById.size} MAT:${integratedMaterialById.size} NOMBRE:${integratedNameById.size} SUB:${integratedSubById.size}`);
+    logToScreen(`✓ Clasificado: ${allIds.size} elem | CLASIF:${integratedClassById.size} NIVEL:${integratedLevelById.size} MAT:${integratedMaterialById.size} NOMBRE:${integratedNameById.size} SUB:${integratedSubById.size}`);
 }
+
+
 
 function setupVisibilityToolbar() {
     const hideBtn = document.getElementById('btn-hide');
