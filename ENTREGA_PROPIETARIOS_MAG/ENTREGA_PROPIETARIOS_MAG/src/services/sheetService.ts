@@ -13,6 +13,7 @@ type JsonpOptions = {
 
 const SCRIPT_URL_STORAGE_KEY = 'entrega_propi_mag:scriptUrl';
 const FALLBACK_SCRIPT_URLS = [
+  'https://script.google.com/macros/s/AKfycbzbyhvXTJ6zopblU4yURITWEf9Lzug9TdrTuhOVPmsMe77vqe3ZQYt6JCvOSxRyliI/exec',
   'https://script.google.com/macros/s/AKfycbxVxH6HzAKwU9VNz1UqV7ntql3P70GukAoMfErYLGTetf4hRPF64LMFihxw_7tDhHE/exec',
   'https://script.google.com/macros/s/AKfycbxDXc7XldGCnbVMlR0FfQg7HrHBI3Ux2t2_wC1AdGitFy5d82Lca6YFd309nLKj7tI/exec',
 ];
@@ -179,7 +180,8 @@ export const triggerSync = async (): Promise<boolean> => {
 export const updateSheetStatus = async (towerId: number, aptNumber: string, status: string, weeklyGoalDate?: string | null): Promise<boolean> => {
   const stored = readStoredScriptUrl();
   const storedIsFallback = stored ? FALLBACK_SCRIPT_URLS.includes(stored) : false;
-  const base = stored && !storedIsFallback ? stored : (API_CONFIG.scriptUrl || stored);
+  // Always prefer the configured URL; only fall back to stored URL if config is empty
+  const base = API_CONFIG.scriptUrl || (stored && !storedIsFallback ? stored : null);
   if (!base) {
     console.warn('Google Apps Script URL not configured. Change not saved to sheet.');
     return true; // Simulate success so UI updates even without backend
